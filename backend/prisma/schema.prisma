@@ -8,21 +8,50 @@ datasource db {
 }
 
 model User {
-    id           String    @id @default(uuid())
-    isActive     Boolean   @default(false)
-    createdAt    DateTime? @db.Timestamp()
-    updatedAt    DateTime? @updatedAt @db.Timestamp()
-    deletedAt    DateTime? @db.Timestamp()
-    email        String    @unique @db.VarChar(256)
-    fullname     String?   @db.VarChar(256)
-    password     String?
-    refreshToken String?
-    role         Role      @default(value: USER)
+    id String @id @default(uuid())
+
+    email         String    @unique @db.VarChar(256)
+    fullname      String?   @db.VarChar(256)
+    password      String?
+    refreshToken  String?
+    fonctionality String?
+    bio           String?
+    role          Role      @default(value: USER)
+    plan          Plan      @default(value: NOPLAN)
+    journals      Journal[]
+
+    createdAt DateTime? @db.Timestamp()
+    updatedAt DateTime? @updatedAt @db.Timestamp()
+    deletedAt DateTime? @db.Timestamp()
+    isActive  Boolean   @default(false)
 
     @@map("users")
+}
+
+model Journal {
+    id String @id @default(uuid())
+
+    isPayed       Boolean
+    registredTime DateTime
+    leaveTime     DateTime?
+    payedAmount   Float
+
+    userId String?
+    user   User?   @relation(fields: [userId], references: [id])
+
+    createdAt DateTime? @db.Timestamp()
+    updatedAt DateTime? @updatedAt @db.Timestamp()
+
+    @@map("journals")
 }
 
 enum Role {
     ADMIN
     USER
+}
+
+enum Plan {
+    NOPLAN
+    BASIC
+    PRO
 }

@@ -1,1 +1,2 @@
-export const API_URL = "http://localhost:3002";
+import config from "./config";
+export const API_URL = config.apiUrl;

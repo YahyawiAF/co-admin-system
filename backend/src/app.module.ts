@@ -7,16 +7,16 @@ import { AppService } from './app.service';
 import { UserModule } from './modules/user/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { EventsModule } from 'src/modules/webSocket/events.module';
-import { StatusModule } from './modules/status/status.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     ConfigModule.forRoot(),
+    EventEmitterModule.forRoot(),
     UserModule,
     AuthModule,
     EventsModule,
-    StatusModule,
   ],
   controllers: [AppController],
   providers: [AppService],
