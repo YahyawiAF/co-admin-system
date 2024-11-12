@@ -12,10 +12,8 @@ import {
   TableBody,
   TableContainer,
   TableCell,
-  TableHead,
   TablePagination,
   TableRow,
-  TableSortLabel,
   IconButton,
   Tabs,
   Box,
@@ -24,9 +22,7 @@ import {
 import { spacing } from "@mui/system";
 
 import DashboardLayout from "../../layouts/Dashboard";
-
-import { useAppSelector } from "../../redux/hooks";
-import { Card, User } from "../../types/shared";
+import { Journal } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -37,25 +33,22 @@ import {
   Delete as RemoveRedEyeIcon,
   Done,
 } from "@mui/icons-material";
-import CardForm from "../../components/pages/dashboard/card/CardForm";
-import CardBanner from "src/components/pages/dashboard/card/Card";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
-import CardBank from "src/components/pages/dashboard/card/BankCard";
+// import CardBank from "src/components/pages/dashboard/card/BankCard";
 
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
-import {
-  useDeleteCardMutation,
-  useDeleteMemeberMutation,
-  useGetCardQuery,
-  useGetMembersQuery,
-} from "src/api";
+import { useGetCardQuery } from "src/api";
 import Loader from "src/components/Loader";
 import Modal from "src/components/Modal/BasicModal";
 import JournalForm from "src/components/pages/dashboard/journal/journalForm";
-import { green, red } from "@mui/material/colors";
+import { red } from "@mui/material/colors";
 import { format } from "date-fns";
+import {
+  useDeleteJournalMutation,
+  useGetJournalQuery,
+} from "src/api/journal.repo";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -63,34 +56,28 @@ const Paper = styled(MuiPaper)(spacing);
 
 const headCells: Array<HeadCell> = [
   {
-    id: "fullName",
+    id: "registredTime",
     numeric: false,
     disablePadding: true,
-    label: "Full name",
+    label: "Registred Time",
   },
   {
-    id: "starting",
-    numeric: true,
-    disablePadding: false,
-    label: "Starting",
+    id: "payedAmount",
+    numeric: false,
+    disablePadding: true,
+    label: "Payed Amount",
   },
   {
-    id: "hours",
-    numeric: true,
-    disablePadding: false,
-    label: "Passed hours",
+    id: "leaveTime",
+    numeric: false,
+    disablePadding: true,
+    label: "leave Time",
   },
   {
-    id: "price",
-    numeric: true,
-    disablePadding: false,
-    label: "Payment",
-  },
-  {
-    id: "payed",
-    numeric: true,
-    disablePadding: false,
-    label: "Payed",
+    id: "isPayed",
+    numeric: false,
+    disablePadding: true,
+    label: "is Payed",
   },
   {
     id: "actions",
@@ -105,7 +92,10 @@ interface Filters {
   query?: string | undefined;
 }
 
-const applyFilters = (keywordServices: User[], filters: Filters): User[] => {
+const applyFilters = (
+  keywordServices: Journal[],
+  filters: Filters
+): Journal[] => {
   return keywordServices?.filter((keywordServices) => {
     let matches = true;
     const { query } = filters;
@@ -127,7 +117,7 @@ function EnhancedTable() {
   const [orderBy, setOrderBy] = React.useState("calories");
   const [openDeletModal, setOpenDeletModal] = React.useState<boolean>(false);
   const [selected, setSelected] = React.useState<Array<string>>([]);
-  const [editeUser, setEditeUser] = React.useState<User | null>(null);
+  const [editeJournal, setEditeJournal] = React.useState<Journal | null>(null);
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [today, setToday] = React.useState<Date>(new Date());
@@ -136,19 +126,21 @@ function EnhancedTable() {
   });
   const [open, setOpen] = useState(false);
 
-  const { data: members, isLoading, error, refetch } = useGetMembersQuery();
-  const [deleteMember] = useDeleteMemeberMutation();
+  const { data: Journals, isLoading, error, refetch } = useGetJournalQuery();
+  const [deleteJournal] = useDeleteJournalMutation();
 
-  const rows: User[] = useMemo(
+  const rows: Journal[] = useMemo(
     () =>
-      members?.filter(
-        (data) =>
-          new Date(data?.createdOn).getUTCFullYear() ===
-            today.getUTCFullYear() &&
-          new Date(data?.createdOn).getUTCMonth() === today.getUTCMonth() &&
-          new Date(data?.createdOn).getUTCDay() === today.getUTCDay()
-      ) || [],
-    [members, today]
+      (Journals &&
+        Journals.data.filter(
+          (data) =>
+            new Date(data?.createdOn).getUTCFullYear() ===
+              today.getUTCFullYear() &&
+            new Date(data?.createdOn).getUTCMonth() === today.getUTCMonth() &&
+            new Date(data?.createdOn).getUTCDay() === today.getUTCDay()
+        )) ||
+      [],
+    [Journals, today]
   );
 
   const handleRequestSort = (event: any, property: string) => {
@@ -203,33 +195,33 @@ function EnhancedTable() {
     setFilters((filters) => ({ ...filters, query: event.target.value }));
   };
 
-  const filteredRows: User[] = useMemo(
+  const filteredRows: Journal[] = useMemo(
     () => applyFilters(rows, filters),
     [filters, rows]
   );
 
-  const handleEdite = useCallback((data: User) => {
-    setEditeUser(data);
+  const handleEdite = useCallback((data: Journal) => {
+    setEditeJournal(data);
     setOpen(true);
   }, []);
 
-  const handleDelete = useCallback((data: User) => {
-    setEditeUser(data);
+  const handleDelete = useCallback((data: Journal) => {
+    setEditeJournal(data);
     setOpenDeletModal(true);
   }, []);
 
   const handleAction = useCallback(() => {
-    if (editeUser) {
-      deleteMember(editeUser.id).finally(() => {
-        setEditeUser(null);
+    if (editeJournal) {
+      deleteJournal(editeJournal.id).finally(() => {
+        setEditeJournal(null);
         setOpenDeletModal(false);
       });
     }
-  }, [editeUser, deleteMember]);
+  }, [editeJournal, deleteJournal]);
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelecteds = filteredRows?.map((n: User) => n.id);
+      const newSelecteds = filteredRows?.map((n: Journal) => n.id);
       setSelected(newSelecteds);
       return;
     }
@@ -250,8 +242,8 @@ function EnhancedTable() {
         open={openDeletModal}
         handleClose={() => setOpenDeletModal(false)}
         handleAction={handleAction}
-        title={"Delete User"}
-        contentText={`Are you sure you want to remove ${editeUser?.fullName}`}
+        title={"Delete Journal"}
+        contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
       />
       <Drawer
         open={open}
@@ -263,9 +255,9 @@ function EnhancedTable() {
           <JournalForm
             handleClose={() => {
               setOpen(false);
-              setEditeUser(null);
+              setEditeJournal(null);
             }}
-            selectItem={editeUser}
+            selectItem={editeJournal}
           />
         </SubPage>
       </Drawer>
@@ -278,7 +270,7 @@ function EnhancedTable() {
           onHandleSearch={onHandleSearch}
           refetch={refetch}
         />
-        <TableContainer>
+        {/* <TableContainer>
           <Table aria-labelledby="tableTitle" aria-label="enhanced table">
             <EnhancedTableHead
               numSelected={selected.length}
@@ -387,7 +379,7 @@ function EnhancedTable() {
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+        </TableContainer> */}
         <TablePagination
           rowsPerPageOptions={[5, 10, 25]}
           component="div"
@@ -404,28 +396,13 @@ function EnhancedTable() {
 
 function CardPage() {
   const [value, setValue] = useState(0);
-  const { data: cards, isLoading, error, isError } = useGetCardQuery();
+  // const { data: cards, isLoading, error, isError } = useGetCardQuery();
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
-  const cardsList = useMemo(
-    () =>
-      cards && cards?.length > 0
-        ? cards?.filter((c) => !c.status || c.status !== "pending approval")
-        : [],
-    [cards]
-  );
 
-  const cardsBannerList = useMemo(
-    () =>
-      cards && cards?.length > 0
-        ? cards?.filter((c) => c.status === "pending approval")
-        : [],
-    [cards]
-  );
-
-  if (isLoading) return <Loader />;
-  if (isError) return <div> error</div>;
+  // if (isLoading) return <Loader />;
+  // if (isError) return <div> error</div>;
   return (
     <React.Fragment>
       <Helmet title="Transactions" />
@@ -448,11 +425,7 @@ function CardPage() {
       </TabPanel>
       <TabPanel value={value} index={1} title={"Card"}>
         <Grid container spacing={6}>
-          {cardsList.map((card, index) => (
-            <Grid key={card.id} item xs={4}>
-              <CardBank card={card} />
-            </Grid>
-          ))}
+          Add later
         </Grid>
       </TabPanel>
     </React.Fragment>

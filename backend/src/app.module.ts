@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { UserModule } from './modules/user/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { EventsModule } from 'src/modules/webSocket/events.module';
+import { JournalModule } from 'src/modules/journal/journal.modal';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
@@ -17,6 +18,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     UserModule,
     AuthModule,
     EventsModule,
+    JournalModule,
   ],
   controllers: [AppController],
   providers: [AppService],

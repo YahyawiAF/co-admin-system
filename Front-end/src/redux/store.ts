@@ -9,12 +9,14 @@ import {
   expensesServerApi,
   transactionsServerApi,
   companiersServerApi,
+  journalServerApi,
 } from "src/api";
 export const store = configureStore({
   reducer: {
     members: membersReducer,
     cards: cardReducer,
     [membersServerApi.reducerPath]: membersServerApi.reducer,
+    [journalServerApi.reducerPath]: journalServerApi.reducer,
     [balancesServerApi.reducerPath]: balancesServerApi.reducer,
     [cardServerApi.reducerPath]: cardServerApi.reducer,
     [expensesServerApi.reducerPath]: expensesServerApi.reducer,
@@ -29,6 +31,7 @@ export const store = configureStore({
       expensesServerApi.middleware,
       transactionsServerApi.middleware,
       companiersServerApi.middleware,
+      journalServerApi.middleware
     ]),
 });
 

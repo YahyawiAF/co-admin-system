@@ -64,6 +64,18 @@ export type User = {
   payed: any;
 };
 
+export type Journal = {
+  [key: string]: any;
+  id: string;
+  isPayed: boolean;
+  registredTime: Date;
+  leaveTime: Date | null;
+  payedAmount: number;
+  userId: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+};
+
 export interface Card {
   [key: string]: any;
   id: string;

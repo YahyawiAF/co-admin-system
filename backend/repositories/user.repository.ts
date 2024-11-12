@@ -5,9 +5,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString } from 'class-validator';
 
 export class SignInDto {
-    @ApiProperty({
-        type: String,
-    })
+  @ApiProperty({
+    type: String,
+  })
     @IsEmail()
     email: string;
 

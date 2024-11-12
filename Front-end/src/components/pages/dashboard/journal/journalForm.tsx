@@ -1,7 +1,7 @@
 // components
 import { FC, useState } from "react";
 import * as React from "react";
-import { Box, styled, Button, Snackbar, MenuItem } from "@mui/material";
+import { Box, styled, Button, Snackbar } from "@mui/material";
 //Yup
 import { useForm } from "react-hook-form";
 //Form
@@ -10,38 +10,41 @@ import RHFTextField from "../../../hook-form/RHTextField";
 import { RHFTimePeakerField } from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
 
-import { User } from "../../../../types/shared";
+import { Journal } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ZodType, z } from "zod";
-import { useCreateMemberMutation, useUpdateMemberMutation } from "src/api";
+import {
+  useCreateJournalMutation,
+  useUpdateJournalMutation,
+} from "src/api/journal.repo";
 
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
-  selectItem: User | null;
+  selectItem: Journal | null;
   handleClose: () => void;
 }
 
-const defaultValues: User = {
+const defaultValues: Journal = {
   id: "",
   createdOn: new Date(),
-  email: "",
-  fullName: "",
-  birthdate: "",
-  price: 0,
-  plan: "basic",
-  starting: "",
-  payed: false,
+  isPayed: false,
+  registredTime: new Date(),
+  leaveTime: new Date(),
+  payedAmount: 0,
+  userId: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
 }) => {
-  const [createMember, { isLoading }] = useCreateMemberMutation();
-  const [updateMember] = useUpdateMemberMutation();
+  const [createMember, { isLoading }] = useCreateJournalMutation();
+  const [updateMember] = useUpdateJournalMutation();
 
   const [openSnak, setOpenSnak] = useState(false);
   let time = new Date().toLocaleTimeString();
@@ -53,7 +56,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   };
   setInterval(UpdateTime);
 
-  const validationSchema: ZodType<Omit<User, "createdOn">> = z.object({
+  const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     email: z.union([z.literal(""), z.string().email()]),
     fullName: z.string({ required_error: "FullName required" }).min(1),
     starting: z.union([z.string().optional(), z.date()]),
@@ -86,7 +89,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     }
   }, [selectItem, resetAsyn]);
 
-  const onSubmit = async (data: User) => {
+  const onSubmit = async (data: Journal) => {
     if (selectItem) {
       console.log("data", data);
       updateMember({ ...selectItem, ...data });
@@ -96,7 +99,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       data.createdOn = new Date();
       data.starting = data.starting ? data.starting : new Date().toDateString();
 
-      createMember(data as User);
+      createMember(data as Journal);
       setOpenSnak(true);
       handleClose();
     }
@@ -108,7 +111,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         open={openSnak}
         onClose={handleClose}
-        message={`User ${selectItem ? "updated" : "created"} !`}
+        message={`Journal ${selectItem ? "updated" : "created"} !`}
         key={"bottom" + "right"}
       />
       <h1>{ctime}</h1>
