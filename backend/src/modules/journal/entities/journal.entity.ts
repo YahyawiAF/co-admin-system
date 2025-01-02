@@ -1,9 +1,13 @@
+import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { Journal } from '@prisma/client';
 
 export class JournalEntity implements Journal {
-  constructor(partial: Partial<JournalEntity>) {
-    Object.assign(this, partial);
+  constructor({ members, ...data }: Partial<JournalEntity>) {
+    Object.assign(this, data);
+    if (members) {
+      this.members = new MemberEntity(members);
+    }
   }
   @ApiProperty()
   id: string;
@@ -28,4 +32,10 @@ export class JournalEntity implements Journal {
 
   @ApiProperty()
   updatedAt: Date | null;
+
+  @ApiProperty()
+  memberID: string;
+
+  @ApiProperty({ required: false, type: MemberEntity })
+  members?: MemberEntity;
 }

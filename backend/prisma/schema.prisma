@@ -10,9 +10,9 @@ datasource db {
 model User {
     id           String    @id @default(uuid())
     isActive     Boolean   @default(false)
-    createdAt    DateTime? @db.Timestamp()
-    updatedAt    DateTime? @updatedAt @db.Timestamp()
-    deletedAt    DateTime? @db.Timestamp()
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime  @updatedAt @db.Timestamp()
+    deletedAt    DateTime?  @db.Timestamp()
     email        String    @unique @db.VarChar(256)
     fullname     String?   @db.VarChar(256)
     password     String?
@@ -22,35 +22,38 @@ model User {
     @@map("users")
 }
 
-model Client {
+model Member {
     id String @id @default(uuid())
 
-    email         String?    @unique @db.VarChar(256)
-    fullname      String?   @db.VarChar(256)
-    fonctionality String?
+    email         String? @unique @db.VarChar(256)
+    firstName      String? @db.VarChar(56)
+    lastName      String? @db.VarChar(56)
+    functionality String?
     bio           String?
 
-    plan          Subscription?      @default(value: NOPSubs)
-    journals      Journal[]
-    reservations  Reservation[]
+    credits Float @default(value: 0)
 
-    createdAt DateTime? @db.Timestamp()
-    updatedAt DateTime? @updatedAt @db.Timestamp()
+    plan         Subscription? @default(value: NOPSubs)
+    journals     Journal[]
+    reservations Reservation[]
+
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @db.Timestamp()
     deletedAt DateTime? @db.Timestamp()
     isActive  Boolean   @default(false)
 
-    @@map("clients")
+    @@map("members")
 }
 
 model Prices {
     id String @id @default(uuid())
 
-    journalPrice Float @default(value:0)
-    demiJournal  Float @default(value:0)
-    monthSubscription  Float @default(value:0)
-    weekSubscription  Float @default(value:0)
-    meetingRoomHourly  Float @default(value:0)
-    meetingRoomMonthly  Float @default(value:0)
+    journalPrice       Float @default(value: 0)
+    demiJournal        Float @default(value: 0)
+    monthSubscription  Float @default(value: 0)
+    weekSubscription   Float @default(value: 0)
+    meetingRoomHourly  Float @default(value: 0)
+    meetingRoomMonthly Float @default(value: 0)
 }
 
 model Journal {
@@ -61,15 +64,14 @@ model Journal {
     leaveTime     DateTime?
     payedAmount   Float
 
-    clientID String?
-    client   Client?   @relation(fields: [clientID], references: [id])
+    memberID String?
+    members   Member? @relation(fields: [memberID], references: [id])
 
-    createdAt DateTime? @db.Timestamp()
-    updatedAt DateTime? @updatedAt @db.Timestamp()
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @db.Timestamp()
 
     @@map("journals")
 }
-
 
 model Reservation {
     id String @id @default(uuid())
@@ -79,11 +81,11 @@ model Reservation {
     leaveTime     DateTime?
     payedAmount   Float
 
-    clientID String?
-    client   Client?   @relation(fields: [clientID], references: [id])
+    memberID String?
+    member   Member? @relation(fields: [memberID], references: [id])
 
-    createdAt DateTime? @db.Timestamp()
-    updatedAt DateTime? @updatedAt @db.Timestamp()
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt @db.Timestamp()
 
     @@map("reservations")
 }

@@ -60,7 +60,7 @@ export const RHFTimePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
         fieldState: { error },
       }) => {
         console.log("value", value);
-        const date = value ? new Date(value) : null;
+        const date = value ? new Date(value) : new Date();
         return (
           <MobileTimePicker
             {...field}

@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { UpdateJournalDto } from './dtos/updateJournal.dto';
-import { Prisma } from '@prisma/client';
+import { Journal, Prisma } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { AddJournalDto } from './dtos/createJournal.dto';
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode, GeneralException } from '@/exceptions';
+import { JournalEntity } from './entities/journal.entity';
 
 export const roundsOfHashing = 10;
 
@@ -53,18 +54,26 @@ export class JournalService {
     orderBy?: Prisma.UserOrderByWithRelationInput;
     page?: number;
     perPage: number;
-  }): Promise<PaginatedResult<AddJournalDto>> {
+  }): Promise<PaginatedResult<Journal>> {
     const paginate = createPaginator({ perPage });
-    return paginate(
+    const paginatedResult = await paginate(
       this.prisma.journal,
       {
         where,
         orderBy,
+        include: {
+          members: true, // Include related members
+        },
       },
       {
         page,
       },
     );
+
+    return {
+      data: paginatedResult.data.map((member) => new JournalEntity(member)),
+      meta: paginatedResult.meta,
+    };
   }
   findOne(id: string) {
     return this.prisma.journal.findUnique({ where: { id } });

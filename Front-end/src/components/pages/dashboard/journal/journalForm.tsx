@@ -10,7 +10,7 @@ import RHFTextField from "../../../hook-form/RHTextField";
 import { RHFTimePeakerField } from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
 
-import { Journal } from "../../../../types/shared";
+import { Journal, Member } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +19,8 @@ import {
   useCreateJournalMutation,
   useUpdateJournalMutation,
 } from "src/api/journal.repo";
+import RHFAutoCompletDropDown from "src/components/hook-form/RHFAutoCompletDropDown";
+import { useGetMembersQuery } from "src/api";
 
 // ----------------------------------------------------------------------
 
@@ -27,41 +29,47 @@ interface IShopFilterSidebar {
   handleClose: () => void;
 }
 
-const defaultValues: Journal = {
+const defaultValues: Partial<Journal> = {
   id: "",
-  createdOn: new Date(),
   isPayed: false,
-  registredTime: new Date(),
-  leaveTime: new Date(),
   payedAmount: 0,
-  userId: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  registredTime: new Date(),
+  memberID: null,
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
 }) => {
-  const [createMember, { isLoading }] = useCreateJournalMutation();
+  // API
+  const {
+    data: membersList,
+    isLoading: isLoadingMember,
+    error,
+  } = useGetMembersQuery();
+  const [createJournal, { isLoading }] = useCreateJournalMutation();
   const [updateMember] = useUpdateJournalMutation();
-
+  // state
   const [openSnak, setOpenSnak] = useState(false);
-  let time = new Date().toLocaleTimeString();
+  const [member, setMember] = useState(undefined);
 
+  let time = new Date().toLocaleTimeString();
   const [ctime, setTime] = useState(time);
+
   const UpdateTime = () => {
     time = new Date().toLocaleTimeString();
     setTime(time);
   };
+
   setInterval(UpdateTime);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
-    email: z.union([z.literal(""), z.string().email()]),
-    fullName: z.string({ required_error: "FullName required" }).min(1),
-    starting: z.union([z.string().optional(), z.date()]),
-    payed: z.boolean().optional(),
-    price: z.number().optional(),
+    // email: z.union([z.literal(""), z.string().email()]),
+    // fullName: z.string({ required_error: "FullName required" }).min(1),
+    registredTime: z.union([z.string().optional(), z.date()]),
+    isPayed: z.boolean().optional(),
+    payedAmount: z.number().optional(),
+    memberID: z.string(),
   });
 
   const methods = useForm({
@@ -73,8 +81,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     handleSubmit,
     formState: { isSubmitting },
     reset,
-    control,
+    setValue,
+    watch,
   } = methods;
+
+  const formValues = watch();
 
   const resetAsyn = React.useCallback(
     (data: any) => {
@@ -86,20 +97,42 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   React.useEffect(() => {
     if (selectItem) {
       resetAsyn(selectItem);
+      resetAsyn(selectItem);
+      if (selectItem) {
+        setMember(selectItem?.members);
+      }
     }
   }, [selectItem, resetAsyn]);
 
-  const onSubmit = async (data: Journal) => {
+  const handleSelect = (event: any) => {
+    console.log("handleSelect", event);
+    if (event) {
+      setMember(event);
+      setValue("memberID", event.id);
+    } else {
+      setMember(" ");
+      setValue("memberID", "");
+    }
+  };
+
+  const defaultProps = React.useMemo(() => {
+    return {
+      options: membersList as any,
+      getOptionLabel: (option: any) =>
+        option.fullNameWithEmail + ` (${option.plan})`,
+    };
+  }, [membersList]);
+
+  const onSubmit = async (data: Partial<Journal>) => {
     if (selectItem) {
       console.log("data", data);
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
-      console.log("data creat", data);
       data.createdOn = new Date();
-      data.starting = data.starting ? data.starting : new Date().toDateString();
-
-      createMember(data as Journal);
+      data.registredTime = data.registredTime ? data.registredTime : new Date();
+      if (data.isPayed) data.leaveTime = new Date();
+      createJournal(data as Journal);
       setOpenSnak(true);
       handleClose();
     }
@@ -126,17 +159,30 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         methods={methods as unknown as MethodeType}
         onSubmit={handleSubmit(onSubmit)}
       >
-        <RHFTextField name="fullName" label="FullName" placeholder="FullName" />
-        <RHFTextField name="email" label="Email" placeholder="Email" />
+        {!isLoadingMember ? (
+          <RHFAutoCompletDropDown
+            label="Keywords Tags"
+            placeholder="Search for Keywords"
+            defaultProps={defaultProps}
+            selectedItem={member}
+            handleSelection={handleSelect}
+            name={"member"}
+            multiple={false}
+          />
+        ) : (
+          <div>Loading!!</div>
+        )}
+        {/* <RHFTextField name="fullName" label="FullName" placeholder="FullName" /> */}
+        {/* <RHFTextField name="email" label="Email" placeholder="Email" /> */}
         <RHFTimePeakerField
-          name="starting"
+          name="registredTime"
           label="Starting Date"
           placeholder="Inscription Date"
         />
-        <RHCheckBox defaultChecked={false} name="payed" label="Payed" />
+        <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
         <RHFTextField
           type="number"
-          name="price"
+          name="payedAmount"
           label="Price Payed (DT)"
           placeholder="Prix"
         />

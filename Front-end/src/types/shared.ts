@@ -50,32 +50,6 @@ export type ExpensesRes = {
   expenses: Expense[];
 };
 
-export type User = {
-  [key: string]: any;
-  id: string;
-  fullName: string;
-  plan: string;
-  price: number;
-  inscriptionDate?: string | null;
-  createdOn: Date;
-  email: string;
-  birthdate?: string | null;
-  starting?: string;
-  payed: any;
-};
-
-export type Journal = {
-  [key: string]: any;
-  id: string;
-  isPayed: boolean;
-  registredTime: Date;
-  leaveTime: Date | null;
-  payedAmount: number;
-  userId: string | null;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-};
-
 export interface Card {
   [key: string]: any;
   id: string;
@@ -104,4 +78,84 @@ export interface Filters {
   query?: string | undefined;
   date?: string | undefined;
   myTransaction?: boolean | undefined;
+}
+
+export enum Role {
+  ADMIN = "ADMIN",
+  USER = "USER",
+}
+
+export enum Subscription {
+  NOPSubs = "NOPSubs",
+  Monthly = "Monthly",
+  Weekly = "Weekly",
+}
+
+export interface User {
+  [key: string]: any;
+  id: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
+  email: string;
+  fullname?: string | null;
+  password?: string | null;
+  refreshToken?: string | null;
+  role: Role;
+}
+
+export interface Member {
+  [key: string]: any;
+  id: string;
+  email?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  functionality?: string | null;
+  bio?: string | null;
+  credits: number;
+  plan: Subscription;
+  journals: Journal[];
+  reservations: Reservation[];
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date | null;
+  isActive: boolean;
+  fullName: string | null;
+  fullNameWithEmail: string | null;
+}
+
+export interface Prices {
+  id: string;
+  journalPrice: number;
+  demiJournal: number;
+  monthSubscription: number;
+  weekSubscription: number;
+  meetingRoomHourly: number;
+  meetingRoomMonthly: number;
+}
+
+export interface Journal {
+  [key: string]: any;
+  id: string;
+  isPayed: boolean;
+  registredTime: Date;
+  leaveTime?: Date | null;
+  payedAmount: number;
+  memberID?: string | null;
+  member?: Member | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Reservation {
+  id: string;
+  isPayed: boolean;
+  registredTime: Date;
+  leaveTime?: Date | null;
+  payedAmount: number;
+  memberID?: string | null;
+  member?: Member | null;
+  createdAt: Date;
+  updatedAt: Date;
 }

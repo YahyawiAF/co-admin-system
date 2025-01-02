@@ -8,6 +8,7 @@ import { UserModule } from './modules/user/user.module';
 import { AuthModule } from 'src/modules/auth/auth.module';
 import { EventsModule } from 'src/modules/webSocket/events.module';
 import { JournalModule } from 'src/modules/journal/journal.modal';
+import { MemberModule } from 'src/modules/member/member.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
@@ -19,6 +20,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     AuthModule,
     EventsModule,
     JournalModule,
+    MemberModule,
   ],
   controllers: [AppController],
   providers: [AppService],

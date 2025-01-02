@@ -60,7 +60,8 @@ export class JournalController {
   @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity, isArray: true })
   async findAll(): Promise<Array<UpdateJournalDto>> {
-    return await this.JournalService.findAll();
+    const journals = await this.JournalService.findAll();
+    return journals.map((journal) => new JournalEntity(journal));
   }
 
   @Get(':id')

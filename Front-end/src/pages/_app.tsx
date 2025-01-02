@@ -24,11 +24,6 @@ import { store } from "../redux/store";
 import createEmotionCache from "../utils/createEmotionCache";
 
 import { AuthProvider } from "../contexts/JWTContext";
-import useAppDispatch from "../hooks/useAppDispatch";
-import { cardServerApi } from "src/api";
-// import { AuthProvider } from "../contexts/FirebaseAuthContext";
-// import { AuthProvider } from "../contexts/Auth0Context";
-// import { AuthProvider } from "../contexts/CognitoContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -50,14 +45,6 @@ interface AuthInitializerProps {
 }
 
 const AppInitializer: React.FC<AuthInitializerProps> = ({ children }) => {
-  const dispatch = useAppDispatch();
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      dispatch(cardServerApi.endpoints.getCard.initiate());
-    }
-  }, [dispatch]);
-
   return children;
 };
 

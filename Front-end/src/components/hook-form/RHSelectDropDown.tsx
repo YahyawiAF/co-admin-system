@@ -33,11 +33,15 @@ const RHSelectDropDown: FC<IRHFTextField> = ({
               {...field}
               value={field.value || ""}
               onChange={(e) => field.onChange(e.target.value)}
-              defaultValue={"basic"}
+              defaultValue={list[0]}
               // helperText={error?.message}
               error={!!error}
             >
-              <MenuItem value={"basic"}>Basic</MenuItem>
+              {list.map((v: string, index: number) => (
+                <MenuItem key={index} value={v}>
+                  {v}
+                </MenuItem>
+              ))}
             </Select>
             {!!error && <FormHelperText>{error?.message}</FormHelperText>}
           </StyledDropDown>

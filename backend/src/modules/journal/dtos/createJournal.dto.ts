@@ -1,25 +1,30 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsNotEmpty,
   IsString,
   IsDate,
   IsNumber,
   IsBoolean,
+  IsOptional,
 } from 'class-validator';
 
 export class AddJournalDto {
   @IsNotEmpty()
   @IsString()
   @ApiProperty()
-  public clientID: string;
+  public memberID: string;
 
   @IsNotEmpty()
   @IsDate()
+  @Type(() => Date)
   @ApiProperty()
   public registredTime: Date;
 
   @IsNotEmpty()
   @IsDate()
+  @Type(() => Date)
+  @IsOptional()
   @ApiProperty()
   public leaveTime: Date | null;
 

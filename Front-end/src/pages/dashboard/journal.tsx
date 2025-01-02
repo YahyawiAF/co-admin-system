@@ -39,7 +39,6 @@ import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
-import { useGetCardQuery } from "src/api";
 import Loader from "src/components/Loader";
 import Modal from "src/components/Modal/BasicModal";
 import JournalForm from "src/components/pages/dashboard/journal/journalForm";
@@ -55,6 +54,12 @@ const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
 
 const headCells: Array<HeadCell> = [
+  {
+    id: "members.fullName",
+    numeric: false,
+    disablePadding: true,
+    label: "Name",
+  },
   {
     id: "registredTime",
     numeric: false,
@@ -129,19 +134,22 @@ function EnhancedTable() {
   const { data: Journals, isLoading, error, refetch } = useGetJournalQuery();
   const [deleteJournal] = useDeleteJournalMutation();
 
-  const rows: Journal[] = useMemo(
-    () =>
-      (Journals &&
-        Journals.data.filter(
-          (data) =>
-            new Date(data?.createdOn).getUTCFullYear() ===
-              today.getUTCFullYear() &&
-            new Date(data?.createdOn).getUTCMonth() === today.getUTCMonth() &&
-            new Date(data?.createdOn).getUTCDay() === today.getUTCDay()
-        )) ||
-      [],
-    [Journals, today]
-  );
+  // const rows: Journal[] = useMemo(
+  //   () =>
+  //     (Journals &&
+  //       Journals.data.filter(
+  //         (data) =>
+  //           new Date(data?.createdAt).getUTCFullYear() ===
+  //             today.getUTCFullYear() &&
+  //           new Date(data?.createdAt).getUTCMonth() === today.getUTCMonth() &&
+  //           new Date(data?.createdAt).getUTCDay() === today.getUTCDay()
+  //       )) ||
+  //     [],
+  //   [Journals, today]
+  // );
+  const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
+
+  console.log({ rows });
 
   const handleRequestSort = (event: any, property: string) => {
     const isAsc = orderBy === property && order === "asc";
@@ -270,7 +278,7 @@ function EnhancedTable() {
           onHandleSearch={onHandleSearch}
           refetch={refetch}
         />
-        {/* <TableContainer>
+        <TableContainer>
           <Table aria-labelledby="tableTitle" aria-label="enhanced table">
             <EnhancedTableHead
               numSelected={selected.length}
@@ -288,7 +296,7 @@ function EnhancedTable() {
                   const isItemSelected = isSelected(row.id);
                   const labelId = `enhanced-table-checkbox-${index}`;
 
-                  const pastDate = new Date(row?.starting as string);
+                  const pastDate = new Date(row?.createdAt);
 
                   // Get the current date and time
                   const currentDate = new Date();
@@ -336,21 +344,17 @@ function EnhancedTable() {
                         scope="row"
                         padding="none"
                       >
-                        {row.fullName}
+                        {row.members.fullName}
                       </TableCell>
-                      <TableCell align="right">
-                        {format(
-                          new Date(row.starting as string) as Date,
-                          "HH:mm:ss"
-                        )}
+                      <TableCell>
+                        {format(new Date(row.createdAt) as Date, "HH:mm:ss")}
                       </TableCell>
-                      <TableCell align="right">{formattedTime}</TableCell>
-                      <TableCell align="right">
+                      <TableCell>
                         {row.price ? row.price + " DT" : toBePayed + " DT"}
                       </TableCell>
-                      <TableCell align="right">
-                        {row.payed ? <Done /> : null}
-                      </TableCell>
+                      <TableCell>{formattedTime}</TableCell>
+
+                      <TableCell>{row.isPayed ? <Done /> : null}</TableCell>
                       <TableCell padding="none" align="right">
                         <Box mr={2}>
                           <IconButton
@@ -379,7 +383,7 @@ function EnhancedTable() {
               )}
             </TableBody>
           </Table>
-        </TableContainer> */}
+        </TableContainer>
         <TablePagination
           rowsPerPageOptions={[5, 10, 25]}
           component="div"
@@ -396,7 +400,6 @@ function EnhancedTable() {
 
 function CardPage() {
   const [value, setValue] = useState(0);
-  // const { data: cards, isLoading, error, isError } = useGetCardQuery();
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };

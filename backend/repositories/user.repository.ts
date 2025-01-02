@@ -8,16 +8,15 @@ export class SignInDto {
   @ApiProperty({
     type: String,
   })
-    @IsEmail()
-    email: string;
+  @IsEmail()
+  email: string;
 
-    @ApiProperty({
-        type: String,
-    })
-    @IsString()
-    password: string;
+  @ApiProperty({
+    type: String,
+  })
+  @IsString()
+  password: string;
 }
-
 
 @Injectable()
 export class UserRepository {
@@ -42,5 +41,4 @@ export class UserRepository {
   async deleteUser(userId: string) {
     return this.prisma.user.delete({ where: { id: userId } });
   }
-
 }

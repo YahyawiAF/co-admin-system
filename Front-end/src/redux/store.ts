@@ -1,37 +1,15 @@
 import { configureStore, ThunkAction, Action } from "@reduxjs/toolkit";
-import membersReducer from "./slices/members";
-import cardReducer from "./slices/card";
 import { setupListeners } from "@reduxjs/toolkit/query";
-import {
-  membersServerApi,
-  balancesServerApi,
-  cardServerApi,
-  expensesServerApi,
-  transactionsServerApi,
-  companiersServerApi,
-  journalServerApi,
-} from "src/api";
+import { membersServerApi, journalServerApi } from "src/api";
 export const store = configureStore({
   reducer: {
-    members: membersReducer,
-    cards: cardReducer,
     [membersServerApi.reducerPath]: membersServerApi.reducer,
     [journalServerApi.reducerPath]: journalServerApi.reducer,
-    [balancesServerApi.reducerPath]: balancesServerApi.reducer,
-    [cardServerApi.reducerPath]: cardServerApi.reducer,
-    [expensesServerApi.reducerPath]: expensesServerApi.reducer,
-    [transactionsServerApi.reducerPath]: transactionsServerApi.reducer,
-    [companiersServerApi.reducerPath]: companiersServerApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat([
       membersServerApi.middleware,
-      balancesServerApi.middleware,
-      cardServerApi.middleware,
-      expensesServerApi.middleware,
-      transactionsServerApi.middleware,
-      companiersServerApi.middleware,
-      journalServerApi.middleware
+      journalServerApi.middleware,
     ]),
 });
 

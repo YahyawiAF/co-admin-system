@@ -10,7 +10,7 @@ import RHFTextField from "../../../../components/hook-form/RHTextField";
 import RHTextFieldDate from "../../../../components/hook-form/RHTextFieldDate";
 import RHSelectDropDown from "../../../../components/hook-form/RHSelectDropDown";
 
-import { User } from "../../../../types/shared";
+import { User, Subscription, Member } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,15 +24,16 @@ interface IShopFilterSidebar {
   handleClose: () => void;
 }
 
-const defaultValues: User = {
+const defaultValues: Member = {
   id: "",
-  createdOn: null,
   email: "",
-  fullName: "",
-  birthdate: "",
-  price: 0,
-  plan: "basic",
-  inscriptionDate: "",
+  firstName: "",
+  lastName: "",
+  fonctionality: "",
+  bio: "",
+  credits: 0,
+  plan: Subscription.NOPSubs,
+  isActive: false,
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -44,13 +45,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const [openSnak, setOpenSnak] = useState(false);
 
-  const validationSchema: ZodType<Omit<User, "createdOn">> = z.object({
+  const validationSchema: ZodType<Omit<Member, "createdOn">> = z.object({
     email: z.string().email("Email must be a valid email address"),
-    fullName: z.string({ required_error: "FullName required" }).min(1),
-    birthdate: z.date({ required_error: "birthdate required" }),
-    inscriptionDate: z.date({ required_error: "inscription date required" }),
-    price: z.number(),
-    plan: z.enum(["basic", "user"]),
+    firstName: z.string({ required_error: "FirstName required" }).min(1),
+    lastName: z.string({ required_error: "LastName required" }).min(1),
+    fonctionality: z
+      .string({ required_error: "Fonctionality required" })
+      .min(1),
+    bio: z.string({ required_error: "Bio required" }).min(1),
+    plan: z.enum(["NOPSubs", "Monthly", "Weekly"]),
   });
 
   const methods = useForm({
@@ -109,8 +112,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         methods={methods as unknown as MethodeType}
         onSubmit={handleSubmit(onSubmit)}
       >
-        <RHFTextField name="fullName" label="FullName" placeholder="FullName" />
-        <RHFTextField name="email" label="Email" placeholder="Email" />
+        <RHFTextField
+          name="firstName"
+          label="FirstName"
+          placeholder="FullName"
+        />
+        <RHFTextField name="LastName" label="LastName" placeholder="lastName" />
+        <RHFTextField
+          name="fonctionality"
+          label="Fonctionality"
+          placeholder="fFonctionality"
+        />
+        <RHFTextField name="bio" label="Bio" placeholder="Bio" />
         <RHFTextField
           name="price"
           label="Price"
@@ -122,12 +135,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           label="Birthdate"
           placeholder="Birthdate"
         />
-        <RHTextFieldDate
-          name="inscriptionDate"
-          label="Inscription Date"
-          placeholder="Inscription Date"
+        <RHSelectDropDown
+          name="plan"
+          label="Plan"
+          list={["NOPSubs", "Monthly", "Weekly"]}
         />
-        <RHSelectDropDown name="plan" label="Plan" list={["basic"]} />
         <Box
           style={{
             padding: 0,

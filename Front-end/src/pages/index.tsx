@@ -21,7 +21,7 @@ import Stats from "src/components/pages/dashboard/landing/stats";
 import Table from "src/components/pages/dashboard/landing/Table";
 import { DollarSign, CreditCard, User } from "react-feather";
 import { useAppSelector } from "src/redux/hooks";
-import { useGetTransactionsQuery } from "src/api";
+// import { useGetTransactionsQuery } from "src/api";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -30,9 +30,9 @@ const Typography = styled(MuiTypography)(spacing);
 function Default() {
   const { t } = useTranslation();
 
-  const { data: transaction, isLoading } = useGetTransactionsQuery();
-  const members = useAppSelector((state) => state.members.members);
-  const cards = useAppSelector((state) => state.cards.cards);
+  // const { data: transaction, isLoading } = useGetTransactionsQuery();
+  // const members = useAppSelector((state) => state.members.members);
+  // const cards = useAppSelector((state) => state.cards.cards);
 
   return (
     <React.Fragment>
@@ -46,7 +46,7 @@ function Default() {
       </Grid>
 
       <Divider my={6} />
-
+      {/* 
       <Grid container spacing={6}>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats title="Members" count={members.length} icon={<User />} />
@@ -81,7 +81,7 @@ function Default() {
             transactions={transaction}
           />
         </Grid>
-      </Grid>
+      </Grid> */}
     </React.Fragment>
   );
 }

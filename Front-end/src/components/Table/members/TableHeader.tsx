@@ -33,7 +33,7 @@ interface IBulkActions {
   search?: string;
   refetch?: any;
   toDay?: Date;
-  handleChangeDate: (date: Date | null) => void;
+  handleChangeDate?: (date: Date | null) => void;
 }
 
 const BulkActions: FC<IBulkActions> = ({
@@ -60,25 +60,27 @@ const BulkActions: FC<IBulkActions> = ({
               Refresh
             </Button>
           </Box>
-          <Box display="flex" alignItems="center">
-            <MobileDatePicker
-              value={toDay}
-              onChange={(value) => handleChangeDate(value)}
-              slotProps={{
-                textField: {
-                  style: {
-                    padding: "7.5px 10px !important",
-                    borderRadius: 0,
+          {handleChangeDate && (
+            <Box display="flex" alignItems="center">
+              <MobileDatePicker
+                value={toDay}
+                onChange={(value) => handleChangeDate(value)}
+                slotProps={{
+                  textField: {
+                    style: {
+                      padding: "7.5px 10px !important",
+                      borderRadius: 0,
+                    },
+                    size: "small",
+                    fullWidth: true,
+                    // error: !!error,
+                    // helperText: error?.message,
+                    // ...other,
                   },
-                  size: "small",
-                  fullWidth: true,
-                  // error: !!error,
-                  // helperText: error?.message,
-                  // ...other,
-                },
-              }}
-            />
-          </Box>
+                }}
+              />
+            </Box>
+          )}
         </Box>
       )}
       <div>
