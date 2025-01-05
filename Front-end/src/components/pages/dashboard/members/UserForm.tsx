@@ -7,10 +7,9 @@ import { useForm } from "react-hook-form";
 //Form
 import FormProvider from "../../../../components/hook-form/FormProvider";
 import RHFTextField from "../../../../components/hook-form/RHTextField";
-import RHTextFieldDate from "../../../../components/hook-form/RHTextFieldDate";
 import RHSelectDropDown from "../../../../components/hook-form/RHSelectDropDown";
 
-import { User, Subscription, Member } from "../../../../types/shared";
+import { Subscription, Member } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,20 +19,16 @@ import { useCreateMemberMutation, useUpdateMemberMutation } from "src/api";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
-  selectItem: User | null;
+  selectItem: Member | null;
   handleClose: () => void;
 }
 
-const defaultValues: Member = {
+const defaultValues: Partial<Member> = {
   id: "",
   email: "",
   firstName: "",
   lastName: "",
-  fonctionality: "",
-  bio: "",
-  credits: 0,
   plan: Subscription.NOPSubs,
-  isActive: false,
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -49,10 +44,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     email: z.string().email("Email must be a valid email address"),
     firstName: z.string({ required_error: "FirstName required" }).min(1),
     lastName: z.string({ required_error: "LastName required" }).min(1),
-    fonctionality: z
-      .string({ required_error: "Fonctionality required" })
-      .min(1),
-    bio: z.string({ required_error: "Bio required" }).min(1),
     plan: z.enum(["NOPSubs", "Monthly", "Weekly"]),
   });
 
@@ -80,13 +71,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     }
   }, [selectItem, resetAsyn]);
 
-  const onSubmit = async (data: User) => {
+  const onSubmit = async (data: Partial<Member>) => {
     if (selectItem) {
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
       data.createdOn = new Date();
-      createMember(data as User);
+      createMember(data as Member);
       setOpenSnak(true);
       handleClose();
     }
@@ -98,7 +89,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         open={openSnak}
         onClose={handleClose}
-        message={`User ${selectItem ? "updated" : "created"} !`}
+        message={`Member ${selectItem ? "updated" : "created"} !`}
         key={"bottom" + "right"}
       />
       <FormProvider
@@ -117,24 +108,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           label="FirstName"
           placeholder="FullName"
         />
-        <RHFTextField name="LastName" label="LastName" placeholder="lastName" />
-        <RHFTextField
-          name="fonctionality"
-          label="Fonctionality"
-          placeholder="fFonctionality"
-        />
-        <RHFTextField name="bio" label="Bio" placeholder="Bio" />
-        <RHFTextField
-          name="price"
-          label="Price"
-          placeholder="Price"
-          type="number"
-        />
-        <RHTextFieldDate
-          name="birthdate"
-          label="Birthdate"
-          placeholder="Birthdate"
-        />
+        <RHFTextField name="lastName" label="LastName" placeholder="lastName" />
+        <RHFTextField name="email" label="Email" placeholder="Email" />
         <RHSelectDropDown
           name="plan"
           label="Plan"

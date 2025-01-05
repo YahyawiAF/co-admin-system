@@ -21,7 +21,9 @@ import {
 } from "src/api/journal.repo";
 import RHFAutoCompletDropDown from "src/components/hook-form/RHFAutoCompletDropDown";
 import { useGetMembersQuery } from "src/api";
-
+import { parseErrorMessage } from "src/utils/api";
+import { PersonAdd } from "@mui/icons-material";
+import UserForm from "../members/UserForm";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
@@ -47,25 +49,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     isLoading: isLoadingMember,
     error,
   } = useGetMembersQuery();
-  const [createJournal, { isLoading }] = useCreateJournalMutation();
+  const [createJournal, { isLoading, error: createJournalError }] =
+    useCreateJournalMutation();
   const [updateMember] = useUpdateJournalMutation();
   // state
   const [openSnak, setOpenSnak] = useState(false);
-  const [member, setMember] = useState(undefined);
-
-  let time = new Date().toLocaleTimeString();
-  const [ctime, setTime] = useState(time);
-
-  const UpdateTime = () => {
-    time = new Date().toLocaleTimeString();
-    setTime(time);
-  };
-
-  setInterval(UpdateTime);
+  const [member, setMember] = useState(null);
+  const [openUserForm, setOpenUserForm] = useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
-    // email: z.union([z.literal(""), z.string().email()]),
-    // fullName: z.string({ required_error: "FullName required" }).min(1),
     registredTime: z.union([z.string().optional(), z.date()]),
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
@@ -105,12 +97,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   }, [selectItem, resetAsyn]);
 
   const handleSelect = (event: any) => {
-    console.log("handleSelect", event);
     if (event) {
       setMember(event);
       setValue("memberID", event.id);
+      if (event.plan !== "NOPSubs") {
+        setValue("isPayed", true);
+        setValue("payedAmount", 4);
+      }
     } else {
-      setMember(" ");
+      setMember(null);
       setValue("memberID", "");
     }
   };
@@ -125,18 +120,33 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const onSubmit = async (data: Partial<Journal>) => {
     if (selectItem) {
-      console.log("data", data);
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
-      data.createdOn = new Date();
-      data.registredTime = data.registredTime ? data.registredTime : new Date();
-      if (data.isPayed) data.leaveTime = new Date();
-      createJournal(data as Journal);
-      setOpenSnak(true);
-      handleClose();
+      try {
+        data.createdOn = new Date();
+        data.registredTime = data.registredTime
+          ? data.registredTime
+          : new Date();
+        if (data.isPayed) data.leaveTime = new Date();
+        await createJournal(data as Journal).unwrap();
+        setOpenSnak(true);
+        handleClose();
+      } catch (e) {
+        console.log("createJournalError", e);
+      }
     }
   };
+
+  if (openUserForm)
+    return (
+      <UserForm
+        handleClose={() => {
+          setOpenUserForm(false);
+        }}
+        selectItem={null}
+      />
+    );
 
   return (
     <>
@@ -147,7 +157,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         message={`Journal ${selectItem ? "updated" : "created"} !`}
         key={"bottom" + "right"}
       />
-      <h1>{ctime}</h1>
       <FormProvider
         styles={{
           width: "100%",
@@ -159,6 +168,21 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         methods={methods as unknown as MethodeType}
         onSubmit={handleSubmit(onSubmit)}
       >
+        <Box
+          style={{
+            padding: 0,
+            display: "flex",
+            gap: "10px",
+          }}
+        >
+          <ActionButtton
+            endIcon={<PersonAdd />}
+            autoFocus
+            onClick={() => setOpenUserForm(true)}
+          >
+            New Member
+          </ActionButtton>
+        </Box>
         {!isLoadingMember ? (
           <RHFAutoCompletDropDown
             label="Keywords Tags"
@@ -172,8 +196,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         ) : (
           <div>Loading!!</div>
         )}
-        {/* <RHFTextField name="fullName" label="FullName" placeholder="FullName" /> */}
-        {/* <RHFTextField name="email" label="Email" placeholder="Email" /> */}
         <RHFTimePeakerField
           name="registredTime"
           label="Starting Date"
@@ -206,6 +228,14 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             Confirm
           </SubmitButtton>
         </Box>
+
+        {!!createJournalError ? (
+          <p style={{ color: "red" }}>
+            {parseErrorMessage(createJournalError)}
+          </p>
+        ) : (
+          <></>
+        )}
       </FormProvider>
     </>
   );

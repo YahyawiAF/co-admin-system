@@ -40,7 +40,7 @@ export class AddMemberDto {
   @ApiProperty({ description: 'Biography of the member', required: false })
   public bio?: string;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsNumber()
   @ApiProperty({ description: 'Credits associated with the member' })
   public credits: number;
@@ -93,7 +93,7 @@ export class AddMemberDto {
   // })
   // public deletedAt?: Date;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsBoolean()
   @ApiProperty({ description: 'Indicates whether the member is active' })
   public isActive: boolean;

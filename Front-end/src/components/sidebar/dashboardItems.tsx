@@ -1,10 +1,10 @@
 import { SidebarItemsType } from "../../types/sidebar";
 
-import { Sliders, Repeat, User, CreditCard, Activity } from "react-feather";
+import { Sliders, User, Activity } from "react-feather";
 
 const pagesSection = [
   {
-    href: "/",
+    href: "/dashboard/landing",
     icon: Sliders,
     title: "Dashboard",
   },
@@ -14,20 +14,15 @@ const pagesSection = [
     title: "Journal",
   },
   {
-    href: "/dashboard/transactions",
-    icon: Repeat,
-    title: "Transactions",
-  },
-  {
     href: "/dashboard/members",
     icon: User,
     title: "Members",
   },
-  {
-    href: "/dashboard/cards",
-    icon: CreditCard,
-    title: "Cards",
-  },
+  // {
+  //   href: "/dashboard/cards",
+  //   icon: CreditCard,
+  //   title: "Cards",
+  // },
 ] as SidebarItemsType[];
 
 const navItems = [

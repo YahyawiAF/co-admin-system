@@ -72,8 +72,8 @@ export class MemberController {
   }
 
   @Patch(':id')
-  @Roles([Role.ADMIN])
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles([Role.ADMIN])
+  // @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiCreatedResponse({ type: MemberEntity })
   async update(
@@ -84,8 +84,8 @@ export class MemberController {
   }
 
   @Delete(':id')
-  @Roles([Role.ADMIN])
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles([Role.ADMIN])
+  // @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: MemberEntity })
   async remove(@Param('id', ParseUUIDPipe) id: string): Promise<MemberEntity> {

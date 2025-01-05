@@ -24,7 +24,7 @@ import { spacing } from "@mui/system";
 
 import DashboardLayout from "../../layouts/Dashboard";
 
-import { User } from "../../types/shared";
+import { Member } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -47,14 +47,22 @@ const headCells: Array<HeadCell> = [
     numeric: false,
     disablePadding: true,
     label: "Full name",
+    alignment: "left",
+  },
+  {
+    id: "email",
+    numeric: false,
+    disablePadding: false,
+    label: "Email",
+    alignment: "left",
   },
   {
     id: "plan",
-    numeric: true,
+    numeric: false,
     disablePadding: false,
     label: "Plan",
+    alignment: "left",
   },
-  { id: "birthdate", numeric: true, disablePadding: false, label: "Birthdate" },
   {
     id: "actions",
     alignment: "right",
@@ -68,7 +76,10 @@ interface Filters {
   query?: string | undefined;
 }
 
-const applyFilters = (keywordServices: User[], filters: Filters): User[] => {
+const applyFilters = (
+  keywordServices: Member[],
+  filters: Filters
+): Member[] => {
   return keywordServices?.filter((keywordServices) => {
     let matches = true;
     const { query } = filters;
@@ -90,7 +101,7 @@ function EnhancedTable() {
   const [orderBy, setOrderBy] = React.useState("calories");
   const [openDeletModal, setOpenDeletModal] = React.useState<boolean>(false);
   const [selected, setSelected] = React.useState<Array<string>>([]);
-  const [editeUser, setEditeUser] = React.useState<User | null>(null);
+  const [memberSelected, setEditeMember] = React.useState<Member | null>(null);
   const [page, setPage] = React.useState(0);
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [filters, setFilters] = useState<Filters>({
@@ -101,7 +112,7 @@ function EnhancedTable() {
   const { data: members, isLoading, error } = useGetMembersQuery();
   const [deleteMember] = useDeleteMemeberMutation();
 
-  const rows: User[] = useMemo(() => members || [], [members]);
+  const rows: Member[] = useMemo(() => members || [], [members]);
 
   const handleRequestSort = (event: any, property: string) => {
     const isAsc = orderBy === property && order === "asc";
@@ -155,33 +166,33 @@ function EnhancedTable() {
     setFilters((filters) => ({ ...filters, query: event.target.value }));
   };
 
-  const filteredRows: User[] = useMemo(
+  const filteredRows: Member[] = useMemo(
     () => applyFilters(rows, filters),
     [filters, rows]
   );
 
-  const handleEdite = useCallback((data: User) => {
-    setEditeUser(data);
+  const handleEdite = useCallback((data: Member) => {
+    setEditeMember(data);
     setOpen(true);
   }, []);
 
-  const handleDelete = useCallback((data: User) => {
-    setEditeUser(data);
+  const handleDelete = useCallback((data: Member) => {
+    setEditeMember(data);
     setOpenDeletModal(true);
   }, []);
 
   const handleAction = useCallback(() => {
-    if (editeUser) {
-      deleteMember(editeUser.id).finally(() => {
-        setEditeUser(null);
+    if (memberSelected) {
+      deleteMember(memberSelected.id).finally(() => {
+        setEditeMember(null);
         setOpenDeletModal(false);
       });
     }
-  }, [editeUser, deleteMember]);
+  }, [memberSelected, deleteMember]);
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelecteds = filteredRows?.map((n: User) => n.id);
+      const newSelecteds = filteredRows?.map((n: Member) => n.id);
       setSelected(newSelecteds);
       return;
     }
@@ -198,8 +209,8 @@ function EnhancedTable() {
         open={openDeletModal}
         handleClose={() => setOpenDeletModal(false)}
         handleAction={handleAction}
-        title={"Delete User"}
-        contentText={`Are you sure you want to remove ${editeUser?.fullName}`}
+        title={"Delete Member"}
+        contentText={`Are you sure you want to remove ${memberSelected?.fullName}`}
       />
       <Drawer
         open={open}
@@ -211,9 +222,9 @@ function EnhancedTable() {
           <UserForm
             handleClose={() => {
               setOpen(false);
-              setEditeUser(null);
+              setEditeMember(null);
             }}
-            selectItem={editeUser}
+            selectItem={memberSelected}
           />
         </SubPage>
       </Drawer>
@@ -265,8 +276,8 @@ function EnhancedTable() {
                       >
                         {row.fullName}
                       </TableCell>
-                      <TableCell align="right">{row.plan}</TableCell>
-                      <TableCell align="right">{row.birthdate}</TableCell>
+                      <TableCell>{row.email}</TableCell>
+                      <TableCell>{row.plan}</TableCell>
                       <TableCell padding="none" align="right">
                         <Box mr={2}>
                           <IconButton

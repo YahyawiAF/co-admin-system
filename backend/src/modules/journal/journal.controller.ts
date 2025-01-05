@@ -28,6 +28,7 @@ import { Role } from '@prisma/client';
 import { RolesGuard } from '../../../common/guards/auth.guard';
 import { Roles } from '../../../common/decorator/roles.decorator';
 import { PaginatedResult } from 'prisma-pagination';
+import { startOfDay, endOfDay } from 'date-fns';
 
 @Controller('Journal')
 @ApiTags('journal')
@@ -50,8 +51,21 @@ export class JournalController {
   async findAllkeyword(
     @Query('page') page: number,
     @Query('perPage') perPage: number,
+    @Query('journalDate') journalDate: string,
   ): Promise<PaginatedResult<AddJournalDto>> {
-    return await this.JournalService.findMany({ perPage, page });
+    const date = new Date(journalDate);
+
+    // Create date range for filtering within the same day
+    const startOfTheDay = startOfDay(date);
+    const endOfTheDay = endOfDay(date);
+
+    const where = {
+      createdAt: {
+        gte: startOfTheDay,
+        lt: endOfTheDay,
+      },
+    };
+    return await this.JournalService.findMany({ perPage, page, where });
   }
 
   @Get('all')
@@ -73,8 +87,8 @@ export class JournalController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard)
+  // @ApiBearerAuth()
   @ApiCreatedResponse({ type: JournalEntity })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,8 +100,8 @@ export class JournalController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth()
+  // @UseGuards(JwtAuthGuard)
+  // @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity })
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return new JournalEntity(await this.JournalService.remove(id));

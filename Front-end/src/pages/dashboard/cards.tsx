@@ -119,7 +119,7 @@ function EnhancedTable({ cards }: { cards: Card[] | undefined }) {
   const [openDeletModal, setOpenDeletModal] = React.useState<boolean>(false);
   const [editeCard, setEditeCard] = React.useState<Card | null>(null);
   const [open, setOpen] = useState(false);
-  const [deleteCard] = useDeleteCardMutation();
+  // const [deleteCard] = useDeleteCardMutation();
 
   const rows: Card[] = useMemo(() => cards || [], [cards]);
 
@@ -187,13 +187,13 @@ function EnhancedTable({ cards }: { cards: Card[] | undefined }) {
   }, []);
 
   const handleAction = useCallback(() => {
-    if (editeCard?.id) {
-      deleteCard(editeCard?.id).finally(() => {
-        setEditeCard(null);
-        setOpenDeletModal(false);
-      });
-    }
-  }, [editeCard, deleteCard]);
+    // if (editeCard?.id) {
+    //   deleteCard(editeCard?.id).finally(() => {
+    //     setEditeCard(null);
+    //     setOpenDeletModal(false);
+    //   });
+    // }
+  }, [editeCard]);
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
@@ -339,7 +339,8 @@ function EnhancedTable({ cards }: { cards: Card[] | undefined }) {
 
 function CardPage() {
   const [value, setValue] = useState(0);
-  const { data: cards, isLoading, error, isError } = useGetCardQuery();
+  // const { data: cards, isLoading, error, isError } = useGetCardQuery();
+  const cards = []
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
@@ -359,8 +360,8 @@ function CardPage() {
     [cards]
   );
 
-  if (isLoading) return <Loader />;
-  if (isError) return <div> error</div>;
+  // if (isLoading) return <Loader />;
+  // if (isError) return <div> error</div>;
   return (
     <React.Fragment>
       <Helmet title="Transactions" />

@@ -48,7 +48,7 @@ const AutoCompletDropDown: React.FC<IRHFTextFieldAutoComplet> = ({
             multiple={multiple}
             {...defaultProps}
             {...field}
-            value={selectedItem || []}
+            value={selectedItem || (multiple ? [] : null)}
             onChange={(event: any, newValue: any) => {
               handleSelection(newValue);
             }}

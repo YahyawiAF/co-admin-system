@@ -8,6 +8,7 @@ import { AddJournalDto } from './dtos/createJournal.dto';
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { JournalEntity } from './entities/journal.entity';
+import { endOfDay, startOfDay } from 'date-fns';
 
 export const roundsOfHashing = 10;
 
@@ -21,6 +22,30 @@ export class JournalService {
   constructor(private prisma: PrismaService) {}
   async create(CreateJournalDto: AddJournalDto) {
     try {
+      const { memberID } = CreateJournalDto;
+
+      const now = new Date();
+      const startOfTheDay = startOfDay(now);
+      const endOfTheDay = endOfDay(now);
+
+      const existingJournal = await this.prisma.journal.findFirst({
+        where: {
+          memberID,
+          createdAt: {
+            gte: startOfTheDay,
+            lt: endOfTheDay,
+          },
+        },
+      });
+
+      if (existingJournal) {
+        throw new GeneralException(
+          HttpStatus.CONFLICT,
+          ErrorCode.ALREADY_EXIST,
+          `A journal entry for member already exists today.`,
+        );
+      }
+
       return await this.prisma.journal.create({
         data: CreateJournalDto,
       });
