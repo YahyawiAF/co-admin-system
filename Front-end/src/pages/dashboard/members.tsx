@@ -80,13 +80,13 @@ const applyFilters = (
   keywordServices: Member[],
   filters: Filters
 ): Member[] => {
-  return keywordServices?.filter((keywordServices) => {
+  return keywordServices.filter((keywordServices) => {
     let matches = true;
     const { query } = filters;
     if (query) {
       matches = Object.keys(keywordServices).some((key) => {
         return keywordServices[key]
-          .toString()
+          ?.toString()
           .toLowerCase()
           .includes(query.toLowerCase());
       });

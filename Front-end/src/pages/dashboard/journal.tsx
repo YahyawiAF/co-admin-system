@@ -99,6 +99,12 @@ interface Filters {
   query?: string | undefined;
 }
 
+function doesObjectContainQuery(obj: Record<any, any>, query: string) {
+  return Object.keys(obj).some((key) => {
+    return obj[key]?.toString().toLowerCase().includes(query.toLowerCase());
+  });
+}
+
 const applyFilters = (
   keywordServices: Journal[],
   filters: Filters
@@ -108,10 +114,13 @@ const applyFilters = (
     const { query } = filters;
     if (query) {
       matches = Object.keys(keywordServices).some((key) => {
-        return keywordServices[key]
-          .toString()
-          .toLowerCase()
-          .includes(query.toLowerCase());
+        if (key === "members")
+          return doesObjectContainQuery(keywordServices["members"], query);
+        else
+          return keywordServices[key]
+            ?.toString()
+            .toLowerCase()
+            .includes(query.toLowerCase());
       });
     }
 
