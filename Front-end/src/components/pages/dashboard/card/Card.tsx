@@ -10,7 +10,7 @@ import {
 import { green, grey, red } from "@mui/material/colors";
 import { Box, spacing } from "@mui/system";
 import { TaskAltOutlined, DoNotDisturb } from "@mui/icons-material";
-import { useUpdateCardMutation } from "src/api";
+// import { useUpdateCardMutation } from "src/api";
 import { Card as ICARD, StatusCard } from "src/types/shared";
 const CardIcon = styled.div`
   width: 100px;
@@ -34,7 +34,7 @@ const Button = styled(MuiButton)(spacing);
 const Card = styled(MuiCard)(spacing);
 
 function CardBanner({ card }: { card: ICARD }) {
-  const [updateCard] = useUpdateCardMutation();
+  const updateCard = (args: any) => {};
 
   const onHandleUpdateCardAction = async (status: StatusCard) => {
     updateCard({ ...card, status });

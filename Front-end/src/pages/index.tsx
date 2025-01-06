@@ -13,14 +13,14 @@ import { spacing } from "@mui/system";
 
 import DashboardLayout from "src/layouts/Dashboard";
 
-import LineChart from "src/components/pages/dashboard/landing/LineChart";
-import DoughnutChart from "src/components/pages/dashboard/landing/DoughnutChart";
-import DoughnutTopTransactions from "src/components/pages/dashboard/landing/DoughnutTopTransactions";
+// import LineChart from "src/components/pages/dashboard/landing/LineChart";
+// import DoughnutChart from "src/components/pages/dashboard/landing/DoughnutChart";
+// import DoughnutTopTransactions from "src/components/pages/dashboard/landing/DoughnutTopTransactions";
 
-import Stats from "src/components/pages/dashboard/landing/stats";
-import Table from "src/components/pages/dashboard/landing/Table";
-import { DollarSign, CreditCard, User } from "react-feather";
-import { useAppSelector } from "src/redux/hooks";
+// import Stats from "src/components/pages/dashboard/landing/stats";
+// import Table from "src/components/pages/dashboard/landing/Table";
+// import { DollarSign, CreditCard, User } from "react-feather";
+// import { useAppSelector } from "src/redux/hooks";
 // import { useGetTransactionsQuery } from "src/api";
 
 const Divider = styled(MuiDivider)(spacing);

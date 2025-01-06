@@ -1,5 +1,5 @@
 const config = {
-  apiUrl: "http://localhost:4000/",
+  apiUrl: process.env.NEXT_PUBLIC_WEB_SERVER,
 };
 
 export default config;
