@@ -94,7 +94,7 @@ const Dashboard: React.FC<DashboardType> = ({ children }) => {
       </Drawer>
       <AppContent>
         <Navbar onDrawerToggle={handleDrawerToggle} />
-        <MainContent p={isLgDown ? 5 : 12}>
+        <MainContent p={isLgDown ? 2 : 12}>
           {children}
           <Outlet />
         </MainContent>

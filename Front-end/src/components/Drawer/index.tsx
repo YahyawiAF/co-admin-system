@@ -21,7 +21,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         open={open}
         onClose={(e, raison) => raison !== "backdropClick" && handleClose()}
         PaperProps={{
-          sx: { width: 440, border: "none", overflow: "hidden" },
+          lg: { width: 440, border: "none", overflow: "hidden" },
+          sx: { width: "100%" },
         }}
       >
         {children}

@@ -35,7 +35,6 @@ import {
 } from "@mui/icons-material";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
 // import CardBank from "src/components/pages/dashboard/card/BankCard";
-
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
@@ -255,6 +254,7 @@ function JournalPage() {
     rowsPerPage -
     Math.min(rowsPerPage, filteredRows.length - page * rowsPerPage);
 
+  if (isLoading) return <Loader />;
   return (
     <React.Fragment>
       <Helmet title="Transactions" />

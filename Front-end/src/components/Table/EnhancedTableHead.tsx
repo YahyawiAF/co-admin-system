@@ -36,6 +36,7 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = (props) => {
           {headCells.map((headCell) => (
             <TableCell
               key={headCell.id}
+              sx={{ textWrap: "nowrap" }}
               align={headCell.numeric ? "right" : "left"}
               padding={headCell.disablePadding ? "none" : "normal"}
               sortDirection={orderBy === headCell.id ? order : false}

@@ -45,7 +45,18 @@ const BulkActions: FC<IBulkActions> = ({
   handleChangeDate,
 }) => {
   return (
-    <Toolbar sx={{ justifyContent: refetch ? "space-between" : "flex-end" }}>
+    <Toolbar
+      sx={{
+        justifyContent: {
+          xs: "flex-start",
+          md: refetch ? "space-between" : "flex-end",
+        },
+        alignItems: { xs: "flex-start", md: "center" },
+        flexDirection: { xs: "column", md: "row" },
+        gap: { xs: "10px", md: "unset" },
+        marginBottom: { xs: "12px", md: "unset" },
+      }}
+    >
       {refetch && (
         <Box display="flex" alignItems="center">
           <Box display="flex" alignItems="center" mr="5px">
