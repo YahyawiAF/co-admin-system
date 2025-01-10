@@ -60,7 +60,7 @@ export class JournalController {
     const endOfTheDay = endOfDay(date);
 
     const where = {
-      createdAt: {
+      registredTime: {
         gte: startOfTheDay,
         lt: endOfTheDay,
       },

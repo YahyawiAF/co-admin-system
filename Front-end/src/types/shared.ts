@@ -114,6 +114,7 @@ export interface Member {
   functionality?: string | null;
   bio?: string | null;
   credits: number;
+  phone: string;
   plan: Subscription;
   journals: Journal[];
   reservations: Reservation[];

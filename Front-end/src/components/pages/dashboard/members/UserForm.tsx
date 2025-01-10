@@ -28,6 +28,7 @@ const defaultValues: Partial<Member> = {
   email: "",
   firstName: "",
   lastName: "",
+  phone: "",
   plan: Subscription.NOPSubs,
 };
 
@@ -41,8 +42,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
 
   const validationSchema: ZodType<Omit<Member, "createdOn">> = z.object({
-    email: z.string().email("Email must be a valid email address"),
     firstName: z.string({ required_error: "FirstName required" }).min(1),
+    phone: z.number({ required_error: "Phone required" }).min(1),
+    email: z.union([z.literal(""), z.string().email()]),
     lastName: z.string({ required_error: "LastName required" }).min(1),
     plan: z.enum(["NOPSubs", "Monthly", "Weekly"]),
   });
@@ -73,9 +75,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const onSubmit = async (data: Partial<Member>) => {
     if (selectItem) {
+      console.log("data", selectItem);
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
+      console.log("data", data);
       data.createdOn = new Date();
       createMember(data as Member);
       setOpenSnak(true);
@@ -109,6 +113,21 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           placeholder="FullName"
         />
         <RHFTextField name="lastName" label="LastName" placeholder="lastName" />
+        <RHFTextField
+          sx={{
+            "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
+              {
+                display: "none",
+              },
+            "& input[type=number]": {
+              MozAppearance: "textfield",
+            },
+          }}
+          type="number"
+          name="phone"
+          label="Phone"
+          placeholder="Phone"
+        />
         <RHFTextField name="email" label="Email" placeholder="Email" />
         <RHSelectDropDown
           name="plan"

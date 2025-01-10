@@ -28,6 +28,9 @@ export class MemberEntity implements Member {
   @ApiProperty({ description: 'Credits associated with the member' })
   credits: number;
 
+  @ApiProperty({ description: 'Phone of the member' })
+  phone: number;
+
   @ApiProperty({
     description: 'Subscription plan of the member',
     required: false,

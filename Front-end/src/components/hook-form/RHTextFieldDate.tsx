@@ -1,7 +1,11 @@
 import { FC } from "react";
 import { useFormContext, Controller } from "react-hook-form";
 import { TextFieldProps } from "@mui/material";
-import { DesktopDatePicker, MobileTimePicker } from "@mui/x-date-pickers";
+import {
+  DesktopDatePicker,
+  MobileTimePicker,
+  MobileDateTimePicker,
+} from "@mui/x-date-pickers";
 import { format } from "date-fns";
 
 type IRHFTextField = {
@@ -59,10 +63,43 @@ export const RHFTimePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
         field: { value, onChange, ...field },
         fieldState: { error },
       }) => {
-        console.log("value", value);
         const date = value ? new Date(value) : new Date();
         return (
           <MobileTimePicker
+            {...field}
+            value={date}
+            onChange={(value) => onChange(value)}
+            slotProps={{
+              textField: {
+                fullWidth: true,
+                variant: "outlined",
+                error: !!error,
+                helperText: error?.message,
+                ...other,
+              },
+            }}
+          />
+        );
+      }}
+    />
+  );
+};
+export const RHFDatePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
+  const { control } = useFormContext();
+
+  return (
+    <Controller
+      name={name}
+      control={control}
+      render={({
+        field: { value, onChange, ...field },
+        fieldState: { error },
+      }) => {
+        console.log("MobileDateTimePicker", value);
+        console.log("MobileDateTimePicker", new Date(value));
+        const date = value ? new Date(value) : new Date();
+        return (
+          <MobileDateTimePicker
             {...field}
             value={date}
             onChange={(value) => onChange(value)}

@@ -1,6 +1,7 @@
 // components
 import { FC, ReactNode } from "react";
 import Drawer from "@mui/material/Drawer";
+import { Box } from "@mui/material";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
@@ -22,10 +23,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         onClose={(e, raison) => raison !== "backdropClick" && handleClose()}
         PaperProps={{
           lg: { width: 440, border: "none", overflow: "hidden" },
-          sx: { width: "100%" },
+          sx: { width: { sm: "100%", lg: 440 }, overflow: "hidden" },
         }}
       >
-        {children}
+        <Box
+          sx={{
+            overflowY: "auto", // Enable vertical scrolling
+            height: "100%", // Ensure it takes up the full height of the drawer
+          }}
+        >
+          {children}
+        </Box>
       </Drawer>
     </>
   );

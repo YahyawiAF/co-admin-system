@@ -75,7 +75,7 @@ export class JournalService {
     page,
     perPage = 20,
   }: {
-    where?: Prisma.UserWhereInput;
+    where?: Prisma.JournalWhereInput;
     orderBy?: Prisma.UserOrderByWithRelationInput;
     page?: number;
     perPage: number;

@@ -6,7 +6,7 @@ type IRHFTextField = {
   name: string;
 } & TextFieldProps;
 
-const RHFTextField: FC<IRHFTextField> = ({ InputProps, name, ...other }) => {
+const RHFTextField: FC<IRHFTextField> = ({ inputProps, name, ...other }) => {
   const { control } = useFormContext();
 
   return (
@@ -33,7 +33,7 @@ const RHFTextField: FC<IRHFTextField> = ({ InputProps, name, ...other }) => {
           helperText={error?.message}
           error={!!error}
           {...other}
-          InputProps={InputProps}
+          inputProps={inputProps}
         />
       )}
     />

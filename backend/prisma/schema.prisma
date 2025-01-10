@@ -24,9 +24,9 @@ model User {
 
 model Member {
     id String @id @default(uuid())
-
     email         String? @unique @db.VarChar(256)
-    firstName      String? @db.VarChar(56)
+    phone         Int? @unique
+    firstName     String? @db.VarChar(56)
     lastName      String? @db.VarChar(56)
     functionality String?
     bio           String?

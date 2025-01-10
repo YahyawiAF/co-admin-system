@@ -1,13 +1,23 @@
 // components
 import { FC, useState } from "react";
 import * as React from "react";
-import { Box, styled, Button, Snackbar } from "@mui/material";
+import {
+  Box,
+  styled,
+  Button,
+  Snackbar,
+  Divider,
+  Typography,
+} from "@mui/material";
 //Yup
 import { useForm } from "react-hook-form";
 //Form
 import FormProvider from "../../../hook-form/FormProvider";
 import RHFTextField from "../../../hook-form/RHTextField";
-import { RHFTimePeakerField } from "../../../hook-form/RHTextFieldDate";
+import {
+  RHFDatePeakerField,
+  RHFTimePeakerField,
+} from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
 
 import { Journal, Member } from "../../../../types/shared";
@@ -24,6 +34,7 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
+import { differenceInHours } from "date-fns";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
@@ -36,6 +47,7 @@ const defaultValues: Partial<Journal> = {
   isPayed: false,
   payedAmount: 0,
   registredTime: new Date(),
+  leaveTime: new Date(),
   memberID: null,
 };
 
@@ -59,6 +71,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
+    leaveTime: z.union([z.string().optional(), z.date().optional()]),
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
@@ -77,7 +90,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     watch,
   } = methods;
 
-  const formValues = watch();
+  const isPayed = watch("isPayed");
+  const leaveTime = watch("leaveTime");
+  const payedAmount = watch("payedAmount");
+
+  const stayedHours = React.useMemo(() => {
+    const dStarting = selectItem?.registredTime
+      ? new Date(selectItem?.registredTime)
+      : new Date();
+    const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
+    return differenceInHours(dLeaving, dStarting);
+  }, [selectItem, leaveTime]);
 
   const resetAsyn = React.useCallback(
     (data: any) => {
@@ -89,21 +112,33 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   React.useEffect(() => {
     if (selectItem) {
       resetAsyn(selectItem);
-      resetAsyn(selectItem);
       if (selectItem) {
         setMember(selectItem?.members);
       }
     }
   }, [selectItem, resetAsyn]);
 
+  React.useEffect(() => {
+    if (isPayed) {
+      if (selectItem?.members?.plan === "NOPSubs") {
+        setValue("isPayed", true);
+        if (stayedHours > 6) {
+          setValue("payedAmount", 8);
+        } else {
+          setValue("payedAmount", 4);
+        }
+      }
+    } else {
+      setValue("leaveTime", new Date());
+      setValue("payedAmount", 0);
+    }
+  }, [isPayed, setValue, stayedHours, selectItem]);
+
   const handleSelect = (event: any) => {
     if (event) {
       setMember(event);
       setValue("memberID", event.id);
-      if (event.plan !== "NOPSubs") {
-        setValue("isPayed", true);
-        setValue("payedAmount", 4);
-      }
+      console.log("event", event);
     } else {
       setMember(null);
       setValue("memberID", "");
@@ -124,11 +159,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       handleClose();
     } else {
       try {
-        data.createdOn = new Date();
         data.registredTime = data.registredTime
           ? data.registredTime
           : new Date();
-        if (data.isPayed) data.leaveTime = new Date();
+        if (data.isPayed && !data.leaveTime) data.leaveTime = new Date();
         await createJournal(data as Journal).unwrap();
         setOpenSnak(true);
         handleClose();
@@ -168,21 +202,25 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         methods={methods as unknown as MethodeType}
         onSubmit={handleSubmit(onSubmit)}
       >
-        <Box
-          style={{
-            padding: 0,
-            display: "flex",
-            gap: "10px",
-          }}
-        >
-          <ActionButtton
-            endIcon={<PersonAdd />}
-            autoFocus
-            onClick={() => setOpenUserForm(true)}
+        {!selectItem ? (
+          <Box
+            style={{
+              padding: 0,
+              display: "flex",
+              gap: "10px",
+            }}
           >
-            New Member
-          </ActionButtton>
-        </Box>
+            <ActionButtton
+              endIcon={<PersonAdd />}
+              autoFocus
+              onClick={() => setOpenUserForm(true)}
+            >
+              New Member
+            </ActionButtton>
+          </Box>
+        ) : (
+          <></>
+        )}
         {!isLoadingMember ? (
           <RHFAutoCompletDropDown
             label="Keywords Tags"
@@ -201,6 +239,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           label="Starting Date"
           placeholder="Inscription Date"
         />
+        <RHFDatePeakerField
+          name="leaveTime"
+          label="Leaving Date"
+          placeholder="Leaving Date"
+        />
         <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
         <RHFTextField
           type="number"
@@ -208,12 +251,83 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           label="Price Payed (DT)"
           placeholder="Prix"
         />
+        <Divider />
+        <Box
+          style={{
+            flexDirection: "column",
+            padding: 0,
+            display: "flex",
+            gap: "10px",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              justifyItems: "center",
+            }}
+          >
+            <Typography variant="subtitle2">Stayed Hours</Typography>
+            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+              {stayedHours + " hours"}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              justifyItems: "center",
+            }}
+          >
+            <Typography variant="subtitle2">Total</Typography>
+            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+              {payedAmount
+                ? payedAmount
+                : stayedHours < 1
+                ? "0 DT"
+                : stayedHours <= 6
+                ? "4 DT"
+                : "8DT"}
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              justifyItems: "center",
+            }}
+          >
+            <Typography variant="subtitle2">Discount</Typography>
+            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+              {"0 DT"}
+            </Typography>
+          </Box>
+          <Divider />
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              justifyItems: "center",
+            }}
+          >
+            <Typography variant="h4">SubTotal</Typography>
+            <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
+              {payedAmount
+                ? payedAmount
+                : stayedHours < 1
+                ? "0 DT"
+                : stayedHours <= 6
+                ? "4 DT"
+                : "8DT"}
+            </Typography>
+          </Box>
+          <Divider />
+        </Box>
         <Box
           style={{
             padding: 0,
             display: "flex",
             gap: "10px",
-            marginTop: "25px",
           }}
         >
           <ActionButtton autoFocus onClick={handleClose}>

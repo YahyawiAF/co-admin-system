@@ -1,13 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Subscription } from '@prisma/client';
-import {
-  IsNotEmpty,
-  IsString,
-  IsOptional,
-  IsDate,
-  IsNumber,
-  IsBoolean,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean } from 'class-validator';
 
 export class AddMemberDto {
   // @IsNotEmpty()
@@ -44,6 +37,11 @@ export class AddMemberDto {
   @IsNumber()
   @ApiProperty({ description: 'Credits associated with the member' })
   public credits: number;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ description: 'Phone associated with the member' })
+  public phone: number;
 
   @IsOptional()
   @IsString()

@@ -53,7 +53,7 @@
     "css-vendor": "2.0.8",
     "date-fns": "2.30.0",
     "deepmerge": "4.3.1",
-    "firebase": "8.10.1",
+    "firebase": "^8.10.1",
     "formik": "2.4.5",
     "google-map-react": "2.2.1",
     "history": "5.3.0",

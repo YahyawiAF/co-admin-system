@@ -74,10 +74,10 @@ const headCells: Array<HeadCell> = [
     label: "Payed Amount",
   },
   {
-    id: "leaveTime",
+    id: "stayed",
     numeric: false,
     disablePadding: true,
-    label: "leave Time",
+    label: "StayedTime",
   },
   {
     id: "isPayed",
@@ -134,7 +134,7 @@ function JournalPage() {
   const [selected, setSelected] = React.useState<Array<string>>([]);
   const [editeJournal, setEditeJournal] = React.useState<Journal | null>(null);
   const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(10);
+  const [rowsPerPage, setRowsPerPage] = React.useState(100);
   const [today, setToday] = React.useState<Date>(new Date());
   const [filters, setFilters] = useState<Filters>({
     query: "",
@@ -356,6 +356,10 @@ function JournalPage() {
                             "0"
                           )}:${String(minutes).padStart(2, "0")}`;
 
+                          const leaveDate = row?.leaveTime
+                            ? new Date(row?.leaveTime).toDateString()
+                            : "N/S";
+
                           return (
                             <TableRow
                               hover
@@ -378,19 +382,20 @@ function JournalPage() {
                                 scope="row"
                                 padding="none"
                               >
-                                {row.members.fullName}
+                                {row.members?.fullName}
                               </TableCell>
                               <TableCell>
                                 {format(
-                                  new Date(row.createdAt) as Date,
+                                  new Date(row.registredTime) as Date,
                                   "HH:mm:ss"
                                 )}
                               </TableCell>
                               <TableCell>
-                                {row.price
-                                  ? row.price + " DT"
-                                  : toBePayed + " DT"}
+                                {row.payedAmount
+                                  ? row.payedAmount + " DT"
+                                  : 0 + " DT"}
                               </TableCell>
+                              {/* <TableCell>{leaveDate}</TableCell> */}
                               <TableCell>{formattedTime}</TableCell>
 
                               <TableCell>
@@ -426,7 +431,7 @@ function JournalPage() {
                   </Table>
                 </TableContainer>
                 <TablePagination
-                  rowsPerPageOptions={[5, 10, 25]}
+                  rowsPerPageOptions={[50, 100, 200, 500]}
                   component="div"
                   count={filteredRows.length}
                   rowsPerPage={rowsPerPage}

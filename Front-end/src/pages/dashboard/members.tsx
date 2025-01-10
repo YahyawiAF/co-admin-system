@@ -103,7 +103,7 @@ function EnhancedTable() {
   const [selected, setSelected] = React.useState<Array<string>>([]);
   const [memberSelected, setEditeMember] = React.useState<Member | null>(null);
   const [page, setPage] = React.useState(0);
-  const [rowsPerPage, setRowsPerPage] = React.useState(10);
+  const [rowsPerPage, setRowsPerPage] = React.useState(50);
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
@@ -308,7 +308,7 @@ function EnhancedTable() {
           </Table>
         </TableContainer>
         <TablePagination
-          rowsPerPageOptions={[5, 10, 25]}
+          rowsPerPageOptions={[50, 100, 400]}
           component="div"
           count={filteredRows.length}
           rowsPerPage={rowsPerPage}

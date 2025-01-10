@@ -17,7 +17,7 @@ export const journalServerApi = createApi({
     getJournal: builder.query<PaginatedResponse<Journal>, Params>({
       query: ({ perPage, page, journalDate }) => {
         const queryParams = new URLSearchParams({
-          perpage: perPage.toString(),
+          perPage: perPage.toString(),
           page: page.toString(),
           journalDate,
         });

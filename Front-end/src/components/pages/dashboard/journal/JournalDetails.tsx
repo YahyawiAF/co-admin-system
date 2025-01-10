@@ -31,7 +31,11 @@ function JournalDetails({
 }) {
   const Members = journals.length;
   const cashTotal = useMemo(
-    () => journals.reduce((acc, curr) => (curr.isPayed ? acc + 4 : acc), 0),
+    () =>
+      journals.reduce(
+        (acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 4) : acc),
+        0
+      ),
     [journals]
   );
   if (isLoading) return <p>Loading</p>;
