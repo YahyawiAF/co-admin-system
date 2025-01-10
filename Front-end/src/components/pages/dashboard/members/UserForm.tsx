@@ -15,6 +15,7 @@ import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ZodType, z } from "zod";
 import { useCreateMemberMutation, useUpdateMemberMutation } from "src/api";
+import { parseErrorMessage } from "src/utils/api";
 
 // ----------------------------------------------------------------------
 
@@ -36,7 +37,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
 }) => {
-  const [createMember, { isLoading }] = useCreateMemberMutation();
+  const [createMember, { isLoading, error: errorCreateMember }] =
+    useCreateMemberMutation();
   const [updateMember] = useUpdateMemberMutation();
 
   const [openSnak, setOpenSnak] = useState(false);
@@ -79,11 +81,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
-      console.log("data", data);
-      data.createdOn = new Date();
-      createMember(data as Member);
-      setOpenSnak(true);
-      handleClose();
+      try {
+        data.createdOn = new Date();
+        if (!data.email) {
+          delete data.email;
+        }
+        createMember(data as Member).unwrap();
+        setOpenSnak(true);
+        handleClose();
+      } catch (e) {
+        console.log("createJournalError", e);
+      }
     }
   };
 
@@ -154,6 +162,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             Confirm
           </SubmitButtton>
         </Box>
+        {!!errorCreateMember ? (
+          <p style={{ color: "red" }}>{parseErrorMessage(errorCreateMember)}</p>
+        ) : (
+          <></>
+        )}
       </FormProvider>
     </>
   );

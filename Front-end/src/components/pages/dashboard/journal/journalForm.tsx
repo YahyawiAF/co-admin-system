@@ -34,7 +34,8 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
-import { differenceInHours } from "date-fns";
+import { addHours, differenceInHours } from "date-fns";
+import RHSelectDropDown from "src/components/hook-form/RHSelectDropDown";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
@@ -49,6 +50,7 @@ const defaultValues: Partial<Journal> = {
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
+  optionDaily: "Full Day",
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -93,6 +95,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
+  // const optionDaily = watch("optionDaily");
+  // const registredTime = watch("registredTime");
 
   const stayedHours = React.useMemo(() => {
     const dStarting = selectItem?.registredTime
@@ -111,7 +115,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     if (selectItem) {
-      resetAsyn(selectItem);
+      let updatedMemberJournal = { ...selectItem };
+      if (!updatedMemberJournal.isPayed)
+        updatedMemberJournal.leaveTime = new Date();
+      resetAsyn(updatedMemberJournal);
       if (selectItem) {
         setMember(selectItem?.members);
       }
@@ -129,16 +136,25 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         }
       }
     } else {
-      setValue("leaveTime", new Date());
       setValue("payedAmount", 0);
     }
   }, [isPayed, setValue, stayedHours, selectItem]);
+
+  // React.useEffect(() => {
+  //   let date = registredTime ? new Date(registredTime) : new Date();
+  //   if (optionDaily === "Full Day") {
+  //     const newDate = addHours(date, 8);
+  //     setValue("leaveTime", newDate);
+  //   } else if (optionDaily === "Demi Day") {
+  //     const newDate = addHours(date, 6);
+  //     setValue("leaveTime", newDate);
+  //   }
+  // }, [registredTime, setValue, optionDaily]);
 
   const handleSelect = (event: any) => {
     if (event) {
       setMember(event);
       setValue("memberID", event.id);
-      console.log("event", event);
     } else {
       setMember(null);
       setValue("memberID", "");
@@ -239,90 +255,101 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           label="Starting Date"
           placeholder="Inscription Date"
         />
-        <RHFDatePeakerField
-          name="leaveTime"
-          label="Leaving Date"
-          placeholder="Leaving Date"
-        />
         <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
-        <RHFTextField
-          type="number"
-          name="payedAmount"
-          label="Price Payed (DT)"
-          placeholder="Prix"
-        />
-        <Divider />
-        <Box
-          style={{
-            flexDirection: "column",
-            padding: 0,
-            display: "flex",
-            gap: "10px",
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              justifyItems: "center",
-            }}
-          >
-            <Typography variant="subtitle2">Stayed Hours</Typography>
-            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-              {stayedHours + " hours"}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              justifyItems: "center",
-            }}
-          >
-            <Typography variant="subtitle2">Total</Typography>
-            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-              {payedAmount
-                ? payedAmount
-                : stayedHours < 1
-                ? "0 DT"
-                : stayedHours <= 6
-                ? "4 DT"
-                : "8DT"}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              justifyItems: "center",
-            }}
-          >
-            <Typography variant="subtitle2">Discount</Typography>
-            <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-              {"0 DT"}
-            </Typography>
-          </Box>
-          <Divider />
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              justifyItems: "center",
-            }}
-          >
-            <Typography variant="h4">SubTotal</Typography>
-            <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
-              {payedAmount
-                ? payedAmount
-                : stayedHours < 1
-                ? "0 DT"
-                : stayedHours <= 6
-                ? "4 DT"
-                : "8DT"}
-            </Typography>
-          </Box>
-          <Divider />
-        </Box>
+        {isPayed ? (
+          <>
+            {/* <RHSelectDropDown
+              name="optionDaily"
+              list={["Full Day", "Demi Day"]}
+            /> */}
+            <RHFDatePeakerField
+              name="leaveTime"
+              label="Leaving Date"
+              placeholder="Leaving Date"
+            />
+            <RHFTextField
+              type="number"
+              name="payedAmount"
+              label="Price Payed (DT)"
+              placeholder="Prix"
+            />
+            <Divider />
+            <Box
+              style={{
+                flexDirection: "column",
+                padding: 0,
+                display: "flex",
+                gap: "10px",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  justifyItems: "center",
+                }}
+              >
+                <Typography variant="subtitle2">Stayed Hours</Typography>
+                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+                  {stayedHours + " hours"}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  justifyItems: "center",
+                }}
+              >
+                <Typography variant="subtitle2">Total</Typography>
+                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+                  {payedAmount
+                    ? payedAmount
+                    : stayedHours < 1
+                    ? "0 DT"
+                    : stayedHours <= 6
+                    ? "4 DT"
+                    : "8DT"}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  justifyItems: "center",
+                }}
+              >
+                <Typography variant="subtitle2">Discount</Typography>
+                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+                  {"0 DT"}
+                </Typography>
+              </Box>
+              <Divider />
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  justifyItems: "center",
+                }}
+              >
+                <Typography variant="h4">SubTotal</Typography>
+                <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
+                  {payedAmount
+                    ? payedAmount
+                    : stayedHours < 1
+                    ? "0 DT"
+                    : stayedHours <= 6
+                    ? "4 DT"
+                    : "8DT"}
+                </Typography>
+              </Box>
+              <Divider />
+            </Box>
+          </>
+        ) : (
+          <></>
+        )}
+
         <Box
           style={{
             padding: 0,

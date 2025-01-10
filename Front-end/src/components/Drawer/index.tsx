@@ -23,11 +23,12 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         onClose={(e, raison) => raison !== "backdropClick" && handleClose()}
         PaperProps={{
           lg: { width: 440, border: "none", overflow: "hidden" },
-          sx: { width: { sm: "100%", lg: 440 }, overflow: "hidden" },
+          sx: { width: { xs: "100%", sm: 440 }, overflow: "hidden" },
         }}
       >
         <Box
           sx={{
+            width: "100%",
             overflowY: "auto", // Enable vertical scrolling
             height: "100%", // Ensure it takes up the full height of the drawer
           }}
