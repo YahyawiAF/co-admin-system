@@ -27,7 +27,7 @@ const RHSelectDropDown: FC<IRHFTextField> = ({
       name={name}
       control={control}
       render={({ field, fieldState: { error } }) => {
-        console.log("field.value", field.value)
+        console.log("field.value", field.value);
         return (
           <StyledDropDown fullWidth>
             <Select
