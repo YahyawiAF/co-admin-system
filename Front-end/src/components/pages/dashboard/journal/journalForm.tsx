@@ -51,7 +51,7 @@ const defaultValues: Partial<Journal> = {
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
-  daySubscriptionType: "DemiJournéé",
+  daySubscriptionType: "DemiJournée",
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -121,6 +121,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       let updatedMemberJournal = { ...selectItem };
       if (!updatedMemberJournal.isPayed)
         updatedMemberJournal.leaveTime = new Date();
+      if (!updatedMemberJournal.daySubscriptionType)
+        updatedMemberJournal.daySubscriptionType = "DemiJournée";
       resetAsyn(updatedMemberJournal);
       if (selectItem) {
         setMember(selectItem?.members);
@@ -144,10 +146,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     let date = registredTime ? new Date(registredTime) : new Date();
-    if (daySubscriptionType === "Journéé") {
+    if (daySubscriptionType === "Journée") {
       const newDate = addHours(date, 8);
       setValue("leaveTime", newDate);
-    } else if (daySubscriptionType === "DemiJournéé") {
+    } else if (daySubscriptionType === "DemiJournée") {
       const newDate = addHours(date, 6);
       setValue("leaveTime", newDate);
     }
@@ -282,7 +284,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           <>
             <RHSelectDropDown
               name="daySubscriptionType"
-              list={["Journée", "DemiJournéé"]}
+              list={["Journée", "DemiJournée"]}
             />
             <RHFDatePeakerField
               name="leaveTime"
