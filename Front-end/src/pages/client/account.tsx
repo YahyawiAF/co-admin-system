@@ -16,16 +16,14 @@ export const metadata = {
 
 function Account(): React.JSX.Element {
   return (
-    <Stack spacing={3}>
-      <Grid container spacing={3}>
-        <Grid lg={4} md={6} xs={12}>
-          <AccountInfo />
-        </Grid>
-        <Grid lg={8} md={6} xs={12}>
-          <AccountDetailsForm />
-        </Grid>
+    <Grid container spacing={3}>
+      <Grid lg={4} md={6} xs={12}>
+        <AccountInfo />
       </Grid>
-    </Stack>
+      <Grid lg={8} md={6} xs={12}>
+        <AccountDetailsForm />
+      </Grid>
+    </Grid>
   );
 }
 

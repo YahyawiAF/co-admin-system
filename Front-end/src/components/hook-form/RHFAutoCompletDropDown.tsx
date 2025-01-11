@@ -13,7 +13,7 @@ type IRHFTextFieldAutoComplet = {
     options: any[];
     getOptionLabel: (option: any) => any;
   };
-  selectedItem: [{ key: string }] | undefined | null;
+  selectedItem: any | undefined | null;
   handleSelection: (event: any) => void;
   label: string;
   disabled?: boolean;

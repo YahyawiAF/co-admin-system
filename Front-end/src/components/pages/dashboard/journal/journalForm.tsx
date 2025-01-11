@@ -36,6 +36,7 @@ import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
 import { addHours, differenceInHours } from "date-fns";
 import RHSelectDropDown from "src/components/hook-form/RHSelectDropDown";
+import { date } from "yup";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
@@ -50,7 +51,7 @@ const defaultValues: Partial<Journal> = {
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
-  optionDaily: "Full Day",
+  daySubscriptionType: "DemiJournéé",
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -68,7 +69,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [updateMember] = useUpdateJournalMutation();
   // state
   const [openSnak, setOpenSnak] = useState(false);
-  const [member, setMember] = useState(null);
+  const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
@@ -92,11 +93,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     watch,
   } = methods;
 
+  const onSetDefaultValues = () => {};
+
   const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
-  // const optionDaily = watch("optionDaily");
-  // const registredTime = watch("registredTime");
+  const daySubscriptionType = watch("daySubscriptionType");
+  const registredTime = watch("registredTime");
 
   const stayedHours = React.useMemo(() => {
     const dStarting = selectItem?.registredTime
@@ -127,8 +130,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     if (isPayed) {
-      if (selectItem?.members?.plan === "NOPSubs") {
-        setValue("isPayed", true);
+      if (member?.plan === "NOPSubs") {
         if (stayedHours > 6) {
           setValue("payedAmount", 8);
         } else {
@@ -138,18 +140,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     } else {
       setValue("payedAmount", 0);
     }
-  }, [isPayed, setValue, stayedHours, selectItem]);
+  }, [isPayed, setValue, stayedHours, member]);
 
-  // React.useEffect(() => {
-  //   let date = registredTime ? new Date(registredTime) : new Date();
-  //   if (optionDaily === "Full Day") {
-  //     const newDate = addHours(date, 8);
-  //     setValue("leaveTime", newDate);
-  //   } else if (optionDaily === "Demi Day") {
-  //     const newDate = addHours(date, 6);
-  //     setValue("leaveTime", newDate);
-  //   }
-  // }, [registredTime, setValue, optionDaily]);
+  React.useEffect(() => {
+    let date = registredTime ? new Date(registredTime) : new Date();
+    if (daySubscriptionType === "Journéé") {
+      const newDate = addHours(date, 8);
+      setValue("leaveTime", newDate);
+    } else if (daySubscriptionType === "DemiJournéé") {
+      const newDate = addHours(date, 6);
+      setValue("leaveTime", newDate);
+    }
+  }, [registredTime, setValue, daySubscriptionType]);
 
   const handleSelect = (event: any) => {
     if (event) {
@@ -195,6 +197,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           setOpenUserForm(false);
         }}
         selectItem={null}
+        setMember={setMember}
       />
     );
 
@@ -250,18 +253,37 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         ) : (
           <div>Loading!!</div>
         )}
-        <RHFTimePeakerField
-          name="registredTime"
-          label="Starting Date"
-          placeholder="Inscription Date"
-        />
-        <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
-        {isPayed ? (
+        {member ? (
           <>
-            {/* <RHSelectDropDown
-              name="optionDaily"
-              list={["Full Day", "Demi Day"]}
-            /> */}
+            <Box
+              sx={{
+                display: "flex",
+                columnGap: "14px",
+              }}
+            >
+              <RHFTimePeakerField
+                name="registredTime"
+                label="Starting Date"
+                placeholder="Inscription Date"
+              />
+              <Button
+                onClick={() => setValue("registredTime", new Date())}
+                variant="outlined"
+              >
+                Now
+              </Button>
+            </Box>
+            <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
+          </>
+        ) : (
+          <></>
+        )}
+        {isPayed && member ? (
+          <>
+            <RHSelectDropDown
+              name="daySubscriptionType"
+              list={["Journée", "DemiJournéé"]}
+            />
             <RHFDatePeakerField
               name="leaveTime"
               label="Leaving Date"

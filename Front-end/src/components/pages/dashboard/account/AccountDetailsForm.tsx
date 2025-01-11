@@ -7,17 +7,8 @@ import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
-import MenuItem from "@mui/material/MenuItem";
 import OutlinedInput from "@mui/material/OutlinedInput";
-import Select from "@mui/material/Select";
 import Grid from "@mui/material/Unstable_Grid2";
-
-const states = [
-  { value: "alabama", label: "Alabama" },
-  { value: "new-york", label: "New York" },
-  { value: "san-francisco", label: "San Francisco" },
-  { value: "los-angeles", label: "Los Angeles" },
-] as const;
 
 export function AccountDetailsForm(): React.JSX.Element {
   return (
@@ -80,7 +71,7 @@ export function AccountDetailsForm(): React.JSX.Element {
                 <OutlinedInput label="Phone number" name="phone" type="tel" />
               </FormControl>
             </Grid>
-            <Grid md={6} xs={12}>
+            {/* <Grid md={6} xs={12}>
               <FormControl fullWidth>
                 <InputLabel>State</InputLabel>
                 <Select
@@ -102,7 +93,7 @@ export function AccountDetailsForm(): React.JSX.Element {
                 <InputLabel>City</InputLabel>
                 <OutlinedInput label="City" />
               </FormControl>
-            </Grid>
+            </Grid> */}
           </Grid>
         </CardContent>
         <Divider />

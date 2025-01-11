@@ -22,6 +22,7 @@ import { parseErrorMessage } from "src/utils/api";
 interface IShopFilterSidebar {
   selectItem: Member | null;
   handleClose: () => void;
+  setMember: React.Dispatch<React.SetStateAction<Member | null>>;
 }
 
 const defaultValues: Partial<Member> = {
@@ -36,10 +37,24 @@ const defaultValues: Partial<Member> = {
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
+  setMember,
 }) => {
-  const [createMember, { isLoading, error: errorCreateMember }] =
-    useCreateMemberMutation();
-  const [updateMember] = useUpdateMemberMutation();
+  const [
+    createMember,
+    { isLoading: isLoadingCreateeM, error: errorCreateMember },
+  ] = useCreateMemberMutation();
+  const [updateMember, { isLoading: isLoadingUpdateM, error: errorUpdateM }] =
+    useUpdateMemberMutation();
+
+  const isLoading = React.useMemo(
+    () => isLoadingCreateeM || isLoadingUpdateM,
+    [isLoadingCreateeM, isLoadingUpdateM]
+  );
+
+  const error = React.useMemo(
+    () => errorCreateMember || errorUpdateM,
+    [errorCreateMember, errorUpdateM]
+  );
 
   const [openSnak, setOpenSnak] = useState(false);
 
@@ -77,16 +92,23 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const onSubmit = async (data: Partial<Member>) => {
     if (selectItem) {
-      console.log("data", selectItem);
-      updateMember({ ...selectItem, ...data });
-      handleClose();
+      try {
+        await updateMember({ ...selectItem, ...data }).unwrap();
+        handleClose();
+      } catch (e) {
+        console.log("createJournalError", e);
+      }
     } else {
       try {
         data.createdOn = new Date();
         if (!data.email) {
           delete data.email;
         }
-        createMember(data as Member).unwrap();
+
+        await createMember(data as Member)
+          .unwrap()
+          .then((data) => setMember(data));
+
         setOpenSnak(true);
         handleClose();
       } catch (e) {
@@ -162,8 +184,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             Confirm
           </SubmitButtton>
         </Box>
-        {!!errorCreateMember ? (
-          <p style={{ color: "red" }}>{parseErrorMessage(errorCreateMember)}</p>
+        {!!error ? (
+          <p style={{ color: "red" }}>{parseErrorMessage(error)}</p>
         ) : (
           <></>
         )}
