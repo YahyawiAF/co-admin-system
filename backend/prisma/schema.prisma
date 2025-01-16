@@ -63,7 +63,9 @@ model Journal {
     registredTime DateTime
     leaveTime     DateTime?
     payedAmount   Float
-
+    isReservation Boolean @default(false)
+    journalType   JournalType @default(value: DEMI_JOURNEE)
+  
     memberID String?
     members   Member? @relation(fields: [memberID], references: [id])
 
@@ -99,4 +101,9 @@ enum Subscription {
     NOPSubs
     Monthly
     Weekly
+}
+
+enum JournalType {
+  DEMI_JOURNEE
+  JOURNEE
 }

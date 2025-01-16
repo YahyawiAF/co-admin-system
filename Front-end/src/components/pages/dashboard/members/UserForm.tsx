@@ -22,7 +22,7 @@ import { parseErrorMessage } from "src/utils/api";
 interface IShopFilterSidebar {
   selectItem: Member | null;
   handleClose: () => void;
-  setMember?: React.Dispatch<React.SetStateAction<Member | null>>;
+  handleNewMember?: (member: Member) => void;
 }
 
 const defaultValues: Partial<Member> = {
@@ -37,7 +37,7 @@ const defaultValues: Partial<Member> = {
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
-  setMember,
+  handleNewMember,
 }) => {
   const [
     createMember,
@@ -107,7 +107,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
         await createMember(data as Member)
           .unwrap()
-          .then((data) => setMember && setMember(data));
+          .then((data) => handleNewMember && handleNewMember(data));
 
         setOpenSnak(true);
         handleClose();

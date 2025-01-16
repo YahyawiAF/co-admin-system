@@ -5,6 +5,8 @@ import {
   DesktopDatePicker,
   MobileTimePicker,
   MobileDateTimePicker,
+  MobileTimePickerProps,
+  MobileDateTimePickerProps,
 } from "@mui/x-date-pickers";
 import { format } from "date-fns";
 
@@ -52,7 +54,12 @@ const RHFTextField: FC<IRHFTextField> = ({ name, isMin, ...other }) => {
   );
 };
 
-export const RHFTimePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
+type IRHFTimePeakerField = IRHFTextField & MobileTimePickerProps<Date>;
+export const RHFTimePeakerField: FC<IRHFTimePeakerField> = ({
+  name,
+  minTime,
+  ...other
+}) => {
   const { control } = useFormContext();
 
   return (
@@ -69,6 +76,7 @@ export const RHFTimePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
             {...field}
             value={date}
             onChange={(value) => onChange(value)}
+            minTime={minTime}
             slotProps={{
               textField: {
                 fullWidth: true,
@@ -84,7 +92,13 @@ export const RHFTimePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
     />
   );
 };
-export const RHFDatePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
+
+type IRHFDatePeakerField = IRHFTextField & MobileDateTimePickerProps<Date>;
+export const RHFDatePeakerField: FC<IRHFDatePeakerField> = ({
+  name,
+  minDate,
+  ...other
+}) => {
   const { control } = useFormContext();
 
   return (
@@ -95,14 +109,14 @@ export const RHFDatePeakerField: FC<IRHFTextField> = ({ name, ...other }) => {
         field: { value, onChange, ...field },
         fieldState: { error },
       }) => {
-        console.log("MobileDateTimePicker", value);
-        console.log("MobileDateTimePicker", new Date(value));
         const date = value ? new Date(value) : new Date();
         return (
           <MobileDateTimePicker
             {...field}
             value={date}
             onChange={(value) => onChange(value)}
+            // minTime={minTime}
+            minDate={minDate}
             slotProps={{
               textField: {
                 fullWidth: true,

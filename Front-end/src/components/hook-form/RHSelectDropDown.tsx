@@ -13,12 +13,14 @@ type IRHFTextField = {
   name: string;
   list?: any;
   label?: string;
+  onhandleManuelUpdae?: () => void;
 } & TextFieldProps;
 
 const RHSelectDropDown: FC<IRHFTextField> = ({
   name,
   list,
   label,
+  onhandleManuelUpdae,
   ...other
 }) => {
   const { control } = useFormContext();
@@ -33,10 +35,14 @@ const RHSelectDropDown: FC<IRHFTextField> = ({
             <Select
               {...field}
               value={field.value || ""}
-              onChange={(e) => field.onChange(e.target.value)}
+              onChange={(e) => {
+                field.onChange(e.target.value);
+                onhandleManuelUpdae && onhandleManuelUpdae();
+              }}
               defaultValue={list[0]}
               // helperText={error?.message}
               error={!!error}
+              // {...other}
             >
               {list.map((v: string, index: number) => (
                 <MenuItem key={index} value={v}>

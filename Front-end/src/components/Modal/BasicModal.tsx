@@ -26,12 +26,12 @@ const ResponsiveDialog: FC<IResponsiveDialog> = ({
   contentText,
 }) => {
   const theme = useTheme();
-  const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
+  // const fullScreen = useMediaQuery(theme.breakpoints.down("md"));
 
   return (
     <div>
       <Dialog
-        fullScreen={fullScreen}
+        // fullScreen={fullScreen}
         open={open}
         maxWidth="sm"
         fullWidth={true}

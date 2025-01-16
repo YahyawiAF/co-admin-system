@@ -147,6 +147,7 @@ export interface Journal {
   member?: Member | null;
   createdAt: Date;
   updatedAt: Date;
+  isReservation: boolean;
 }
 
 export interface Reservation {

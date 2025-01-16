@@ -65,7 +65,7 @@ const AutoCompletDropDown: React.FC<IRHFTextFieldAutoComplet> = ({
                 label={label}
                 error={!!error}
                 helperText={error?.message}
-                // {...other}
+                {...other}
               />
             )}
           />

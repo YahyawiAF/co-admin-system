@@ -24,14 +24,14 @@ export class JournalService {
     try {
       const { memberID } = CreateJournalDto;
 
-      const now = new Date();
+      const now = new Date(CreateJournalDto.registredTime);
       const startOfTheDay = startOfDay(now);
       const endOfTheDay = endOfDay(now);
 
       const existingJournal = await this.prisma.journal.findFirst({
         where: {
           memberID,
-          createdAt: {
+          registredTime: {
             gte: startOfTheDay,
             lt: endOfTheDay,
           },

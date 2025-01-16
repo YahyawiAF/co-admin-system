@@ -49,6 +49,7 @@ import {
 } from "src/api/journal.repo";
 import JournalDetails from "src/components/pages/dashboard/journal/JournalDetails";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
+import { getHourDifference } from "src/utils/shared";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -83,7 +84,7 @@ const headCells: Array<HeadCell> = [
     id: "isPayed",
     numeric: false,
     disablePadding: true,
-    label: "is Payed",
+    label: "Payed",
   },
   {
     id: "actions",
@@ -139,6 +140,7 @@ function JournalPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
+
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
 
@@ -291,6 +293,7 @@ function JournalPage() {
                       setOpen(false);
                       setEditeJournal(null);
                     }}
+                    today={today}
                     selectItem={editeJournal}
                   />
                 </SubPage>
@@ -328,42 +331,17 @@ function JournalPage() {
                           const isItemSelected = isSelected(row.id);
                           const labelId = `enhanced-table-checkbox-${index}`;
 
-                          const pastDate = new Date(row?.createdAt);
-
-                          // Get the current date and time
-                          const currentDate = new Date();
-
-                          // Calculate the difference in milliseconds
-                          const differenceInMilliseconds =
-                            currentDate.getTime() - pastDate.getTime();
-
-                          // Convert the difference from milliseconds to hours
-                          const differenceInHours =
-                            differenceInMilliseconds / (1000 * 60 * 60);
-
-                          const toBePayed = differenceInHours < 6 ? 4 : 8;
-
-                          const hours = Math.floor(differenceInHours);
-                          differenceInHours;
-                          // Extract the minutes by taking the remainder of the hours and converting it to minutes
-                          const minutes = Math.round(
-                            (differenceInHours - hours) * 60
-                          );
-
-                          // Format the time as HH:mm
-                          const formattedTime = `${String(hours).padStart(
-                            2,
-                            "0"
-                          )}:${String(minutes).padStart(2, "0")}`;
-
-                          const leaveDate = row?.leaveTime
-                            ? new Date(row?.leaveTime).toDateString()
-                            : "N/S";
-
+                          const dleave = row.isPayed
+                            ? row.leaveTime ?? new Date()
+                            : new Date();
+                          const hoursDifference = row.isReservation
+                            ? "Reservation"
+                            : getHourDifference(row.registredTime, dleave);
                           return (
                             <TableRow
                               hover
-                              onClick={(event) => handleClick(event, row.id)}
+                              // onClick={(event) => handleClick(event, row.id)}
+                              onDoubleClick={() => handleEdite(row)}
                               role="checkbox"
                               aria-checked={isItemSelected}
                               tabIndex={-1}
@@ -396,7 +374,7 @@ function JournalPage() {
                                   : 0 + " DT"}
                               </TableCell>
                               {/* <TableCell>{leaveDate}</TableCell> */}
-                              <TableCell>{formattedTime}</TableCell>
+                              <TableCell>{hoursDifference}</TableCell>
 
                               <TableCell>
                                 {row.isPayed ? <Done /> : null}

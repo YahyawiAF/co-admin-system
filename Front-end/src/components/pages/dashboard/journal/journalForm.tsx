@@ -34,29 +34,62 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
-import { addHours, differenceInHours } from "date-fns";
+import {
+  addHours,
+  differenceInHours,
+  setHours,
+  setMinutes,
+  isSameDay,
+} from "date-fns";
 import RHSelectDropDown from "src/components/hook-form/RHSelectDropDown";
-import { date } from "yup";
+import {
+  adjustDateWithDifference,
+  getHourDifference,
+  updateHoursAndMinutes,
+} from "src/utils/shared";
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
   selectItem: Journal | null;
   handleClose: () => void;
+  today: Date;
 }
 
-const defaultValues: Partial<Journal> = {
+enum JournalType {
+  DEMI_JOURNEE = "DEMI_JOURNEE",
+  JOURNEE = "JOURNEE",
+}
+
+type ExtractedType = Pick<
+  Journal,
+  | "id"
+  | "isPayed"
+  | "payedAmount"
+  | "registredTime"
+  | "leaveTime"
+  | "memberID"
+  | "isReservation"
+>;
+
+type ExtendedTypeOptional = ExtractedType & {
+  journalType: JournalType;
+};
+
+const defaultValues: Partial<ExtendedTypeOptional> = {
   id: "",
   isPayed: false,
-  payedAmount: 0,
+  payedAmount: 4,
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
-  daySubscriptionType: "DemiJournée",
+  journalType: JournalType.DEMI_JOURNEE,
+  isReservation: false,
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
+  today,
 }) => {
   // API
   const {
@@ -71,6 +104,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
+  const [isManualyUpdating, setIsManualyUpdating] = useState(false);
+  const [isManualyCalculationUpdating, setIsManualyCalculationUpdating] =
+    useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -78,6 +114,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
+    journalType: z
+      .enum([JournalType.DEMI_JOURNEE, JournalType.JOURNEE])
+      .optional(),
+    isReservation: z.boolean(),
   });
 
   const methods = useForm({
@@ -87,27 +127,26 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const {
     handleSubmit,
-    formState: { isSubmitting },
+    formState: { isSubmitting, errors },
     reset,
     setValue,
     watch,
   } = methods;
 
-  const onSetDefaultValues = () => {};
-
   const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
-  const daySubscriptionType = watch("daySubscriptionType");
-  const registredTime = watch("registredTime");
+  const journalType = watch("journalType");
+  const registredTime = watch("registredTime") as Date;
+  const isReservation = watch("isReservation");
+
+  // console.log("isReservation", isReservation);
 
   const stayedHours = React.useMemo(() => {
-    const dStarting = selectItem?.registredTime
-      ? new Date(selectItem?.registredTime)
-      : new Date();
+    const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
     return differenceInHours(dLeaving, dStarting);
-  }, [selectItem, leaveTime]);
+  }, [registredTime, leaveTime]);
 
   const resetAsyn = React.useCallback(
     (data: any) => {
@@ -117,43 +156,90 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   );
 
   React.useEffect(() => {
-    if (selectItem) {
-      let updatedMemberJournal = { ...selectItem };
-      if (!updatedMemberJournal.isPayed)
-        updatedMemberJournal.leaveTime = new Date();
-      if (!updatedMemberJournal.daySubscriptionType)
-        updatedMemberJournal.daySubscriptionType = "DemiJournée";
-      resetAsyn(updatedMemberJournal);
-      if (selectItem) {
-        setMember(selectItem?.members);
+    const initializeFormValues = () => {
+      const isReservation = !isSameDay(new Date(), new Date(today));
+      if (!selectItem) {
+        resetAsyn({
+          ...defaultValues,
+          registredTime: updateHoursAndMinutes(today),
+          leaveTime: updateHoursAndMinutes(today),
+          isReservation,
+        });
+      } else {
+        const updatedJournal: Partial<Journal> = {
+          ...selectItem,
+          leaveTime: selectItem.isPayed
+            ? selectItem.leaveTime
+            : updateHoursAndMinutes(today),
+        };
+        resetAsyn(updatedJournal);
+        setMember(selectItem?.members ?? null);
       }
-    }
-  }, [selectItem, resetAsyn]);
+    };
+    initializeFormValues();
+  }, [selectItem, resetAsyn, today]);
+
+  // React.useEffect(() => {
+  //   if (!isPayed) {
+  //     setValue("payedAmount", 0);
+  //     return;
+  //   }
+  // }, [isPayed, setValue]);
 
   React.useEffect(() => {
-    if (isPayed) {
-      if (member?.plan === "NOPSubs") {
-        if (stayedHours > 6) {
-          setValue("payedAmount", 8);
-        } else {
-          setValue("payedAmount", 4);
-        }
+    const adjustLeaveTime = async () => {
+      if (!isManualyUpdating) return;
+      if (!registredTime || !journalType) return;
+
+      const baseDate = new Date(registredTime);
+      const updatedLeaveTime =
+        journalType === JournalType.JOURNEE
+          ? addHours(baseDate, 8)
+          : addHours(baseDate, 6);
+
+      const updatedPrice = journalType === JournalType.DEMI_JOURNEE ? 4 : 8;
+      if (
+        leaveTime &&
+        new Date(leaveTime).getTime() === updatedLeaveTime.getTime()
+      ) {
+        return;
       }
-    } else {
-      setValue("payedAmount", 0);
-    }
-  }, [isPayed, setValue, stayedHours, member]);
+
+      setValue("payedAmount", updatedPrice);
+      setValue("leaveTime", updatedLeaveTime);
+      setIsManualyUpdating(false);
+    };
+
+    adjustLeaveTime();
+  }, [registredTime, setValue, journalType, leaveTime, isManualyUpdating]);
 
   React.useEffect(() => {
-    let date = registredTime ? new Date(registredTime) : new Date();
-    if (daySubscriptionType === "Journée") {
-      const newDate = addHours(date, 8);
-      setValue("leaveTime", newDate);
-    } else if (daySubscriptionType === "DemiJournée") {
-      const newDate = addHours(date, 6);
-      setValue("leaveTime", newDate);
-    }
-  }, [registredTime, setValue, daySubscriptionType]);
+    const adjustJournalType = () => {
+      if (!isManualyCalculationUpdating) return;
+      if (!registredTime || !journalType) return;
+      let hoursDifference = 0;
+      if (leaveTime) {
+        hoursDifference = getHourDifference(registredTime, leaveTime);
+      }
+      const updatedJournal =
+        hoursDifference <= 6 ? JournalType.DEMI_JOURNEE : JournalType.JOURNEE;
+      const updatedPrice = updatedJournal === JournalType.DEMI_JOURNEE ? 4 : 8;
+      if (journalType && journalType === updatedJournal) {
+        return;
+      }
+      setValue("payedAmount", updatedPrice);
+      setValue("journalType", updatedJournal);
+      setIsManualyCalculationUpdating(false);
+    };
+
+    adjustJournalType();
+  }, [
+    registredTime,
+    setValue,
+    journalType,
+    leaveTime,
+    isManualyCalculationUpdating,
+  ]);
 
   const handleSelect = (event: any) => {
     if (event) {
@@ -179,10 +265,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       handleClose();
     } else {
       try {
-        data.registredTime = data.registredTime
-          ? data.registredTime
-          : new Date();
-        if (data.isPayed && !data.leaveTime) data.leaveTime = new Date();
         await createJournal(data as Journal).unwrap();
         setOpenSnak(true);
         handleClose();
@@ -192,6 +274,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     }
   };
 
+  const handleNewMember = (member: Member) => {
+    setMember(member);
+    setValue("memberID", member.id);
+  };
+
   if (openUserForm)
     return (
       <UserForm
@@ -199,7 +286,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           setOpenUserForm(false);
         }}
         selectItem={null}
-        setMember={setMember}
+        handleNewMember={handleNewMember}
       />
     );
 
@@ -250,7 +337,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             selectedItem={member}
             handleSelection={handleSelect}
             name={"member"}
+            disabled={!!selectItem}
             multiple={false}
+            error={!!!errors.memberID}
+            errorMessage={errors.memberID?.message}
           />
         ) : (
           <div>Loading!!</div>
@@ -268,12 +358,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 label="Starting Date"
                 placeholder="Inscription Date"
               />
-              <Button
-                onClick={() => setValue("registredTime", new Date())}
-                variant="outlined"
-              >
-                Now
-              </Button>
             </Box>
             <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
           </>
@@ -283,14 +367,35 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         {isPayed && member ? (
           <>
             <RHSelectDropDown
-              name="daySubscriptionType"
-              list={["Journée", "DemiJournée"]}
+              name="journalType"
+              list={["DEMI_JOURNEE", "JOURNEE"]}
+              onhandleManuelUpdae={() => setIsManualyUpdating(true)}
             />
-            <RHFDatePeakerField
-              name="leaveTime"
-              label="Leaving Date"
-              placeholder="Leaving Date"
-            />
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                rowGap: "14px",
+              }}
+            >
+              <RHFDatePeakerField
+                name="leaveTime"
+                label="Leaving Date"
+                placeholder="Leaving Date"
+                minTime={registredTime}
+              />
+              {!isReservation && (
+                <Button
+                  onClick={() => {
+                    setIsManualyCalculationUpdating(true);
+                    setValue("leaveTime", new Date());
+                  }}
+                  variant="outlined"
+                >
+                  Calculate from Now
+                </Button>
+              )}
+            </Box>
             <RHFTextField
               type="number"
               name="payedAmount"
@@ -328,7 +433,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 <Typography variant="subtitle2">Total</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="body1">
                   {payedAmount
-                    ? payedAmount
+                    ? payedAmount + " DT"
                     : stayedHours < 1
                     ? "0 DT"
                     : stayedHours <= 6
@@ -359,7 +464,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 <Typography variant="h4">SubTotal</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
                   {payedAmount
-                    ? payedAmount
+                    ? payedAmount + " DT"
                     : stayedHours < 1
                     ? "0 DT"
                     : stayedHours <= 6
