@@ -138,7 +138,7 @@ function SignIn() {
         
         {/* Lien Forgot Password */}
         <Box mt={2} textAlign="center">
-          <Link href="/auth/reset-password" variant="body2">
+          <Link href="/auth/reset-password/" variant="body2">
             Forgot Password?
           </Link>
         </Box>
