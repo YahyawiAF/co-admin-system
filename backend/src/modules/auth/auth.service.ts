@@ -11,6 +11,7 @@ import { AuthEntity } from './entity/auth.entity';
 import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 
+
 const roundsOfHashing = 10;
 
 @Injectable()
@@ -20,21 +21,51 @@ export class AuthService {
     private jwtService: JwtService,
     private configService: ConfigService,
   ) {}
+  async signUp(email: string, password: string, fullname: string) {
+    const existingUser = await this.prisma.user.findUnique({ where: { email } });
+  
+    if (existingUser) {
+      throw new ForbiddenException('Email already in use');
+    }
+  
+    const hashedPassword = await this.hashData(password);
+  
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        fullname,
+      },
+    });
+  
+    const tokens = await this.getTokens(user.id, user.email);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+  
+    return {
+      email: user.email,
+      id: user.id,
+      fullname: user.fullname,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    };
+  }
+  
 
   async login(email: string, password: string): Promise<AuthEntity> {
     const user = await this.prisma.user.findUnique({ where: { email: email } });
-
+  
     if (!user) {
       throw new NotFoundException(`No user found for email: ${email}`);
     }
-
+  
     const isPasswordValid = await bcrypt.compare(password, user.password);
-
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid password');
     }
+  
     const tokens = await this.getTokens(user.id, user.email);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
+  
     return {
       email,
       role: user.role,
@@ -44,7 +75,8 @@ export class AuthService {
       refreshToken: tokens.refreshToken,
     };
   }
-
+  
+  
   async refreshTokens(userId: string, refreshToken: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
