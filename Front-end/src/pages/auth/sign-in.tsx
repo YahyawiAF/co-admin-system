@@ -34,12 +34,16 @@ function SignIn() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false); // État pour "Remember Me"
   const [login, { isLoading, isError, error }] = useLoginMutation(); // Utiliser le hook
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const user = await login({ email, password }).unwrap();
-      // Si la connexion réussit, redirection via window.location
+      const user = await login({ email, password, }).unwrap();
+      
+      // Si la connexion réussit, stockez le token et le nom d'utilisateur dans sessionStorage
+      sessionStorage.setItem("token", user.accessToken); // Remplacez `user.token` par le nom exact du token dans la réponse
+      sessionStorage.setItem("username", user.email); // Remplacez `user.fullname` par le nom exact de l'utilisateur dans la réponse
+      
+      // Afficher un message de succès avec SweetAlert2
       Swal.fire({
         title: "Success!",
         text: "You have logged in successfully.",
@@ -58,6 +62,7 @@ function SignIn() {
       });
     }
   };
+  
 
   // Gérer le message d'erreur
   const getErrorMessage = () => {

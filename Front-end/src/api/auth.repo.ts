@@ -6,6 +6,7 @@ import { User } from "src/types/shared";
 interface LoginParams {
   email: string;
   password: string;
+  
 }
 
 interface SignUpParams {
@@ -40,6 +41,16 @@ export const authServerApi = createApi({
       }),
       invalidatesTags: ["authApi"],
     }),
+    // Add signOut endpoint (if necessary)
+signOut: builder.mutation<void, void>({
+  query: () => ({
+    url: "auth/logout", // Add your logout API endpoint
+    method: "POST",
+  }),
+  // You can invalidate tags or manage other cache effects if necessary
+  invalidatesTags: ["authApi"],
+}),
+
 
     // Endpoint pour rafraîchir les tokens
     refreshTokens: builder.mutation<User, string>({

@@ -2,6 +2,8 @@ import React from "react";
 import styled from "@emotion/styled";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
+import { useDispatch } from "react-redux";  // Make sure dispatch is imported
+import { signOut } from "src/redux/authSlice"; // Update path accordingly
 
 import {
   Tooltip,
@@ -9,8 +11,6 @@ import {
   MenuItem,
   IconButton as MuiIconButton,
 } from "@mui/material";
-
-import useAuth from "../../hooks/useAuth";
 
 const IconButton = styled(MuiIconButton)`
   svg {
@@ -22,7 +22,7 @@ const IconButton = styled(MuiIconButton)`
 function NavbarUserDropdown() {
   const [anchorMenu, setAnchorMenu] = React.useState<any>(null);
   const router = useRouter();
-  const { signOut } = useAuth();
+  const dispatch = useDispatch();  // Initialize dispatch here
 
   const toggleMenu = (event: React.SyntheticEvent) => {
     setAnchorMenu(event.currentTarget);
@@ -33,9 +33,21 @@ function NavbarUserDropdown() {
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    // Effacer les données de session
+    localStorage.removeItem("authToken");
+    sessionStorage.removeItem("authToken");
+  
+    // Afficher dans la console pour vérifier que les tokens sont bien supprimés
+    console.log("Auth token removed:", !localStorage.getItem("authToken"));
+    console.log("Session token removed:", !sessionStorage.getItem("authToken"));
+  
+    // Dispatcher l'action signOut pour réinitialiser l'état Redux
+    dispatch(signOut());
+  
+    // Optionnellement, rediriger vers la page de connexion
     router.push("/auth/sign-in");
   };
+  
 
   return (
     <React.Fragment>
