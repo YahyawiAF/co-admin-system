@@ -33,20 +33,17 @@ function NavbarUserDropdown() {
   };
 
   const handleSignOut = async () => {
-    // Effacer les données de session
-    localStorage.removeItem("authToken");
-    sessionStorage.removeItem("authToken");
+    // Efface les données de session (token et username)
+    sessionStorage.removeItem("token");
+    sessionStorage.removeItem("username");
   
-    // Afficher dans la console pour vérifier que les tokens sont bien supprimés
-    console.log("Auth token removed:", !localStorage.getItem("authToken"));
-    console.log("Session token removed:", !sessionStorage.getItem("authToken"));
-  
-    // Dispatcher l'action signOut pour réinitialiser l'état Redux
+    // Dispatcher l'action de déconnexion pour réinitialiser l'état Redux (si tu l'utilises)
     dispatch(signOut());
   
-    // Optionnellement, rediriger vers la page de connexion
-    router.push("/auth/sign-in");
+    // Redirige l'utilisateur vers la page de connexion en remplaçant l'URL actuelle
+    router.replace("/auth/sign-in");
   };
+  
   
 
   return (
