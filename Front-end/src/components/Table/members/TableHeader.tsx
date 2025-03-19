@@ -92,7 +92,7 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
       minWidth: "0px",
       padding: "0px",
       margin: "0",
-      color: "black",
+      color: "bleu",
       borderWidth: "0px",
       position: "absolute",
       left: "5px", // Positionne la flèche à gauche à l’intérieur du champ
@@ -138,7 +138,7 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
       minWidth: "0px",
       padding: "0px",
       margin: "0",
-      color: "black",
+      color: "bleu",
       borderWidth: "0px",
       position: "absolute",
       right: "5px",  // Positionne la flèche à droite à l’intérieur du champ

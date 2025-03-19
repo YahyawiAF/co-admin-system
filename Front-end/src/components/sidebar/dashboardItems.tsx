@@ -1,6 +1,5 @@
 import { SidebarItemsType } from "../../types/sidebar";
-
-import { Sliders, User, Activity } from "react-feather";
+import { Sliders, User, Activity, Settings, DollarSign } from "react-feather"; // Assurez-vous d'importer l'icône DollarSign si vous voulez l'utiliser pour 'price'
 
 const pagesSection = [
   {
@@ -18,11 +17,16 @@ const pagesSection = [
     icon: User,
     title: "Members",
   },
-  // {
-  //   href: "/dashboard/cards",
-  //   icon: CreditCard,
-  //   title: "Cards",
-  // },
+  {
+    href: "/dashboard/cards",
+    icon: Settings,
+    title: "Settings",
+  },
+  {
+    href: "/dashboard/price", // Ajoutez le lien pour la page 'price'
+    icon: DollarSign,  // Exemple d'icône pour 'price', vous pouvez choisir une autre icône si nécessaire
+    title: "Price",    // Titre de la section 'Price'
+  },
 ] as SidebarItemsType[];
 
 const navItems = [

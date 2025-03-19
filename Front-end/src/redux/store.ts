@@ -1,19 +1,22 @@
 import { configureStore, ThunkAction, Action } from "@reduxjs/toolkit";
 import { setupListeners } from "@reduxjs/toolkit/query";
-import { membersServerApi, journalServerApi, authServerApi } from "src/api"; // Importation des API
+import { membersServerApi, journalServerApi, authServerApi } from "src/api";
+import { priceApi } from "src/api/price.repo";
 
 // Configuration du store
 export const store = configureStore({
   reducer: {
     [membersServerApi.reducerPath]: membersServerApi.reducer,
     [journalServerApi.reducerPath]: journalServerApi.reducer,
-    [authServerApi.reducerPath]: authServerApi.reducer, // Ajout de authServerApi ici
+    [authServerApi.reducerPath]: authServerApi.reducer,
+    [priceApi.reducerPath]: priceApi.reducer, // Ajout de priceApi ici
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat([  // Ajout du middleware pour authServerApi
+    getDefaultMiddleware().concat([
       membersServerApi.middleware,
       journalServerApi.middleware,
-      authServerApi.middleware, // Ajout de authServerApi.middleware ici
+      authServerApi.middleware,
+      priceApi.middleware, // Ajout de priceApi.middleware ici
     ]),
 });
 

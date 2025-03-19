@@ -90,6 +90,11 @@ export enum Subscription {
   Monthly = "Monthly",
   Weekly = "Weekly",
 }
+export enum PriceType {
+  journal = "journal",
+  abonnement = "abonnement"
+}
+
 
 export interface User {
   [key: string]: any;
@@ -127,14 +132,14 @@ export interface Member {
   fullNameWithEmail: string | null;
 }
 
-export interface Prices {
+export interface Price {
   id: string;
-  journalPrice: number;
-  demiJournal: number;
-  monthSubscription: number;
-  weekSubscription: number;
-  meetingRoomHourly: number;
-  meetingRoomMonthly: number;
+  name:string;
+  price: number;
+  timePeriod: string; 
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  type:PriceType[];
 }
 
 export interface Journal {

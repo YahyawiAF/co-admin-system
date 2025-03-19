@@ -1,106 +1,103 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-    id           String    @id @default(uuid())
-    isActive     Boolean   @default(false)
-    createdAt    DateTime  @default(now())
-    updatedAt    DateTime  @updatedAt @db.Timestamp()
-    deletedAt    DateTime?  @db.Timestamp()
-    email        String    @unique @db.VarChar(256)
-    fullname     String?   @db.VarChar(256)
-    password     String?
-    refreshToken String?
-    role         Role      @default(value: USER)
+  id           String    @id @default(uuid())
+  isActive     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt    DateTime? @db.Timestamp(6)
+  email        String    @unique @db.VarChar(256)
+  fullname     String?   @db.VarChar(256)
+  password     String?
+  refreshToken String?
+  role         Role      @default(USER)
 
-    @@map("users")
+  @@map("users")
 }
 
 model Member {
-    id String @id @default(uuid())
-    email         String? @unique @db.VarChar(256)
-    phone         Int? @unique
-    firstName     String? @db.VarChar(56)
-    lastName      String? @db.VarChar(56)
-    functionality String?
-    bio           String?
+  id            String        @id @default(uuid())
+  email         String?       @unique @db.VarChar(256)
+  firstName     String?       @db.VarChar(56)
+  lastName      String?       @db.VarChar(56)
+  bio           String?
+  credits       Float         @default(0)
+  plan          Subscription? @default(NOPSubs)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt @db.Timestamp(6)
+  deletedAt     DateTime?     @db.Timestamp(6)
+  isActive      Boolean       @default(false)
+  functionality String?
+  phone         Int?          @unique
+  journals      Journal[]
+  reservations  Reservation[]
 
-    credits Float @default(value: 0)
-
-    plan         Subscription? @default(value: NOPSubs)
-    journals     Journal[]
-    reservations Reservation[]
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt @db.Timestamp()
-    deletedAt DateTime? @db.Timestamp()
-    isActive  Boolean   @default(false)
-
-    @@map("members")
+  @@map("members")
 }
 
-model Prices {
-    id String @id @default(uuid())
+model Price {
+  id         String    @id @default(uuid())
+  name       String
+  price      Float
+  timePeriod String
+  type       PriceType
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-    journalPrice       Float @default(value: 0)
-    demiJournal        Float @default(value: 0)
-    monthSubscription  Float @default(value: 0)
-    weekSubscription   Float @default(value: 0)
-    meetingRoomHourly  Float @default(value: 0)
-    meetingRoomMonthly Float @default(value: 0)
+  @@map("prices")
 }
 
 model Journal {
-    id String @id @default(uuid())
+  id            String      @id @default(uuid())
+  isPayed       Boolean
+  registredTime DateTime
+  leaveTime     DateTime?
+  payedAmount   Float
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt @db.Timestamp(6)
+  memberID      String?
+  journalType   JournalType @default(DEMI_JOURNEE)
+  isReservation Boolean     @default(false)
+  members       Member?     @relation(fields: [memberID], references: [id])
 
-    isPayed       Boolean
-    registredTime DateTime
-    leaveTime     DateTime?
-    payedAmount   Float
-    isReservation Boolean @default(false)
-    journalType   JournalType @default(value: DEMI_JOURNEE)
-  
-    memberID String?
-    members   Member? @relation(fields: [memberID], references: [id])
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt @db.Timestamp()
-
-    @@map("journals")
+  @@map("journals")
 }
 
 model Reservation {
-    id String @id @default(uuid())
+  id            String    @id @default(uuid())
+  isPayed       Boolean
+  registredTime DateTime
+  leaveTime     DateTime?
+  payedAmount   Float
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt @db.Timestamp(6)
+  memberID      String?
+  member        Member?   @relation(fields: [memberID], references: [id])
 
-    isPayed       Boolean
-    registredTime DateTime
-    leaveTime     DateTime?
-    payedAmount   Float
+  @@map("reservations")
+}
 
-    memberID String?
-    member   Member? @relation(fields: [memberID], references: [id])
-
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt @db.Timestamp()
-
-    @@map("reservations")
+enum PriceType {
+  journal
+  abonnement
 }
 
 enum Role {
-    ADMIN
-    USER
+  ADMIN
+  USER
 }
 
 enum Subscription {
-    NOPSubs
-    Monthly
-    Weekly
+  NOPSubs
+  Monthly
+  Weekly
 }
 
 enum JournalType {

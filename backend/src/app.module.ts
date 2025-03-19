@@ -10,6 +10,7 @@ import { EventsModule } from 'src/modules/webSocket/events.module';
 import { JournalModule } from 'src/modules/journal/journal.modal';
 import { MemberModule } from 'src/modules/member/member.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { PriceModule } from './modules/price/price.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     EventsModule,
     JournalModule,
     MemberModule,
+    PriceModule
   ],
   controllers: [AppController],
   providers: [AppService],
