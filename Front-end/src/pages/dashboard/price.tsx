@@ -3,9 +3,8 @@ import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useD
 import { Price, PriceType } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faEdit, faTrash } from '@fortawesome/free-solid-svg-icons';
-import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from "@mui/material";
-
-import DashboardLayout from "../../layouts/Dashboard"; // Assurez-vous que ce layout inclut Navbar et Sidebar
+import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select } from "@mui/material";
+import DashboardLayout from "../../layouts/Dashboard"; 
 
 const PriceComponent: React.FC = () => {
   const { data: prices, isLoading, isError } = useGetPricesQuery();
@@ -20,16 +19,15 @@ const PriceComponent: React.FC = () => {
     timePeriod: "",
     createdAt: null,
     updatedAt: null,
-    type: [],
+type: [PriceType.journal], // Remarquez l'utilisation de PriceType.journal dans un tableau
   });
 
   const [editPrice, setEditPrice] = useState<Price | null>(null);
   const [showModal, setShowModal] = useState(false);
 
   const handleAddPrice = async () => {
-    const formattedPrice: Price = { ...newPrice, type: newPrice.type.map(t => t as PriceType) };
     try {
-      await createPrice(formattedPrice).unwrap();
+      await createPrice(newPrice).unwrap();
       setShowModal(false);
       console.log("Prix ajouté avec succès !");
     } catch (error) {
@@ -39,27 +37,22 @@ const PriceComponent: React.FC = () => {
 
   const handleUpdatePrice = async () => {
     if (editPrice) {
-      await updatePrice({ id: editPrice.id, data: editPrice });
-      setEditPrice(null);
-      setShowModal(false);
+      try {
+        const { id, createdAt, updatedAt, ...data } = editPrice; // Exclure `id`, `createdAt`, `updatedAt`
+        await updatePrice({ id, data }).unwrap();
+        setEditPrice(null);
+        setShowModal(false);
+        console.log("Prix mis à jour avec succès !");
+      } catch (error) {
+        console.error("Erreur lors de la mise à jour du prix :", error);
+      }
     }
   };
+  
 
   const handleDeletePrice = async (id: string) => {
     await deletePrice(id);
   };
-
-  const handleTypeChange = (selectedTypes: string[], isEditing = false) => {
-    const updatedTypes = selectedTypes.map((type) => type as PriceType);
-    if (isEditing && editPrice) {
-      setEditPrice({ ...editPrice, type: updatedTypes });
-    } else {
-      setNewPrice({ ...newPrice, type: updatedTypes });
-    }
-  };
-
-  if (isLoading) return <p>Chargement...</p>;
-  if (isError) return <p>Erreur lors du chargement des prix.</p>;
 
   return (
     <DashboardLayout>
@@ -67,25 +60,24 @@ const PriceComponent: React.FC = () => {
         <h2>Gestion des Prix</h2>
 
         <Button
-  onClick={() => { setNewPrice({ id: "", name: "", price: 0, timePeriod: "", createdAt: null, updatedAt: null, type: [] }); setShowModal(true); }}
-  variant="contained"
-  color="primary"
-  style={{ 
-    marginBottom: "10px", 
-    display: "flex", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    padding: "5px",   // Réduction du padding pour un bouton plus petit
-    borderRadius: "50%", 
-    width: "30px",    // Taille plus petite
-    height: "30px",   // Taille plus petite
-    minWidth: "30px"  // Assure que la taille minimale soit petite
-  }}
->
-  <FontAwesomeIcon icon={faPlus} style={{ fontSize: "14px", color: "white" }} />  {/* Ajustement de la taille de l'icône */}
-</Button>
-
-
+onClick={() => { 
+  setNewPrice({ 
+    id: "", 
+    name: "", 
+    price: 0, 
+    timePeriod: "", 
+    createdAt: null, 
+    updatedAt: null, 
+    type: [PriceType.journal],// Correction ici
+  }); 
+  setShowModal(true); 
+}}
+          variant="contained"
+          color="primary"
+          style={{ marginBottom: "10px", borderRadius: "50%", width: "30px", height: "30px", minWidth: "30px" }}
+        >
+          <FontAwesomeIcon icon={faPlus} style={{ fontSize: "14px", color: "white" }} />
+        </Button>
 
         <TableContainer component={Paper}>
           <Table>
@@ -94,6 +86,7 @@ const PriceComponent: React.FC = () => {
                 <TableCell>Nom</TableCell>
                 <TableCell>Prix</TableCell>
                 <TableCell>Période</TableCell>
+                <TableCell>Type</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -103,17 +96,12 @@ const PriceComponent: React.FC = () => {
                   <TableCell>{price.name}</TableCell>
                   <TableCell>{price.price}€</TableCell>
                   <TableCell>{price.timePeriod}</TableCell>
+                  <TableCell>{price.type}</TableCell>
                   <TableCell>
-                    <IconButton
-                      onClick={() => { setEditPrice(price); setShowModal(true); }}
-                      color="primary"
-                    >
+                    <IconButton onClick={() => { setEditPrice(price); setShowModal(true); }} color="primary">
                       <FontAwesomeIcon icon={faEdit} />
                     </IconButton>
-                    <IconButton
-                      onClick={() => handleDeletePrice(price.id)}
-                      color="secondary"
-                    >
+                    <IconButton onClick={() => handleDeletePrice(price.id)} color="secondary">
                       <FontAwesomeIcon icon={faTrash} />
                     </IconButton>
                   </TableCell>
@@ -127,17 +115,18 @@ const PriceComponent: React.FC = () => {
           <div
             style={{
               position: "fixed",
-              top: "50px", // Décale le modal sous la navbar, ajuste cette valeur si nécessaire
+              top: "50px",
               right: 0,
-              width: "300px",
-              height: "calc(100% - 50px)", // Si tu veux que le modal prenne toute la hauteur sauf la hauteur du navbar
+              width: "400px",
+              height: "calc(100% - 50px)",
               backgroundColor: "#fff",
               boxShadow: "-2px 0 5px rgba(0,0,0,0.1)",
               padding: "20px",
-              zIndex: 1000, // Assure-toi que le z-index du modal est plus élevé que celui de la navbar
+              zIndex: 1000,
             }}
           >
             <h3>{editPrice ? "Modifier le prix" : "Ajouter un prix"}</h3>
+
             <div style={{ marginBottom: "10px" }}>
               <label>Nom du tarif</label>
               <input
@@ -147,6 +136,7 @@ const PriceComponent: React.FC = () => {
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
             </div>
+
             <div style={{ marginBottom: "10px" }}>
               <label>Prix</label>
               <input
@@ -156,6 +146,7 @@ const PriceComponent: React.FC = () => {
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
             </div>
+
             <div style={{ marginBottom: "10px" }}>
               <label>Période (ex: 1 mois)</label>
               <input
@@ -165,34 +156,51 @@ const PriceComponent: React.FC = () => {
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
             </div>
-            <button
-              onClick={editPrice ? handleUpdatePrice : handleAddPrice}
-              style={{
-                backgroundColor: "#1976d2", // Bleu primaire de Material UI
-                color: "white",
-                padding: "10px 20px",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-              }}
-              
-            >
-              {editPrice ? "Mettre à jour" : "Ajouter"}
-            </button>
-            <button
-              onClick={() => setShowModal(false)}
-              style={{
-                backgroundColor: "#9E9E9E",
-                color: "white",
-                padding: "10px 20px",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-                marginLeft: "10px",
-              }}
-            >
-              Annuler
-            </button>
+
+            <div style={{ marginBottom: "10px" }}>
+              <label>Type</label>
+              <Select
+                value={editPrice ? editPrice.type : newPrice.type}
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))}
+                fullWidth
+              >
+                <MenuItem value="journal">Journal</MenuItem>
+                <MenuItem value="abonnement">Abonnement</MenuItem>
+              </Select>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "20px" }}>
+              <button
+                onClick={editPrice ? handleUpdatePrice : handleAddPrice}
+                style={{
+                  backgroundColor: "#1976d2",
+                  color: "white",
+                  padding: "12px 20px",
+                  border: "none",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                  flex: "1",
+                  marginRight: "10px",
+                }}
+              >
+                {editPrice ? "Mettre à jour" : "Ajouter"}
+              </button>
+
+              <button
+                onClick={() => setShowModal(false)}
+                style={{
+                  backgroundColor: "#9E9E9E",
+                  color: "white",
+                  padding: "12px 20px",
+                  border: "none",
+                  borderRadius: "5px",
+                  cursor: "pointer",
+                  flex: "1",
+                }}
+              >
+                Annuler
+              </button>
+            </div>
           </div>
         )}
       </div>
