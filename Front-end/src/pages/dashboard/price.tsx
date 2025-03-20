@@ -3,7 +3,7 @@ import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useD
 import { Price, PriceType } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faEdit, faTrash } from '@fortawesome/free-solid-svg-icons';
-import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select } from "@mui/material";
+import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard"; 
 
 const PriceComponent: React.FC = () => {
@@ -11,7 +11,7 @@ const PriceComponent: React.FC = () => {
   const [createPrice] = useCreatePriceMutation();
   const [updatePrice] = useUpdatePriceMutation();
   const [deletePrice] = useDeletePriceMutation();
-
+  const [searchTerm, setSearchTerm] = useState("");
   const [newPrice, setNewPrice] = useState<Price>({
     id: "",
     name: "",
@@ -19,7 +19,7 @@ const PriceComponent: React.FC = () => {
     timePeriod: "",
     createdAt: null,
     updatedAt: null,
-type: [PriceType.journal], // Remarquez l'utilisation de PriceType.journal dans un tableau
+    type: PriceType.journal, 
   });
 
   const [editPrice, setEditPrice] = useState<Price | null>(null);
@@ -53,48 +53,74 @@ type: [PriceType.journal], // Remarquez l'utilisation de PriceType.journal dans 
   const handleDeletePrice = async (id: string) => {
     await deletePrice(id);
   };
+  const filteredPrices = prices?.filter((price) =>
+    price.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <DashboardLayout>
       <div style={{ padding: "20px" }}>
-        <h2>Gestion des Prix</h2>
+        <h2>Rate Management</h2>
 
-        <Button
-onClick={() => { 
-  setNewPrice({ 
-    id: "", 
-    name: "", 
-    price: 0, 
-    timePeriod: "", 
-    createdAt: null, 
-    updatedAt: null, 
-    type: [PriceType.journal],// Correction ici
-  }); 
-  setShowModal(true); 
-}}
-          variant="contained"
-          color="primary"
-          style={{ marginBottom: "10px", borderRadius: "50%", width: "30px", height: "30px", minWidth: "30px" }}
-        >
-          <FontAwesomeIcon icon={faPlus} style={{ fontSize: "14px", color: "white" }} />
-        </Button>
+        {/* Conteneur pour aligner la recherche et le bouton Add */}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+  <TextField
+    label="Search by name"
+    variant="outlined"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    style={{
+      width: "200px", // Largeur réduite du champ de recherche
+      padding: "0px", // Réduit le padding à l'intérieur du champ
+      fontSize: "12px",
+      marginRight: "10px", // Espacement entre le champ de recherche et le bouton
+    }}
+  />
+
+  <Button
+    onClick={() => { 
+      setNewPrice({ 
+        id: "", 
+        name: "", 
+        price: 0, 
+        timePeriod: "", 
+        createdAt: null, 
+        updatedAt: null, 
+        type: PriceType.journal,
+      }); 
+      setShowModal(true); 
+    }}
+    variant="contained"
+    color="primary"
+    style={{
+      borderRadius: "50%", 
+      width: "30px",  // Taille du bouton plus petite
+      height: "30px", 
+      minWidth: "30px",
+      padding: "0", // Enlever le padding pour rendre le bouton plus petit
+    }}
+  >
+    <FontAwesomeIcon icon={faPlus} style={{ fontSize: "16px", color: "white" }} />
+  </Button>
+</div>
+
 
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Nom</TableCell>
-                <TableCell>Prix</TableCell>
-                <TableCell>Période</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Price</TableCell>
+                <TableCell>TimePeriod</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {prices?.map((price) => (
+              {filteredPrices?.map((price) => (
                 <TableRow key={price.id}>
                   <TableCell>{price.name}</TableCell>
-                  <TableCell>{price.price}€</TableCell>
+                  <TableCell>{price.price}D</TableCell>
                   <TableCell>{price.timePeriod}</TableCell>
                   <TableCell>{price.type}</TableCell>
                   <TableCell>
@@ -125,10 +151,11 @@ onClick={() => {
               zIndex: 1000,
             }}
           >
-            <h3>{editPrice ? "Modifier le prix" : "Ajouter un prix"}</h3>
+            <h3>{editPrice ? "Update Rate" : "Add Rate"}</h3>
 
+            {/* Form Modal Inputs (Name, Price, TimePeriod, Type) */}
             <div style={{ marginBottom: "10px" }}>
-              <label>Nom du tarif</label>
+              <label>Name</label>
               <input
                 type="text"
                 value={editPrice ? editPrice.name : newPrice.name}
@@ -138,7 +165,7 @@ onClick={() => {
             </div>
 
             <div style={{ marginBottom: "10px" }}>
-              <label>Prix</label>
+              <label>Price</label>
               <input
                 type="number"
                 value={editPrice ? editPrice.price : newPrice.price}
@@ -148,7 +175,7 @@ onClick={() => {
             </div>
 
             <div style={{ marginBottom: "10px" }}>
-              <label>Période (ex: 1 mois)</label>
+              <label>TimePeriod</label>
               <input
                 type="text"
                 value={editPrice ? editPrice.timePeriod : newPrice.timePeriod}
@@ -183,7 +210,7 @@ onClick={() => {
                   marginRight: "10px",
                 }}
               >
-                {editPrice ? "Mettre à jour" : "Ajouter"}
+                {editPrice ? "Update" : "Add"}
               </button>
 
               <button
@@ -198,7 +225,7 @@ onClick={() => {
                   flex: "1",
                 }}
               >
-                Annuler
+                Cancel
               </button>
             </div>
           </div>

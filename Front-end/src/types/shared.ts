@@ -139,7 +139,7 @@ export interface Price {
   timePeriod: string; 
   createdAt: Date | null;
   updatedAt: Date | null;
-  type:PriceType[];
+  type:PriceType;
 }
 
 export interface Journal {
