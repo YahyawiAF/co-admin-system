@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useDeletePriceMutation } from "src/api/price.repo";
 import { Price, PriceType } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash } from '@fortawesome/free-solid-svg-icons';
+import { faPlus, faEdit, faTrash,faSearch } from '@fortawesome/free-solid-svg-icons';
 import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard"; 
 
@@ -62,20 +62,31 @@ const PriceComponent: React.FC = () => {
       <div style={{ padding: "20px" }}>
         <h2>Rate Management</h2>
 
-        {/* Conteneur pour aligner la recherche et le bouton Add */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-  <TextField
-    label="Search by name"
-    variant="outlined"
-    value={searchTerm}
-    onChange={(e) => setSearchTerm(e.target.value)}
-    style={{
-      width: "200px", // Largeur réduite du champ de recherche
-      padding: "0px", // Réduit le padding à l'intérieur du champ
-      fontSize: "12px",
-      marginRight: "10px", // Espacement entre le champ de recherche et le bouton
-    }}
-  />
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: "20px" }}>
+  <div style={{
+    display: "flex",
+    alignItems: "center",
+    border: "1px solid #ccc",
+    borderRadius: "5px",
+    padding: "8px",
+    backgroundColor: "white",
+    width: "220px" 
+  }}>
+   
+    <input
+      type="text"
+      placeholder="Search..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      style={{
+        border: "none",
+        outline: "none",
+        flex: 1, 
+      }}
+    />
+     <FontAwesomeIcon icon={faSearch} style={{ marginRight: "8px", color: "#aaa" }} />
+  </div>
+
 
   <Button
     onClick={() => { 
@@ -94,15 +105,19 @@ const PriceComponent: React.FC = () => {
     color="primary"
     style={{
       borderRadius: "50%", 
-      width: "30px",  // Taille du bouton plus petite
+      width: "30px", 
       height: "30px", 
       minWidth: "30px",
-      padding: "0", // Enlever le padding pour rendre le bouton plus petit
+      padding: "0", 
+      marginLeft: "10px" 
     }}
   >
     <FontAwesomeIcon icon={faPlus} style={{ fontSize: "16px", color: "white" }} />
   </Button>
 </div>
+
+
+
 
 
         <TableContainer component={Paper}>
