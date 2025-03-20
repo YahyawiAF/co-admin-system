@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useDeletePriceMutation } from "src/api/price.repo";
 import { Price, PriceType } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash,faSearch } from '@fortawesome/free-solid-svg-icons';
-import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField } from "@mui/material";
+import { faPlus, faEdit, faTrash, faSearch } from '@fortawesome/free-solid-svg-icons';
+import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard"; 
 
 const PriceComponent: React.FC = () => {
@@ -24,21 +24,40 @@ const PriceComponent: React.FC = () => {
 
   const [editPrice, setEditPrice] = useState<Price | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
+  const validateForm = () => {
+    const errors: { [key: string]: string } = {};
+    
+    // Vérification des champs pour l'ajout ou la mise à jour
+    if (!(editPrice ? editPrice.name : newPrice.name)) errors.name = "Name is required";
+    if ((editPrice ? editPrice.price : newPrice.price) <= 0) errors.price = "Price must be greater than 0";
+    if (!(editPrice ? editPrice.timePeriod : newPrice.timePeriod)) errors.timePeriod = "Time period is required";
+    if (!(editPrice ? editPrice.type : newPrice.type)) errors.type = "Type is required";
+  
+    setErrors(errors);
+    
+    return Object.keys(errors).length === 0;
+  };
+  
   const handleAddPrice = async () => {
-    try {
-      await createPrice(newPrice).unwrap();
-      setShowModal(false);
-      console.log("Prix ajouté avec succès !");
-    } catch (error) {
-      console.error("Erreur lors de l'ajout du prix :", error);
+    setErrors({});  // Réinitialiser les erreurs avant de valider
+    if (validateForm()) {
+      try {
+        await createPrice(newPrice).unwrap();
+        setShowModal(false);
+        console.log("Prix ajouté avec succès !");
+      } catch (error) {
+        console.error("Erreur lors de l'ajout du prix :", error);
+      }
     }
   };
-
+  
   const handleUpdatePrice = async () => {
-    if (editPrice) {
+    setErrors({});  // Réinitialiser les erreurs avant de valider
+    if (editPrice && validateForm()) {
       try {
-        const { id, createdAt, updatedAt, ...data } = editPrice; // Exclure `id`, `createdAt`, `updatedAt`
+        const { id, createdAt, updatedAt, ...data } = editPrice;
         await updatePrice({ id, data }).unwrap();
         setEditPrice(null);
         setShowModal(false);
@@ -53,6 +72,7 @@ const PriceComponent: React.FC = () => {
   const handleDeletePrice = async (id: string) => {
     await deletePrice(id);
   };
+
   const filteredPrices = prices?.filter((price) =>
     price.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -63,62 +83,56 @@ const PriceComponent: React.FC = () => {
         <h2>Rate Management</h2>
 
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: "20px" }}>
-  <div style={{
-    display: "flex",
-    alignItems: "center",
-    border: "1px solid #ccc",
-    borderRadius: "5px",
-    padding: "8px",
-    backgroundColor: "white",
-    width: "220px" 
-  }}>
-   
-    <input
-      type="text"
-      placeholder="Search..."
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      style={{
-        border: "none",
-        outline: "none",
-        flex: 1, 
-      }}
-    />
-     <FontAwesomeIcon icon={faSearch} style={{ marginRight: "8px", color: "#aaa" }} />
-  </div>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            border: "1px solid #ccc",
+            borderRadius: "5px",
+            padding: "9px",
+            backgroundColor: "white",
+            width: "220px" 
+          }}>
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              style={{
+                border: "none",
+                outline: "none",
+                flex: 1, 
+              }}
+            />
+            <FontAwesomeIcon icon={faSearch} style={{ marginRight: "8px", color: "#aaa" }} />
+          </div>
 
-
-  <Button
-    onClick={() => { 
-      setNewPrice({ 
-        id: "", 
-        name: "", 
-        price: 0, 
-        timePeriod: "", 
-        createdAt: null, 
-        updatedAt: null, 
-        type: PriceType.journal,
-      }); 
-      setShowModal(true); 
-    }}
-    variant="contained"
-    color="primary"
-    style={{
-      borderRadius: "50%", 
-      width: "30px", 
-      height: "30px", 
-      minWidth: "30px",
-      padding: "0", 
-      marginLeft: "10px" 
-    }}
-  >
-    <FontAwesomeIcon icon={faPlus} style={{ fontSize: "16px", color: "white" }} />
-  </Button>
-</div>
-
-
-
-
+          <Button
+            onClick={() => { 
+              setNewPrice({ 
+                id: "", 
+                name: "", 
+                price: 0, 
+                timePeriod: "", 
+                createdAt: null, 
+                updatedAt: null, 
+                type: PriceType.journal,
+              }); 
+              setShowModal(true); 
+            }}
+            variant="contained"
+            color="primary"
+            style={{
+              borderRadius: "50%", 
+              width: "30px", 
+              height: "30px", 
+              minWidth: "30px",
+              padding: "0", 
+              marginLeft: "10px" 
+            }}
+          >
+            <FontAwesomeIcon icon={faPlus} style={{ fontSize: "16px", color: "white" }} />
+          </Button>
+        </div>
 
         <TableContainer component={Paper}>
           <Table>
@@ -126,7 +140,7 @@ const PriceComponent: React.FC = () => {
               <TableRow>
                 <TableCell>Name</TableCell>
                 <TableCell>Price</TableCell>
-                <TableCell>TimePeriod</TableCell>
+                <TableCell>Time Period</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -135,7 +149,7 @@ const PriceComponent: React.FC = () => {
               {filteredPrices?.map((price) => (
                 <TableRow key={price.id}>
                   <TableCell>{price.name}</TableCell>
-                  <TableCell>{price.price}D</TableCell>
+                  <TableCell>{price.price} D</TableCell>
                   <TableCell>{price.timePeriod}</TableCell>
                   <TableCell>{price.type}</TableCell>
                   <TableCell>
@@ -168,15 +182,15 @@ const PriceComponent: React.FC = () => {
           >
             <h3>{editPrice ? "Update Rate" : "Add Rate"}</h3>
 
-            {/* Form Modal Inputs (Name, Price, TimePeriod, Type) */}
             <div style={{ marginBottom: "10px" }}>
               <label>Name</label>
               <input
                 type="text"
                 value={editPrice ? editPrice.name : newPrice.name}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))} 
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
+              {errors.name && <FormHelperText error>{errors.name}</FormHelperText>}
             </div>
 
             <div style={{ marginBottom: "10px" }}>
@@ -184,9 +198,10 @@ const PriceComponent: React.FC = () => {
               <input
                 type="number"
                 value={editPrice ? editPrice.price : newPrice.price}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, price: +e.target.value }) : setNewPrice({ ...newPrice, price: +e.target.value }))}
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, price: +e.target.value }) : setNewPrice({ ...newPrice, price: +e.target.value }))} 
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
+              {errors.price && <FormHelperText error>{errors.price}</FormHelperText>}
             </div>
 
             <div style={{ marginBottom: "10px" }}>
@@ -194,21 +209,23 @@ const PriceComponent: React.FC = () => {
               <input
                 type="text"
                 value={editPrice ? editPrice.timePeriod : newPrice.timePeriod}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, timePeriod: e.target.value }) : setNewPrice({ ...newPrice, timePeriod: e.target.value }))}
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, timePeriod: e.target.value }) : setNewPrice({ ...newPrice, timePeriod: e.target.value }))} 
                 style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
               />
+              {errors.timePeriod && <FormHelperText error>{errors.timePeriod}</FormHelperText>}
             </div>
 
             <div style={{ marginBottom: "10px" }}>
               <label>Type</label>
               <Select
                 value={editPrice ? editPrice.type : newPrice.type}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))}
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))} 
                 fullWidth
               >
                 <MenuItem value="journal">Journal</MenuItem>
                 <MenuItem value="abonnement">Abonnement</MenuItem>
               </Select>
+              {errors.type && <FormHelperText error>{errors.type}</FormHelperText>}
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", marginTop: "20px" }}>
