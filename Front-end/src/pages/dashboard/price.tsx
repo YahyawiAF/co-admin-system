@@ -3,8 +3,15 @@ import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useD
 import { Price, PriceType } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faEdit, faTrash, faSearch } from '@fortawesome/free-solid-svg-icons';
-import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl } from "@mui/material";
+import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl, Drawer } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard"; 
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions
+} from "@mui/material";
 
 const PriceComponent: React.FC = () => {
   const { data: prices, isLoading, isError } = useGetPricesQuery();
@@ -21,15 +28,16 @@ const PriceComponent: React.FC = () => {
     updatedAt: null,
     type: PriceType.journal, 
   });
-
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [priceToDelete, setPriceToDelete] = useState<string | null>(null);
+  
   const [editPrice, setEditPrice] = useState<Price | null>(null);
-  const [showModal, setShowModal] = useState(false);
+  const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
     
-    // Vérification des champs pour l'ajout ou la mise à jour
     if (!(editPrice ? editPrice.name : newPrice.name)) errors.name = "Name is required";
     if ((editPrice ? editPrice.price : newPrice.price) <= 0) errors.price = "Price must be greater than 0";
     if (!(editPrice ? editPrice.timePeriod : newPrice.timePeriod)) errors.timePeriod = "Time period is required";
@@ -45,14 +53,29 @@ const PriceComponent: React.FC = () => {
     if (validateForm()) {
       try {
         await createPrice(newPrice).unwrap();
-        setShowModal(false);
+        setShowDrawer(false);
+        setNewPrice({ 
+          id: "", 
+          name: "", 
+          price: 0, 
+          timePeriod: "", 
+          createdAt: null, 
+          updatedAt: null, 
+          type: PriceType.journal,
+        });
         console.log("Prix ajouté avec succès !");
       } catch (error) {
         console.error("Erreur lors de l'ajout du prix :", error);
       }
     }
   };
-  
+
+  const handleCloseDrawer = () => {
+    setShowDrawer(false);
+    setEditPrice(null); // Réinitialiser editPrice
+    setErrors({}); // Réinitialiser les erreurs
+  };
+
   const handleUpdatePrice = async () => {
     setErrors({});  // Réinitialiser les erreurs avant de valider
     if (editPrice && validateForm()) {
@@ -60,17 +83,25 @@ const PriceComponent: React.FC = () => {
         const { id, createdAt, updatedAt, ...data } = editPrice;
         await updatePrice({ id, data }).unwrap();
         setEditPrice(null);
-        setShowModal(false);
+        setShowDrawer(false);
         console.log("Prix mis à jour avec succès !");
       } catch (error) {
         console.error("Erreur lors de la mise à jour du prix :", error);
       }
     }
   };
-  
 
-  const handleDeletePrice = async (id: string) => {
-    await deletePrice(id);
+  const confirmDeletePrice = (id: string) => {
+    setPriceToDelete(id);
+    setShowDeleteModal(true);
+  };
+  
+  const handleConfirmDelete = async () => {
+    if (priceToDelete) {
+      await deletePrice(priceToDelete);
+      setShowDeleteModal(false);
+      setPriceToDelete(null);
+    }
   };
 
   const filteredPrices = prices?.filter((price) =>
@@ -117,7 +148,7 @@ const PriceComponent: React.FC = () => {
                 updatedAt: null, 
                 type: PriceType.journal,
               }); 
-              setShowModal(true); 
+              setShowDrawer(true); 
             }}
             variant="contained"
             color="primary"
@@ -153,10 +184,10 @@ const PriceComponent: React.FC = () => {
                   <TableCell>{price.timePeriod}</TableCell>
                   <TableCell>{price.type}</TableCell>
                   <TableCell>
-                    <IconButton onClick={() => { setEditPrice(price); setShowModal(true); }} color="primary">
+                    <IconButton onClick={() => { setEditPrice(price); setShowDrawer(true); }} color="primary">
                       <FontAwesomeIcon icon={faEdit} />
                     </IconButton>
-                    <IconButton onClick={() => handleDeletePrice(price.id)} color="secondary">
+                    <IconButton onClick={() => confirmDeletePrice(price.id)} color="secondary">
                       <FontAwesomeIcon icon={faTrash} />
                     </IconButton>
                   </TableCell>
@@ -165,103 +196,77 @@ const PriceComponent: React.FC = () => {
             </TableBody>
           </Table>
         </TableContainer>
-
-        {showModal && (
-          <div
-            style={{
-              position: "fixed",
-              top: "50px",
-              right: 0,
-              width: "400px",
-              height: "calc(100% - 50px)",
-              backgroundColor: "#fff",
-              boxShadow: "-2px 0 5px rgba(0,0,0,0.1)",
-              padding: "20px",
-              zIndex: 1000,
-            }}
-          >
-            <h3>{editPrice ? "Update Rate" : "Add Rate"}</h3>
-
-            <div style={{ marginBottom: "10px" }}>
-              <label>Name</label>
-              <input
-                type="text"
-                value={editPrice ? editPrice.name : newPrice.name}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))} 
-                style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
-              />
-              {errors.name && <FormHelperText error>{errors.name}</FormHelperText>}
-            </div>
-
-            <div style={{ marginBottom: "10px" }}>
-              <label>Price</label>
-              <input
-                type="number"
-                value={editPrice ? editPrice.price : newPrice.price}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, price: +e.target.value }) : setNewPrice({ ...newPrice, price: +e.target.value }))} 
-                style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
-              />
-              {errors.price && <FormHelperText error>{errors.price}</FormHelperText>}
-            </div>
-
-            <div style={{ marginBottom: "10px" }}>
-              <label>TimePeriod</label>
-              <input
-                type="text"
-                value={editPrice ? editPrice.timePeriod : newPrice.timePeriod}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, timePeriod: e.target.value }) : setNewPrice({ ...newPrice, timePeriod: e.target.value }))} 
-                style={{ width: "100%", padding: "8px", marginBottom: "10px", border: "1px solid #ccc", borderRadius: "5px" }}
-              />
-              {errors.timePeriod && <FormHelperText error>{errors.timePeriod}</FormHelperText>}
-            </div>
-
-            <div style={{ marginBottom: "10px" }}>
-              <label>Type</label>
+        
+        <Dialog open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
+          <DialogTitle>Confirmation</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+            Are you sure you want to delete this rate? This action is irreversible.            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowDeleteModal(false)} color="primary">
+             Cancel
+            </Button>
+            <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
+              Confirm
+            </Button>
+          </DialogActions>
+        </Dialog>
+        
+        <Drawer anchor="right" open={showDrawer} onClose={handleCloseDrawer}>
+          <div style={{ width: "400px", padding: "20px" }}>
+            <h3>{editPrice ? "Manage Rate" : "New Rate"}</h3>
+            <TextField 
+              label="Name" 
+              fullWidth 
+              margin="dense" 
+              value={editPrice ? editPrice.name : newPrice.name} 
+              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}
+              error={!!errors.name}
+              helperText={errors.name}
+            />
+            <TextField 
+              label="Price" 
+              fullWidth 
+              margin="dense" 
+              type="number" 
+              value={editPrice ? editPrice.price : newPrice.price} 
+              onChange={(e) => {
+                const value = Math.max(0, +e.target.value); // Empêche les valeurs négatives
+                editPrice
+                  ? setEditPrice({ ...editPrice, price: value })
+                  : setNewPrice({ ...newPrice, price: value });
+              }}
+              error={!!errors.price}
+              helperText={errors.price}
+            />
+            <TextField 
+              label="Time Period" 
+              fullWidth 
+              margin="dense" 
+              value={editPrice ? editPrice.timePeriod : newPrice.timePeriod} 
+              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, timePeriod: e.target.value }) : setNewPrice({ ...newPrice, timePeriod: e.target.value }))} 
+              error={!!errors.timePeriod}
+              helperText={errors.timePeriod}
+            />
+            <FormControl fullWidth margin="dense" error={!!errors.type}>
               <Select
                 value={editPrice ? editPrice.type : newPrice.type}
                 onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))} 
-                fullWidth
               >
                 <MenuItem value="journal">Journal</MenuItem>
                 <MenuItem value="abonnement">Abonnement</MenuItem>
               </Select>
-              {errors.type && <FormHelperText error>{errors.type}</FormHelperText>}
-            </div>
-
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: "20px" }}>
-              <button
-                onClick={editPrice ? handleUpdatePrice : handleAddPrice}
-                style={{
-                  backgroundColor: "#1976d2",
-                  color: "white",
-                  padding: "12px 20px",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                  flex: "1",
-                  marginRight: "10px",
-                }}
-              >
-                {editPrice ? "Update" : "Add"}
-              </button>
-
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  backgroundColor: "#9E9E9E",
-                  color: "white",
-                  padding: "12px 20px",
-                  border: "none",
-                  borderRadius: "5px",
-                  cursor: "pointer",
-                  flex: "1",
-                }}
-              >
-                Cancel
-              </button>
-            </div>
+              {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+            </FormControl>
+            <Button onClick={editPrice ? handleUpdatePrice : handleAddPrice} color="primary" variant="contained" fullWidth style={{ marginTop: "20px" }}>
+              {editPrice ? "Confirm" : "Confirm"}
+            </Button>
+            <Button onClick={handleCloseDrawer} color="secondary" variant="outlined" fullWidth style={{ marginTop: "10px" }}>
+              Cancel
+            </Button>
           </div>
-        )}
+        </Drawer>
       </div>
     </DashboardLayout>
   );

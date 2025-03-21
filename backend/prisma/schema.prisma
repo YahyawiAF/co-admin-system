@@ -50,6 +50,7 @@ model Price {
   type       PriceType
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
+  journals   Journal[]
 
   @@map("prices")
 }
@@ -65,7 +66,9 @@ model Journal {
   memberID      String?
   journalType   JournalType @default(DEMI_JOURNEE)
   isReservation Boolean     @default(false)
+  priceId       String?
   members       Member?     @relation(fields: [memberID], references: [id])
+  prices        Price?      @relation(fields: [priceId], references: [id])
 
   @@map("journals")
 }
