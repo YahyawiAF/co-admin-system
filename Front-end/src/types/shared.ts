@@ -140,6 +140,7 @@ export interface Price {
   createdAt: Date | null;
   updatedAt: Date | null;
   type:PriceType;
+  journals: Journal[];
 }
 
 export interface Journal {
@@ -154,6 +155,8 @@ export interface Journal {
   createdAt: Date;
   updatedAt: Date;
   isReservation: boolean;
+  priceId?: string | null;
+  price?: Member | null;
 }
 
 export interface Reservation {

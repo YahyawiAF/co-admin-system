@@ -1,9 +1,8 @@
 import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
-import { Journal, JournalType } from '@prisma/client';
 import { PriceEntity } from '@/modules/price/entities/price.entity'; // Importez l'entité PriceEntity
 
-export class JournalEntity implements Journal {
+export class JournalEntity  {
   constructor({ members, price, ...data }: Partial<JournalEntity>) {
     Object.assign(this, data);
     if (members) {
@@ -43,9 +42,6 @@ export class JournalEntity implements Journal {
 
   @ApiProperty()
   isReservation: boolean;
-
-  @ApiProperty({ enum: JournalType, enumName: 'JournalType' })
-  journalType: JournalType;
 
   @ApiProperty({ required: false, type: MemberEntity })
   members?: MemberEntity;

@@ -64,7 +64,6 @@ model Journal {
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt @db.Timestamp(6)
   memberID      String?
-  journalType   JournalType @default(DEMI_JOURNEE)
   isReservation Boolean     @default(false)
   priceId       String?
   members       Member?     @relation(fields: [memberID], references: [id])
@@ -103,7 +102,4 @@ enum Subscription {
   Weekly
 }
 
-enum JournalType {
-  DEMI_JOURNEE
-  JOURNEE
-}
+

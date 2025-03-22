@@ -1,4 +1,3 @@
-// components
 import { FC, useState } from "react";
 import * as React from "react";
 import {
@@ -9,9 +8,7 @@ import {
   Divider,
   Typography,
 } from "@mui/material";
-//Yup
 import { useForm } from "react-hook-form";
-//Form
 import FormProvider from "../../../hook-form/FormProvider";
 import RHFTextField from "../../../hook-form/RHTextField";
 import {
@@ -19,8 +16,7 @@ import {
   RHFTimePeakerField,
 } from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
-
-import { Journal, Member } from "../../../../types/shared";
+import { Journal, Member, Price } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -47,17 +43,14 @@ import {
   getHourDifference,
   updateHoursAndMinutes,
 } from "src/utils/shared";
+import { useGetPricesQuery } from "src/api/price.repo";
+
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
   selectItem: Journal | null;
   handleClose: () => void;
   today: Date;
-}
-
-enum JournalType {
-  DEMI_JOURNEE = "DEMI_JOURNEE",
-  JOURNEE = "JOURNEE",
 }
 
 type ExtractedType = Pick<
@@ -69,11 +62,10 @@ type ExtractedType = Pick<
   | "leaveTime"
   | "memberID"
   | "isReservation"
+  | "priceId"
 >;
 
-type ExtendedTypeOptional = ExtractedType & {
-  journalType: JournalType;
-};
+type ExtendedTypeOptional = ExtractedType & {};
 
 const defaultValues: Partial<ExtendedTypeOptional> = {
   id: "",
@@ -82,7 +74,7 @@ const defaultValues: Partial<ExtendedTypeOptional> = {
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
-  journalType: JournalType.DEMI_JOURNEE,
+  priceId: null,
   isReservation: false,
 };
 
@@ -95,11 +87,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const {
     data: membersList,
     isLoading: isLoadingMember,
-    error,
+    error: membersError,
   } = useGetMembersQuery();
+  const {
+    data: pricesList,
+    isLoading: isLoadingPrices,
+    error: pricesError,
+  } = useGetPricesQuery();
   const [createJournal, { isLoading, error: createJournalError }] =
     useCreateJournalMutation();
   const [updateMember] = useUpdateJournalMutation();
+
   // state
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
@@ -114,9 +112,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
-    journalType: z
-      .enum([JournalType.DEMI_JOURNEE, JournalType.JOURNEE])
-      .optional(),
+    priceId: z.string(), // Ajout du champ priceId
     isReservation: z.boolean(),
   });
 
@@ -136,11 +132,19 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
-  const journalType = watch("journalType");
   const registredTime = watch("registredTime") as Date;
   const isReservation = watch("isReservation");
+  const priceId = watch("priceId");
 
-  // console.log("isReservation", isReservation);
+  // Mettre à jour payedAmount lorsque priceId change
+  React.useEffect(() => {
+    if (priceId && pricesList) {
+      const selectedPrice = pricesList.find((price: Price) => price.id === priceId);
+      if (selectedPrice) {
+        setValue("payedAmount", selectedPrice.price);
+      }
+    }
+  }, [priceId, pricesList, setValue]);
 
   const stayedHours = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
@@ -178,68 +182,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     };
     initializeFormValues();
   }, [selectItem, resetAsyn, today]);
-
-  // React.useEffect(() => {
-  //   if (!isPayed) {
-  //     setValue("payedAmount", 0);
-  //     return;
-  //   }
-  // }, [isPayed, setValue]);
-
-  React.useEffect(() => {
-    const adjustLeaveTime = async () => {
-      if (!isManualyUpdating) return;
-      if (!registredTime || !journalType) return;
-
-      const baseDate = new Date(registredTime);
-      const updatedLeaveTime =
-        journalType === JournalType.JOURNEE
-          ? addHours(baseDate, 8)
-          : addHours(baseDate, 6);
-
-      const updatedPrice = journalType === JournalType.DEMI_JOURNEE ? 4 : 8;
-      if (
-        leaveTime &&
-        new Date(leaveTime).getTime() === updatedLeaveTime.getTime()
-      ) {
-        return;
-      }
-
-      setValue("payedAmount", updatedPrice);
-      setValue("leaveTime", updatedLeaveTime);
-      setIsManualyUpdating(false);
-    };
-
-    adjustLeaveTime();
-  }, [registredTime, setValue, journalType, leaveTime, isManualyUpdating]);
-
-  React.useEffect(() => {
-    const adjustJournalType = () => {
-      if (!isManualyCalculationUpdating) return;
-      if (!registredTime || !journalType) return;
-      let hoursDifference = 0;
-      if (leaveTime) {
-        hoursDifference = getHourDifference(registredTime, leaveTime);
-      }
-      const updatedJournal =
-        hoursDifference <= 6 ? JournalType.DEMI_JOURNEE : JournalType.JOURNEE;
-      const updatedPrice = updatedJournal === JournalType.DEMI_JOURNEE ? 4 : 8;
-      if (journalType && journalType === updatedJournal) {
-        return;
-      }
-      setValue("payedAmount", updatedPrice);
-      setValue("journalType", updatedJournal);
-      setIsManualyCalculationUpdating(false);
-    };
-
-    adjustJournalType();
-  }, [
-    registredTime,
-    setValue,
-    journalType,
-    leaveTime,
-    isManualyCalculationUpdating,
-  ]);
 
   const handleSelect = (event: any) => {
     if (event) {
@@ -339,7 +281,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             name={"member"}
             disabled={!!selectItem}
             multiple={false}
-            error={!!!errors.memberID}
+            error={!!errors.memberID}
             errorMessage={errors.memberID?.message}
           />
         ) : (
@@ -366,11 +308,16 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         )}
         {isPayed && member ? (
           <>
-            <RHSelectDropDown
-              name="journalType"
-              list={["DEMI_JOURNEE", "JOURNEE"]}
-              onhandleManuelUpdae={() => setIsManualyUpdating(true)}
-            />
+            {!isLoadingPrices ? (
+              <RHSelectDropDown
+                name="priceId"
+                list={pricesList}
+                label="Select Rate"
+                onhandleManuelUpdae={() => console.log("Manual update triggered")}
+              />
+            ) : (
+              <div>Loading Prices...</div>
+            )}
             <Box
               sx={{
                 display: "flex",
@@ -438,7 +385,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                     ? "0 DT"
                     : stayedHours <= 6
                     ? "4 DT"
-                    : "8DT"}
+                    : "8 DT"}
                 </Typography>
               </Box>
               <Box
@@ -469,7 +416,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                     ? "0 DT"
                     : stayedHours <= 6
                     ? "4 DT"
-                    : "8DT"}
+                    : "8 DT"}
                 </Typography>
               </Box>
               <Divider />
@@ -544,4 +491,5 @@ const ActionButtton = styled(Button)(() => ({
     color: "#fff",
   },
 }));
+
 export default ShopFilterSidebar;

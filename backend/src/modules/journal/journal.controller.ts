@@ -92,12 +92,13 @@ export class JournalController {
   @ApiCreatedResponse({ type: JournalEntity })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUserDto: AddJournalDto,
+    @Body() updateJournalDto: UpdateJournalDto, // Utiliser UpdateJournalDto
   ) {
     return new JournalEntity(
-      await this.JournalService.update(id, updateUserDto),
+      await this.JournalService.update(id, updateJournalDto),
     );
   }
+  
 
   @Delete(':id')
   // @UseGuards(JwtAuthGuard)

@@ -27,6 +27,7 @@ const PriceComponent: React.FC = () => {
     createdAt: null,
     updatedAt: null,
     type: PriceType.journal, 
+    journals: []
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [priceToDelete, setPriceToDelete] = useState<string | null>(null);
@@ -62,6 +63,7 @@ const PriceComponent: React.FC = () => {
           createdAt: null, 
           updatedAt: null, 
           type: PriceType.journal,
+          journals: []
         });
         console.log("Prix ajouté avec succès !");
       } catch (error) {
@@ -147,6 +149,7 @@ const PriceComponent: React.FC = () => {
                 createdAt: null, 
                 updatedAt: null, 
                 type: PriceType.journal,
+                journals: []
               }); 
               setShowDrawer(true); 
             }}
