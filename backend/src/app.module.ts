@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'; // Importez MiddlewareConsumer et NestModule
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -13,6 +13,8 @@ import { EventsModule } from 'src/modules/webSocket/events.module';
 import { JournalModule } from 'src/modules/journal/journal.modal';
 import { MemberModule } from 'src/modules/member/member.module';
 import { PriceModule } from './modules/price/price.module';
+import { SecurityMiddleware } from 'common/guards/securityMiddleware';
+import { PrismaService } from 'database/prisma.service';
 
 @Module({
   imports: [
@@ -35,12 +37,12 @@ import { PriceModule } from './modules/price/price.module';
           from: `"No Reply" <${configService.get<string>('MAILER_FROM')}>`, // Adresse e-mail par défaut
         },
         template: {
-            dir: process.cwd() + '/src/templates', // Chemin absolu vers le dossier templates
-            adapter: new HandlebarsAdapter(),
-            options: {
-              strict: true,
-            },
+          dir: process.cwd() + '/src/templates', // Chemin absolu vers le dossier templates
+          adapter: new HandlebarsAdapter(),
+          options: {
+            strict: true,
           },
+        },
       }),
       inject: [ConfigService], // Injecte ConfigService dans useFactory
     }),
@@ -52,6 +54,11 @@ import { PriceModule } from './modules/price/price.module';
     PriceModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService,PrismaService],
 })
-export class AppModule {}
+export class AppModule implements NestModule { // Implémentez NestModule
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(SecurityMiddleware).
+    forRoutes('auth'); // Appliquez le middleware à toutes les routes
+  }
+}

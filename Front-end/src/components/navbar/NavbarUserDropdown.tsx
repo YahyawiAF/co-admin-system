@@ -2,8 +2,8 @@ import React from "react";
 import styled from "@emotion/styled";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
-import { useDispatch } from "react-redux";  // Make sure dispatch is imported
-import { signOut } from "src/redux/authSlice"; // Update path accordingly
+import { useDispatch } from "react-redux";
+import { signOut } from "src/redux/authSlice"; // Assurez-vous que le chemin est correct
 
 import {
   Tooltip,
@@ -11,6 +11,7 @@ import {
   MenuItem,
   IconButton as MuiIconButton,
 } from "@mui/material";
+import { useLogoutMutation } from "src/api/auth.repo";
 
 const IconButton = styled(MuiIconButton)`
   svg {
@@ -22,7 +23,8 @@ const IconButton = styled(MuiIconButton)`
 function NavbarUserDropdown() {
   const [anchorMenu, setAnchorMenu] = React.useState<any>(null);
   const router = useRouter();
-  const dispatch = useDispatch();  // Initialize dispatch here
+  const dispatch = useDispatch();
+  const [logout] = useLogoutMutation(); // Initialisez la mutation de déconnexion
 
   const toggleMenu = (event: React.SyntheticEvent) => {
     setAnchorMenu(event.currentTarget);
@@ -33,18 +35,51 @@ function NavbarUserDropdown() {
   };
 
   const handleSignOut = async () => {
-    // Efface les données de session (token et username)
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("username");
+    // Récupérez le token depuis sessionStorage
+    const accessToken = sessionStorage.getItem('accessToken');
   
-    // Dispatcher l'action de déconnexion pour réinitialiser l'état Redux (si tu l'utilises)
-    dispatch(signOut());
+    if (!accessToken) {
+      console.error("Aucun token d'accès trouvé.");
+      // Redirigez l'utilisateur vers la page de connexion
+      router.replace("/auth/sign-in");
+      return;
+    }
   
-    // Redirige l'utilisateur vers la page de connexion en remplaçant l'URL actuelle
-    router.replace("/auth/sign-in");
+    try {
+      // Appel à l'API de déconnexion
+      await logout().unwrap();
+  
+      // Efface les données de session
+
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem('accessToken'); // Supprimez le token du sessionStorage
+      sessionStorage.removeItem('refreshToken'); // Supprimez également le refreshToken si nécessaire
+  
+      // Dispatcher l'action de déconnexion
+      dispatch(signOut());
+  
+      // Redirige l'utilisateur vers la page de connexion
+      router.replace("/auth/sign-in");
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error);
+  
+      // Si le token est invalide, forcez la déconnexion côté client
+      if (typeof error === 'object' && error !== null && 'status' in error) {
+        const fetchError = error as { status: number; data: { message: string } };
+        if (fetchError.status === 401) {
+          console.error("Token invalide :", fetchError.data.message);
+        }
+      }
+  
+      // Forcez la déconnexion côté client en cas d'erreur
+      sessionStorage.removeItem("token");
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('refreshToken');
+      dispatch(signOut());
+      router.replace("/auth/sign-in");
+    }
   };
-  
-  
 
   return (
     <React.Fragment>

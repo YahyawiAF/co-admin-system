@@ -1,7 +1,7 @@
 import {
     Body,
     Controller,
-    Get,
+    Get, // Ajoutez Get ici
     Param,
     Post,
     Req,
@@ -16,6 +16,7 @@ import {
   import { SignUpDto } from './dto/signup.dto';
   import { ForgotPasswordDto } from './dto/forgot-password.dto';
   import { ResetPasswordDto } from './dto/reset-password.dto';
+  import { JwtAuthGuard } from 'common/guards/accessToken.guard';
   
   @Controller('auth')
   @ApiTags('auth')
@@ -50,13 +51,35 @@ import {
       return { message: 'Password reset email sent' };
     }
   
-    @Post('reset-password/:token') // Le token est maintenant dans le chemin
+    @Post('reset-password/:token')
     @ApiOkResponse({ description: 'Password reset successfully' })
     async resetPassword(
-      @Param('token') token: string, // Récupérez le token depuis le chemin
-      @Body() resetPasswordDto: ResetPasswordDto, // Récupérez le nouveau mot de passe depuis le corps
+      @Param('token') token: string,
+      @Body() resetPasswordDto: ResetPasswordDto,
     ) {
       await this.authService.resetPassword(token, resetPasswordDto.newPassword);
       return { message: 'Password reset successfully' };
+    }
+  
+    @Post('logout')
+    @UseGuards(JwtAuthGuard)
+    @ApiOkResponse({ description: 'Logout successful' })
+    async logout(@Req() req: Request) {
+      const userId = req.user['sub'];
+      await this.authService.logout(userId);
+      return { message: 'Logout successful' };
+    }
+  
+    // Ajoutez cette nouvelle route protégée
+    @Get('protected')
+    @UseGuards(JwtAuthGuard) // Appliquez le guard pour protéger la route
+    @ApiOkResponse({ description: 'Accès à une ressource protégée' })
+    getProtectedResource(@Req() req: Request) {
+      // Vous pouvez accéder aux informations de l'utilisateur via `req.user`
+      const userId = req.user['sub'];
+      return {
+        message: 'Ceci est une ressource protégée',
+        userId: userId,
+      };
     }
   }

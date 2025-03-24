@@ -40,7 +40,7 @@ function SignIn() {
       const user = await login({ email, password, }).unwrap();
       
       // Si la connexion réussit, stockez le token et le nom d'utilisateur dans sessionStorage
-      sessionStorage.setItem("token", user.accessToken); // Remplacez `user.token` par le nom exact du token dans la réponse
+      sessionStorage.setItem("accessToken", user.accessToken); // Remplacez `user.token` par le nom exact du token dans la réponse
       sessionStorage.setItem("username", user.email); // Remplacez `user.fullname` par le nom exact de l'utilisateur dans la réponse
       
       // Afficher un message de succès avec SweetAlert2

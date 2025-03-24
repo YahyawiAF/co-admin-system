@@ -61,6 +61,26 @@ export const authServerApi = createApi({
         body: { email },
       }),
     }),
+    // Endpoint pour accéder à la ressource protégée
+getProtectedResource: builder.query<{ message: string; userId: string }, void>({
+  query: () => ({
+    url: "auth/protected",
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+    },
+  }),
+}),
+// Endpoint pour la déconnexion
+logout: builder.mutation<void, void>({
+  query: () => ({
+    url: "auth/logout",
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sessionStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+    },
+  }),
+}),
 
     // Endpoint pour la réinitialisation du mot de passe
     resetPassword: builder.mutation<void, { token: string; newPassword: string }>({
@@ -78,6 +98,8 @@ export const {
   useLoginMutation,
   useSignUpMutation,
   useRefreshTokensMutation,
-  useForgotPasswordMutation, // Nouveau hook pour forgot-password
-  useResetPasswordMutation, // Nouveau hook pour reset-password
+  useForgotPasswordMutation,
+  useResetPasswordMutation,
+  useGetProtectedResourceQuery, // Nouveau hook pour la ressource protégée
+  useLogoutMutation, // Nouveau hook pour la déconnexion
 } = authServerApi;

@@ -17,6 +17,7 @@ model User {
   fullname     String?   @db.VarChar(256)
   password     String?
   refreshToken String?
+  accessToken  String?
   role         Role      @default(USER)
   resetPasswordToken String?
 

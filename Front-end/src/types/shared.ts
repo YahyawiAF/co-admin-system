@@ -107,7 +107,7 @@ export interface User {
   fullname?: string | null;
   password?: string | null;
   refreshToken?: string | null;
-  accessToken:  string;
+  accessToken:string;
   role: Role;
   resetPasswordToken :string;
 
