@@ -138,11 +138,7 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
               }}
             />
           </div>
-        </Box>
-      )}
-  
-      {/* Bouton Current Day */}
-      <Button
+          <Button
         variant="outlined"
         color="primary"
         onClick={setCurrentDay}
@@ -150,6 +146,11 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
       >
         Current Day
       </Button>
+        </Box>
+      )}
+  
+      {/* Bouton Current Day */}
+     
     </Box>
     <Box display="flex" alignItems="center" gap="10px">
       {/* Bouton Refresh */}

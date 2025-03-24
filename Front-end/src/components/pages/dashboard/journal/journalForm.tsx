@@ -44,6 +44,7 @@ import {
   updateHoursAndMinutes,
 } from "src/utils/shared";
 import { useGetPricesQuery } from "src/api/price.repo";
+import RHSelectRate from "src/components/hook-form/RHSelectRate";
 
 // ----------------------------------------------------------------------
 
@@ -309,7 +310,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         {isPayed && member ? (
           <>
             {!isLoadingPrices ? (
-              <RHSelectDropDown
+              <RHSelectRate
                 name="priceId"
                 list={pricesList}
                 label="Select Rate"
