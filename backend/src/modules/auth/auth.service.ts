@@ -10,7 +10,7 @@ import {
   import { AuthEntity } from './entity/auth.entity';
   import * as bcrypt from 'bcrypt';
   import { ConfigService } from '@nestjs/config';
-  
+  import { MailerService } from '@nestjs-modules/mailer';
   
   const roundsOfHashing = 10;
   
@@ -20,6 +20,7 @@ import {
       private prisma: PrismaService,
       private jwtService: JwtService,
       private configService: ConfigService,
+      private mailerService: MailerService,
     ) {}
     async signUp(email: string, password: string, fullname: string) {
       const existingUser = await this.prisma.user.findUnique({ where: { email } });
@@ -154,4 +155,87 @@ import {
     private hashData(data: string) {
       return bcrypt.hash(data, roundsOfHashing);
     }
+    async requestPasswordReset(email: string): Promise<void> {
+        const user = await this.prisma.user.findUnique({ where: { email } });
+      
+        if (!user) {
+          throw new NotFoundException('Utilisateur non trouvé');
+        }
+      
+        // Ajoutez userId au payload du jeton
+        const resetToken = this.jwtService.sign(
+          { userId: user.id, email: user.email }, // Incluez userId et email
+          {
+            secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+            expiresIn: '1h',
+          },
+        );
+      
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { resetPasswordToken: resetToken },
+        });
+      
+        const resetUrl = `http://localhost:3000/auth/reset-password?token=${resetToken}`;
+      
+        await this.mailerService.sendMail({
+          to: email,
+          subject: 'Demande de réinitialisation de mot de passe',
+          template: 'password-reset',
+          context: {
+            name: user.fullname,
+            resetUrl,
+          },
+        });
+      }
+     async resetPassword(token: string, newPassword: string): Promise<void> {
+  try {
+    console.log('Jeton reçu :', token);
+
+    // Vérifiez le jeton
+    const payload = this.jwtService.verify(token, {
+      secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+    });
+
+    console.log('Payload du jeton :', payload);
+
+    if (!payload || !payload.email || !payload.userId) {
+      throw new ForbiddenException('Jeton invalide');
+    }
+
+    // Récupérez l'utilisateur
+    const user = await this.prisma.user.findUnique({
+      where: { email: payload.email },
+    });
+
+    if (!user) {
+      console.log('Utilisateur non trouvé pour l\'email :', payload.email);
+      throw new ForbiddenException('Jeton invalide');
+    }
+
+    // Vérifiez que le jeton stocké correspond au jeton reçu
+    if (user.resetPasswordToken !== token) {
+      console.log('Incompatibilité de jeton :', user.resetPasswordToken, '!=', token);
+      throw new ForbiddenException('Jeton invalide');
+    }
+
+    // Hash du nouveau mot de passe
+    const hashedPassword = await this.hashData(newPassword);
+
+    // Mettez à jour le mot de passe et réinitialisez le jeton
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordToken: null, // Réinitialisez le jeton après utilisation
+      },
+    });
+
+    console.log('Mot de passe réinitialisé avec succès pour l\'utilisateur :', user.email);
+  } catch (error) {
+    console.error('Erreur lors de la réinitialisation du mot de passe :', error.message);
+    throw new ForbiddenException('Jeton invalide ou expiré');
   }
+}
+      }
+  

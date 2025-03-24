@@ -109,6 +109,8 @@ export interface User {
   refreshToken?: string | null;
   accessToken:  string;
   role: Role;
+  resetPasswordToken :string;
+
 }
 
 export interface Member {

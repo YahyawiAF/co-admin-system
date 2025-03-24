@@ -18,6 +18,7 @@ model User {
   password     String?
   refreshToken String?
   role         Role      @default(USER)
+  resetPasswordToken String?
 
   @@map("users")
 }

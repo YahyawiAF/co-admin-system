@@ -17,8 +17,8 @@ interface SignUpParams {
 
 // Créez l'API pour l'authentification
 export const authServerApi = createApi({
-  reducerPath: "authApi", // Un nom unique pour ce service d'authentification
-  baseQuery: fetchBaseQuery({ baseUrl: API_URL }), // L'URL de base pour vos appels d'API
+  reducerPath: "authApi",
+  baseQuery: fetchBaseQuery({ baseUrl: API_URL }),
   tagTypes: ["authApi"],
   endpoints: (builder) => ({
     // Endpoint de login
@@ -28,7 +28,6 @@ export const authServerApi = createApi({
         method: "POST",
         body: { email, password },
       }),
-      // Invalidates cache lorsque le login réussit
       invalidatesTags: ["authApi"],
     }),
 
@@ -41,16 +40,6 @@ export const authServerApi = createApi({
       }),
       invalidatesTags: ["authApi"],
     }),
-    // Add signOut endpoint (if necessary)
-signOut: builder.mutation<void, void>({
-  query: () => ({
-    url: "auth/logout", // Add your logout API endpoint
-    method: "POST",
-  }),
-  // You can invalidate tags or manage other cache effects if necessary
-  invalidatesTags: ["authApi"],
-}),
-
 
     // Endpoint pour rafraîchir les tokens
     refreshTokens: builder.mutation<User, string>({
@@ -58,17 +47,37 @@ signOut: builder.mutation<void, void>({
         url: "auth/refresh",
         method: "GET",
         headers: {
-          Authorization: `Bearer ${refreshToken}`, // On envoie le token de rafraîchissement
+          Authorization: `Bearer ${refreshToken}`,
         },
       }),
-      // Invalidates cache ici si nécessaire
       invalidatesTags: ["authApi"],
+    }),
+
+    // Endpoint pour la demande de réinitialisation de mot de passe
+    forgotPassword: builder.mutation<void, { email: string }>({
+      query: ({ email }) => ({
+        url: "auth/forgot-password",
+        method: "POST",
+        body: { email },
+      }),
+    }),
+
+    // Endpoint pour la réinitialisation du mot de passe
+    resetPassword: builder.mutation<void, { token: string; newPassword: string }>({
+      query: ({ token, newPassword }) => ({
+        url: `auth/reset-password/${token}`, // Le token est maintenant dans le chemin
+        method: "POST",
+        body: { newPassword }, // Le nouveau mot de passe est dans le corps
+      }),
     }),
   }),
 });
 
+// Exportez les hooks générés
 export const {
   useLoginMutation,
   useSignUpMutation,
   useRefreshTokensMutation,
+  useForgotPasswordMutation, // Nouveau hook pour forgot-password
+  useResetPasswordMutation, // Nouveau hook pour reset-password
 } = authServerApi;
