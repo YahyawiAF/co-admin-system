@@ -12,11 +12,16 @@ import {
 import { SelectChangeEvent } from "@mui/material/Select";
 import { styled } from "@mui/system";
 
+interface TimeInterval {
+  start: string;
+  end: string;
+}
+
 interface Price {
   id: string;
   name: string;
   price: number;
-  timePeriod: string;
+  timePeriod: TimeInterval;
   createdAt: Date | null;
   updatedAt: Date | null;
   type: string;
@@ -27,6 +32,10 @@ type IRHFTextField = {
   list?: Price[];
   label?: string;
   onhandleManuelUpdae?: () => void;
+};
+
+const formatTimeInterval = (interval: TimeInterval) => {
+  return `${interval.start} - ${interval.end}`;
 };
 
 const RHSelectRate: FC<IRHFTextField> = ({
@@ -89,7 +98,7 @@ const RHSelectRate: FC<IRHFTextField> = ({
               />
               <TextField
                 label="Période"
-                value={selectedPrice.timePeriod}
+                value={formatTimeInterval(selectedPrice.timePeriod)}
                 disabled
                 fullWidth
                 sx={{
@@ -126,4 +135,4 @@ const StyledDropDown = styled(FormControl)(() => ({
   },
 }));
 
-export default  RHSelectRate;
+export default RHSelectRate;

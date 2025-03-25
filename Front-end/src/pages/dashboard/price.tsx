@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useDeletePriceMutation } from "src/api/price.repo";
-import { Price, PriceType } from "src/types/shared";
+import { Price, PriceType, TimeInterval } from "src/types/shared";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faEdit, faTrash, faSearch } from '@fortawesome/free-solid-svg-icons';
 import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl, Drawer } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard"; 
+
 import {
   Dialog,
   DialogTitle,
@@ -12,6 +13,7 @@ import {
   DialogContentText,
   DialogActions
 } from "@mui/material";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const PriceComponent: React.FC = () => {
   const { data: prices, isLoading, isError } = useGetPricesQuery();
@@ -23,7 +25,7 @@ const PriceComponent: React.FC = () => {
     id: "",
     name: "",
     price: 0,
-    timePeriod: "",
+    timePeriod: { start: "", end: "" },
     createdAt: null,
     updatedAt: null,
     type: PriceType.journal, 
@@ -41,7 +43,8 @@ const PriceComponent: React.FC = () => {
     
     if (!(editPrice ? editPrice.name : newPrice.name)) errors.name = "Name is required";
     if ((editPrice ? editPrice.price : newPrice.price) <= 0) errors.price = "Price must be greater than 0";
-    if (!(editPrice ? editPrice.timePeriod : newPrice.timePeriod)) errors.timePeriod = "Time period is required";
+    if (!(editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start)) errors.timePeriodStart = "Start time is required";
+    if (!(editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end)) errors.timePeriodEnd = "End time is required";
     if (!(editPrice ? editPrice.type : newPrice.type)) errors.type = "Type is required";
   
     setErrors(errors);
@@ -59,7 +62,7 @@ const PriceComponent: React.FC = () => {
           id: "", 
           name: "", 
           price: 0, 
-          timePeriod: "", 
+          timePeriod: { start: "", end: "" }, 
           createdAt: null, 
           updatedAt: null, 
           type: PriceType.journal,
@@ -106,11 +109,16 @@ const PriceComponent: React.FC = () => {
     }
   };
 
+  const formatTimeInterval = (interval: TimeInterval) => {
+    return `${interval.start} - ${interval.end}`;
+  };
+
   const filteredPrices = prices?.filter((price) =>
     price.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
+    <ProtectedRoute>
     <DashboardLayout>
       <div style={{ padding: "20px" }}>
         <h2>Rate Management</h2>
@@ -145,7 +153,7 @@ const PriceComponent: React.FC = () => {
                 id: "", 
                 name: "", 
                 price: 0, 
-                timePeriod: "", 
+                timePeriod: { start: "", end: "" }, 
                 createdAt: null, 
                 updatedAt: null, 
                 type: PriceType.journal,
@@ -184,7 +192,7 @@ const PriceComponent: React.FC = () => {
                 <TableRow key={price.id}>
                   <TableCell>{price.name}</TableCell>
                   <TableCell>{price.price} D</TableCell>
-                  <TableCell>{price.timePeriod}</TableCell>
+                  <TableCell>{formatTimeInterval(price.timePeriod)}</TableCell>
                   <TableCell>{price.type}</TableCell>
                   <TableCell>
                     <IconButton onClick={() => { setEditPrice(price); setShowDrawer(true); }} color="primary">
@@ -204,11 +212,12 @@ const PriceComponent: React.FC = () => {
           <DialogTitle>Confirmation</DialogTitle>
           <DialogContent>
             <DialogContentText>
-            Are you sure you want to delete this rate? This action is irreversible.            </DialogContentText>
+              Are you sure you want to delete this rate? This action is irreversible.
+            </DialogContentText>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setShowDeleteModal(false)} color="primary">
-             Cancel
+              Cancel
             </Button>
             <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
               Confirm
@@ -224,8 +233,7 @@ const PriceComponent: React.FC = () => {
               fullWidth 
               margin="dense" 
               value={editPrice ? editPrice.name : newPrice.name} 
-              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}
-              error={!!errors.name}
+              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}              error={!!errors.name}
               helperText={errors.name}
             />
             <TextField 
@@ -244,13 +252,42 @@ const PriceComponent: React.FC = () => {
               helperText={errors.price}
             />
             <TextField 
-              label="Time Period" 
+              label="Start Time" 
               fullWidth 
               margin="dense" 
-              value={editPrice ? editPrice.timePeriod : newPrice.timePeriod} 
-              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, timePeriod: e.target.value }) : setNewPrice({ ...newPrice, timePeriod: e.target.value }))} 
-              error={!!errors.timePeriod}
-              helperText={errors.timePeriod}
+              value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start} 
+              onChange={(e) => 
+                editPrice 
+                  ? setEditPrice({ 
+                      ...editPrice, 
+                      timePeriod: { ...editPrice.timePeriod, start: e.target.value } 
+                    }) 
+                  : setNewPrice({ 
+                      ...newPrice, 
+                      timePeriod: { ...newPrice.timePeriod, start: e.target.value } 
+                    })
+              } 
+              error={!!errors.timePeriodStart}
+              helperText={errors.timePeriodStart}
+            />
+            <TextField 
+              label="End Time" 
+              fullWidth 
+              margin="dense" 
+              value={editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end} 
+              onChange={(e) => 
+                editPrice 
+                  ? setEditPrice({ 
+                      ...editPrice, 
+                      timePeriod: { ...editPrice.timePeriod, end: e.target.value } 
+                    }) 
+                  : setNewPrice({ 
+                      ...newPrice, 
+                      timePeriod: { ...newPrice.timePeriod, end: e.target.value } 
+                    })
+              } 
+              error={!!errors.timePeriodEnd}
+              helperText={errors.timePeriodEnd}
             />
             <FormControl fullWidth margin="dense" error={!!errors.type}>
               <Select
@@ -272,6 +309,7 @@ const PriceComponent: React.FC = () => {
         </Drawer>
       </div>
     </DashboardLayout>
+    </ProtectedRoute>
   );
 };
 

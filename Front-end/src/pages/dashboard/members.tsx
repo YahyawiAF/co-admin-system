@@ -36,6 +36,7 @@ import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
 import { useDeleteMemeberMutation, useGetMembersQuery } from "src/api";
 import { red } from "@mui/material/colors";
 import Modal from "src/components/Modal/BasicModal";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -204,6 +205,8 @@ function EnhancedTable() {
     Math.min(rowsPerPage, filteredRows.length - page * rowsPerPage);
 
   return (
+    
+    
     <div>
       <Modal
         open={openDeletModal}
@@ -323,20 +326,22 @@ function EnhancedTable() {
 
 function MembersPage() {
   return (
-    <React.Fragment>
-      <Helmet title="Transactions" />
-      <Typography variant="h3" gutterBottom display="inline">
-        Members
-      </Typography>
+    <ProtectedRoute>
+      <React.Fragment>
+        <Helmet title="Transactions" />
+        <Typography variant="h3" gutterBottom display="inline">
+          Members
+        </Typography>
 
-      <Divider my={6} />
+        <Divider my={6} />
 
-      <Grid container spacing={6}>
-        <Grid item xs={12}>
-          <EnhancedTable />
+        <Grid container spacing={6}>
+          <Grid item xs={12}>
+            <EnhancedTable />
+          </Grid>
         </Grid>
-      </Grid>
-    </React.Fragment>
+      </React.Fragment>
+    </ProtectedRoute>
   );
 }
 

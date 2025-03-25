@@ -22,6 +22,7 @@ import Stats from "../../components/pages/dashboard/landing/stats";
 // import Table from "../../components/pages/dashboard/landing/Table";
 import { DollarSign, CreditCard, User } from "react-feather";
 import { useGetMembersQuery } from "src/api";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -38,6 +39,7 @@ function Default() {
   if (isLoading) return <p>Loading</p>;
   if (errorMemberReq) return <p>error!</p>;
   return (
+    <ProtectedRoute>
     <React.Fragment>
       <Helmet title="Default Dashboard" />
       <Grid justifyContent="space-between" container spacing={6}>
@@ -75,6 +77,7 @@ function Default() {
         </Grid>
       </Grid>
     </React.Fragment>
+    </ProtectedRoute>
   );
 }
 

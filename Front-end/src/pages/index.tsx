@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
+import ProtectedRoute from "src/components/auth/ProtectedRoute"; // Ligne ajoutée
 
 import {
   Grid,
@@ -27,7 +28,7 @@ const Divider = styled(MuiDivider)(spacing);
 
 const Typography = styled(MuiTypography)(spacing);
 
-function Default() {
+function DefaultContent() {  // Nom modifié de Default à DefaultContent
   const { t } = useTranslation();
 
   // const { data: transaction, isLoading } = useGetTransactionsQuery();
@@ -83,6 +84,14 @@ function Default() {
         </Grid>
       </Grid> */}
     </React.Fragment>
+  );
+}
+
+function Default() {  // Nouveau composant Default qui englobe avec ProtectedRoute
+  return (
+    <ProtectedRoute>
+      <DefaultContent />
+    </ProtectedRoute>
   );
 }
 

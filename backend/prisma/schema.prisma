@@ -48,7 +48,7 @@ model Price {
   id         String    @id @default(uuid())
   name       String
   price      Float
-  timePeriod String
+  timePeriod Json 
   type       PriceType
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

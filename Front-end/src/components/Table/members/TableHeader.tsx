@@ -61,97 +61,101 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
     }}
   >
      {/* Partie gauche : DatePicker et Current Day */}
-     <Box display="flex" alignItems="center" gap="10px">
-      {/* Sélecteur de Date avec flèches */}
-      {handleChangeDate && (
-        <Box display="flex" alignItems="center">
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              position: "relative",
-              border: "1px solid #ccc", // Bordure autour du champ de date
-              borderRadius: "4px",
-            }}
-          >
-            {/* Flèche gauche */}
-            <Button
-              onClick={goToPreviousDay}
-              variant="outlined"
-              startIcon={<KeyboardArrowLeftIcon />}
-              style={{
-                minWidth: "0px",
-                padding: "0px",
-                margin: "0",
-                color: "blue", // Couleur des flèches
-                borderWidth: "0px",
-                position: "absolute",
-                left: "5px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                zIndex: 1,
-              }}
-            />
-  
-            {/* MobileDatePicker */}
-            <MobileDatePicker
-              value={toDay}
-              onChange={(value) => handleChangeDate(value)}
-              slotProps={{
-                textField: {
-                  InputProps: {
-                    disableUnderline: true,
-                    style: {
-                      border: "none",
-                      outline: "none",
-                      boxShadow: "none",
-                      padding: "0px 35px",
-                      textAlign: "center",
-                      color: "#333",
-                      fontWeight: "bold",
-                      backgroundColor: "transparent",
-                      width: "180px",
-                    },
-                  },
-                  size: "small",
-                  fullWidth: false,
+<Box display="flex" alignItems="center" gap="10px">
+  {/* Sélecteur de Date avec flèches */}
+  {handleChangeDate && (
+    <Box display="flex" alignItems="center" gap="10px"> {/* Ajout d'un gap ici */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          position: "relative",
+          border: "1px solid #ccc",
+          borderRadius: "4px",
+        }}
+      >
+        {/* Flèche gauche */}
+        <Button
+          onClick={goToPreviousDay}
+          variant="outlined"
+          startIcon={<KeyboardArrowLeftIcon />}
+          style={{
+            minWidth: "0px",
+            padding: "0px",
+            margin: "0",
+            color: "blue",
+            borderWidth: "0px",
+            position: "absolute",
+            left: "5px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1,
+          }}
+        />
+
+        {/* MobileDatePicker */}
+        <MobileDatePicker
+          value={toDay}
+          onChange={(value) => handleChangeDate(value)}
+          slotProps={{
+            textField: {
+              InputProps: {
+                disableUnderline: true,
+                style: {
+                  border: "none",
+                  outline: "none",
+                  boxShadow: "none",
+                  padding: "0px 35px",
+                  textAlign: "center",
+                  color: "#333",
+                  fontWeight: "bold",
+                  backgroundColor: "transparent",
+                  width: "180px",
                 },
-              }}
-            />
-  
-            {/* Flèche droite */}
-            <Button
-              onClick={goToNextDay}
-              variant="outlined"
-              endIcon={<KeyboardArrowRightIcon />}
-              style={{
-                minWidth: "0px",
-                padding: "0px",
-                margin: "0",
-                color: "blue", // Couleur des flèches
-                borderWidth: "0px",
-                position: "absolute",
-                right: "5px", // Positionne la flèche à droite à l’intérieur du champ
-                top: "50%",
-                transform: "translateY(-50%)",
-                zIndex: 1,
-              }}
-            />
-          </div>
-          <Button
+              },
+              size: "small",
+              fullWidth: false,
+            },
+          }}
+        />
+
+        {/* Flèche droite */}
+        <Button
+          onClick={goToNextDay}
+          variant="outlined"
+          endIcon={<KeyboardArrowRightIcon />}
+          style={{
+            minWidth: "0px",
+            padding: "0px",
+            margin: "0",
+            color: "blue",
+            borderWidth: "0px",
+            position: "absolute",
+            right: "5px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            zIndex: 1,
+          }}
+        />
+      </div>
+      
+      {/* Bouton Current Day - Ajout de marginLeft pour l'espacement */}
+      <Button
         variant="outlined"
         color="primary"
         onClick={setCurrentDay}
-        sx={{ width: "120px", minWidth: "120px", padding: "6px 9px" }}
+        sx={{ 
+          width: "120px", 
+          minWidth: "120px", 
+          padding: "6px 9px",
+          marginLeft: "0px" // Ajoutez cette ligne pour décaler le bouton
+        }}
       >
         Current Day
       </Button>
-        </Box>
-      )}
-  
-      {/* Bouton Current Day */}
-     
     </Box>
+  )}
+</Box>
     <Box display="flex" alignItems="center" gap="10px">
       {/* Bouton Refresh */}
       {refetch && (

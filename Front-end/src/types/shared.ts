@@ -94,6 +94,11 @@ export enum PriceType {
   journal = "journal",
   abonnement = "abonnement"
 }
+export interface TimeInterval {
+  start: string;
+  end: string;
+}
+
 
 
 export interface User {
@@ -138,7 +143,7 @@ export interface Price {
   id: string;
   name:string;
   price: number;
-  timePeriod: string; 
+  timePeriod: TimeInterval; 
   createdAt: Date | null;
   updatedAt: Date | null;
   type:PriceType;

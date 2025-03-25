@@ -61,7 +61,6 @@ export const authServerApi = createApi({
         body: { email },
       }),
     }),
-    // Endpoint pour accéder à la ressource protégée
 getProtectedResource: builder.query<{ message: string; userId: string }, void>({
   query: () => ({
     url: "auth/protected",

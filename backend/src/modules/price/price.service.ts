@@ -1,5 +1,4 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-
 import { PriceEntity } from './entities/price.entity';
 import { PrismaService } from 'database/prisma.service';
 import { CreatePriceDto } from './dtos/create-price.dto';
@@ -10,7 +9,7 @@ export class PriceService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createPriceDto: CreatePriceDto): Promise<PriceEntity> {
-    console.log('Received DTO:', createPriceDto);  // 
+    console.log('Received DTO:', createPriceDto);
     
     try {
       const { name, price, timePeriod, type } = createPriceDto;
@@ -18,27 +17,40 @@ export class PriceService {
       if (!name || !price || !timePeriod || !type) {
         throw new Error('Missing required fields');
       }
-  
+
+      // Validation supplémentaire du timePeriod
+      if (!timePeriod.start || !timePeriod.end) {
+        throw new Error('Time period must have start and end times');
+      }
+
       const priceEntity = await this.prisma.price.create({
         data: {
           name,
           price,
-          timePeriod,
+          timePeriod: {  // Stocké comme JSON
+            start: timePeriod.start,
+            end: timePeriod.end
+          },
           type,
         },
       });
   
-      return new PriceEntity(priceEntity);
+      return new PriceEntity({
+        ...priceEntity,
+        timePeriod: priceEntity.timePeriod as { start: string; end: string }
+      });
     } catch (error) {
       console.error('Error creating price:', error);
-      throw error;  // Lancez à nouveau l'erreur après l'avoir loggée
+      throw error;
     }
   }
   
-  
   async findAll(): Promise<PriceEntity[]> {
     const prices = await this.prisma.price.findMany();
-    return prices.map((price) => new PriceEntity(price));
+    return prices.map((price) => new PriceEntity({
+      ...price,
+      timePeriod: price.timePeriod as { start: string; end: string }
+    }));
   }
 
   async findOne(id: string): Promise<PriceEntity> {
@@ -50,7 +62,10 @@ export class PriceService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    return new PriceEntity(price);
+    return new PriceEntity({
+      ...price,
+      timePeriod: price.timePeriod as { start: string; end: string }
+    });
   }
 
   async update(id: string, updatePriceDto: UpdatePriceDto): Promise<PriceEntity> {
@@ -62,12 +77,26 @@ export class PriceService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
+    // Gestion du timePeriod dans l'update
+    const updateData = {
+      ...updatePriceDto,
+      ...(updatePriceDto.timePeriod && {
+        timePeriod: {
+          start: updatePriceDto.timePeriod.start,
+          end: updatePriceDto.timePeriod.end
+        }
+      })
+    };
+
     const updatedPrice = await this.prisma.price.update({
       where: { id },
-      data: updatePriceDto,
+      data: updateData,
     });
 
-    return new PriceEntity(updatedPrice);
+    return new PriceEntity({
+      ...updatedPrice,
+      timePeriod: updatedPrice.timePeriod as { start: string; end: string }
+    });
   }
 
   async remove(id: string): Promise<void> {
