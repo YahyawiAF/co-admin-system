@@ -7,17 +7,17 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
-  
+ 
 } from 'class-validator';
 
-export class AddJournalDto {
+export class AddAbonnementDto {
   @IsNotEmpty()
   @IsString()
   @ApiProperty()
   public memberID: string;
 
 
- 
+  @IsNotEmpty()
   @IsString()
   @ApiProperty()
   public priceId: string;
@@ -26,14 +26,14 @@ export class AddJournalDto {
   @IsDate()
   @Type(() => Date)
   @ApiProperty()
-  public registredTime: Date;
+  public registredDate: Date;
 
   @IsNotEmpty()
   @IsDate()
   @Type(() => Date)
   @IsOptional()
   @ApiProperty()
-  public leaveTime: Date | null;
+  public leaveDate: Date | null;
 
   @IsNotEmpty()
   @IsBoolean()
@@ -44,8 +44,12 @@ export class AddJournalDto {
   @IsBoolean()
   @ApiProperty()
   public isReservation: boolean;
-
-  
+  @IsNotEmpty()
+  @IsDate()
+  @Type(() => Date)
+  @IsOptional()
+  @ApiProperty()
+  stayedPeriode: Date | null;
 
   @IsNotEmpty()
   @IsNumber()

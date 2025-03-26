@@ -8,18 +8,18 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(uuid())
-  isActive     Boolean   @default(false)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt    DateTime? @db.Timestamp(6)
-  email        String    @unique @db.VarChar(256)
-  fullname     String?   @db.VarChar(256)
-  password     String?
-  refreshToken String?
-  accessToken  String?
-  role         Role      @default(USER)
+  id                 String    @id @default(uuid())
+  isActive           Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt @db.Timestamp(6)
+  deletedAt          DateTime? @db.Timestamp(6)
+  email              String    @unique @db.VarChar(256)
+  fullname           String?   @db.VarChar(256)
+  password           String?
+  refreshToken       String?
+  role               Role      @default(USER)
   resetPasswordToken String?
+  accessToken        String?
 
   @@map("users")
 }
@@ -38,6 +38,7 @@ model Member {
   isActive      Boolean       @default(false)
   functionality String?
   phone         Int?          @unique
+  abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
 
@@ -45,33 +46,52 @@ model Member {
 }
 
 model Price {
-  id         String    @id @default(uuid())
-  name       String
-  price      Float
-  timePeriod Json 
-  type       PriceType
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
-  journals   Journal[]
+  id          String       @id @default(uuid())
+  name        String
+  price       Float
+  type        PriceType
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  timePeriod  Json
+  abonnements Abonnement[]
+  journals    Journal[]
 
   @@map("prices")
 }
 
 model Journal {
-  id            String      @id @default(uuid())
+  id            String    @id @default(uuid())
   isPayed       Boolean
   registredTime DateTime
   leaveTime     DateTime?
   payedAmount   Float
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt @db.Timestamp(6)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt @db.Timestamp(6)
   memberID      String?
-  isReservation Boolean     @default(false)
+  isReservation Boolean   @default(false)
   priceId       String?
-  members       Member?     @relation(fields: [memberID], references: [id])
-  prices        Price?      @relation(fields: [priceId], references: [id])
+  members       Member?   @relation(fields: [memberID], references: [id])
+  prices        Price?    @relation(fields: [priceId], references: [id])
 
   @@map("journals")
+}
+
+model Abonnement {
+  id            String    @id @default(uuid())
+  isPayed       Boolean
+  registredDate DateTime
+  leaveDate     DateTime?
+  stayedPeriode DateTime?
+  payedAmount   Float
+  createdAt     DateTime? @default(now())
+  updatedAt     DateTime? @updatedAt @db.Timestamp(6)
+  memberID      String
+  isReservation Boolean   @default(false)
+  priceId       String
+  members       Member    @relation(fields: [memberID], references: [id])
+  price         Price     @relation(fields: [priceId], references: [id])
+
+  @@map("abonnements")
 }
 
 model Reservation {
@@ -103,5 +123,3 @@ enum Subscription {
   Monthly
   Weekly
 }
-
-

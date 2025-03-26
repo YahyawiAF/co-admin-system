@@ -30,21 +30,9 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
-import {
-  addHours,
-  differenceInHours,
-  setHours,
-  setMinutes,
-  isSameDay,
-} from "date-fns";
-import RHSelectDropDown from "src/components/hook-form/RHSelectDropDown";
-import {
-  adjustDateWithDifference,
-  getHourDifference,
-  updateHoursAndMinutes,
-} from "src/utils/shared";
-import { useGetPricesQuery } from "src/api/price.repo";
+import { isSameDay } from "date-fns";
 import RHSelectRate from "src/components/hook-form/RHSelectRate";
+import { useGetPricesQuery } from "src/api/price.repo";
 
 // ----------------------------------------------------------------------
 
@@ -79,6 +67,25 @@ const defaultValues: Partial<ExtendedTypeOptional> = {
   isReservation: false,
 };
 
+// Fonction pour formater la durée en "1h35" ou "45min"
+const formatDuration = (startDate: Date, endDate: Date): string => {
+  const diffInMilliseconds = endDate.getTime() - startDate.getTime();
+  const diffInMinutes = Math.floor(diffInMilliseconds / (1000 * 60));
+  
+  if (diffInMinutes < 0) return "0min"; // Cas où endDate est avant startDate
+  
+  const hours = Math.floor(diffInMinutes / 60);
+  const minutes = diffInMinutes % 60;
+  
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h${minutes.toString().padStart(2, '0')}m`;
+  } else if (hours > 0) {
+    return `${hours}h`;
+  } else {
+    return `${minutes}min`;
+  }
+};
+
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
@@ -103,9 +110,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
-  const [isManualyUpdating, setIsManualyUpdating] = useState(false);
-  const [isManualyCalculationUpdating, setIsManualyCalculationUpdating] =
-    useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -113,7 +117,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
-    priceId: z.string(), // Ajout du champ priceId
+    priceId: z.string(),
     isReservation: z.boolean(),
   });
 
@@ -137,20 +141,68 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
 
-  // Mettre à jour payedAmount lorsque priceId change
-  React.useEffect(() => {
-    if (priceId && pricesList) {
-      const selectedPrice = pricesList.find((price: Price) => price.id === priceId);
-      if (selectedPrice) {
-        setValue("payedAmount", selectedPrice.price);
+  // Helper pour convertir le format "1h" ou "1h30" en minutes
+  const parseTimeToMinutes = (timeStr: string): number => {
+    if (!timeStr.includes('h')) return 0;
+    
+    const [hoursStr, minutesStr] = timeStr.split('h');
+    const hours = parseInt(hoursStr) || 0;
+    const minutes = parseInt(minutesStr) || 0;
+    
+    return hours * 60 + minutes;
+  };
+  
+
+  // Fonction pour trouver le tarif correspondant à la durée
+  const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
+    if (!pricesList || pricesList.length === 0) return null;
+    
+    const diffInMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
+    
+    // Trier les prix par durée croissante
+    const sortedPrices = [...pricesList].sort((a, b) => {
+      const aStart = parseTimeToMinutes(a.timePeriod.start);
+      const bStart = parseTimeToMinutes(b.timePeriod.start);
+      return aStart - bStart;
+    });
+
+    // Trouver le tarif correspondant
+    for (const price of sortedPrices) {
+      const start = parseTimeToMinutes(price.timePeriod.start);
+      const end = parseTimeToMinutes(price.timePeriod.end);
+      
+      if (diffInMinutes >= start && diffInMinutes < end) {
+        return price;
       }
     }
-  }, [priceId, pricesList, setValue]);
 
-  const stayedHours = React.useMemo(() => {
+    // Si aucun tarif ne correspond exactement, retourner le plus proche
+    return sortedPrices.reduce((prev, curr) => {
+      const prevDiff = Math.abs(parseTimeToMinutes(prev.timePeriod.start) - diffInMinutes);
+      const currDiff = Math.abs(parseTimeToMinutes(curr.timePeriod.start) - diffInMinutes);
+      return prevDiff < currDiff ? prev : curr;
+    });
+  };
+
+  // Mettre à jour le tarif automatiquement quand la durée change
+  React.useEffect(() => {
+    if (isPayed && pricesList && registredTime && leaveTime) {
+      const start = new Date(registredTime);
+      const end = new Date(leaveTime);
+      const matchingPrice = findMatchingPrice(start, end);
+      
+      if (matchingPrice) {
+        setValue("priceId", matchingPrice.id);
+        setValue("payedAmount", matchingPrice.price);
+      }
+    }
+  }, [registredTime, leaveTime, isPayed, pricesList, setValue]);
+
+  // Calculer la durée de séjour formatée
+  const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
-    return differenceInHours(dLeaving, dStarting);
+    return formatDuration(dStarting, dLeaving);
   }, [registredTime, leaveTime]);
 
   const resetAsyn = React.useCallback(
@@ -166,8 +218,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       if (!selectItem) {
         resetAsyn({
           ...defaultValues,
-          registredTime: updateHoursAndMinutes(today),
-          leaveTime: updateHoursAndMinutes(today),
+          registredTime: today,
+          leaveTime: today,
           isReservation,
         });
       } else {
@@ -175,7 +227,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           ...selectItem,
           leaveTime: selectItem.isPayed
             ? selectItem.leaveTime
-            : updateHoursAndMinutes(today),
+            : today,
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
@@ -204,6 +256,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const onSubmit = async (data: Partial<Journal>) => {
     if (selectItem) {
+      // Même implémentation que dans l'ancienne version
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
@@ -314,7 +367,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 name="priceId"
                 list={pricesList}
                 label="Select Rate"
-                onhandleManuelUpdae={() => console.log("Manual update triggered")}
+                onhandleManuelUpdae={() => {
+                  // Permettre la modification manuelle sans réinitialisation automatique
+                }}
               />
             ) : (
               <div>Loading Prices...</div>
@@ -332,17 +387,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 placeholder="Leaving Date"
                 minTime={registredTime}
               />
-              {!isReservation && (
-                <Button
-                  onClick={() => {
-                    setIsManualyCalculationUpdating(true);
-                    setValue("leaveTime", new Date());
-                  }}
-                  variant="outlined"
-                >
-                  Calculate from Now
-                </Button>
-              )}
             </Box>
             <RHFTextField
               type="number"
@@ -366,9 +410,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                   justifyItems: "center",
                 }}
               >
-                <Typography variant="subtitle2">Stayed Hours</Typography>
+                <Typography variant="subtitle2">Stayed Duration </Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {stayedHours + " hours"}
+                  {stayedDuration} 
                 </Typography>
               </Box>
               <Box
@@ -380,25 +424,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               >
                 <Typography variant="subtitle2">Total</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {payedAmount
-                    ? payedAmount + " DT"
-                    : stayedHours < 1
-                    ? "0 DT"
-                    : stayedHours <= 6
-                    ? "4 DT"
-                    : "8 DT"}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  justifyItems: "center",
-                }}
-              >
-                <Typography variant="subtitle2">Discount</Typography>
-                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {"0 DT"}
+                  {payedAmount} DT
                 </Typography>
               </Box>
               <Divider />
@@ -411,13 +437,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               >
                 <Typography variant="h4">SubTotal</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
-                  {payedAmount
-                    ? payedAmount + " DT"
-                    : stayedHours < 1
-                    ? "0 DT"
-                    : stayedHours <= 6
-                    ? "4 DT"
-                    : "8 DT"}
+                  {payedAmount} DT
                 </Typography>
               </Box>
               <Divider />

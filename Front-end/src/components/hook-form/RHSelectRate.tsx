@@ -44,22 +44,27 @@ const RHSelectRate: FC<IRHFTextField> = ({
   label,
   onhandleManuelUpdae,
 }) => {
-  const { control, setValue } = useFormContext();
+  const { control, setValue, watch } = useFormContext();
+  const selectedId = watch(name); // Obtenir la valeur actuelle du champ sélectionné
   const [selectedPrice, setSelectedPrice] = useState<Price | null>(null);
+
+  // Mettre à jour selectedPrice lorsque selectedId change
+  useEffect(() => {
+    const newSelectedPrice = list.find((price) => price.id === selectedId) || null;
+    setSelectedPrice(newSelectedPrice);
+  }, [selectedId, list]);
 
   const handleChange = (event: SelectChangeEvent<string>) => {
     const selectedId = event.target.value;
-    const selectedPrice = list.find((price) => price.id === selectedId) || null;
-    setSelectedPrice(selectedPrice);
     setValue(name, selectedId, { shouldValidate: true });
     onhandleManuelUpdae?.();
   };
 
   useEffect(() => {
-    if (selectedPrice) {
-      setValue(name, selectedPrice.id, { shouldValidate: true });
+    if (list.length > 0 && !selectedId) {
+      setValue(name, list[0].id, { shouldValidate: true });
     }
-  }, [selectedPrice, setValue, name]);
+  }, [list, selectedId, setValue, name]);
 
   return (
     <Controller
@@ -74,11 +79,21 @@ const RHSelectRate: FC<IRHFTextField> = ({
             onChange={handleChange}
             label={label}
             error={!!error}
+            disabled
+            fullWidth
+            sx={{
+              "& .MuiInputBase-input.Mui-disabled": {
+                color: "black",
+                WebkitTextFillColor: "black",
+              },
+            }}
           >
             {list.map((price) => (
               <MenuItem key={price.id} value={price.id}>
-                {price.name}
+                {`${price.name} `}
+                
               </MenuItem>
+              
             ))}
           </Select>
           {!!error && <FormHelperText error>{error?.message}</FormHelperText>}
@@ -86,7 +101,7 @@ const RHSelectRate: FC<IRHFTextField> = ({
             <Box sx={{ marginTop: 2, display: "flex", flexDirection: "column", gap: 2 }}>
               <TextField
                 label="Prix"
-                value={selectedPrice.price}
+                value={`${selectedPrice.price} DT`}
                 disabled
                 fullWidth
                 sx={{

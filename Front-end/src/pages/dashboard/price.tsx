@@ -1,11 +1,10 @@
 import React, { useState } from "react";
 import { useGetPricesQuery, useCreatePriceMutation, useUpdatePriceMutation, useDeletePriceMutation } from "src/api/price.repo";
 import { Price, PriceType, TimeInterval } from "src/types/shared";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlus, faEdit, faTrash, faSearch } from '@fortawesome/free-solid-svg-icons';
-import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl, Drawer } from "@mui/material";
+import { Button, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, MenuItem, Select, TextField, FormHelperText, FormControl, Drawer, styled } from "@mui/material";
+import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "../../layouts/Dashboard"; 
-
+import EditIcon from '@mui/icons-material/Edit';
 import {
   Dialog,
   DialogTitle,
@@ -14,9 +13,67 @@ import {
   DialogActions
 } from "@mui/material";
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import BulkActions from "src/components/Table/members/TableHeader";
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrash } from '@fortawesome/free-solid-svg-icons';
+
+// Styles des boutons réutilisés
+const SubmitButtton = styled(LoadingButton)(() => ({
+  border: "1px solid",
+  borderColor: "#054547",
+  background: "#fff",
+  color: "#054547",
+  width: "100%",
+  height: "50px",
+  lineHeight: "50px",
+  cursor: "pointer",
+  borderRadius: 0,
+  margin: 0,
+  "&:hover": {
+    background: "#054547",
+    color: "#fff",
+  },
+}));
+
+const ActionButtton = styled(Button)(() => ({
+  border: "1px solid",
+  borderColor: "#054547",
+  background: "#fff",
+  color: "#054547",
+  width: "100%",
+  height: "50px",
+  lineHeight: "50px",
+  cursor: "pointer",
+  borderRadius: 0,
+  margin: 0,
+  "&:hover": {
+    background: "#054547",
+    color: "#fff",
+  },
+}));
+
+
+
+// Style pour la table
+const StyledTableHead = styled(TableHead)(({ theme }) => ({
+  backgroundColor: theme.palette.grey[100],
+  "& .MuiTableCell-root": {
+    fontWeight: "bold",
+    borderBottom: `1px solid ${theme.palette.divider}`,
+  },
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  "&:nth-of-type(even)": {
+    backgroundColor: theme.palette.action.hover,
+  },
+  "&:hover": {
+    backgroundColor: theme.palette.action.selected,
+  },
+}));
 
 const PriceComponent: React.FC = () => {
-  const { data: prices, isLoading, isError } = useGetPricesQuery();
+  const { data: prices, isLoading, isError, refetch } = useGetPricesQuery();
   const [createPrice] = useCreatePriceMutation();
   const [updatePrice] = useUpdatePriceMutation();
   const [deletePrice] = useDeletePriceMutation();
@@ -33,7 +90,6 @@ const PriceComponent: React.FC = () => {
   });
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [priceToDelete, setPriceToDelete] = useState<string | null>(null);
-  
   const [editPrice, setEditPrice] = useState<Price | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
@@ -53,7 +109,7 @@ const PriceComponent: React.FC = () => {
   };
   
   const handleAddPrice = async () => {
-    setErrors({});  // Réinitialiser les erreurs avant de valider
+    setErrors({});
     if (validateForm()) {
       try {
         await createPrice(newPrice).unwrap();
@@ -68,30 +124,28 @@ const PriceComponent: React.FC = () => {
           type: PriceType.journal,
           journals: []
         });
-        console.log("Prix ajouté avec succès !");
       } catch (error) {
-        console.error("Erreur lors de l'ajout du prix :", error);
+        console.error("Error adding price:", error);
       }
     }
   };
 
   const handleCloseDrawer = () => {
     setShowDrawer(false);
-    setEditPrice(null); // Réinitialiser editPrice
-    setErrors({}); // Réinitialiser les erreurs
+    setEditPrice(null);
+    setErrors({});
   };
 
   const handleUpdatePrice = async () => {
-    setErrors({});  // Réinitialiser les erreurs avant de valider
+    setErrors({});
     if (editPrice && validateForm()) {
       try {
         const { id, createdAt, updatedAt, ...data } = editPrice;
         await updatePrice({ id, data }).unwrap();
         setEditPrice(null);
         setShowDrawer(false);
-        console.log("Prix mis à jour avec succès !");
       } catch (error) {
-        console.error("Erreur lors de la mise à jour du prix :", error);
+        console.error("Error updating price:", error);
       }
     }
   };
@@ -117,38 +171,18 @@ const PriceComponent: React.FC = () => {
     price.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
+  };
+
   return (
     <ProtectedRoute>
-    <DashboardLayout>
-      <div style={{ padding: "20px" }}>
-        <h2>Rate Management</h2>
+      <DashboardLayout>
+        <div style={{ padding: "20px" }}>
+          <h2>Rate Management</h2>
 
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: "20px" }}>
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            border: "1px solid #ccc",
-            borderRadius: "5px",
-            padding: "9px",
-            backgroundColor: "white",
-            width: "220px" 
-          }}>
-            <input
-              type="text"
-              placeholder="Search..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              style={{
-                border: "none",
-                outline: "none",
-                flex: 1, 
-              }}
-            />
-            <FontAwesomeIcon icon={faSearch} style={{ marginRight: "8px", color: "#aaa" }} />
-          </div>
-
-          <Button
-            onClick={() => { 
+          <BulkActions 
+            handleClickOpen={() => {
               setNewPrice({ 
                 id: "", 
                 name: "", 
@@ -159,156 +193,171 @@ const PriceComponent: React.FC = () => {
                 type: PriceType.journal,
                 journals: []
               }); 
-              setShowDrawer(true); 
+              setShowDrawer(true);
             }}
-            variant="contained"
-            color="primary"
-            style={{
-              borderRadius: "50%", 
-              width: "30px", 
-              height: "30px", 
-              minWidth: "30px",
-              padding: "0", 
-              marginLeft: "10px" 
-            }}
-          >
-            <FontAwesomeIcon icon={faPlus} style={{ fontSize: "16px", color: "white" }} />
-          </Button>
-        </div>
+            onHandleSearch={handleSearch}
+            search={searchTerm}
+            refetch={refetch}
+          />
 
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Price</TableCell>
-                <TableCell>Time Period</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredPrices?.map((price) => (
-                <TableRow key={price.id}>
-                  <TableCell>{price.name}</TableCell>
-                  <TableCell>{price.price} D</TableCell>
-                  <TableCell>{formatTimeInterval(price.timePeriod)}</TableCell>
-                  <TableCell>{price.type}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => { setEditPrice(price); setShowDrawer(true); }} color="primary">
-                      <FontAwesomeIcon icon={faEdit} />
-                    </IconButton>
-                    <IconButton onClick={() => confirmDeletePrice(price.id)} color="secondary">
-                      <FontAwesomeIcon icon={faTrash} />
-                    </IconButton>
-                  </TableCell>
+          <TableContainer component={Paper}>
+            <Table>
+              <StyledTableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Price</TableCell>
+                  <TableCell>Time Period</TableCell>
+                  <TableCell>Type</TableCell>
+                  <TableCell align="center">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-        
-        <Dialog open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
-          <DialogTitle>Confirmation</DialogTitle>
-          <DialogContent>
-            <DialogContentText>
-              Are you sure you want to delete this rate? This action is irreversible.
-            </DialogContentText>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setShowDeleteModal(false)} color="primary">
-              Cancel
-            </Button>
-            <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
-              Confirm
-            </Button>
-          </DialogActions>
-        </Dialog>
-        
-        <Drawer anchor="right" open={showDrawer} onClose={handleCloseDrawer}>
-          <div style={{ width: "400px", padding: "20px" }}>
-            <h3>{editPrice ? "Manage Rate" : "New Rate"}</h3>
-            <TextField 
-              label="Name" 
-              fullWidth 
-              margin="dense" 
-              value={editPrice ? editPrice.name : newPrice.name} 
-              onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}              error={!!errors.name}
-              helperText={errors.name}
-            />
-            <TextField 
-              label="Price" 
-              fullWidth 
-              margin="dense" 
-              type="number" 
-              value={editPrice ? editPrice.price : newPrice.price} 
-              onChange={(e) => {
-                const value = Math.max(0, +e.target.value); // Empêche les valeurs négatives
-                editPrice
-                  ? setEditPrice({ ...editPrice, price: value })
-                  : setNewPrice({ ...newPrice, price: value });
-              }}
-              error={!!errors.price}
-              helperText={errors.price}
-            />
-            <TextField 
-              label="Start Time" 
-              fullWidth 
-              margin="dense" 
-              value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start} 
-              onChange={(e) => 
-                editPrice 
-                  ? setEditPrice({ 
-                      ...editPrice, 
-                      timePeriod: { ...editPrice.timePeriod, start: e.target.value } 
-                    }) 
-                  : setNewPrice({ 
-                      ...newPrice, 
-                      timePeriod: { ...newPrice.timePeriod, start: e.target.value } 
-                    })
-              } 
-              error={!!errors.timePeriodStart}
-              helperText={errors.timePeriodStart}
-            />
-            <TextField 
-              label="End Time" 
-              fullWidth 
-              margin="dense" 
-              value={editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end} 
-              onChange={(e) => 
-                editPrice 
-                  ? setEditPrice({ 
-                      ...editPrice, 
-                      timePeriod: { ...editPrice.timePeriod, end: e.target.value } 
-                    }) 
-                  : setNewPrice({ 
-                      ...newPrice, 
-                      timePeriod: { ...newPrice.timePeriod, end: e.target.value } 
-                    })
-              } 
-              error={!!errors.timePeriodEnd}
-              helperText={errors.timePeriodEnd}
-            />
-            <FormControl fullWidth margin="dense" error={!!errors.type}>
-              <Select
-                value={editPrice ? editPrice.type : newPrice.type}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))} 
-              >
-                <MenuItem value="journal">Journal</MenuItem>
-                <MenuItem value="abonnement">Abonnement</MenuItem>
-              </Select>
-              {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
-            </FormControl>
-            <Button onClick={editPrice ? handleUpdatePrice : handleAddPrice} color="primary" variant="contained" fullWidth style={{ marginTop: "20px" }}>
-              {editPrice ? "Confirm" : "Confirm"}
-            </Button>
-            <Button onClick={handleCloseDrawer} color="secondary" variant="outlined" fullWidth style={{ marginTop: "10px" }}>
-              Cancel
-            </Button>
-          </div>
-        </Drawer>
-      </div>
-    </DashboardLayout>
+              </StyledTableHead>
+              <TableBody>
+                {filteredPrices?.map((price) => (
+                  <StyledTableRow key={price.id}>
+                    <TableCell>{price.name}</TableCell>
+                    <TableCell>{price.price} D</TableCell>
+                    <TableCell>{formatTimeInterval(price.timePeriod)}</TableCell>
+                    <TableCell>{price.type}</TableCell>
+                    <TableCell align="center">
+                      <IconButton 
+                        onClick={() => { setEditPrice(price); setShowDrawer(true); }}
+                        sx={{ 
+                          color: "#054547",
+                          '&:hover': { 
+                            backgroundColor: 'rgba(5, 69, 71, 0.1)',
+                          },
+                          padding: "8px",
+                          margin: "0 4px"
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton 
+                        onClick={() => confirmDeletePrice(price.id)}
+                        sx={{ 
+                          color: "#ff4444",
+                          '&:hover': { 
+                            backgroundColor: 'rgba(255, 68, 68, 0.1)',
+                          },
+                          padding: "8px",
+                          margin: "0 4px"
+                        }}
+                      >
+                        <FontAwesomeIcon icon={faTrash} style={{ fontSize: "16px" }} />
+                      </IconButton>
+                    </TableCell>
+                  </StyledTableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          <Dialog open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
+            <DialogTitle>Confirmation</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Are you sure you want to delete this rate? This action is irreversible.
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setShowDeleteModal(false)} color="primary">
+                Cancel
+              </Button>
+              <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
+                Confirm
+              </Button>
+            </DialogActions>
+          </Dialog>
+          
+          <Drawer anchor="right" open={showDrawer} onClose={handleCloseDrawer}>
+            <div style={{ width: "400px", padding: "20px" }}>
+              <h3>{editPrice ? "Manage Rate" : "New Rate"}</h3>
+              <TextField 
+                label="Name" 
+                fullWidth 
+                margin="dense" 
+                value={editPrice ? editPrice.name : newPrice.name} 
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}              error={!!errors.name}
+                helperText={errors.name}
+              />
+              <TextField 
+                label="Price" 
+                fullWidth 
+                margin="dense" 
+                type="number" 
+                value={editPrice ? editPrice.price : newPrice.price} 
+                onChange={(e) => {
+                  const value = Math.max(0, +e.target.value);
+                  editPrice
+                    ? setEditPrice({ ...editPrice, price: value })
+                    : setNewPrice({ ...newPrice, price: value });
+                }}
+                error={!!errors.price}
+                helperText={errors.price}
+              />
+              <TextField 
+                label="Start Time" 
+                fullWidth 
+                margin="dense" 
+                value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start} 
+                onChange={(e) => 
+                  editPrice 
+                    ? setEditPrice({ 
+                        ...editPrice, 
+                        timePeriod: { ...editPrice.timePeriod, start: e.target.value } 
+                      }) 
+                    : setNewPrice({ 
+                        ...newPrice, 
+                        timePeriod: { ...newPrice.timePeriod, start: e.target.value } 
+                      })
+                } 
+                error={!!errors.timePeriodStart}
+                helperText={errors.timePeriodStart}
+              />
+              <TextField 
+                label="End Time" 
+                fullWidth 
+                margin="dense" 
+                value={editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end} 
+                onChange={(e) => 
+                  editPrice 
+                    ? setEditPrice({ 
+                        ...editPrice, 
+                        timePeriod: { ...editPrice.timePeriod, end: e.target.value } 
+                      }) 
+                    : setNewPrice({ 
+                        ...newPrice, 
+                        timePeriod: { ...newPrice.timePeriod, end: e.target.value } 
+                      })
+                } 
+                error={!!errors.timePeriodEnd}
+                helperText={errors.timePeriodEnd}
+              />
+              <FormControl fullWidth margin="dense" error={!!errors.type}>
+                <Select
+                  value={editPrice ? editPrice.type : newPrice.type}
+                  onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))} 
+                >
+                  <MenuItem value="journal">Journal</MenuItem>
+                  <MenuItem value="abonnement">Abonnement</MenuItem>
+                </Select>
+                {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+              </FormControl>
+              
+              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                <SubmitButtton 
+                  onClick={editPrice ? handleUpdatePrice : handleAddPrice}
+                >
+                  {editPrice ? "Update" : "Add"}
+                </SubmitButtton>
+                <ActionButtton onClick={handleCloseDrawer}>
+                  Cancel
+                </ActionButtton>
+              </div>
+            </div>
+          </Drawer>
+        </div>
+      </DashboardLayout>
     </ProtectedRoute>
   );
 };
