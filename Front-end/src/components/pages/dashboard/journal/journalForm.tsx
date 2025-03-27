@@ -7,6 +7,10 @@ import {
   Snackbar,
   Divider,
   Typography,
+  Card,
+  CardContent,
+  Grid,
+  Alert,
 } from "@mui/material";
 import { useForm } from "react-hook-form";
 import FormProvider from "../../../hook-form/FormProvider";
@@ -31,7 +35,6 @@ import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
 import { isSameDay } from "date-fns";
-import RHSelectRate from "src/components/hook-form/RHSelectRate";
 import { useGetPricesQuery } from "src/api/price.repo";
 
 // ----------------------------------------------------------------------
@@ -59,7 +62,7 @@ type ExtendedTypeOptional = ExtractedType & {};
 const defaultValues: Partial<ExtendedTypeOptional> = {
   id: "",
   isPayed: false,
-  payedAmount: 4,
+  payedAmount: 0,
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
@@ -67,12 +70,11 @@ const defaultValues: Partial<ExtendedTypeOptional> = {
   isReservation: false,
 };
 
-// Fonction pour formater la durée en "1h35" ou "45min"
 const formatDuration = (startDate: Date, endDate: Date): string => {
   const diffInMilliseconds = endDate.getTime() - startDate.getTime();
   const diffInMinutes = Math.floor(diffInMilliseconds / (1000 * 60));
   
-  if (diffInMinutes < 0) return "0min"; // Cas où endDate est avant startDate
+  if (diffInMinutes < 0) return "0min";
   
   const hours = Math.floor(diffInMinutes / 60);
   const minutes = diffInMinutes % 60;
@@ -110,6 +112,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
+  const [tarifAlert, setTarifAlert] = useState<{show: boolean, message: string}>({show: false, message: ''});
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -141,7 +144,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
 
-  // Helper pour convertir le format "1h" ou "1h30" en minutes
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr.includes('h')) return 0;
     
@@ -151,9 +153,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     
     return hours * 60 + minutes;
   };
-  
 
-  // Fonction pour trouver le tarif correspondant à la durée
   const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
     if (!pricesList || pricesList.length === 0) return null;
     
@@ -166,39 +166,53 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       return aStart - bStart;
     });
 
-    // Trouver le tarif correspondant
-    for (const price of sortedPrices) {
+    // Trouver le tarif correspondant avec marge de 15 minutes
+    for (let i = 0; i < sortedPrices.length; i++) {
+      const price = sortedPrices[i];
       const start = parseTimeToMinutes(price.timePeriod.start);
-      const end = parseTimeToMinutes(price.timePeriod.end);
+      let end = parseTimeToMinutes(price.timePeriod.end);
       
-      if (diffInMinutes >= start && diffInMinutes < end) {
+      // Ajouter 15 minutes à la limite supérieure sauf pour le dernier tarif
+      if (i < sortedPrices.length - 1) {
+        end += 15;
+      }
+      
+      if (diffInMinutes >= start && (i === sortedPrices.length - 1 ? diffInMinutes >= end : diffInMinutes < end)) {
         return price;
       }
     }
 
-    // Si aucun tarif ne correspond exactement, retourner le plus proche
-    return sortedPrices.reduce((prev, curr) => {
-      const prevDiff = Math.abs(parseTimeToMinutes(prev.timePeriod.start) - diffInMinutes);
-      const currDiff = Math.abs(parseTimeToMinutes(curr.timePeriod.start) - diffInMinutes);
-      return prevDiff < currDiff ? prev : curr;
-    });
+    return sortedPrices[sortedPrices.length - 1]; // Retourner le dernier tarif par défaut
   };
 
-  // Mettre à jour le tarif automatiquement quand la durée change
   React.useEffect(() => {
-    if (isPayed && pricesList && registredTime && leaveTime) {
+    if (pricesList && registredTime && leaveTime) {
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
-      
+
       if (matchingPrice) {
         setValue("priceId", matchingPrice.id);
-        setValue("payedAmount", matchingPrice.price);
+        setValue("payedAmount", isPayed ? matchingPrice.price : 0);
+        
+        // Calculer le temps restant avant le prochain tarif
+        const currentDuration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+        const priceEnd = parseTimeToMinutes(matchingPrice.timePeriod.end);
+        const minutesLeft = priceEnd - currentDuration;
+        
+        // Afficher une alerte si on approche de la limite
+        if (minutesLeft <= 15 && minutesLeft > -15) {
+          setTarifAlert({
+            show: true,
+            message: `Tarif actuel: ${matchingPrice.timePeriod.start}-${matchingPrice.timePeriod.end} (${matchingPrice.price} DT)`
+          });
+        } else {
+          setTarifAlert({show: false, message: ''});
+        }
       }
     }
-  }, [registredTime, leaveTime, isPayed, pricesList, setValue]);
+  }, [registredTime, leaveTime, pricesList, setValue, isPayed]);
 
-  // Calculer la durée de séjour formatée
   const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
@@ -246,6 +260,12 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     }
   };
 
+  const handlePriceSelect = (price: Price) => {
+    setValue("priceId", price.id);
+    setValue("payedAmount", price.price);
+    setTarifAlert({show: false, message: ''});
+  };
+
   const defaultProps = React.useMemo(() => {
     return {
       options: membersList as any,
@@ -256,7 +276,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const onSubmit = async (data: Partial<Journal>) => {
     if (selectItem) {
-      // Même implémentation que dans l'ancienne version
       updateMember({ ...selectItem, ...data });
       handleClose();
     } else {
@@ -362,15 +381,28 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         )}
         {isPayed && member ? (
           <>
+            {tarifAlert.show && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                {tarifAlert.message}
+              </Alert>
+            )}
             {!isLoadingPrices ? (
-              <RHSelectRate
-                name="priceId"
-                list={pricesList}
-                label="Select Rate"
-                onhandleManuelUpdae={() => {
-                  // Permettre la modification manuelle sans réinitialisation automatique
-                }}
-              />
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                  Select Rate
+                </Typography>
+                <Grid container spacing={2}>
+                  {pricesList?.map((price) => (
+                    <Grid item xs={6} key={price.id}>
+                      <PriceCard
+                        price={price}
+                        isSelected={priceId === price.id}
+                        onClick={() => handlePriceSelect(price)}
+                      />
+                    </Grid>
+                  ))}
+                </Grid>
+              </Box>
             ) : (
               <div>Loading Prices...</div>
             )}
@@ -476,6 +508,40 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         )}
       </FormProvider>
     </>
+  );
+};
+
+const PriceCard: FC<{
+  price: Price;
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ price, isSelected, onClick }) => {
+  return (
+    <Card
+      onClick={onClick}
+      sx={{
+        cursor: 'pointer',
+        border: isSelected ? '2px solid #054547' : '1px solid #ddd',
+        backgroundColor: isSelected ? '#f5f9f9' : '#fff',
+        transition: 'all 0.3s ease',
+        '&:hover': {
+          borderColor: '#054547',
+          backgroundColor: '#f5f9f9',
+        },
+      }}
+    >
+      <CardContent>
+        <Typography variant="subtitle1" fontWeight="bold">
+          {price.name}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          {price.timePeriod.start} - {price.timePeriod.end}
+        </Typography>
+        <Typography variant="h6" sx={{ mt: 1 }}>
+          {price.price} DT
+        </Typography>
+      </CardContent>
+    </Card>
   );
 };
 

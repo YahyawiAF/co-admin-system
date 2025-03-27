@@ -17,7 +17,7 @@ export class AddJournalDto {
   public memberID: string;
 
 
- 
+  
   @IsString()
   @ApiProperty()
   public priceId: string;

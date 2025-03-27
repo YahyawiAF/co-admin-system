@@ -148,6 +148,7 @@ export interface Price {
   updatedAt: Date | null;
   type:PriceType;
   journals: Journal[];
+  
 }
 
 export interface Journal {
@@ -156,6 +157,23 @@ export interface Journal {
   isPayed: boolean;
   registredTime: Date;
   leaveTime?: Date | null;
+  payedAmount: number;
+  memberID?: string | null;
+  member?: Member | null;
+  createdAt: Date;
+  updatedAt: Date;
+  isReservation: boolean;
+  priceId?: string | null;
+  price?: Member | null;
+}
+
+export interface Abonnement {
+  
+  id: string;
+  isPayed: boolean;
+  registredDate: Date;
+  leaveDate?: Date | null;
+  stayedPeriode?: Date | null;
   payedAmount: number;
   memberID?: string | null;
   member?: Member | null;

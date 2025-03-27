@@ -68,7 +68,7 @@ export class JournalService {
           isPayed: createJournalDto.isPayed,
           isReservation: createJournalDto.isReservation,
           payedAmount: createJournalDto.payedAmount,
-          priceId: priceId,  
+          priceId: createJournalDto.priceId,  
         },
       });
       

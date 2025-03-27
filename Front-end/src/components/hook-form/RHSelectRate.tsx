@@ -79,14 +79,7 @@ const RHSelectRate: FC<IRHFTextField> = ({
             onChange={handleChange}
             label={label}
             error={!!error}
-            disabled
-            fullWidth
-            sx={{
-              "& .MuiInputBase-input.Mui-disabled": {
-                color: "black",
-                WebkitTextFillColor: "black",
-              },
-            }}
+           
           >
             {list.map((price) => (
               <MenuItem key={price.id} value={price.id}>
