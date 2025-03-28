@@ -31,23 +31,49 @@ import {
   MenuItem,
   InputLabel,
   Select,
+  Card,
+  CardContent,
+  Grid,
+  Typography,
+  Box,
+  CircularProgress,
+  Alert,
+  Divider,
+  keyframes,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DatePicker } from "@mui/x-date-pickers";
 import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import BulkActions from "src/components/Table/members/TableHeader";
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrash } from '@fortawesome/free-solid-svg-icons';
 
-// Styles des boutons réutilisés
-const SubmitButtton = styled(LoadingButton)(() => ({
+// Styles personnalisés
+const SubmitButton = styled(LoadingButton)(() => ({
   border: "1px solid",
   borderColor: "#054547",
   background: "#fff",
   color: "#054547",
-  width: "100%",
+  width: "calc(50% - 5px)",
+  height: "50px",
+  lineHeight: "50px",
+  cursor: "pointer",
+  marginLeft: "10px",
+  borderRadius: 0,
+  margin: 0,
+  "&:hover": {
+    background: "#054547",
+    color: "#fff",
+  },
+}));
+
+const ActionButton = styled(Button)(() => ({
+  border: "1px solid",
+  borderColor: "#054547",
+  background: "#fff",
+  color: "#054547",
+  width: "calc(50% - 5px)",
   height: "50px",
   lineHeight: "50px",
   cursor: "pointer",
@@ -59,203 +85,231 @@ const SubmitButtton = styled(LoadingButton)(() => ({
   },
 }));
 
-const ActionButtton = styled(Button)(() => ({
-  border: "1px solid",
-  borderColor: "#054547",
-  background: "#fff",
-  color: "#054547",
-  width: "100%",
-  height: "50px",
-  lineHeight: "50px",
-  cursor: "pointer",
-  borderRadius: 0,
-  margin: 0,
-  "&:hover": {
-    background: "#054547",
-    color: "#fff",
-  },
-}));
-
-// Style pour la table
 const StyledTableHead = styled(TableHead)(({ theme }) => ({
   backgroundColor: theme.palette.grey[100],
-  "& .MuiTableCell-root": {
-    fontWeight: "bold",
-    borderBottom: `1px solid ${theme.palette.divider}`,
-  },
 }));
 
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  "&:nth-of-type(even)": {
-    backgroundColor: theme.palette.action.hover,
-  },
-  "&:hover": {
+const blinkAnimation = keyframes`
+  0% { background-color: rgba(255, 0, 0, 0.1); }
+  50% { background-color: rgba(255, 0, 0, 0.4); }
+  100% { background-color: rgba(255, 0, 0, 0.1); }
+`;
+
+const BlinkingTableRow = styled(TableRow)(({ theme }) => ({
+  animation: `${blinkAnimation} 1.5s ease-in-out infinite`,
+  '&:hover': {
     backgroundColor: theme.palette.action.selected,
   },
 }));
 
-interface AbonnementFormData extends Omit<Partial<Abonnement>, 'id' | 'createdAt' | 'updatedAt'> {
-  isPayed: boolean;
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  '&:nth-of-type(even)': {
+    backgroundColor: theme.palette.action.hover,
+  },
+  '&:hover': {
+    backgroundColor: theme.palette.action.selected,
+  },
+}));
+
+const PriceCard = ({ price, isSelected, onClick }: { price: Price; isSelected: boolean; onClick: () => void }) => (
+  <Card
+    onClick={onClick}
+    sx={{
+      cursor: 'pointer',
+      border: isSelected ? '2px solid #054547' : '1px solid #ddd',
+      backgroundColor: isSelected ? '#f5f9f9' : '#fff',
+      transition: 'all 0.3s ease',
+      '&:hover': {
+        borderColor: '#054547',
+        backgroundColor: '#f5f9f9',
+      },
+    }}
+  >
+    <CardContent>
+      <Typography variant="subtitle1" fontWeight="bold">{price.name}</Typography>
+      <Typography variant="body2" color="text.secondary">
+        {price.timePeriod?.start} - {price.timePeriod?.end}
+      </Typography>
+      <Typography variant="h6" sx={{ mt: 1 }}>
+        {price.price} DT
+      </Typography>
+    </CardContent>
+  </Card>
+);
+
+interface AbonnementFormData extends Partial<Abonnement> {
   registredDate: Date;
+  leaveDate: Date;
   payedAmount: number;
-  isReservation: boolean;
 }
 
-const AbonnementComponent: React.FC = () => {
+// Fonction utilitaire pour comparer les dates (sans l'heure)
+const isSameDay = (date1: Date, date2: Date) => {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
+
+
+
+const AbonnementComponent = () => {
+  const [search, setSearch] = useState("");
   // Fetch data
-  const { data: abonnementsData, refetch } = useGetAbonnementsQuery({});
+  const { 
+    data: abonnementsData, 
+    isLoading, 
+    isError, 
+    refetch 
+  } = useGetAbonnementsQuery({
+    search: search,
+  });
+
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
-  
+  const abonnementPrices = prices.filter(price => price.type === "abonnement");
+
   // Mutations
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
 
   // State
-  const [searchTerm, setSearchTerm] = useState("");
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
-    isPayed: false,
     registredDate: new Date(),
+    leaveDate: new Date(),
     payedAmount: 0,
+    isPayed: false,
     isReservation: false,
-    memberID: null,
-    priceId: null,
   });
+  const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
-  const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDrawer, setShowDrawer] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const abonnements = abonnementsData?.data || [];
+  // Get available members (not already subscribed)
+  const availableMembers = members.filter(member => 
+    editAbonnement 
+      ? true // Show all members in edit mode (field will be disabled)
+      : !abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
+  );
 
   // Helper functions
-  const findMemberById = (id: string | null) => members.find(m => m.id === id);
-  const findPriceById = (id: string | null) => prices.find(p => p.id === id);
+  const formatDate = (date: Date | string | null | undefined) => {
+    if (!date) return "N/A";
+    try {
+      return new Date(date).toLocaleDateString();
+    } catch (e) {
+      return "Invalid date";
+    }
+  };
+
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+  };
 
   const validateForm = () => {
-    const errors: { [key: string]: string } = {};
+    const newErrors: Record<string, string> = {};
     
     if (!(editAbonnement ? editAbonnement.registredDate : newAbonnement.registredDate)) {
-      errors.registredDate = "Registration date is required";
-    }
-    if ((editAbonnement ? editAbonnement.payedAmount : newAbonnement.payedAmount) < 0) {
-      errors.payedAmount = "Amount must be positive";
+      newErrors.registredDate = "Registration date is required";
     }
     
-    setErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
+    if (!(editAbonnement ? editAbonnement.leaveDate : newAbonnement.leaveDate)) {
+      newErrors.leaveDate = "Leave date is required"; 
+    }
+    
+    if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
+      newErrors.memberID = "Member is required";
+    }
+    
+    if (!(editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)) {
+      newErrors.priceId = "Price is required";
+    }
   
-  const handleAddAbonnement = async () => {
-    setErrors({});
-    if (validateForm()) {
-      try {
-        const abonnementToCreate: Abonnement = {
-          ...newAbonnement,
-          id: '',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          leaveDate: newAbonnement.leaveDate || null,
-          stayedPeriode: newAbonnement.stayedPeriode || null,
-          member: findMemberById(newAbonnement.memberID || null) || null,
-          priceId: newAbonnement.priceId || null,
-        
-        };
-        
-        await createAbonnement(abonnementToCreate).unwrap();
-        setShowDrawer(false);
-        resetForm();
-      } catch (error) {
-        console.error("Error adding abonnement:", error);
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    try {
+      if (editAbonnement) {
+        await updateAbonnement({
+          id: editAbonnement.id,
+          data: editAbonnement,
+        }).unwrap();
+      } else {
+        await createAbonnement(newAbonnement).unwrap();
       }
+      
+      handleCloseDrawer();
+      refetch();
+    } catch (error) {
+      console.error("Error saving subscription:", error);
     }
   };
 
-  const resetForm = () => {
-    setNewAbonnement({ 
-      isPayed: false,
-      registredDate: new Date(),
-      payedAmount: 0,
-      isReservation: false,
-      memberID: null,
-      priceId: null,
-    });
+  const handleDelete = async () => {
+    if (abonnementToDelete) {
+      try {
+        await deleteAbonnement(abonnementToDelete).unwrap();
+        refetch();
+      } catch (error) {
+        console.error("Error deleting subscription:", error);
+      } finally {
+        setShowDeleteModal(false);
+        setAbonnementToDelete(null);
+      }
+    }
   };
 
   const handleCloseDrawer = () => {
     setShowDrawer(false);
     setEditAbonnement(null);
+    setNewAbonnement({
+      registredDate: new Date(),
+      leaveDate: new Date(),
+      payedAmount: 0,
+      isPayed: false,
+      isReservation: false,
+    });
     setErrors({});
   };
 
-  const handleUpdateAbonnement = async () => {
-    setErrors({});
-    if (editAbonnement && validateForm()) {
-      try {
-        await updateAbonnement({ 
-          id: editAbonnement.id, 
-          data: {
-            ...editAbonnement,
-            updatedAt: new Date(),
-            member: findMemberById(editAbonnement.memberID || null) || null,
-            priceId: editAbonnement.priceId || null,
-          }
-        }).unwrap();
-        setEditAbonnement(null);
-        setShowDrawer(false);
-      } catch (error) {
-        console.error("Error updating abonnement:", error);
-      }
+  const handlePriceSelect = (price: Price) => {
+    const update = {
+      priceId: price.id,
+      payedAmount: price.price,
+    };
+
+    if (editAbonnement) {
+      setEditAbonnement({ ...editAbonnement, ...update });
+    } else {
+      setNewAbonnement({ ...newAbonnement, ...update });
     }
   };
 
-  const confirmDeleteAbonnement = (id: string) => {
-    setAbonnementToDelete(id);
-    setShowDeleteModal(true);
-  };
-  
-  const handleConfirmDelete = async () => {
-    if (abonnementToDelete) {
-      await deleteAbonnement(abonnementToDelete);
-      setShowDeleteModal(false);
-      setAbonnementToDelete(null);
-    }
-  };
-
-  const formatDate = (date: Date | string | null | undefined) => {
-    if (!date) return "N/A";
-    const d = new Date(date);
-    return d.toLocaleDateString();
-  };
-
-  const filteredAbonnements = abonnements.filter((abonnement: Abonnement) =>
-    abonnement.member?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    abonnement.member?.lastName?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-  };
+  if (isLoading) return <CircularProgress />;
+  if (isError) return <Alert severity="error">Error loading subscriptions</Alert>;
 
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <div style={{ padding: "20px" }}>
-          <h2>Subscription Management</h2>
+        <Box sx={{ p: 3 }}>
+          <Typography variant="h4" sx={{ mb: 3 }}>Subscription Management</Typography>
 
-          <BulkActions 
-            handleClickOpen={() => {
-              resetForm();
-              setShowDrawer(true);
-            }}
+          <BulkActions
+            handleClickOpen={() => setShowDrawer(true)}
             onHandleSearch={handleSearch}
-            search={searchTerm}
+            search={search}
             refetch={refetch}
           />
 
-          <TableContainer component={Paper}>
+          <TableContainer component={Paper} sx={{ mt: 2 }}>
             <Table>
               <StyledTableHead>
                 <TableRow>
@@ -269,233 +323,256 @@ const AbonnementComponent: React.FC = () => {
                 </TableRow>
               </StyledTableHead>
               <TableBody>
-                {filteredAbonnements.map((abonnement: Abonnement) => (
-                  <StyledTableRow key={abonnement.id}>
-                    <TableCell>
-                      {abonnement.member ? `${abonnement.member.firstName} ${abonnement.member.lastName}` : "N/A"}
-                    </TableCell>
-                    <TableCell>{formatDate(abonnement.registredDate)}</TableCell>
-                    <TableCell>{formatDate(abonnement.leaveDate)}</TableCell>
-                    <TableCell>{abonnement.price?.name || "N/A"}</TableCell>
-                    <TableCell>{abonnement.payedAmount} D</TableCell>
-                    <TableCell>{abonnement.isPayed ? "Paid" : "Unpaid"}</TableCell>
-                    <TableCell align="center">
-                      <IconButton 
-                        onClick={() => { setEditAbonnement(abonnement); setShowDrawer(true); }}
-                        sx={{ 
-                          color: "#054547",
-                          '&:hover': { 
-                            backgroundColor: 'rgba(5, 69, 71, 0.1)',
-                          },
-                          padding: "8px",
-                          margin: "0 4px"
-                        }}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                      <IconButton 
-                        onClick={() => confirmDeleteAbonnement(abonnement.id)}
-                        sx={{ 
-                          color: "#ff4444",
-                          '&:hover': { 
-                            backgroundColor: 'rgba(255, 68, 68, 0.1)',
-                          },
-                          padding: "8px",
-                          margin: "0 4px"
-                        }}
-                      >
-                        <FontAwesomeIcon icon={faTrash} style={{ fontSize: "16px" }} />
-                      </IconButton>
-                    </TableCell>
-                  </StyledTableRow>
-                ))}
+              {abonnementsData?.data.map((abonnement) => {
+  const member = members.find(m => m.id === abonnement.memberID);
+  const price = prices.find(p => p.id === abonnement.priceId);
+  
+  // Convertir la leaveDate en objet Date
+  const leaveDate = abonnement.leaveDate ? new Date(abonnement.leaveDate) : null;
+  const today = new Date();
+  
+  // Vérifier si c'est la date d'aujourd'hui (doit clignoter)
+  const shouldBlink = leaveDate && isSameDay(leaveDate, today);
+
+  const TableRowComponent = shouldBlink ? BlinkingTableRow : StyledTableRow;
+
+  return (
+    <TableRowComponent key={abonnement.id}>
+      {/* Le reste du code reste inchangé */}
+      <TableCell>
+        {member ? `${member.firstName} ${member.lastName}` : "N/A"}
+      </TableCell>
+      <TableCell>{formatDate(abonnement.registredDate)}</TableCell>
+      <TableCell>{formatDate(abonnement.leaveDate)}</TableCell>
+      <TableCell>
+        {price ? `${price.name} (${price.timePeriod.start} ${price.timePeriod.end})` : "N/A"}
+      </TableCell>
+      <TableCell>{abonnement.payedAmount} DT</TableCell>
+      <TableCell>
+        <Box
+          sx={{
+            color: abonnement.isPayed ? 'success.main' : 'error.main',
+            fontWeight: 'bold'
+          }}
+        >
+          {abonnement.isPayed ? "Paid" : "Unpaid"}
+        </Box>
+      </TableCell>
+      <TableCell align="center">
+        <IconButton
+          onClick={() => {
+            setEditAbonnement({ 
+              ...abonnement, 
+              leaveDate: abonnement.leaveDate ? new Date(abonnement.leaveDate) : new Date() 
+            });
+            setShowDrawer(true);
+          }}
+        >
+          <EditIcon color="primary" />
+        </IconButton>
+        <IconButton
+          onClick={() => {
+            setAbonnementToDelete(abonnement.id);
+            setShowDeleteModal(true);
+          }}
+        >
+          <DeleteIcon color="error" />
+        </IconButton>
+      </TableCell>
+    </TableRowComponent>
+  );
+})}
               </TableBody>
             </Table>
           </TableContainer>
-          
+
+          {/* Delete Confirmation Dialog */}
           <Dialog open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
-            <DialogTitle>Confirmation</DialogTitle>
+            <DialogTitle>Delete Subscription</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to delete this subscription? This action is irreversible.
+                Are you sure you want to delete this subscription? This action cannot be undone.
               </DialogContentText>
             </DialogContent>
             <DialogActions>
-              <Button onClick={() => setShowDeleteModal(false)} color="primary">
-                Cancel
-              </Button>
-              <Button onClick={handleConfirmDelete} color="secondary" autoFocus>
-                Confirm
+              <Button onClick={() => setShowDeleteModal(false)}>Cancel</Button>
+              <Button onClick={handleDelete} color="error" autoFocus>
+                Delete
               </Button>
             </DialogActions>
           </Dialog>
-          
-          <Drawer anchor="right" open={showDrawer} onClose={handleCloseDrawer}>
-            <div style={{ width: "400px", padding: "20px" }}>
-              <h3>{editAbonnement ? "Manage Subscription" : "New Subscription"}</h3>
-              
-              {/* Member Select */}
-              <FormControl fullWidth margin="dense">
-                <InputLabel>Member</InputLabel>
-                <Select
-                  value={editAbonnement?.memberID || newAbonnement.memberID || ''}
-                  onChange={(e) => {
-                    const memberId = e.target.value as string;
-                    const member = findMemberById(memberId);
-                    
-                    if (editAbonnement) {
-                      setEditAbonnement({ 
-                        ...editAbonnement, 
-                        memberID: memberId,
-                        member: member || null
-                      });
-                    } else {
-                      setNewAbonnement({ 
-                        ...newAbonnement, 
-                        memberID: memberId,
-                        member: member || null
-                      });
-                    }
-                  }}
-                  label="Member"
-                >
-                  <MenuItem value="">Select a member</MenuItem>
-                  {members.map((member: Member) => (
-                    <MenuItem key={member.id} value={member.id}>
-                      {member.firstName} {member.lastName}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
 
-              {/* Price Select */}
-              <FormControl fullWidth margin="dense">
-                <InputLabel>Price</InputLabel>
-                <Select
-                  value={editAbonnement?.priceId || newAbonnement.priceId || ''}
-                  onChange={(e) => {
-                    const priceId = e.target.value as string;
-                    const price = findPriceById(priceId);
-                    
-                     if (editAbonnement) {
-                      setEditAbonnement({ 
-                        ...editAbonnement, 
-                        priceId: priceId,
-                      
-                      });
-                    } else {
-                      setNewAbonnement({ 
-                        ...newAbonnement, 
-                        priceId: priceId,
-                       
-                      });
-                    }
-                  }}
-                  label="Price"
-                >
-                  <MenuItem value="">Select a price</MenuItem>
-                  {prices.map((price: Price) => (
-                    <MenuItem key={price.id} value={price.id}>
-                      {price.name} ({price.price} D)
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              
-              <DatePicker
-                label="Registration Date"
-                value={editAbonnement ? editAbonnement.registredDate : newAbonnement.registredDate}
-                onChange={(date: Date | null) => {
-                  const selectedDate = date || new Date();
-                  if (editAbonnement) {
-                    setEditAbonnement({ ...editAbonnement, registredDate: selectedDate });
-                  } else {
-                    setNewAbonnement({ ...newAbonnement, registredDate: selectedDate });
-                  }
-                }}
-              />
-              
-              <DatePicker
-                label="Leave Date"
-                value={editAbonnement ? editAbonnement.leaveDate || null : null}
-                onChange={(date: Date | null) => {
-                  if (editAbonnement) {
-                    setEditAbonnement({ ...editAbonnement, leaveDate: date || null });
-                  } else {
-                    setNewAbonnement({ ...newAbonnement, leaveDate: date || null });
-                  }
-                }}
-              />
-              
-              <TextField 
-                label="Paid Amount" 
-                fullWidth 
-                margin="dense" 
-                type="number" 
-                value={editAbonnement ? editAbonnement.payedAmount : newAbonnement.payedAmount} 
+          {/* Add/Edit Drawer */}
+          <Drawer
+            anchor="right"
+            open={showDrawer}
+            onClose={handleCloseDrawer}
+            PaperProps={{ 
+              sx: { 
+                width: "450px", 
+                padding: "25px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "20px"
+              } 
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 3 }}>
+              {editAbonnement ? "Manage Subscription" : "New Subscription"}
+            </Typography>
+
+            <FormControl fullWidth sx={{ mb: 0 }} error={!!errors.memberID}>
+              <InputLabel>Member *</InputLabel>
+              <Select
+                value={editAbonnement?.memberID || newAbonnement.memberID || ''}
                 onChange={(e) => {
-                  const value = Math.max(0, +e.target.value);
+                  const value = e.target.value as string;
                   if (editAbonnement) {
-                    setEditAbonnement({ ...editAbonnement, payedAmount: value });
+                    setEditAbonnement({ ...editAbonnement, memberID: value });
                   } else {
-                    setNewAbonnement({ ...newAbonnement, payedAmount: value });
+                    setNewAbonnement({ ...newAbonnement, memberID: value });
                   }
                 }}
-                error={!!errors.payedAmount}
-                helperText={errors.payedAmount}
-              />
-              
-              <FormControl fullWidth margin="dense">
-                <TextField
-                  label="Is Paid"
-                  select
-                  value={editAbonnement ? editAbonnement.isPayed.toString() : newAbonnement.isPayed.toString()}
-                  onChange={(e) => {
-                    const value = e.target.value === 'true';
-                    if (editAbonnement) {
-                      setEditAbonnement({ ...editAbonnement, isPayed: value });
-                    } else {
-                      setNewAbonnement({ ...newAbonnement, isPayed: value });
+                label="Member *"
+                disabled={!!editAbonnement}
+              >
+                <MenuItem value="">Select a member</MenuItem>
+                {availableMembers.map((member) => (
+                  <MenuItem key={member.id} value={member.id}>
+                    {member.firstName} {member.lastName}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.memberID && <FormHelperText>{errors.memberID}</FormHelperText>}
+            </FormControl>
+
+            <Typography variant="subtitle1" sx={{ mb: 0 }}>
+              Select Rate *
+            </Typography>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
+              {abonnementPrices.map((price) => (
+                <Grid item xs={6} key={price.id}>
+                  <PriceCard
+                    price={price}
+                    isSelected={
+                      (editAbonnement?.priceId || newAbonnement.priceId) === price.id
                     }
-                  }}
-                >
-                  <MenuItem value="true">Yes</MenuItem>
-                  <MenuItem value="false">No</MenuItem>
-                </TextField>
-              </FormControl>
-              
-              <FormControl fullWidth margin="dense">
-                <TextField
-                  label="Is Reservation"
-                  select
-                  value={editAbonnement ? editAbonnement.isReservation.toString() : newAbonnement.isReservation.toString()}
-                  onChange={(e) => {
-                    const value = e.target.value === 'true';
-                    if (editAbonnement) {
-                      setEditAbonnement({ ...editAbonnement, isReservation: value });
-                    } else {
-                      setNewAbonnement({ ...newAbonnement, isReservation: value });
-                    }
-                  }}
-                >
-                  <MenuItem value="true">Yes</MenuItem>
-                  <MenuItem value="false">No</MenuItem>
-                </TextField>
-              </FormControl>
-              
-              <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                <SubmitButtton 
-                  onClick={editAbonnement ? handleUpdateAbonnement : handleAddAbonnement}
-                >
-                  {editAbonnement ? "Update" : "Add"}
-                </SubmitButtton>
-                <ActionButtton onClick={handleCloseDrawer}>
-                  Cancel
-                </ActionButtton>
-              </div>
-            </div>
+                    onClick={() => handlePriceSelect(price)}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+            {errors.priceId && (
+              <FormHelperText error sx={{ mb: 0 }}>
+                {errors.priceId}
+              </FormHelperText>
+            )}
+
+            <DatePicker
+              label="Registration Date *"
+              value={editAbonnement?.registredDate ? new Date(editAbonnement.registredDate) : newAbonnement.registredDate}
+              onChange={(date) => {
+                const newDate = date || new Date();
+                if (editAbonnement) {
+                  setEditAbonnement({ ...editAbonnement, registredDate: newDate });
+                } else {
+                  setNewAbonnement({ ...newAbonnement, registredDate: newDate });
+                }
+              }}
+              sx={{ width: '100%', mb:0}}
+            />
+            {errors.registredDate && (
+              <FormHelperText error sx={{ mb: 0 }}>
+                {errors.registredDate}
+              </FormHelperText>
+            )}
+
+            <DatePicker
+              label="Leave Date *"
+              value={editAbonnement?.leaveDate || newAbonnement.leaveDate}
+              onChange={(date) => {
+                const newDate = date || new Date();
+                if (editAbonnement) {
+                  setEditAbonnement({ ...editAbonnement, leaveDate: newDate });
+                } else {
+                  setNewAbonnement({ ...newAbonnement, leaveDate: newDate });
+                }
+              }}
+              sx={{ width: '100%', mb: 0 }}
+            />
+            {errors.leaveDate && (
+              <FormHelperText error sx={{ mb: 0 }}>
+                {errors.leaveDate}
+              </FormHelperText>
+            )}
+
+            <TextField
+              label="Paid Amount (DT)"
+              type="number"
+              fullWidth
+              value={editAbonnement?.payedAmount || newAbonnement.payedAmount || 0}
+              onChange={(e) => {
+                const value = Math.max(0, Number(e.target.value));
+                if (editAbonnement) {
+                  setEditAbonnement({ ...editAbonnement, payedAmount: value });
+                } else {
+                  setNewAbonnement({ ...newAbonnement, payedAmount: value });
+                }
+              }}
+              sx={{ mb: 0 }}
+            />
+
+            <FormControl fullWidth sx={{ mb: 0 }}>
+              <InputLabel>Payment Status</InputLabel>
+              <Select
+                value={(editAbonnement?.isPayed ?? newAbonnement.isPayed) ? 'true' : 'false'}
+                onChange={(e) => {
+                  const value = e.target.value === 'true';
+                  if (editAbonnement) {
+                    setEditAbonnement({ ...editAbonnement, isPayed: value });
+                  } else {
+                    setNewAbonnement({ ...newAbonnement, isPayed: value });
+                  }
+                }}
+                label="Payment Status"
+              >
+                <MenuItem value="true">Paid</MenuItem>
+                <MenuItem value="false">Unpaid</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Divider />
+
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                mt: 2,
+              }}
+            >
+              <Typography variant="h6">Total</Typography>
+              <Typography variant="h6" fontWeight="bold">
+                {editAbonnement?.payedAmount || newAbonnement.payedAmount || 0} DT
+              </Typography>
+            </Box>
+
+            <Box sx={{ display: 'flex',  gap: '10px', mt: 'auto', justifyContent: 'space-between' }}>
+              <ActionButton
+                variant="outlined"
+                onClick={handleCloseDrawer}
+              >
+                Cancel
+              </ActionButton>
+              <SubmitButton
+                variant="contained"
+                onClick={handleSubmit}
+              >
+                {editAbonnement ? "Confirm" : "Confirm"}
+              </SubmitButton>
+            </Box>
           </Drawer>
-        </div>
+        </Box>
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -144,6 +144,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
 
+  // Filtrer les prix pour n'afficher que ceux de type "journal"
+  const journalPrices = React.useMemo(() => {
+    return pricesList?.filter(price => price.type === "journal") || [];
+  }, [pricesList]);
+
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr.includes('h')) return 0;
     
@@ -155,12 +160,12 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   };
 
   const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
-    if (!pricesList || pricesList.length === 0) return null;
+    if (!journalPrices || journalPrices.length === 0) return null;
     
     const diffInMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
     
     // Trier les prix par durée croissante
-    const sortedPrices = [...pricesList].sort((a, b) => {
+    const sortedPrices = [...journalPrices].sort((a, b) => {
       const aStart = parseTimeToMinutes(a.timePeriod.start);
       const bStart = parseTimeToMinutes(b.timePeriod.start);
       return aStart - bStart;
@@ -186,7 +191,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   };
 
   React.useEffect(() => {
-    if (pricesList && registredTime && leaveTime) {
+    if (journalPrices && registredTime && leaveTime) {
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
@@ -211,7 +216,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         }
       }
     }
-  }, [registredTime, leaveTime, pricesList, setValue, isPayed]);
+  }, [registredTime, leaveTime, journalPrices, setValue, isPayed]);
 
   const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
@@ -389,10 +394,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             {!isLoadingPrices ? (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  Select Rate
+                  Select Rate 
                 </Typography>
                 <Grid container spacing={2}>
-                  {pricesList?.map((price) => (
+                  {journalPrices?.map((price) => (
                     <Grid item xs={6} key={price.id}>
                       <PriceCard
                         price={price}

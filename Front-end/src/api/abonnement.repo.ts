@@ -13,14 +13,6 @@ export const abonnementApi = createApi({
   reducerPath: "abonnementApi",
   baseQuery: fetchBaseQuery({ 
     baseUrl: API_URL,
-    // Ajoutez ici les headers si nécessaire (comme le token d'authentification)
-    // prepareHeaders: (headers) => {
-    //   const token = localStorage.getItem('token');
-    //   if (token) {
-    //     headers.set('Authorization', `Bearer ${token}`);
-    //   }
-    //   return headers;
-    // }
   }),
   tagTypes: ["Abonnement"],
   endpoints: (builder) => ({
@@ -46,7 +38,7 @@ export const abonnementApi = createApi({
       providesTags: (result, error, id) => [{ type: "Abonnement", id }],
     }),
     
-    createAbonnement: builder.mutation<Abonnement, Abonnement>({
+    createAbonnement: builder.mutation<Abonnement, Partial<Abonnement>>({
       query: (data) => ({
         url: 'abonnements',
         method: 'POST',
@@ -55,7 +47,7 @@ export const abonnementApi = createApi({
       invalidatesTags: ["Abonnement"],
     }),
     
-    updateAbonnement: builder.mutation<Abonnement, {id: string, data: Abonnement}>({
+    updateAbonnement: builder.mutation<Abonnement, {id: string, data: Partial<Abonnement>}>({
       query: ({id, data}) => ({
         url: `abonnements/${id}`,
         method: 'PATCH',
@@ -77,7 +69,6 @@ export const abonnementApi = createApi({
   }),
 });
 
-// Export hooks for usage in functional components
 export const {
   useGetAbonnementsQuery,
   useGetAllAbonnementsQuery,
