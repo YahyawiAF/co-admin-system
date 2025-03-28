@@ -190,11 +190,11 @@ const AbonnementComponent = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Get available members (not already subscribed)
-  const availableMembers = members.filter(member => 
-    editAbonnement 
-      ? true // Show all members in edit mode (field will be disabled)
-      : !abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
-  );
+// Get all members and mark subscribed ones
+const membersWithSubscriptionStatus = members.map(member => ({
+  ...member,
+  hasSubscription: abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
+}));
 
   // Helper functions
   const formatDate = (date: Date | string | null | undefined) => {
@@ -422,29 +422,38 @@ const AbonnementComponent = () => {
             </Typography>
 
             <FormControl fullWidth sx={{ mb: 0 }} error={!!errors.memberID}>
-              <InputLabel>Member *</InputLabel>
-              <Select
-                value={editAbonnement?.memberID || newAbonnement.memberID || ''}
-                onChange={(e) => {
-                  const value = e.target.value as string;
-                  if (editAbonnement) {
-                    setEditAbonnement({ ...editAbonnement, memberID: value });
-                  } else {
-                    setNewAbonnement({ ...newAbonnement, memberID: value });
-                  }
-                }}
-                label="Member *"
-                disabled={!!editAbonnement}
-              >
-                <MenuItem value="">Select a member</MenuItem>
-                {availableMembers.map((member) => (
-                  <MenuItem key={member.id} value={member.id}>
-                    {member.firstName} {member.lastName}
-                  </MenuItem>
-                ))}
-              </Select>
-              {errors.memberID && <FormHelperText>{errors.memberID}</FormHelperText>}
-            </FormControl>
+  <InputLabel>Member *</InputLabel>
+  <Select
+    value={editAbonnement?.memberID || newAbonnement.memberID || ''}
+    onChange={(e) => {
+      const value = e.target.value as string;
+      if (editAbonnement) {
+        setEditAbonnement({ ...editAbonnement, memberID: value });
+      } else {
+        setNewAbonnement({ ...newAbonnement, memberID: value });
+      }
+    }}
+    label="Member *"
+    disabled={!!editAbonnement}
+  >
+    <MenuItem value="">Select a member</MenuItem>
+    {membersWithSubscriptionStatus.map((member) => (
+      <MenuItem 
+        key={member.id} 
+        value={member.id}
+        disabled={member.hasSubscription && !editAbonnement}
+        sx={{
+          opacity: member.hasSubscription && !editAbonnement ? 0.7 : 1,
+          fontStyle: member.hasSubscription && !editAbonnement ? 'italic' : 'normal'
+        }}
+      >
+        {member.firstName} {member.lastName}
+        {member.hasSubscription && !editAbonnement && ' (Already subscribed)'}
+      </MenuItem>
+    ))}
+  </Select>
+  {errors.memberID && <FormHelperText>{errors.memberID}</FormHelperText>}
+</FormControl>
 
             <Typography variant="subtitle1" sx={{ mb: 0 }}>
               Select Rate *
