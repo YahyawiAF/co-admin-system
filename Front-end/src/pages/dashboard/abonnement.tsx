@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { useTheme } from '@mui/material/styles';
+
 import {
   useGetAbonnementsQuery,
   useCreateAbonnementMutation,
@@ -40,6 +42,9 @@ import {
   Alert,
   Divider,
   keyframes,
+  Checkbox,
+  useMediaQuery,
+  Theme,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DatePicker } from "@mui/x-date-pickers";
@@ -47,33 +52,120 @@ import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
-import BulkActions from "src/components/Table/members/TableHeader";
+import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
+import TableHeadAction from "../../components/Table/members/TableHeader";
+import { string } from "yup";
+// Styles responsives
+const PageContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 'calc(100vh - 64px)',
+  padding: theme.spacing(2),
+  [theme.breakpoints.up('sm')]: {
+    padding: theme.spacing(3),
+  },
+}));
 
-// Styles personnalisés
-const SubmitButton = styled(LoadingButton)(() => ({
+const MainContainer = styled(Paper)(({ theme }) => ({
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: theme.shape.borderRadius,
+  padding: theme.spacing(2),
+  boxShadow: theme.shadows[1],
+  marginTop: theme.spacing(2),
+  flex: 1,
+  display: 'flex',
+  flexDirection: 'column',
+  [theme.breakpoints.up('sm')]: {
+    padding: theme.spacing(3),
+  },
+}));
+
+const TableWrapper = styled(Box)(({ theme }) => ({
+  marginTop: theme.spacing(2),
+  flex: 1,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  [theme.breakpoints.up('sm')]: {
+    marginTop: theme.spacing(3),
+  },
+}));
+
+const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
+  flex: 1,
+  overflow: 'auto',
+  '& .MuiTable-root': {
+    minWidth: 650,
+    [theme.breakpoints.down('sm')]: {
+      minWidth: '100%',
+    },
+  },
+  '& .MuiTableRow-root': {
+    backgroundColor: theme.palette.background.paper,
+    '&:hover': {
+      backgroundColor: theme.palette.action.hover,
+    },
+  },
+  '& .MuiTableCell-root': {
+    borderBottom: `1px solid ${theme.palette.divider}`,
+    padding: theme.spacing(1),
+    [theme.breakpoints.up('sm')]: {
+      padding: theme.spacing(1.5),
+    },
+    [theme.breakpoints.up('md')]: {
+      padding: theme.spacing(2),
+    },
+  },
+}));
+
+const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
+  [theme.breakpoints.down('sm')]: {
+    '&:nth-of-type(1)': { width: '30%' },
+    '&:nth-of-type(2)': { width: '20%' },
+    '&:nth-of-type(3)': { width: '20%' },
+    '&:nth-of-type(4)': { display: 'none' },
+    '&:nth-of-type(5)': { display: 'none' },
+    '&:nth-of-type(6)': { display: 'none' },
+    '&:nth-of-type(7)': { width: '30%' },
+  },
+}));
+
+const ResponsiveActions = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'center',
+  gap: theme.spacing(1),
+  [theme.breakpoints.up('sm')]: {
+    gap: theme.spacing(2),
+  },
+}));
+
+const SubmitButton = styled(LoadingButton)(({ theme }) => ({
   border: "1px solid",
   borderColor: "#054547",
   background: "#fff",
   color: "#054547",
-  width: "calc(50% - 5px)",
+  width: "100%",
   height: "50px",
   lineHeight: "50px",
   cursor: "pointer",
-  marginLeft: "10px",
   borderRadius: 0,
   margin: 0,
   "&:hover": {
     background: "#054547",
     color: "#fff",
   },
+  [theme.breakpoints.up('sm')]: {
+    width: "calc(50% - 5px)",
+    marginLeft: "10px",
+  },
 }));
 
-const ActionButton = styled(Button)(() => ({
+const ActionButton = styled(Button)(({ theme }) => ({
   border: "1px solid",
   borderColor: "#054547",
   background: "#fff",
   color: "#054547",
-  width: "calc(50% - 5px)",
+  width: "100%",
   height: "50px",
   lineHeight: "50px",
   cursor: "pointer",
@@ -83,10 +175,9 @@ const ActionButton = styled(Button)(() => ({
     background: "#054547",
     color: "#fff",
   },
-}));
-
-const StyledTableHead = styled(TableHead)(({ theme }) => ({
-  backgroundColor: theme.palette.grey[100],
+  [theme.breakpoints.up('sm')]: {
+    width: "calc(50% - 5px)",
+  },
 }));
 
 const blinkAnimation = keyframes`
@@ -98,44 +189,18 @@ const blinkAnimation = keyframes`
 const BlinkingTableRow = styled(TableRow)(({ theme }) => ({
   animation: `${blinkAnimation} 1.5s ease-in-out infinite`,
   '&:hover': {
-    backgroundColor: theme.palette.action.selected,
-  },
-}));
-
-const StyledTableRow = styled(TableRow)(({ theme }) => ({
-  '&:nth-of-type(even)': {
     backgroundColor: theme.palette.action.hover,
   },
-  '&:hover': {
-    backgroundColor: theme.palette.action.selected,
-  },
 }));
 
-const PriceCard = ({ price, isSelected, onClick }: { price: Price; isSelected: boolean; onClick: () => void }) => (
-  <Card
-    onClick={onClick}
-    sx={{
-      cursor: 'pointer',
-      border: isSelected ? '2px solid #054547' : '1px solid #ddd',
-      backgroundColor: isSelected ? '#f5f9f9' : '#fff',
-      transition: 'all 0.3s ease',
-      '&:hover': {
-        borderColor: '#054547',
-        backgroundColor: '#f5f9f9',
-      },
-    }}
-  >
-    <CardContent>
-      <Typography variant="subtitle1" fontWeight="bold">{price.name}</Typography>
-      <Typography variant="body2" color="text.secondary">
-        {price.timePeriod?.start} - {price.timePeriod?.end}
-      </Typography>
-      <Typography variant="h6" sx={{ mt: 1 }}>
-        {price.price} DT
-      </Typography>
-    </CardContent>
-  </Card>
-);
+const PriceCard = styled(Card)(({ theme }) => ({
+  cursor: 'pointer',
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    borderColor: theme.palette.primary.main,
+    backgroundColor: theme.palette.action.hover,
+  },
+}));
 
 interface AbonnementFormData extends Partial<Abonnement> {
   registredDate: Date;
@@ -143,7 +208,6 @@ interface AbonnementFormData extends Partial<Abonnement> {
   payedAmount: number;
 }
 
-// Fonction utilitaire pour comparer les dates (sans l'heure)
 const isSameDay = (date1: Date, date2: Date) => {
   return (
     date1.getFullYear() === date2.getFullYear() &&
@@ -152,11 +216,15 @@ const isSameDay = (date1: Date, date2: Date) => {
   );
 };
 
-
-
 const AbonnementComponent = () => {
+  const theme = useTheme();
+
   const [search, setSearch] = useState("");
-  // Fetch data
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
+  const [orderBy, setOrderBy] = useState<string>('registredDate');
+  const [selected, setSelected] = useState<string[]>([]);
+  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
+  
   const { 
     data: abonnementsData, 
     isLoading, 
@@ -170,18 +238,17 @@ const AbonnementComponent = () => {
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(price => price.type === "abonnement");
 
-  // Mutations
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
 
-  // State
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: new Date(),
     leaveDate: new Date(),
     payedAmount: 0,
     isPayed: false,
     isReservation: false,
+    stayedPeriode: "",
   });
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -189,14 +256,63 @@ const AbonnementComponent = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // Get available members (not already subscribed)
-// Get all members and mark subscribed ones
-const membersWithSubscriptionStatus = members.map(member => ({
-  ...member,
-  hasSubscription: abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
-}));
+  const headCells = [
+    {
+      id: 'member',
+      numeric: false,
+      disablePadding: true,
+      label: 'Member',
+      alwaysVisible: true,
+    },
+    {
+      id: 'registredDate',
+      numeric: false,
+      disablePadding: false,
+      label: 'Registered Date',
+      alwaysVisible: true,
+    },
+    {
+      id: 'leaveDate',
+      numeric: false,
+      disablePadding: false,
+      label: 'Leave Date',
+      alwaysVisible: true,
+    },
+    {
+      id: 'Stayed Periode',
+      numeric: false,
+      disablePadding: false,
+      label: 'Stayed Periode',
+      alwaysVisible: false,
+    },
+    {
+      id: 'payedAmount',
+      numeric: false,
+      disablePadding: false,
+      label: 'Paid Amount',
+      alwaysVisible: false,
+    },
+    {
+      id: 'status',
+      numeric: false,
+      disablePadding: false,
+      label: 'Status',
+      alwaysVisible: false,
+    },
+    {
+      id: 'actions',
+      numeric: false,
+      disablePadding: false,
+      label: 'Actions',
+      alwaysVisible: false,
+    },
+  ];
 
-  // Helper functions
+  const membersWithSubscriptionStatus = members.map(member => ({
+    ...member,
+    hasSubscription: abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
+  }));
+
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return "N/A";
     try {
@@ -204,6 +320,41 @@ const membersWithSubscriptionStatus = members.map(member => ({
     } catch (e) {
       return "Invalid date";
     }
+  };
+
+  const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
+
+  const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      const newSelected = abonnementsData?.data.map((n) => n.id) || [];
+      setSelected(newSelected);
+      return;
+    }
+    setSelected([]);
+  };
+
+  const handleClick = (event: React.MouseEvent<unknown>, id: string) => {
+    const selectedIndex = selected.indexOf(id);
+    let newSelected: string[] = [];
+
+    if (selectedIndex === -1) {
+      newSelected = newSelected.concat(selected, id);
+    } else if (selectedIndex === 0) {
+      newSelected = newSelected.concat(selected.slice(1));
+    } else if (selectedIndex === selected.length - 1) {
+      newSelected = newSelected.concat(selected.slice(0, -1));
+    } else if (selectedIndex > 0) {
+      newSelected = newSelected.concat(
+        selected.slice(0, selectedIndex),
+        selected.slice(selectedIndex + 1)
+      );
+    }
+
+    setSelected(newSelected);
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -235,15 +386,25 @@ const membersWithSubscriptionStatus = members.map(member => ({
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
+  
     try {
+      const selectedPrice = prices.find(p => p.id === (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId));
+      const stayedPeriode = selectedPrice ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})` : '';
+  
       if (editAbonnement) {
         await updateAbonnement({
           id: editAbonnement.id,
-          data: editAbonnement,
+          data: {
+            ...editAbonnement,
+            stayedPeriode 
+          
+          },
         }).unwrap();
       } else {
-        await createAbonnement(newAbonnement).unwrap();
+        await createAbonnement({
+          ...newAbonnement,
+          stayedPeriode 
+        }).unwrap();
       }
       
       handleCloseDrawer();
@@ -252,7 +413,6 @@ const membersWithSubscriptionStatus = members.map(member => ({
       console.error("Error saving subscription:", error);
     }
   };
-
   const handleDelete = async () => {
     if (abonnementToDelete) {
       try {
@@ -284,6 +444,8 @@ const membersWithSubscriptionStatus = members.map(member => ({
     const update = {
       priceId: price.id,
       payedAmount: price.price,
+      
+    
     };
 
     if (editAbonnement) {
@@ -293,101 +455,136 @@ const membersWithSubscriptionStatus = members.map(member => ({
     }
   };
 
+  const isSelected = (id: string) => selected.indexOf(id) !== -1;
+
   if (isLoading) return <CircularProgress />;
   if (isError) return <Alert severity="error">Error loading subscriptions</Alert>;
 
   return (
     <ProtectedRoute>
       <DashboardLayout>
-        <Box sx={{ p: 3 }}>
-          <Typography variant="h4" sx={{ mb: 3 }}>Subscription Management</Typography>
+        <PageContainer>
+          <Typography variant="h4" sx={{ mb: 2 }}>Subscription Management</Typography>
+          
+          <MainContainer>
+            <TableHeadAction
+              handleClickOpen={() => setShowDrawer(true)}
+              onHandleSearch={handleSearch}
+              search={search}
+              refetch={refetch}
+              isMobile={isMobile}
+            />
 
-          <BulkActions
-            handleClickOpen={() => setShowDrawer(true)}
-            onHandleSearch={handleSearch}
-            search={search}
-            refetch={refetch}
-          />
+            <TableWrapper>
+              <StyledTableContainer>
+                <Table stickyHeader aria-label="subscriptions table">
+                  <EnhancedTableHead
+                    numSelected={selected.length}
+                    order={order}
+                    orderBy={orderBy}
+                    onSelectAllClick={handleSelectAllClick}
+                    onRequestSort={handleRequestSort}
+                    rowCount={abonnementsData?.data.length || 0}
+                    headCells={headCells}
+                    isMobile={isMobile}
+                  />
+                  <TableBody>
+                    {abonnementsData?.data.map((abonnement) => {
+                      const member = members.find(m => m.id === abonnement.memberID);
+                      const price = prices.find(p => p.id === abonnement.priceId);
+                      const leaveDate = abonnement.leaveDate ? new Date(abonnement.leaveDate) : null;
+                      const today = new Date();
+                      const shouldBlink = leaveDate && isSameDay(leaveDate, today);
+                      const TableRowComponent = shouldBlink ? BlinkingTableRow : TableRow;
+                      const isItemSelected = isSelected(abonnement.id);
 
-          <TableContainer component={Paper} sx={{ mt: 2 }}>
-            <Table>
-              <StyledTableHead>
-                <TableRow>
-                  <TableCell>Member</TableCell>
-                  <TableCell>Registered Date</TableCell>
-                  <TableCell>Leave Date</TableCell>
-                  <TableCell>Price</TableCell>
-                  <TableCell>Paid Amount</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </StyledTableHead>
-              <TableBody>
-              {abonnementsData?.data.map((abonnement) => {
-  const member = members.find(m => m.id === abonnement.memberID);
-  const price = prices.find(p => p.id === abonnement.priceId);
-  
-  // Convertir la leaveDate en objet Date
-  const leaveDate = abonnement.leaveDate ? new Date(abonnement.leaveDate) : null;
-  const today = new Date();
-  
-  // Vérifier si c'est la date d'aujourd'hui (doit clignoter)
-  const shouldBlink = leaveDate && isSameDay(leaveDate, today);
+                      return (
+                        <TableRowComponent
+                          key={abonnement.id}
+                          hover
+                          onClick={(event) => handleClick(event, abonnement.id)}
+                          role="checkbox"
+                          aria-checked={isItemSelected}
+                          tabIndex={-1}
+                          selected={isItemSelected}
+                        >
+                          <ResponsiveTableCell padding="checkbox">
+                            <Checkbox
+                              color="primary"
+                              checked={isItemSelected}
+                              inputProps={{ 'aria-labelledby': abonnement.id }}
+                            />
+                          </ResponsiveTableCell>
+                          <ResponsiveTableCell>
+                            {member ? `${member.firstName} ${member.lastName}` : "N/A"}
+                          </ResponsiveTableCell>
+                          <ResponsiveTableCell>
+                            {formatDate(abonnement.registredDate)}
+                          </ResponsiveTableCell>
+                          <ResponsiveTableCell>
+                            {formatDate(abonnement.leaveDate)}
+                          </ResponsiveTableCell>
+                          {!isMobile && (
+                            <>
+                              <ResponsiveTableCell>
+                                {price ? `${price.name} (${price.timePeriod.start} ${price.timePeriod.end})` : "N/A"}
+                              </ResponsiveTableCell>
+                              <ResponsiveTableCell>
+                                {abonnement.payedAmount } DT
+                              </ResponsiveTableCell>
+                              <ResponsiveTableCell>
+                                <Box
+                                  sx={{
+                                    color: abonnement.isPayed ? 'success.main' : 'error.main',
+                                    fontWeight: 'bold'
+                                  }}
+                                >
+                                  {abonnement.isPayed ? "Paid" : "Unpaid"}
+                                </Box>
+                              </ResponsiveTableCell>
+                            </>
+                          )}
+                          <ResponsiveTableCell align={isMobile ? 'right' : 'center'}>
+                            <ResponsiveActions>
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditAbonnement({ 
+                                    ...abonnement, 
+                                    leaveDate: abonnement.leaveDate ? new Date(abonnement.leaveDate) : new Date() 
+                                  });
+                                  setShowDrawer(true);
+                                }}
+                                size={isMobile ? 'small' : 'medium'}
+                              >
+                                <EditIcon color="primary" />
+                              </IconButton>
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAbonnementToDelete(abonnement.id);
+                                  setShowDeleteModal(true);
+                                }}
+                                size={isMobile ? 'small' : 'medium'}
+                              >
+                                <DeleteIcon color="error" />
+                              </IconButton>
+                            </ResponsiveActions>
+                          </ResponsiveTableCell>
+                        </TableRowComponent>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </StyledTableContainer>
+            </TableWrapper>
+          </MainContainer>
 
-  const TableRowComponent = shouldBlink ? BlinkingTableRow : StyledTableRow;
-
-  return (
-    <TableRowComponent key={abonnement.id}>
-      {/* Le reste du code reste inchangé */}
-      <TableCell>
-        {member ? `${member.firstName} ${member.lastName}` : "N/A"}
-      </TableCell>
-      <TableCell>{formatDate(abonnement.registredDate)}</TableCell>
-      <TableCell>{formatDate(abonnement.leaveDate)}</TableCell>
-      <TableCell>
-        {price ? `${price.name} (${price.timePeriod.start} ${price.timePeriod.end})` : "N/A"}
-      </TableCell>
-      <TableCell>{abonnement.payedAmount} DT</TableCell>
-      <TableCell>
-        <Box
-          sx={{
-            color: abonnement.isPayed ? 'success.main' : 'error.main',
-            fontWeight: 'bold'
-          }}
-        >
-          {abonnement.isPayed ? "Paid" : "Unpaid"}
-        </Box>
-      </TableCell>
-      <TableCell align="center">
-        <IconButton
-          onClick={() => {
-            setEditAbonnement({ 
-              ...abonnement, 
-              leaveDate: abonnement.leaveDate ? new Date(abonnement.leaveDate) : new Date() 
-            });
-            setShowDrawer(true);
-          }}
-        >
-          <EditIcon color="primary" />
-        </IconButton>
-        <IconButton
-          onClick={() => {
-            setAbonnementToDelete(abonnement.id);
-            setShowDeleteModal(true);
-          }}
-        >
-          <DeleteIcon color="error" />
-        </IconButton>
-      </TableCell>
-    </TableRowComponent>
-  );
-})}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-          {/* Delete Confirmation Dialog */}
-          <Dialog open={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
+          <Dialog 
+            open={showDeleteModal} 
+            onClose={() => setShowDeleteModal(false)}
+            fullScreen={isMobile}
+          >
             <DialogTitle>Delete Subscription</DialogTitle>
             <DialogContent>
               <DialogContentText>
@@ -402,72 +599,83 @@ const membersWithSubscriptionStatus = members.map(member => ({
             </DialogActions>
           </Dialog>
 
-          {/* Add/Edit Drawer */}
           <Drawer
-            anchor="right"
-            open={showDrawer}
-            onClose={handleCloseDrawer}
-            PaperProps={{ 
-              sx: { 
-                width: "450px", 
-                padding: "25px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "20px"
-              } 
-            }}
-          >
+  anchor="right"
+  open={showDrawer}
+  onClose={handleCloseDrawer}
+  PaperProps={{ 
+    sx: { 
+      width: isMobile ? '100%' : "450px", 
+      padding: isMobile ? theme.spacing(2) : theme.spacing(3),
+      display: "flex",
+      flexDirection: "column",
+      gap: "20px"
+    } 
+  }}
+>
             <Typography variant="h6" sx={{ mb: 3 }}>
               {editAbonnement ? "Manage Subscription" : "New Subscription"}
             </Typography>
 
             <FormControl fullWidth sx={{ mb: 0 }} error={!!errors.memberID}>
-  <InputLabel>Member *</InputLabel>
-  <Select
-    value={editAbonnement?.memberID || newAbonnement.memberID || ''}
-    onChange={(e) => {
-      const value = e.target.value as string;
-      if (editAbonnement) {
-        setEditAbonnement({ ...editAbonnement, memberID: value });
-      } else {
-        setNewAbonnement({ ...newAbonnement, memberID: value });
-      }
-    }}
-    label="Member *"
-    disabled={!!editAbonnement}
-  >
-    <MenuItem value="">Select a member</MenuItem>
-    {membersWithSubscriptionStatus.map((member) => (
-      <MenuItem 
-        key={member.id} 
-        value={member.id}
-        disabled={member.hasSubscription && !editAbonnement}
-        sx={{
-          opacity: member.hasSubscription && !editAbonnement ? 0.7 : 1,
-          fontStyle: member.hasSubscription && !editAbonnement ? 'italic' : 'normal'
-        }}
-      >
-        {member.firstName} {member.lastName}
-        {member.hasSubscription && !editAbonnement && ' (Already subscribed)'}
-      </MenuItem>
-    ))}
-  </Select>
-  {errors.memberID && <FormHelperText>{errors.memberID}</FormHelperText>}
-</FormControl>
+              <InputLabel>Member *</InputLabel>
+              <Select
+                value={editAbonnement?.memberID || newAbonnement.memberID || ''}
+                onChange={(e) => {
+                  const value = e.target.value as string;
+                  if (editAbonnement) {
+                    setEditAbonnement({ ...editAbonnement, memberID: value });
+                  } else {
+                    setNewAbonnement({ ...newAbonnement, memberID: value });
+                  }
+                }}
+                label="Member *"
+                disabled={!!editAbonnement}
+              >
+                <MenuItem value="">Select a member</MenuItem>
+                {membersWithSubscriptionStatus.map((member) => (
+                  <MenuItem 
+                    key={member.id} 
+                    value={member.id}
+                    disabled={member.hasSubscription && !editAbonnement}
+                    sx={{
+                      opacity: member.hasSubscription && !editAbonnement ? 0.7 : 1,
+                      fontStyle: member.hasSubscription && !editAbonnement ? 'italic' : 'normal'
+                    }}
+                  >
+                    {member.firstName} {member.lastName}
+                    {member.hasSubscription && !editAbonnement && ' (Already subscribed)'}
+                  </MenuItem>
+                ))}
+              </Select>
+              {errors.memberID && <FormHelperText>{errors.memberID}</FormHelperText>}
+            </FormControl>
 
             <Typography variant="subtitle1" sx={{ mb: 0 }}>
               Select Rate *
             </Typography>
             <Grid container spacing={2} sx={{ mb: 2 }}>
               {abonnementPrices.map((price) => (
-                <Grid item xs={6} key={price.id}>
+                <Grid item xs={12} sm={6} key={price.id}>
                   <PriceCard
-                    price={price}
-                    isSelected={
-                      (editAbonnement?.priceId || newAbonnement.priceId) === price.id
-                    }
+                    sx={{
+                      border: (editAbonnement?.priceId || newAbonnement.priceId) === price.id ? 
+                        '2px solid #054547' : '1px solid #ddd',
+                      backgroundColor: (editAbonnement?.priceId || newAbonnement.priceId) === price.id ? 
+                        '#f5f9f9' : '#fff',
+                    }}
                     onClick={() => handlePriceSelect(price)}
-                  />
+                  >
+                    <CardContent>
+                      <Typography variant="subtitle1" fontWeight="bold">{price.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {price.timePeriod?.start} - {price.timePeriod?.end}
+                      </Typography>
+                      <Typography variant="h6" sx={{ mt: 1 }}>
+                        {price.price} DT
+                      </Typography>
+                    </CardContent>
+                  </PriceCard>
                 </Grid>
               ))}
             </Grid>
@@ -566,7 +774,7 @@ const membersWithSubscriptionStatus = members.map(member => ({
               </Typography>
             </Box>
 
-            <Box sx={{ display: 'flex',  gap: '10px', mt: 'auto', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', gap: '10px', mt: 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
               <ActionButton
                 variant="outlined"
                 onClick={handleCloseDrawer}
@@ -577,11 +785,11 @@ const membersWithSubscriptionStatus = members.map(member => ({
                 variant="contained"
                 onClick={handleSubmit}
               >
-                {editAbonnement ? "Confirm" : "Confirm"}
+                {editAbonnement ? "Update" : "Create"}
               </SubmitButton>
             </Box>
           </Drawer>
-        </Box>
+        </PageContainer>
       </DashboardLayout>
     </ProtectedRoute>
   );

@@ -23,6 +23,7 @@ interface IBulkActions {
   refetch?: () => void;
   toDay?: Date;
   handleChangeDate?: (date: Date | null) => void;
+  isMobile?: boolean;
 }
 
 const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search, refetch, toDay, handleChangeDate }) => {

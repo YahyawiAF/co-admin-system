@@ -1,5 +1,5 @@
 import { SidebarItemsType } from "../../types/sidebar";
-import { Sliders, User, Activity, Settings, DollarSign ,Users } from "react-feather"; 
+import { Sliders, User, Activity, Settings, DollarSign ,Users, CreditCard } from "react-feather"; 
 
 const pagesSection = [
   {
@@ -19,8 +19,8 @@ const pagesSection = [
   },
   {
     href: "/dashboard/abonnement",
-    icon: Users,
-    title: "Membership",
+    icon: CreditCard,
+    title: "Subscription",
   },
   {
     href: "",

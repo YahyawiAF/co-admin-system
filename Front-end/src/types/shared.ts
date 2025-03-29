@@ -173,7 +173,7 @@ export interface Abonnement {
   isPayed: boolean;
   registredDate: Date;
   leaveDate?: Date | null;
-  stayedPeriode?: Date | null;
+  stayedPeriode?:  string | null;
   payedAmount: number;
   memberID?: string | null;
   member?: Member | null;

@@ -26,7 +26,7 @@ export class AbonnementEntity  {
   leaveDate: Date | null;
 
   @ApiProperty()
-  stayedPeriode: Date | null;
+  stayedPeriode: string;
 
   @ApiProperty()
   payedAmount: number;

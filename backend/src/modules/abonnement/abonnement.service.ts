@@ -88,9 +88,7 @@ export class AbonnementService {
 
   async findMany({
     where,
-    orderBy = {
-      id: 'desc',
-    },
+    orderBy = { id: 'desc' },
     page,
     perPage = 20,
   }: {
@@ -98,25 +96,20 @@ export class AbonnementService {
     orderBy?: Prisma.AbonnementOrderByWithRelationInput;
     page?: number;
     perPage: number;
-  }): Promise<PaginatedResult<Abonnement>> {
+  }): Promise<PaginatedResult<AbonnementEntity & { stayedPeriode: string }>> {
     const paginate = createPaginator({ perPage });
     const paginatedResult = await paginate(
       this.prisma.abonnement,
       {
         where,
         orderBy,
-        include: {
-          members: true,
-          price: true,
-        },
+        include: { members: true, price: true },
       },
-      {
-        page,
-      },
+      { page },
     );
-
+  
     return {
-      data: paginatedResult.data.map((abonnement) => new AbonnementEntity(abonnement)),
+      data: paginatedResult.data.map(abonnement => new AbonnementEntity(abonnement)),
       meta: paginatedResult.meta,
     };
   }

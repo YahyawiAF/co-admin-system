@@ -16,6 +16,7 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = (props) => {
     rowCount,
     onRequestSort,
     headCells,
+    
   } = props;
   const createSortHandler = (property: string) => (event: any) => {
     onRequestSort(event, property);

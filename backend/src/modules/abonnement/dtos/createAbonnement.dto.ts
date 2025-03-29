@@ -9,6 +9,7 @@ import {
   IsOptional,
  
 } from 'class-validator';
+import { PaginatedResult } from 'prisma-pagination';
 
 export class AddAbonnementDto {
   @IsNotEmpty()
@@ -40,19 +41,17 @@ export class AddAbonnementDto {
   @ApiProperty()
   public isPayed: boolean;
 
-  @IsNotEmpty()
   @IsBoolean()
   @ApiProperty()
   public isReservation: boolean;
   @IsNotEmpty()
-  @IsDate()
-  @Type(() => Date)
   @IsOptional()
   @ApiProperty()
-  stayedPeriode: Date | null;
+  stayedPeriode: string;
 
   @IsNotEmpty()
   @IsNumber()
   @ApiProperty()
   public payedAmount: number;
 }
+
