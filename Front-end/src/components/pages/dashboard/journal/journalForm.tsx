@@ -536,12 +536,14 @@ const PriceCard: FC<{
       }}
     >
       <CardContent>
-        <Typography variant="subtitle1" fontWeight="bold">
-          {price.name}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {price.timePeriod.start} - {price.timePeriod.end}
-        </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="subtitle1" fontWeight="bold">
+            {price.name}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            ({price.timePeriod.start}-{price.timePeriod.end})
+          </Typography>
+        </Box>
         <Typography variant="h6" sx={{ mt: 1 }}>
           {price.price} DT
         </Typography>

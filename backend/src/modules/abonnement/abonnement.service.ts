@@ -43,6 +43,10 @@ export class AbonnementService {
         );
       }
 
+    // Update user plan 
+    //   const updatedUser = await this.prisma.member.update({
+     
+
       return await this.prisma.abonnement.create({
         data: {
           memberID: createAbonnementDto.memberID,
@@ -51,7 +55,8 @@ export class AbonnementService {
           isPayed: createAbonnementDto.isPayed,
           isReservation: createAbonnementDto.isReservation,
           payedAmount: createAbonnementDto.payedAmount,
-          stayedPeriode: createAbonnementDto.stayedPeriode,
+          stayedPeriode: createAbonnementDto.stayedPeriode, // fornt end calculate leave time
+         
           priceId: priceId,
         },
         include: {
