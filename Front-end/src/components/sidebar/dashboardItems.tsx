@@ -9,19 +9,15 @@ const pagesSection = [
   },
   {
     href: "/dashboard/journal",
-    icon: Activity,
-    title: "Journal",
+    icon: CreditCard,
+    title: "Subscription",
   },
   {
     href: "/dashboard/members",
     icon: User,
     title: "Members",
   },
-  {
-    href: "/dashboard/abonnement",
-    icon: CreditCard,
-    title: "Subscription",
-  },
+  
   {
     href: "",
     icon: Settings,

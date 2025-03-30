@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useTheme } from '@mui/material/styles';
 import { PersonAdd } from "@mui/icons-material";
+
 import {
   useGetAbonnementsQuery,
   useCreateAbonnementMutation,
@@ -59,6 +60,7 @@ import TableHeadAction from "../../components/Table/members/TableHeader";
 
 
 import UserForm from "src/components/pages/dashboard/members/UserForm";
+import { HeadCell } from "src/types/table";
 
 // Styles responsives
 const PageContainer = styled(Box)(({ theme }) => ({
@@ -268,55 +270,55 @@ const AbonnementComponent = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
-  const headCells = [
+  const headCells: Array<HeadCell> = [
     {
       id: 'member',
       numeric: false,
       disablePadding: true,
       label: 'Member',
-      alwaysVisible: true,
+     
     },
     {
       id: 'registredDate',
       numeric: false,
       disablePadding: false,
       label: 'Registered Date',
-      alwaysVisible: true,
+      
     },
     {
       id: 'leaveDate',
       numeric: false,
       disablePadding: false,
       label: 'Leave Date',
-      alwaysVisible: true,
+     
     },
     {
       id: 'Stayed Periode',
       numeric: false,
       disablePadding: false,
       label: 'Stayed Periode',
-      alwaysVisible: false,
+      
     },
     {
       id: 'payedAmount',
       numeric: false,
       disablePadding: false,
       label: 'Paid Amount',
-      alwaysVisible: false,
+     
     },
     {
       id: 'status',
       numeric: false,
       disablePadding: false,
       label: 'Status',
-      alwaysVisible: false,
+      
     },
     {
       id: 'actions',
       numeric: false,
       disablePadding: false,
       label: 'Actions',
-      alwaysVisible: false,
+      alignment: "right",
     },
   ];
 
@@ -546,9 +548,8 @@ const AbonnementComponent = () => {
     );
   return (
     <ProtectedRoute>
-      <DashboardLayout>
+     
         <PageContainer>
-          <Typography variant="h4" sx={{ mb: 2 }}>Subscription Management</Typography>
           
           <MainContainer>
             <TableHeadAction
@@ -948,7 +949,7 @@ const AbonnementComponent = () => {
   />
 </Drawer>
         </PageContainer>
-      </DashboardLayout>
+    
     </ProtectedRoute>
   );
 };

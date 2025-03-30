@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-
 import {
   Checkbox,
   Grid,
@@ -51,6 +50,7 @@ import JournalDetails from "src/components/pages/dashboard/journal/JournalDetail
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import Abonnement from "./abonnement";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -263,13 +263,15 @@ function JournalPage() {
     <React.Fragment>
       <Helmet title="Transactions" />
       <Tabs
-        value={value}
-        onChange={handleChange}
-        aria-label="basic tabs example"
-      >
-        <LinkTab label="Journal" {...a11yProps(0)} />
-        <LinkTab label="Overview" {...a11yProps(1)} />
-      </Tabs>
+  value={value}
+  onChange={handleChange}
+  aria-label="basic tabs example"
+>
+<LinkTab label="Journal" {...a11yProps(0)} />
+  <LinkTab label="Membership" {...a11yProps(1)} />
+  <LinkTab label="Overview" {...a11yProps(2)} />
+  
+</Tabs>
 
       <Divider my={6} />
       <TabPanel value={value} index={0} title={"List"}>
@@ -424,14 +426,18 @@ function JournalPage() {
           </Grid>
         </Grid>
       </TabPanel>
-      <TabPanel value={value} index={1} title={"Card"}>
-        <JournalDetails
-          journals={rows}
-          isLoading={isLoading}
-          errorMemberReq={!!error}
-        />
-      </TabPanel>
-    </React.Fragment>
+      <TabPanel value={value} index={1} title={"Membership"}>
+  <Abonnement />
+</TabPanel>
+
+<TabPanel value={value} index={2} title={"Overview"}>
+  <JournalDetails
+    journals={rows}
+    isLoading={isLoading}
+    errorMemberReq={!!error}
+  />
+</TabPanel>
+      </React.Fragment>
     </ProtectedRoute>
   );
 }
