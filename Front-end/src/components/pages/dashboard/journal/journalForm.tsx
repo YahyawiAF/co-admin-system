@@ -150,74 +150,76 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   }, [pricesList]);
 
   const parseTimeToMinutes = (timeStr: string): number => {
-    if (!timeStr.includes('h')) return 0;
+    if (!timeStr) return 0;
     
+    // Gérer les formats "1h", "1h30", "2h00", etc.
     const [hoursStr, minutesStr] = timeStr.split('h');
     const hours = parseInt(hoursStr) || 0;
     const minutes = parseInt(minutesStr) || 0;
     
     return hours * 60 + minutes;
   };
-
   const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
     if (!journalPrices || journalPrices.length === 0) return null;
     
-    const diffInMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
+    const realDurationMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
     
-    // Trier les prix par durée croissante
+    // Trier les prix par durée maximale croissante
     const sortedPrices = [...journalPrices].sort((a, b) => {
-      const aStart = parseTimeToMinutes(a.timePeriod.start);
-      const bStart = parseTimeToMinutes(b.timePeriod.start);
-      return aStart - bStart;
+      const aMax = parseTimeToMinutes(a.timePeriod.end);
+      const bMax = parseTimeToMinutes(b.timePeriod.end);
+      return aMax - bMax;
     });
-
-    // Trouver le tarif correspondant avec marge de 15 minutes
-    for (let i = 0; i < sortedPrices.length; i++) {
-      const price = sortedPrices[i];
-      const start = parseTimeToMinutes(price.timePeriod.start);
-      let end = parseTimeToMinutes(price.timePeriod.end);
+  
+    // Variable pour stocker le tarif correspondant
+    let matchingPrice = null;
+  
+    for (const price of sortedPrices) {
+      const priceMax = parseTimeToMinutes(price.timePeriod.end);
       
-      // Ajouter 15 minutes à la limite supérieure sauf pour le dernier tarif
-      if (i < sortedPrices.length - 1) {
-        end += 15;
-      }
-      
-      if (diffInMinutes >= start && (i === sortedPrices.length - 1 ? diffInMinutes >= end : diffInMinutes < end)) {
-        return price;
+      // On considère le tarif valable si la durée est inférieure ou égale à sa limite +15min
+      if (realDurationMinutes <= priceMax + 15) {
+        matchingPrice = price;
+        break; // On prend le premier tarif qui correspond
       }
     }
-
-    return sortedPrices[sortedPrices.length - 1]; // Retourner le dernier tarif par défaut
+  
+    // Si aucun tarif ne correspond (durée très longue), retourner le tarif maximum
+    return matchingPrice || sortedPrices[sortedPrices.length - 1];
   };
-
+  
   React.useEffect(() => {
     if (journalPrices && registredTime && leaveTime) {
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
-
+  
       if (matchingPrice) {
         setValue("priceId", matchingPrice.id);
         setValue("payedAmount", isPayed ? matchingPrice.price : 0);
         
-        // Calculer le temps restant avant le prochain tarif
-        const currentDuration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
-        const priceEnd = parseTimeToMinutes(matchingPrice.timePeriod.end);
-        const minutesLeft = priceEnd - currentDuration;
+        const priceMaxDuration = parseTimeToMinutes(matchingPrice.timePeriod.end);
+        const realDurationMinutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
         
-        // Afficher une alerte si on approche de la limite
-        if (minutesLeft <= 15 && minutesLeft > -15) {
-          setTarifAlert({
-            show: true,
-            message: `Tarif actuel: ${matchingPrice.timePeriod.start}-${matchingPrice.timePeriod.end} (${matchingPrice.price} DT)`
-          });
+        // Afficher une alerte si on dépasse la durée nominale du tarif (sans les 15 minutes)
+        if (realDurationMinutes > priceMaxDuration) {
+          // Trouver le tarif suivant (le premier dont la durée minimale est supérieure à notre durée max)
+          const nextPrice = journalPrices.find(p => 
+            parseTimeToMinutes(p.timePeriod.start) > priceMaxDuration
+          );
+          
+          if (nextPrice) {
+            setTarifAlert({
+              show: true,
+               message: `Rate overrun: ${realDurationMinutes - priceMaxDuration} min (grace period). Next rate: ${nextPrice.timePeriod.start}-${nextPrice.timePeriod.end}`
+            });
+          }
         } else {
           setTarifAlert({show: false, message: ''});
         }
       }
     }
   }, [registredTime, leaveTime, journalPrices, setValue, isPayed]);
-
   const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
