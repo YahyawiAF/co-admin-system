@@ -54,4 +54,3 @@ export class AddAbonnementDto {
   @ApiProperty()
   public payedAmount: number;
 }
-

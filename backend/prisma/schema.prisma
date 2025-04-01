@@ -83,7 +83,6 @@ model Abonnement {
   registredDate DateTime
   leaveDate     DateTime?
   stayedPeriode String?
-
   payedAmount   Float
   createdAt     DateTime? @default(now())
   updatedAt     DateTime? @updatedAt @db.Timestamp(6)

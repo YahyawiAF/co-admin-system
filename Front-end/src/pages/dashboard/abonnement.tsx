@@ -46,11 +46,10 @@ import {
   Checkbox,
   useMediaQuery,
   Theme,
-  Autocomplete,
+ 
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DatePicker } from "@mui/x-date-pickers";
-import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
@@ -134,6 +133,11 @@ const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
     '&:nth-of-type(5)': { display: 'none' },
     '&:nth-of-type(6)': { display: 'none' },
     '&:nth-of-type(7)': { width: '30%' },
+  },
+  // Ajoutez cette partie pour forcer l'alignement à droite pour la colonne actions
+  '&[data-align="right"]': {
+    textAlign: 'right',
+    justifyContent: 'flex-end',
   },
 }));
 
@@ -300,6 +304,12 @@ const AbonnementComponent = () => {
       
     },
     {
+      id: 'remainingTime',
+      numeric: false,
+      disablePadding: false,
+      label: 'Remaining Time',
+    },
+    {
       id: 'payedAmount',
       numeric: false,
       disablePadding: false,
@@ -313,12 +323,14 @@ const AbonnementComponent = () => {
       label: 'Status',
       
     },
+    
+    
     {
       id: 'actions',
       numeric: false,
       disablePadding: false,
       label: 'Actions',
-      alignment: "right",
+      alignment: "center",
     },
   ];
 
@@ -534,7 +546,62 @@ const AbonnementComponent = () => {
       setNewAbonnement({ ...newAbonnement, memberID: member.id });
     }
   };
- 
+  const calculateRemainingTime = (leaveDate: Date | string | null) => {
+    if (!leaveDate) return "N/A";
+    
+    try {
+      const endDate = new Date(leaveDate);
+      const now = new Date();
+      
+      // Si la date est déjà passée
+      if (endDate < now) return "Expired";
+      
+      // Calcul de la différence en millisecondes
+      const diffMs = endDate.getTime() - now.getTime();
+      
+      // Calcul des différentes unités de temps
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      
+      // Formatage du résultat
+      if (diffDays > 30) {
+        const months = Math.floor(diffDays / 30);
+        const remainingDays = diffDays % 30;
+        return `${months} month(s) ${remainingDays} day(s)`;
+      } else if (diffDays > 7) {
+        const weeks = Math.floor(diffDays / 7);
+        const remainingDays = diffDays % 7;
+        return `${weeks} week(s) ${remainingDays} day(s)`;
+      } else if (diffDays > 0) {
+        return `${diffDays} day(s) ${diffHours} hour(s)`;
+      } else {
+        return `${diffHours} hour(s) ${diffMinutes} minute(s)`;
+      }
+    } catch (e) {
+      return "Invalid date";
+    }
+  };
+  
+  const getRemainingTimeStyle = (leaveDate: Date | string | null, theme: any) => {
+    if (!leaveDate) return {};
+    
+    try {
+      const endDate = new Date(leaveDate);
+      const now = new Date();
+      const diffDays = Math.floor((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 0) {
+        return { color: theme.palette.error.main, fontWeight: 'bold' };
+      } else if (diffDays <= 3) {
+        return { color: theme.palette.warning.main, fontWeight: 'bold' };
+      }
+      return { color: theme.palette.success.main };
+    } catch (e) {
+      return {};
+    }
+  };
+  
   
   if (openUserForm)
     return (
@@ -608,12 +675,18 @@ const AbonnementComponent = () => {
                           </ResponsiveTableCell>
                           <ResponsiveTableCell>
                             {formatDate(abonnement.leaveDate)}
-                          </ResponsiveTableCell>
-                          {!isMobile && (
-                            <>
+                            </ResponsiveTableCell>
+                        {!isMobile && (
+                          <>
+                          
                               <ResponsiveTableCell>
                                 {price ? `${price.name} (${price.timePeriod.start} ${price.timePeriod.end})` : "N/A"}
                               </ResponsiveTableCell>
+                              {abonnement.leaveDate && (
+  <ResponsiveTableCell sx={getRemainingTimeStyle(abonnement.leaveDate, theme)}>
+    {calculateRemainingTime(abonnement.leaveDate)}
+  </ResponsiveTableCell>
+)}
                               <ResponsiveTableCell>
                                 {abonnement.payedAmount } DT
                               </ResponsiveTableCell>
@@ -627,6 +700,7 @@ const AbonnementComponent = () => {
                                   {abonnement.isPayed ? "Paid" : "Unpaid"}
                                 </Box>
                               </ResponsiveTableCell>
+                              
                             </>
                           )}
                           <ResponsiveTableCell align={isMobile ? 'right' : 'center'}>
