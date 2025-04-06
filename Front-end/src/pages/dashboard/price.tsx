@@ -277,7 +277,6 @@ const PriceComponent: React.FC = () => {
       id: 'actions',
       numeric: false,
       disablePadding: false,
-      
       label: 'Actions',
       alwaysVisible: false,
     },
