@@ -13,9 +13,9 @@ import { EventsModule } from 'src/modules/webSocket/events.module';
 import { JournalModule } from 'src/modules/journal/journal.modal';
 import { MemberModule } from 'src/modules/member/member.module';
 import { PriceModule } from './modules/price/price.module';
-import { SecurityMiddleware } from 'common/guards/securityMiddleware';
 import { PrismaService } from 'database/prisma.service';
 import { AbonnementModule } from './modules/abonnement/abonnement.module';
+import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
 
 @Module({
   imports: [

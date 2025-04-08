@@ -39,4 +39,6 @@ export class UserEntity implements User {
   password: string;
   @ApiProperty()
   resetPasswordToken :string;
+  @ApiProperty()
+  phoneNumber: string;
 }

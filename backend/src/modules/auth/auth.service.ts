@@ -1,7 +1,9 @@
 import {
+    BadRequestException,
     ForbiddenException,
     Injectable,
     InternalServerErrorException,
+    Logger,
     NotFoundException,
     UnauthorizedException,
   } from '@nestjs/common';
@@ -12,6 +14,7 @@ import {
   import { ConfigService } from '@nestjs/config';
   import { MailerService } from '@nestjs-modules/mailer';
   import { Role } from '@prisma/client'; // Assurez-vous d'importer Role depuis Prisma
+import { isEmail, isMobilePhone } from 'class-validator';
   
   const roundsOfHashing = 10;
   
@@ -27,99 +30,164 @@ import {
     /**
      * Inscription d'un nouvel utilisateur
      */
-    async signUp(email: string, password: string, fullname: string): Promise<AuthEntity> {
-      const existingUser = await this.prisma.user.findUnique({ where: { email } });
-  
-      if (existingUser) {
-        throw new ForbiddenException('Email already in use');
+    async signUp(
+        identifier: string,
+        password: string,
+        fullname: string,
+        role: Role = Role.USER
+      ): Promise<AuthEntity> {
+        // Validate identifier format
+        if (!isEmail(identifier) && !isMobilePhone(identifier)) {
+          throw new BadRequestException('Please enter a valid email address or phone number');
+        }
+      
+        // Clean the identifier
+        const isIdentifierEmail = isEmail(identifier);
+        const cleanIdentifier = isIdentifierEmail
+          ? identifier.toLowerCase().trim()
+          : identifier.replace(/\s+/g, '');
+      
+        // Check password strength (optional)
+        if (password.length < 8) {
+          throw new BadRequestException('Password must be at least 8 characters long');
+        }
+      
+        // Check if identifier already exists
+        const existingUser = await this.prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: isIdentifierEmail ? cleanIdentifier : undefined },
+              { phoneNumber: !isIdentifierEmail ? cleanIdentifier : undefined }
+            ]
+          }
+        });
+      
+        if (existingUser) {
+          if (isIdentifierEmail) {
+            throw new ForbiddenException('This email address is already registered');
+          } else {
+            throw new ForbiddenException('This phone number is already registered');
+          }
+        }
+      
+        try {
+          const hashedPassword = await this.hashData(password);
+          const user = await this.prisma.user.create({
+            data: {
+              email: isIdentifierEmail ? cleanIdentifier : null,
+              phoneNumber: !isIdentifierEmail ? cleanIdentifier : null,
+              password: hashedPassword,
+              fullname: fullname.trim(),
+              role,
+            },
+          });
+      
+          const tokens = await this.getTokens(user.id, user.email, user.role);
+          await this.updateRefreshToken(user.id, tokens.refreshToken);
+      
+          return {
+            ...tokens,
+            id: user.id,
+            email: user.email,
+            phoneNumber: user.phoneNumber,
+            fullname: user.fullname,
+            role: user.role,
+          };
+        } catch (error) {
+          this.logger.error(`Signup failed: ${error.message}`);
+          throw new InternalServerErrorException('Registration failed. Please try again later.');
+        }
       }
-  
-      const hashedPassword = await this.hashData(password);
-  
-      const user = await this.prisma.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          fullname,
-          role: Role.USER, // Définir le rôle par défaut
-        },
-      });
-  
-      // Générer les tokens avec le rôle inclus
-      const tokens = await this.getTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
-  
-      return {
-        email: user.email,
-        id: user.id,
-        fullname: user.fullname,
-        role: user.role,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      };
-    }
-  
+      private readonly logger = new Logger(AuthService.name);
+    
+
     /**
      * Connexion d'un utilisateur
      */
-    async login(email: string, password: string): Promise<AuthEntity> {
-      const user = await this.prisma.user.findUnique({ where: { email } });
-  
-      if (!user) {
-        throw new NotFoundException(`No user found for email: ${email}`);
+    async login(identifier: string, password: string): Promise<AuthEntity> {
+        // First validate the identifier format
+        if (!isEmail(identifier) && !isMobilePhone(identifier)) {
+          throw new BadRequestException('Please enter a valid email address or phone number');
+        }
+      
+        // Clean the identifier
+        const isIdentifierEmail = isEmail(identifier);
+        const cleanIdentifier = isIdentifierEmail
+          ? identifier.toLowerCase().trim()
+          : identifier.replace(/\s+/g, '');
+      
+        // Find user by email or phoneNumber
+        const user = await this.prisma.user.findFirst({
+          where: {
+            OR: [
+              { email: isIdentifierEmail ? cleanIdentifier : undefined },
+              { phoneNumber: !isIdentifierEmail ? cleanIdentifier : undefined }
+            ]
+          }
+        });
+      
+        if (!user) {
+          if (isIdentifierEmail) {
+            throw new NotFoundException('No account found with this email address');
+          } else {
+            throw new NotFoundException('No account found with this phone number');
+          }
+        }
+      
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
+          throw new UnauthorizedException('The password you entered is incorrect');
+        }
+      
+        try {
+          const tokens = await this.getTokens(user.id, user.email, user.role);
+          await this.updateRefreshToken(user.id, tokens.refreshToken);
+      
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { accessToken: tokens.accessToken },
+          });
+      
+          return {
+            ...tokens,
+            id: user.id,
+            email: user.email,
+            fullname: user.fullname,
+            phoneNumber: user.phoneNumber,
+            role: user.role,
+          };
+        } catch (error) {
+          this.logger.error(`Login failed: ${error.message}`);
+          throw new InternalServerErrorException('Login failed. Please try again later.');
+        }
       }
-  
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        throw new UnauthorizedException('Invalid password');
-      }
-  
-      // Générer les tokens avec le rôle inclus
-      const tokens = await this.getTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
-  
-      // Stocker le accessToken dans la base de données
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { accessToken: tokens.accessToken },
-      });
-  
-      return {
-        email: user.email,
-        role: user.role,
-        id: user.id,
-        fullname: user.fullname || '',
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      };
-    }
   
     /**
      * Rafraîchir les tokens
      */
     async refreshTokens(userId: string, refreshToken: string): Promise<AuthEntity> {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-  
-      if (!user || !user.refreshToken) {
-        throw new ForbiddenException('Access Denied');
+        const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      
+        if (!user || !user.refreshToken) {
+          throw new ForbiddenException('Access Denied');
+        }
+      
+        const refreshTokenMatches = await bcrypt.compare(refreshToken, user.refreshToken);
+        if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
+      
+        const tokens = await this.getTokens(user.id, user.email, user.role);
+        await this.updateRefreshToken(user.id, tokens.refreshToken);
+      
+        return {
+          ...tokens,
+          id: user.id,
+          email: user.email,
+          fullname: user.fullname,
+          phoneNumber: user.phoneNumber, // Ajouté
+          role: user.role,
+        };
       }
-  
-      const refreshTokenMatches = await bcrypt.compare(refreshToken, user.refreshToken);
-      if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
-  
-      // Générer les nouveaux tokens avec le rôle inclus
-      const tokens = await this.getTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
-  
-      return {
-        fullname:user.fullname,
-        email: user.email,
-        role: user.role,
-        id: user.id,
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-      };
-    }
   
     /**
      * Déconnexion d'un utilisateur

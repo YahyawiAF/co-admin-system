@@ -3,10 +3,10 @@ import { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { Paper, Typography, Button, TextField, CircularProgress } from "@mui/material";
-import Swal from "sweetalert2"; // Import SweetAlert2
+import Swal from "sweetalert2";
 
 import AuthLayout from "../../layouts/Auth";
-import { useSignUpMutation } from "../../api/auth.repo";  // Import the mutation
+import { useSignUpMutation } from "../../api/auth.repo";
 
 import Logo from "../../vendor/logo.svg";
 
@@ -26,53 +26,80 @@ const Wrapper = styled(Paper)`
 `;
 
 function SignUp() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [fullname, setFullname] = useState("");
+  const [isPhone, setIsPhone] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
 
   const [signUp, { isLoading, isError, error }] = useSignUpMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // Vérifier que les mots de passe correspondent
+    if (password !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+
     try {
-      await signUp({ email, password, fullname }).unwrap();
+      await signUp({ identifier, password, fullname }).unwrap();
       
-      // Show SweetAlert on successful sign-up
       Swal.fire({
         title: "Success!",
         text: "You have successfully signed up.",
         icon: "success",
         confirmButtonText: "Go to Sign In",
       }).then(() => {
-        // Use window.location to redirect to the sign-in page
-        window.location.href = "/auth/sign-in";  // Redirection sans `useNavigate`
+        window.location.href = "/auth/sign-in";
       });
     } catch (err) {
       console.error("Signup error:", err);
 
-      // Show SweetAlert on failed sign-up
       Swal.fire({
         title: "Failed!",
-        text: "An error occurred during sign up. Please try again.",
+        text: getErrorMessage(),
         icon: "error",
         confirmButtonText: "OK",
       });
     }
   };
 
-  // Determine the error message based on the error type
   const getErrorMessage = () => {
     if (isError && error) {
-      if (error && 'data' in error && typeof error.data === 'string') {
-        return error.data; // Backend error message
+      if ('data' in error && typeof error.data === 'string') {
+        return error.data;
       }
-      if (error && 'message' in error) {
-        return error.message; // Generic error message
+      if ('message' in error) {
+        return error.message;
       }
     }
-
     return "An error occurred during sign up.";
+  };
+
+  const handleIdentifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setIdentifier(value);
+    // Détecter si c'est un email ou un numéro de téléphone
+    setIsPhone(!value.includes('@') && /[0-9]/.test(value));
+  };
+
+  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPassword(e.target.value);
+    // Effacer l'erreur lorsque l'utilisateur modifie le mot de passe
+    if (passwordError && e.target.value === confirmPassword) {
+      setPasswordError("");
+    }
+  };
+
+  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setConfirmPassword(e.target.value);
+    // Effacer l'erreur lorsque l'utilisateur modifie la confirmation
+    if (passwordError && e.target.value === password) {
+      setPasswordError("");
+    }
   };
 
   return (
@@ -98,13 +125,14 @@ function SignUp() {
             required
           />
           <TextField
-            label="Email"
+            label={isPhone ? "Phone Number " : "Email or Phone Number"}
             variant="outlined"
             fullWidth
             margin="normal"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={identifier}
+            onChange={handleIdentifierChange}
             required
+            type={isPhone ? "tel" : "text"}
           />
           <TextField
             label="Password"
@@ -113,8 +141,20 @@ function SignUp() {
             margin="normal"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={handlePasswordChange}
             required
+          />
+          <TextField
+            label="Confirm Password"
+            variant="outlined"
+            fullWidth
+            margin="normal"
+            type="password"
+            value={confirmPassword}
+            onChange={handleConfirmPasswordChange}
+            required
+            error={!!passwordError}
+            helperText={passwordError}
           />
 
           <Button

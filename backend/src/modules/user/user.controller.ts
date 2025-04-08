@@ -109,7 +109,7 @@ export class UsersController {
 
   @Post('changePassword')
   @ApiOkResponse({ type: AuthEntity })
-  changePassword(@Body() { email, password }: LoginDto) {
-    return this.usersService.changePassword(email, password);
+  changePassword(@Body() { identifier, password }: LoginDto) {
+    return this.usersService.changePassword(identifier, password);
   }
 }

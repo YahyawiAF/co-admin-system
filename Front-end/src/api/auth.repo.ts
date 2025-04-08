@@ -2,15 +2,13 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { API_URL } from "../config/axios";  // Assurez-vous que cette constante contient l'URL de votre backend
 import { User } from "src/types/shared";
 
-// Définir les types des paramètres (par exemple pour le login et signup)
 interface LoginParams {
-  email: string;
+  identifier: string; // Peut être email ou numéro de téléphone
   password: string;
-  
 }
 
 interface SignUpParams {
-  email: string;
+  identifier: string; // Peut être email ou numéro de téléphone
   password: string;
   fullname: string;
 }
@@ -21,22 +19,22 @@ export const authServerApi = createApi({
   baseQuery: fetchBaseQuery({ baseUrl: API_URL }),
   tagTypes: ["authApi"],
   endpoints: (builder) => ({
-    // Endpoint de login
+    // Endpoint de login modifié
     login: builder.mutation<User, LoginParams>({
-      query: ({ email, password }) => ({
+      query: ({ identifier, password }) => ({
         url: "auth/login",
         method: "POST",
-        body: { email, password },
+        body: { identifier, password }, // Utilisez identifier au lieu de email
       }),
       invalidatesTags: ["authApi"],
     }),
 
-    // Endpoint d'inscription
+    // Endpoint d'inscription modifié
     signUp: builder.mutation<User, SignUpParams>({
-      query: ({ email, password, fullname }) => ({
+      query: ({ identifier, password, fullname }) => ({
         url: "auth/signup",
         method: "POST",
-        body: { email, password, fullname },
+        body: { identifier, password, fullname }, // Utilisez identifier au lieu de email
       }),
       invalidatesTags: ["authApi"],
     }),

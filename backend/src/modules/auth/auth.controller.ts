@@ -24,16 +24,20 @@ import {
     constructor(private readonly authService: AuthService) {}
   
     @Post('login')
-    @ApiOkResponse({ type: AuthEntity })
-    login(@Body() { email, password }: LoginDto) {
-      return this.authService.login(email, password);
-    }
-  
-    @Post('signup')
-    @ApiOkResponse({ type: AuthEntity })
-    signUp(@Body() signUpDto: SignUpDto) {
-      return this.authService.signUp(signUpDto.email, signUpDto.password, signUpDto.fullname);
-    }
+  @ApiOkResponse({ type: AuthEntity })
+  login(@Body() { identifier, password }: LoginDto) {
+    return this.authService.login(identifier, password);
+  }
+
+  @Post('signup')
+  @ApiOkResponse({ type: AuthEntity })
+  signUp(@Body() signUpDto: SignUpDto) {
+    return this.authService.signUp(
+      signUpDto.identifier,
+      signUpDto.password,
+      signUpDto.fullname
+    );
+  }
   
     @UseGuards(RefreshTokenGuard)
     @Get('refresh')

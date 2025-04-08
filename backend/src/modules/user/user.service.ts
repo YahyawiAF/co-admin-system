@@ -123,6 +123,7 @@ export class UsersService {
         id: user.id,
         accessToken: null,
         refreshToken: null,
+        phoneNumber:user.phoneNumber,
       };
     } catch (error) {
       // Handle errors from the asynchronous operation

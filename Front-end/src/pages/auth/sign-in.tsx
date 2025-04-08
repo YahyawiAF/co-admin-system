@@ -30,18 +30,18 @@ const BigAvatar = styled(Avatar)`
 `;
 
 function SignIn() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false); // État pour "Remember Me"
   const [login, { isLoading, isError, error }] = useLoginMutation(); // Utiliser le hook
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const user = await login({ email, password, }).unwrap();
+      const user = await login({ identifier, password, }).unwrap();
       
       // Si la connexion réussit, stockez le token et le nom d'utilisateur dans sessionStorage
       sessionStorage.setItem("accessToken", user.accessToken); // Remplacez `user.token` par le nom exact du token dans la réponse
-      sessionStorage.setItem("username", user.email); // Remplacez `user.fullname` par le nom exact de l'utilisateur dans la réponse
+      sessionStorage.setItem("username", user.fullname ?? "");
       
       // Afficher un message de succès avec SweetAlert2
       Swal.fire({
@@ -93,12 +93,12 @@ function SignIn() {
 
         <form onSubmit={handleSubmit}>
           <TextField
-            label="Email"
+            label="Email or Phone Number"
             variant="outlined"
             fullWidth
             margin="normal"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             required
           />
           <TextField

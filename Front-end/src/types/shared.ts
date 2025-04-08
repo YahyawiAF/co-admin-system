@@ -115,6 +115,7 @@ export interface User {
   accessToken:string;
   role: Role;
   resetPasswordToken :string;
+  phoneNumber:string;
 
 }
 
