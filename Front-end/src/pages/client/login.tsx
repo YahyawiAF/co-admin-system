@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
+import { useLoginMutation } from 'src/api/auth.repo';
+import Swal from 'sweetalert2';
 
 const SignInPage: React.FC = () => {
+  const [login, { isLoading }] = useLoginMutation();
   const [formData, setFormData] = useState({
-    email: '',
-    password:'',
-    repeatPassword: '',
+    identifier: '',
+    password: '',
+    
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,17 +20,54 @@ const SignInPage: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Logique de connexion
-    console.log(formData);
-  };
+  
+    try {
+      const user = await login({
+        identifier: formData.identifier,
+        password: formData.password
+      }).unwrap();
+
+      if (user.role === 'USER') {
+        sessionStorage.setItem("accessToken", user.accessToken); 
+        sessionStorage.setItem("username", user.fullname ?? "");
+        sessionStorage.setItem("Role", user.role);
+
+        // Notification de connexion réussie
+        await Swal.fire({
+          icon: 'success',
+          title: 'Connexion réussie !',
+          text: 'Redirection en cours...',
+          timer: 2000,
+          showConfirmButton: false
+        });
+
+        window.location.href = '/client/account';
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Accès refusé',
+          text: 'Vous n\'avez pas les autorisations nécessaires pour accéder à cette page.',
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la connexion:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Échec de la connexion',
+        text: 'Identifiants incorrects ou accès non autorisé',
+      });
+    }
+  }
+  
 
   return (
     <>
       <Head>
         <title>Sign In</title>
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" />
       </Head>
 
       <div className="main">
@@ -36,20 +76,20 @@ const SignInPage: React.FC = () => {
             <div className="signin-form">
               <h2 className="form-title">Sign in</h2>
               <form onSubmit={handleSubmit} className="register-form" id="login-form">
-                <div className="form-group">
-                  <label htmlFor="email" className="material-icons-name">
-                    <i className="zmdi zmdi-email"></i>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    id="email"
-                    placeholder="Email or Phone Number"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+              <div className="form-group">
+  <label htmlFor="identifier" className="material-icons-name"> {/* Changé de email à identifier */}
+    <i className="zmdi zmdi-email"></i>
+  </label>
+  <input
+    type="text" // Changé de email à text
+    name="identifier" // Nom modifié
+    id="identifier"
+    placeholder="Email or Phone Number"
+    value={formData.identifier} // Gardez la même valeur si vous voulez garder le state actuel
+    onChange={handleChange}
+    required
+  />
+</div>
 
                 <div className="form-group">
                   <label htmlFor="password" className="material-icons-name">
@@ -65,20 +105,7 @@ const SignInPage: React.FC = () => {
                     required
                   />
                 </div>
-                <div className="form-group">
-                  <label htmlFor="repeatPassword" className="material-icons-name">
-                    <i className="zmdi zmdi-lock-outline"></i>
-                  </label>
-                  <input
-                    type="password"
-                    name="repeatPassword"
-                    id="repeatPassword"
-                    placeholder="Repeat your password"
-                    value={formData.repeatPassword}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+                
 
                 <div className="form-group">
                   <input
@@ -109,7 +136,7 @@ const SignInPage: React.FC = () => {
                 <img 
                   src="/images/signin-image.jpg" 
                   alt="Signin illustration" 
-                  style={{ width: '90%', height: 'auto' }}
+                  style={{ width: '70%', height: 'auto' }}
                 />
               </figure>
               <Link 

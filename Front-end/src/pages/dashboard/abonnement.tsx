@@ -60,6 +60,7 @@ import TableHeadAction from "../../components/Table/members/TableHeader";
 
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // Styles responsives
 const PageContainer = styled(Box)(({ theme }) => ({
@@ -614,7 +615,7 @@ const AbonnementComponent = () => {
       />
     );
   return (
-    <ProtectedRoute>
+    <RoleProtectedRoute allowedRoles={['ADMIN']}>
      
         <PageContainer>
           
@@ -1024,7 +1025,7 @@ const AbonnementComponent = () => {
 </Drawer>
         </PageContainer>
     
-    </ProtectedRoute>
+        </RoleProtectedRoute>
   );
 };
 

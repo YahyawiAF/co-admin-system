@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import Head from 'next/head';
+import { useSignUpMutation } from 'src/api/auth.repo';
+import { Role } from 'src/types/shared';
+import Swal from 'sweetalert2';
 
 const SignUpPage: React.FC = () => {
+  const [signUp, { isLoading }] = useSignUpMutation();
   const [formData, setFormData] = useState({
     name: '',
-    email: '',
+    identifier: '',
     password: '',
     repeatPassword: '',
     agreeTerms: false,
@@ -19,17 +23,57 @@ const SignUpPage: React.FC = () => {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Logique de soumission du formulaire
-    console.log(formData);
-  };
+    
+    if (formData.password !== formData.repeatPassword) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Les mots de passe ne correspondent pas',
+      });
+      return;
+    }
 
+    if (!formData.agreeTerms) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Vous devez accepter les conditions',
+      });
+      return;
+    }
+
+    try {
+      const user = await signUp({
+        identifier: formData.identifier,
+        password: formData.password,
+        fullname: formData.name,
+        role: Role.USER
+      }).unwrap();
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Inscription réussie !',
+        text: 'Vous allez être redirigé vers la page de connexion.',
+        confirmButtonText: 'OK'
+      });
+      window.location.href = '/client/login';
+    } catch (error) {
+      console.error('Erreur lors de l\'inscription:', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Erreur',
+        text: 'Une erreur est survenue lors de l\'inscription',
+      });
+    }
+  };
   return (
     <>
       <Head>
         <title>Sign Up</title>
         <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+        
       </Head>
 
       <div className="main">
@@ -54,19 +98,19 @@ const SignUpPage: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="email" className="material-icons-name">
-                    <i className="zmdi zmdi-email"></i>
-                  </label>
-                  <input
-                    type="email"
-                    name="email"
-                    id="email"
-                    placeholder="Email or Phone Number"
-                    value={formData.email}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
+  <label htmlFor="identifier" className="material-icons-name"> {/* Changé de email à identifier */}
+    <i className="zmdi zmdi-email"></i>
+  </label>
+  <input
+    type="text" // Changé de email à text
+    name="identifier" // Nom modifié
+    id="identifier"
+    placeholder="Email or Phone Number"
+    value={formData.identifier} // Gardez la même valeur si vous voulez garder le state actuel
+    onChange={handleChange}
+    required
+  />
+</div>
 
                 <div className="form-group">
                   <label htmlFor="password" className="material-icons-name">

@@ -37,6 +37,7 @@ import { useDeleteMemeberMutation, useGetMembersQuery } from "src/api";
 import { red } from "@mui/material/colors";
 import Modal from "src/components/Modal/BasicModal";
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -326,7 +327,7 @@ function EnhancedTable() {
 
 function MembersPage() {
   return (
-    <ProtectedRoute>
+    <RoleProtectedRoute allowedRoles={['ADMIN']}>
       <React.Fragment>
         <Helmet title="Transactions" />
         <Typography variant="h3" gutterBottom display="inline">
@@ -341,7 +342,7 @@ function MembersPage() {
           </Grid>
         </Grid>
       </React.Fragment>
-    </ProtectedRoute>
+      </RoleProtectedRoute>
   );
 }
 

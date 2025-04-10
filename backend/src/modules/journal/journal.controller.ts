@@ -69,8 +69,8 @@ export class JournalController {
   }
 
   @Get('all')
-   @Roles([Role.USER])
-   @UseGuards(JwtAuthGuard, RolesGuard)
+   //@Roles([Role.USER])
+   //@UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity, isArray: true })
   async findAll(): Promise<Array<UpdateJournalDto>> {

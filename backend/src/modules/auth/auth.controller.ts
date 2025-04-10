@@ -1,6 +1,7 @@
 import {
     Body,
     Controller,
+    ForbiddenException,
     Get, // Ajoutez Get ici
     Param,
     Post,
@@ -17,6 +18,7 @@ import {
   import { ForgotPasswordDto } from './dto/forgot-password.dto';
   import { ResetPasswordDto } from './dto/reset-password.dto';
   import { JwtAuthGuard } from 'common/guards/accessToken.guard';
+import { Role } from '@prisma/client';
   
   @Controller('auth')
   @ApiTags('auth')
@@ -30,14 +32,18 @@ import {
   }
 
   @Post('signup')
-  @ApiOkResponse({ type: AuthEntity })
-  signUp(@Body() signUpDto: SignUpDto) {
-    return this.authService.signUp(
-      signUpDto.identifier,
-      signUpDto.password,
-      signUpDto.fullname
-    );
-  }
+@ApiOkResponse({ type: AuthEntity })
+async signUp(@Body() signUpDto: SignUpDto) {
+  // Aucun contrôle spécifique sur le rôle ici, on permet l'inscription pour tous les rôles
+  return this.authService.signUp(
+    signUpDto.identifier,
+    signUpDto.password,
+    signUpDto.fullname,
+    signUpDto.role 
+  );
+}
+
+
   
     @UseGuards(RefreshTokenGuard)
     @Get('refresh')

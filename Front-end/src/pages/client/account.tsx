@@ -6,10 +6,18 @@ import Typography from "@mui/material/Typography";
 import Grid from "@mui/material/Grid";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
-
+import IconButton from "@mui/material/IconButton";
+import { Power } from "react-feather";
+import { useRouter } from "next/router";
+import { useDispatch } from "react-redux";
+import { signOut } from "src/redux/authSlice";
+import { useLogoutMutation } from "src/api/auth.repo";
+import { Tooltip } from "@mui/material";
+import PublicLayout from "src/layouts/PublicLayout";
 import { AccountDetailsForm } from "src/components/pages/dashboard/account/AccountDetailsForm";
 import { AccountInfo } from "src/components/pages/dashboard/account/AccountInfo";
-import PublicLayout from "src/layouts/PublicLayout";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 export const metadata: Metadata = {
   title: `Account Settings | Dashboard | Collabora`,
@@ -17,13 +25,60 @@ export const metadata: Metadata = {
 };
 
 function Account(): React.JSX.Element {
+  const router = useRouter();
+  const dispatch = useDispatch();
+  const [logout] = useLogoutMutation();
+
+  const handleSignOut = async () => {
+    const accessToken = sessionStorage.getItem('accessToken');
+    const Role = sessionStorage.getItem('Role');
+    const username = sessionStorage.getItem('username');
+
+    if (!accessToken) {
+      router.replace("/client/login");
+      return;
+    }
+
+    try {
+      await logout().unwrap();
+      sessionStorage.removeItem('accessToken');
+     
+      sessionStorage.removeItem('Role');
+      sessionStorage.removeItem('username');
+
+
+      dispatch(signOut());
+      router.replace("/client/login");
+    } catch (error) {
+      console.error("Déconnexion échouée:", error);
+      sessionStorage.removeItem('accessToken');
+      sessionStorage.removeItem('role');
+      sessionStorage.removeItem('username');
+      dispatch(signOut());
+      router.replace("/client/login");
+    }
+  };
+
   return (
+    <RoleProtectedRoute allowedRoles={['USER']}>
     <Box sx={{ p: 3 }}>
       <Stack spacing={3}>
-        <Typography variant="h4" component="h1" fontWeight="medium">
-          Account Settings
-        </Typography>
-        
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Typography variant="h4" component="h1" fontWeight="medium">
+            Account Settings
+          </Typography>
+          <Tooltip title="Déconnexion">
+            <IconButton 
+              onClick={handleSignOut}
+              color="inherit"
+              size="large"
+              sx={{ marginLeft: 2 }}
+            >
+              <Power />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+
         <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
           <Grid container spacing={4}>
             <Grid item lg={4} md={6} xs={12}>
@@ -42,6 +97,7 @@ function Account(): React.JSX.Element {
         </Paper>
       </Stack>
     </Box>
+    </RoleProtectedRoute>
   );
 }
 

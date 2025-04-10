@@ -34,7 +34,7 @@ import { isEmail, isMobilePhone } from 'class-validator';
         identifier: string,
         password: string,
         fullname: string,
-        role: Role = Role.USER
+        role: Role
       ): Promise<AuthEntity> {
         // Validate identifier format
         if (!isEmail(identifier) && !isMobilePhone(identifier)) {

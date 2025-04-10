@@ -43,9 +43,9 @@ import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "../../layouts/Dashboard"; 
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
-import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import BulkActions from "src/components/Table/members/TableHeader";
 import { EnhancedTableHeadProps, HeadCell } from "src/types/table";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // Styles personnalisés
 const PageContainer = styled(Box)(({ theme }) => ({
@@ -411,7 +411,7 @@ const PriceComponent: React.FC = () => {
   if (isError) return <Alert severity="error">Error loading prices</Alert>;
 
   return (
-    <ProtectedRoute>
+    <RoleProtectedRoute allowedRoles={['ADMIN']}>
       <DashboardLayout>
         <PageContainer>
         <Typography variant="h4" sx={{ mb: 2 }}>Rate Management</Typography>
@@ -681,7 +681,7 @@ const PriceComponent: React.FC = () => {
           </Drawer>
         </PageContainer>
       </DashboardLayout>
-    </ProtectedRoute>
+      </RoleProtectedRoute>
   );
 };
 

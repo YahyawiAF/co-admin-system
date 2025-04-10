@@ -51,6 +51,7 @@ import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import Abonnement from "./abonnement";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -259,7 +260,8 @@ function JournalPage() {
 
   if (isLoading) return <Loader />;
   return (
-    <ProtectedRoute>
+    <RoleProtectedRoute allowedRoles={['ADMIN']}>
+
     <React.Fragment>
       <Helmet title="Transactions" />
       <Tabs
@@ -438,7 +440,7 @@ function JournalPage() {
   />
 </TabPanel>
       </React.Fragment>
-    </ProtectedRoute>
+      </RoleProtectedRoute>
   );
 }
 

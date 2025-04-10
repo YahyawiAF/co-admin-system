@@ -1,26 +1,49 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+type Role = 'USER' | 'ADMIN';
+
+interface RoleProtectedRouteProps {
+  children: React.ReactNode;
+  allowedRoles: Role[];
+}
+
+const RoleProtectedRoute = ({ children, allowedRoles = [] }: RoleProtectedRouteProps) => {
   const router = useRouter();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Cette partie ne s'exécute que côté client
-    const token = typeof window !== 'undefined' ? sessionStorage.getItem('accessToken') : null;
-    setIsAuthenticated(!!token);
+    const token = sessionStorage.getItem('accessToken');
+    const userRole = sessionStorage.getItem('Role') as Role || 'USER';
+    const pathname = router.pathname;
+
+    const validRoles = Array.isArray(allowedRoles) ? allowedRoles : [];
 
     if (!token) {
-      router.replace('/auth/sign-in');
+      const loginPath = validRoles.includes('ADMIN') ? '/auth/sign-in' : '/client/login';
+      router.replace(loginPath);
+      return;
     }
-  }, [router]);
 
-  if (isAuthenticated === null) {
-    // Pendant la vérification de l'authentification
-    return null; // ou un composant de chargement
-  }
+    // Logique de redirection spécifique
+    if (userRole === 'ADMIN' && pathname.startsWith('/client')) {
+      router.replace('/');
+      return;
+    }
 
-  return isAuthenticated ? <>{children}</> : null;
+    if (userRole === 'USER' && (pathname.startsWith('/auth') || pathname.startsWith('/dashboard'))) {
+      router.replace('/client/account');
+      return;
+    }
+
+    // Vérification d'accès générale
+    const hasAccess = validRoles.includes(userRole);
+    setIsAuthorized(hasAccess);
+  }, [router, allowedRoles]);
+
+  if (isAuthorized === null) return null;
+
+  return isAuthorized ? <>{children}</> : null;
 };
 
-export default ProtectedRoute;
+export default RoleProtectedRoute;

@@ -9,6 +9,7 @@ import AuthLayout from "../../layouts/Auth";
 import { useSignUpMutation } from "../../api/auth.repo";
 
 import Logo from "../../vendor/logo.svg";
+import { Role } from "src/types/shared";
 
 const Brand = styled(Logo)`
   fill: ${(props) => props.theme.palette.primary.main};
@@ -45,8 +46,7 @@ function SignUp() {
     }
 
     try {
-      await signUp({ identifier, password, fullname }).unwrap();
-      
+      await signUp({ identifier, password, fullname,role: Role.ADMIN }).unwrap();      
       Swal.fire({
         title: "Success!",
         text: "You have successfully signed up.",

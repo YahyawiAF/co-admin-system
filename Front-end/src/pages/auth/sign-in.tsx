@@ -3,10 +3,10 @@ import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { Avatar, Paper, Typography, TextField, Button, CircularProgress, Box, Link, Checkbox, FormControlLabel } from "@mui/material";
-import { useLoginMutation } from "../../api/auth.repo"; // Importer le hook
+import { useLoginMutation } from "../../api/auth.repo"; 
 import AuthLayout from "../../layouts/Auth";
 import Logo from "../../vendor/logo.svg";
-import Swal from "sweetalert2"; // Importer SweetAlert2
+import Swal from "sweetalert2"; 
 
 const Brand = styled(Logo)`
   fill: ${(props) => props.theme.palette.primary.main};
@@ -37,20 +37,31 @@ function SignIn() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const user = await login({ identifier, password, }).unwrap();
-      
-      // Si la connexion réussit, stockez le token et le nom d'utilisateur dans sessionStorage
-      sessionStorage.setItem("accessToken", user.accessToken); // Remplacez `user.token` par le nom exact du token dans la réponse
+      const user = await login({ identifier, password }).unwrap();
+  
+      // Vérifie le rôle
+      if (user.role !== "ADMIN") {
+        Swal.fire({
+          title: "Accès refusé",
+          text: "Seul un administrateur peut se connecter ici.",
+          icon: "error",
+          confirmButtonText: "OK"
+        });
+        return;
+      }
+  
+      // Connexion réussie, stocke les infos
+      sessionStorage.setItem("accessToken", user.accessToken);
       sessionStorage.setItem("username", user.fullname ?? "");
-      
-      // Afficher un message de succès avec SweetAlert2
+      sessionStorage.setItem("Role", user.role);
+  
       Swal.fire({
         title: "Success!",
         text: "You have logged in successfully.",
         icon: "success",
         confirmButtonText: "OK"
       }).then(() => {
-        window.location.href = "/"; // Rediriger vers le tableau de bord
+        window.location.href = "/"; // Redirection vers le dashboard
       });
     } catch (err) {
       console.error("Login failed", err);
@@ -62,6 +73,7 @@ function SignIn() {
       });
     }
   };
+  
   
 
   // Gérer le message d'erreur

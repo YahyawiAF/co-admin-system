@@ -1,6 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { API_URL } from "../config/axios";  // Assurez-vous que cette constante contient l'URL de votre backend
-import { User } from "src/types/shared";
+import { Role, User } from "src/types/shared";
 
 interface LoginParams {
   identifier: string; // Peut être email ou numéro de téléphone
@@ -11,6 +11,7 @@ interface SignUpParams {
   identifier: string; // Peut être email ou numéro de téléphone
   password: string;
   fullname: string;
+  role: Role;
 }
 
 // Créez l'API pour l'authentification
@@ -31,10 +32,10 @@ export const authServerApi = createApi({
 
     // Endpoint d'inscription modifié
     signUp: builder.mutation<User, SignUpParams>({
-      query: ({ identifier, password, fullname }) => ({
+      query: ({ identifier, password, fullname, role }) => ({
         url: "auth/signup",
         method: "POST",
-        body: { identifier, password, fullname }, // Utilisez identifier au lieu de email
+        body: { identifier, password, fullname, role },
       }),
       invalidatesTags: ["authApi"],
     }),

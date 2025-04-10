@@ -13,6 +13,7 @@ import {
 import { spacing } from "@mui/system";
 
 import DashboardLayout from "src/layouts/Dashboard";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // import LineChart from "src/components/pages/dashboard/landing/LineChart";
 // import DoughnutChart from "src/components/pages/dashboard/landing/DoughnutChart";
@@ -89,9 +90,9 @@ function DefaultContent() {  // Nom modifié de Default à DefaultContent
 
 function Default() {  // Nouveau composant Default qui englobe avec ProtectedRoute
   return (
-    <ProtectedRoute>
+    <RoleProtectedRoute allowedRoles={['ADMIN']}>
       <DefaultContent />
-    </ProtectedRoute>
+      </RoleProtectedRoute>
   );
 }
 
