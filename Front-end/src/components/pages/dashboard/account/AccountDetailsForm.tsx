@@ -10,7 +10,17 @@ import InputLabel from "@mui/material/InputLabel";
 import OutlinedInput from "@mui/material/OutlinedInput";
 import Grid from "@mui/material/Unstable_Grid2";
 
-export function AccountDetailsForm(): React.JSX.Element {
+interface AccountDetailsFormProps {
+  username: string;
+  email?: string;
+  phone?: string;
+}
+
+export function AccountDetailsForm({ username, email, phone }: AccountDetailsFormProps): React.JSX.Element {
+  const nameParts = username.split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+
   return (
     <form
       onSubmit={(event) => {
@@ -24,22 +34,9 @@ export function AccountDetailsForm(): React.JSX.Element {
           <Grid container spacing={3}>
             <Grid md={6} xs={12}>
               <FormControl fullWidth required>
-                <InputLabel>Biography</InputLabel>
-                <OutlinedInput
-                  label="Biography"
-                  id="biography"
-                  multiline={true}
-                  rows={3}
-                  maxRows={4}
-                  defaultValue="Lucy is a Freelance Writer and Social Media Manager who helps finance professionals and Fin-tech startups build an audience and get more paying clients online."
-                />
-              </FormControl>
-            </Grid>
-            <Grid md={6} xs={12}>
-              <FormControl fullWidth required>
                 <InputLabel>First name</InputLabel>
                 <OutlinedInput
-                  defaultValue="Sofia"
+                  defaultValue={firstName}
                   label="First name"
                   name="firstName"
                 />
@@ -49,7 +46,7 @@ export function AccountDetailsForm(): React.JSX.Element {
               <FormControl fullWidth required>
                 <InputLabel>Last name</InputLabel>
                 <OutlinedInput
-                  defaultValue="Rivers"
+                  defaultValue={lastName}
                   label="Last name"
                   name="lastName"
                 />
@@ -59,7 +56,7 @@ export function AccountDetailsForm(): React.JSX.Element {
               <FormControl fullWidth required>
                 <InputLabel>Email address</InputLabel>
                 <OutlinedInput
-                  defaultValue="sofia@devias.io"
+                  defaultValue={email || ''}
                   label="Email address"
                   name="email"
                 />
@@ -68,32 +65,14 @@ export function AccountDetailsForm(): React.JSX.Element {
             <Grid md={6} xs={12}>
               <FormControl fullWidth>
                 <InputLabel>Phone number</InputLabel>
-                <OutlinedInput label="Phone number" name="phone" type="tel" />
+                <OutlinedInput 
+                  defaultValue={phone || ''}
+                  label="Phone number" 
+                  name="phone" 
+                  type="tel" 
+                />
               </FormControl>
             </Grid>
-            {/* <Grid md={6} xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>State</InputLabel>
-                <Select
-                  defaultValue="New York"
-                  label="State"
-                  name="state"
-                  variant="outlined"
-                >
-                  {states.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid md={6} xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>City</InputLabel>
-                <OutlinedInput label="City" />
-              </FormControl>
-            </Grid> */}
           </Grid>
         </CardContent>
         <Divider />

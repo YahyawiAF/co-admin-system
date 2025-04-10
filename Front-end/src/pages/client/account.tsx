@@ -28,6 +28,25 @@ function Account(): React.JSX.Element {
   const router = useRouter();
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
+  const [userData, setUserData] = React.useState<{
+    username: string;
+    role: string;
+    email?: string;
+    phone?: string;
+  }>({ username: '', role: '' });
+
+  React.useEffect(() => {
+    // Vérifier que nous sommes côté client
+    if (typeof window !== 'undefined') {
+      const storedData = {
+        username: sessionStorage.getItem('username') || '',
+        role: sessionStorage.getItem('Role') || 'USER',
+        email: sessionStorage.getItem('email') || undefined,
+        phone: sessionStorage.getItem('phone') || undefined
+      };
+      setUserData(storedData);
+    }
+  }, []);
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem('accessToken');
@@ -80,21 +99,29 @@ function Account(): React.JSX.Element {
         </Stack>
 
         <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
-          <Grid container spacing={4}>
-            <Grid item lg={4} md={6} xs={12}>
-              <AccountInfo />
-            </Grid>
-            
-            <Grid item lg={8} md={6} xs={12}>
-              <Stack spacing={3}>
-                <Typography variant="h6" component="h2">
-                  Profile Details
-                </Typography>
-                <AccountDetailsForm />
-              </Stack>
-            </Grid>
-          </Grid>
-        </Paper>
+  <Grid container spacing={4}>
+    <Grid item lg={4} md={6} xs={12}>
+      <AccountInfo 
+        name={userData.username}
+        email={userData.email}
+        phone={userData.phone}
+      />
+    </Grid>
+    
+    <Grid item lg={8} md={6} xs={12}>
+      <Stack spacing={3}>
+        <Typography variant="h6" component="h2">
+          Profile Details
+        </Typography>
+        <AccountDetailsForm 
+          username={userData.username}
+          email={userData.email}
+          phone={userData.phone}
+        />
+      </Stack>
+    </Grid>
+  </Grid>
+</Paper>
       </Stack>
     </Box>
     </RoleProtectedRoute>
