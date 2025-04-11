@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-import { Paper, Typography, Button, TextField, CircularProgress } from "@mui/material";
+import { Paper, Typography, Button, TextField, CircularProgress, Box, Link } from "@mui/material";
 import Swal from "sweetalert2";
 
 import AuthLayout from "../../layouts/Auth";
@@ -156,6 +156,7 @@ function SignUp() {
             error={!!passwordError}
             helperText={passwordError}
           />
+          
 
           <Button
             type="submit"
@@ -166,7 +167,11 @@ function SignUp() {
           >
             {isLoading ? <CircularProgress size={24} /> : "Sign Up"}
           </Button>
-
+          <Box mt={2} textAlign="center">
+                    <Link href="/auth/sign-in" variant="body2">
+                     Already have account? Sign In
+                    </Link>
+                  </Box>
           {isError && (
             <Typography color="error" align="center" mt={2}>
               {getErrorMessage()}

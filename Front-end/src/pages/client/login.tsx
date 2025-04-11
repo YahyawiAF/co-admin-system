@@ -51,7 +51,7 @@ const SignInPage: React.FC = () => {
         Swal.fire({
           icon: 'error',
           title: 'Accès refusé',
-          text: 'Vous n\'avez pas les autorisations nécessaires pour accéder à cette page.',
+          text: 'this account does not existe',
         });
       }
     } catch (error) {

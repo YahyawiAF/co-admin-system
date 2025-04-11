@@ -125,16 +125,8 @@ function SignIn() {
           />
           
           {/* Checkbox Remember Me */}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                color="primary"
-              />
-            }
-            label="Remember Me"
-          />
+          
+          
 
           <Button
             type="submit"
