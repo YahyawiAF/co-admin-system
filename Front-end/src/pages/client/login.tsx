@@ -31,9 +31,10 @@ const SignInPage: React.FC = () => {
       }).unwrap();
 
       if (user.role === 'USER') {
+        sessionStorage.setItem("userID", user.id);
         sessionStorage.setItem("accessToken", user.accessToken);
         sessionStorage.setItem("username", user.fullname ?? "");
-        sessionStorage.setItem("Role", user.role);
+        sessionStorage.setItem("role", user.role);
         sessionStorage.setItem("email", user.email ?? ""); // Ajouter cette ligne
         sessionStorage.setItem("phone", user.phoneNumber ?? ""); // Ajouter cette ligne
       

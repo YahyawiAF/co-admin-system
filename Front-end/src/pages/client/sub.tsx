@@ -8,6 +8,9 @@ import {
   useCreateAbonnementMutation,
 } from "src/api/abonnement.repo";
 import {
+  useCreateJournalMutation,
+} from "src/api/journal.repo"; // Import pour gérer les journaux
+import {
   Grid,
   Card,
   CardContent,
@@ -18,7 +21,9 @@ import {
   Alert,
 } from "@mui/material";
 import useAuth from "src/hooks/useAuth";
+import { Abonnement, Journal } from "src/types/shared";
 
+// Style de la carte
 const PriceCard = styled(Card)(({ theme }) => ({
   cursor: 'pointer',
   transition: 'all 0.3s ease',
@@ -28,149 +33,273 @@ const PriceCard = styled(Card)(({ theme }) => ({
   },
 }));
 
+// Fonction de calcul de date
 const calculateLeaveDate = (price: Price, startDate: Date): Date => {
   const endDate = new Date(startDate);
   const priceName = price.name.toLowerCase();
 
-  if (priceName.includes('semaine') || priceName.includes('week')) {
-    const weeks = priceName.includes('2') ? 2 : 1;
-    endDate.setDate(endDate.getDate() + 7 * weeks);
-  } else if (priceName.includes('mois') || priceName.includes('month')) {
-    const months = priceName.includes('3') ? 3 : priceName.includes('6') ? 6 : 1;
+  if (priceName.includes('semaine')) {
+    endDate.setDate(endDate.getDate() + (priceName.includes('2') ? 14 : 7));
+  } else if (priceName.includes('mois')) {
+    const months = priceName.match(/3/) ? 3 : priceName.match(/6/) ? 6 : 1;
     endDate.setMonth(endDate.getMonth() + months);
-  } else if (priceName.includes('année') || priceName.includes('year')) {
+  } else if (priceName.includes('année')) {
     endDate.setFullYear(endDate.getFullYear() + 1);
   }
 
   return endDate;
 };
 
-const getDurationLabel = (priceName: string): string => {
-  const name = priceName.toLowerCase();
-  
-  if (name.includes('semaine')) {
-    return name.includes('2') ? '2 Semaines' : '1 Semaine';
-  }
-  if (name.includes('mois')) {
-    if (name.includes('3')) return '3 Mois';
-    if (name.includes('6')) return '6 Mois';
-    return '1 Mois';
-  }
-  if (name.includes('année')) return '1 An';
-  
-  return '';
-};
-
 const SubscriptionSelection = () => {
   const theme = useTheme();
   const { user } = useAuth();
   const { data: prices = [], isLoading, isError } = useGetPricesQuery();
-  const [createAbonnement, { isLoading: isSubmitting, isSuccess, error }] = useCreateAbonnementMutation();
-  
+  const [createAbonnement, { isLoading: isSubmittingAbonnement, isSuccess: isSuccessAbonnement, error: errorAbonnement }] = useCreateAbonnementMutation();
+  const [createJournal, { isLoading: isSubmittingJournal, isSuccess: isSuccessJournal, error: errorJournal }] = useCreateJournalMutation();
+
   const [selectedPrice, setSelectedPrice] = useState<Price | null>(null);
+  const [selectedJournalPrice, setSelectedJournalPrice] = useState<Price | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
   const abonnementPrices = prices.filter(price => price.type === "abonnement");
+  const journalPrices = prices.filter(price => price.type === "journal");
+
+  useEffect(() => {
+    if (isSuccessAbonnement || isSuccessJournal) {
+      setTimeout(() => {
+        window.location.href = "/client/account";
+      }, 2000);
+    }
+  }, [isSuccessAbonnement, isSuccessJournal]);
 
   const handleSubscriptionSubmit = async () => {
-    if (!selectedPrice || !user?.id) return;
+    setErrorMessage('');
 
-    const registrationDate = new Date();
-    const leaveDate = calculateLeaveDate(selectedPrice, registrationDate);
+    if (!user || !user.id) {
+      setErrorMessage("The selected member does not exist.");
+      return;
+    }
+
+    if (!selectedPrice) {
+      setErrorMessage("Veuillez sélectionner un abonnement");
+      return;
+    }
 
     try {
-      await createAbonnement({
-        memberID: user.id,
-        priceId: selectedPrice.id,
+      const registrationDate = new Date();
+      const leaveDate = calculateLeaveDate(selectedPrice, registrationDate);
+
+      const abonnementData: Partial<Abonnement> = {
+        isPayed: false,
         registredDate: registrationDate,
         leaveDate,
         payedAmount: selectedPrice.price,
-        isPayed: false,
+        memberID: user.id, // Utilisation de l'ID de l'utilisateur connecté
+        priceId: selectedPrice.id,
         stayedPeriode: `${selectedPrice.name} (${selectedPrice.timePeriod.start}-${selectedPrice.timePeriod.end})`,
-      }).unwrap();
-      
-    } catch (err) {
-      console.error("Erreur lors de la création de l'abonnement:", err);
+        isReservation: false,
+      };
+
+      await createAbonnement(abonnementData).unwrap();
+    } catch (err: any) {
+      console.error('Erreur complète:', err);
+      setErrorMessage(
+        err.data?.message ||
+        err.message ||
+        "Erreur lors de la création de l'abonnement"
+      );
+    }
+  };
+
+  const handleJournalSubmit = async () => {
+    setErrorMessage('');
+  
+    if (!user || !user.id) {
+      setErrorMessage("The selected member does not exist.");
+      return;
+    }
+  
+    if (!selectedJournalPrice) {
+      setErrorMessage("Veuillez sélectionner un journal");
+      return;
+    }
+  
+    try {
+      const now = new Date(); // Création de l'horodatage actuel
+  
+      // Assurez-vous que toutes les propriétés requises pour Journal sont définies
+      const journalData: Journal = {
+        id: "unique-journal-id", // Génération d'un ID unique (utilisez une bibliothèque comme UUID si nécessaire)
+        isPayed: false,
+        registredTime: now,
+        leaveTime: now,
+        payedAmount: selectedJournalPrice.price,
+        memberID: user.id, // Utilisation de l'ID de l'utilisateur connecté
+        priceId: selectedJournalPrice.id,
+        isReservation: false,
+        createdAt: now, // Ajout de la propriété createdAt
+        updatedAt: now, // Ajout de la propriété updatedAt
+      };
+  
+      // Appel de la mutation avec un objet complet
+      await createJournal(journalData).unwrap();
+    } catch (err: any) {
+      console.error('Erreur complète:', err);
+      setErrorMessage(
+        err.data?.message ||
+        err.message ||
+        "Erreur lors de la création du journal"
+      );
     }
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError) return <Alert severity="error">Erreur de chargement des abonnements</Alert>;
+  if (isError) return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
 
   return (
-   
-      <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
-        <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold', color: 'primary.main' }}>
-          Choisissez votre abonnement
-        </Typography>
+    <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
+      {/* Section Abonnement */}
+      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
+      Monthly/Weekly Subscription
+      </Typography>
 
-        {isSuccess && (
-          <Alert severity="success" sx={{ mb: 3 }}>
-            Abonnement créé avec succès !
-          </Alert>
-        )}
+      {errorMessage && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {errorMessage}
+        </Alert>
+      )}
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {(error as any).data?.message || "Erreur lors de la création de l'abonnement"}
-          </Alert>
-        )}
+      {isSuccessAbonnement && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          Abonnement activé avec succès! Redirection...
+        </Alert>
+      )}
 
-        <Grid container spacing={3}>
-          {abonnementPrices.map((price) => (
-            <Grid item xs={12} md={4} key={price.id}>
-              <PriceCard
-                onClick={() => setSelectedPrice(price)}
-                sx={{
-                  border: selectedPrice?.id === price.id 
-                    ? `2px solid ${theme.palette.primary.main}`
-                    : '1px solid #e0e0e0',
-                  backgroundColor: selectedPrice?.id === price.id 
-                    ? theme.palette.action.selected 
-                    : theme.palette.background.paper,
-                }}
-              >
-                <CardContent>
-                  <Typography variant="h5" component="div" sx={{ fontWeight: 700 }}>
-                    {price.name}
+      <Grid container spacing={3}>
+        {abonnementPrices.map((price) => (
+          <Grid item xs={12} md={4} key={price.id}>
+            <PriceCard
+              onClick={() => setSelectedPrice(price)}
+              sx={{
+                border: selectedPrice?.id === price.id
+                  ? `2px solid ${theme.palette.primary.main}`
+                  : '1px solid #ddd',
+                backgroundColor: selectedPrice?.id === price.id
+                  ? theme.palette.action.selected
+                  : theme.palette.background.paper,
+              }}
+            >
+              <CardContent>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {price.name}
+                </Typography>
+
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
+                  <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                    {price.price} DT
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    {getDurationLabel(price.name)}
-                  </Typography>
-                  <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
-                    <Typography variant="h4" sx={{ fontWeight: 800, color: 'primary.main' }}>
-                      {price.price} DT
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                      /{price.timePeriod.end.toLowerCase()}
-                    </Typography>
-                  </Box>
-                 
-                </CardContent>
-              </PriceCard>
-            </Grid>
-          ))}
-        </Grid>
+                </Box>
 
-        <Box sx={{ mt: 4, textAlign: 'center' }}>
-          <Button
-            variant="contained"
-            size="large"
-            disabled={!selectedPrice || isSubmitting}
-            onClick={handleSubscriptionSubmit}
-            sx={{
-              px: 6,
-              py: 1.5,
-              fontSize: '1.1rem',
-              fontWeight: 'bold',
-            }}
-          >
-            {isSubmitting ? (
-              <CircularProgress size={24} />
-            ) : (
-              'Activer mon abonnement'
-            )}
-          </Button>
-        </Box>
+                <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                  Période: {price.timePeriod.start} à {price.timePeriod.end}
+                </Typography>
+              </CardContent>
+            </PriceCard>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Box sx={{ mt: 4, textAlign: 'center' }}>
+        <Button
+          variant="contained"
+          size="large"
+          disabled={!selectedPrice || isSubmittingAbonnement}
+          onClick={handleSubscriptionSubmit}
+          sx={{
+            px: 6,
+            py: 2,
+            fontSize: '1.1rem',
+            '&.Mui-disabled': {
+              backgroundColor: theme.palette.action.disabledBackground,
+            },
+          }}
+        >
+          {isSubmittingAbonnement ? (
+            <CircularProgress size={24} sx={{ color: 'white' }} />
+          ) : (
+            "Confirm"
+          )}
+        </Button>
       </Box>
+
+      {/* Section Journal */}
+      <Typography variant="h4" gutterBottom sx={{ mt: 6, mb: 4, fontWeight: 'bold' }}>
+      Daily Subscription
+      </Typography>
+
+      {isSuccessJournal && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          Journal créé avec succès! Redirection...
+        </Alert>
+      )}
+
+      <Grid container spacing={3}>
+        {journalPrices.map((price) => (
+          <Grid item xs={12} md={4} key={price.id}>
+            <PriceCard
+              onClick={() => setSelectedJournalPrice(price)}
+              sx={{
+                border: selectedJournalPrice?.id === price.id
+                  ? `2px solid ${theme.palette.primary.main}`
+                  : '1px solid #ddd',
+                backgroundColor: selectedJournalPrice?.id === price.id
+                  ? theme.palette.action.selected
+                  : theme.palette.background.paper,
+              }}
+            >
+              <CardContent>
+                <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                  {price.name}
+                </Typography>
+
+                <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
+                  <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                    {price.price} DT
+                  </Typography>
+                </Box>
+
+                <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                  Période: {price.timePeriod.start} à {price.timePeriod.end}
+                </Typography>
+              </CardContent>
+            </PriceCard>
+          </Grid>
+        ))}
+      </Grid>
+
+      <Box sx={{ mt: 4, textAlign: 'center' }}>
+        <Button
+          variant="contained"
+          size="large"
+          disabled={!selectedJournalPrice || isSubmittingJournal}
+          onClick={handleJournalSubmit}
+          sx={{
+            px: 6,
+            py: 2,
+            fontSize: '1.1rem',
+            '&.Mui-disabled': {
+              backgroundColor: theme.palette.action.disabledBackground,
+            },
+          }}
+        >
+          {isSubmittingJournal ? (
+            <CircularProgress size={24} sx={{ color: 'white' }} />
+          ) : (
+            "Confirm"
+          )}
+        </Button>
+      </Box>
+    </Box>
   );
 };
 

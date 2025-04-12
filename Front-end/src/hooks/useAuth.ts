@@ -1,17 +1,33 @@
-import { useContext } from "react";
-
+import { useContext, useEffect, useState } from "react";
 import { AuthContext } from "../contexts/JWTContext";
-// import { AuthContext } from "../contexts/FirebaseAuthContext";
-// import { AuthContext } from "../contexts/Auth0Context";
-// import { AuthContext } from "../contexts/CognitoContext";
 
 const useAuth = () => {
   const context = useContext(AuthContext);
+  if (!context) throw new Error("AuthContext must be placed within AuthProvider");
 
-  if (!context)
-    throw new Error("AuthContext must be placed within AuthProvider");
+  const [user, setUser] = useState(() => context.user || null);
 
-  return context;
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userID = sessionStorage.getItem("userID");
+      const username = sessionStorage.getItem("username");
+      const role = sessionStorage.getItem("role");
+  
+      // Vérifier si les informations sont bien disponibles
+      if (userID && username && role) {
+        setUser({
+          id: userID,  // Assurez-vous que l'ID est bien stocké
+          username,
+          role,
+          email: sessionStorage.getItem("email") || "", 
+          phone: sessionStorage.getItem("phone") || "", 
+        });
+      }
+    }
+  }, []);
+
+  return { user };
 };
+
 
 export default useAuth;
