@@ -14,13 +14,13 @@ model User {
   updatedAt          DateTime  @updatedAt @db.Timestamp(6)
   deletedAt          DateTime? @db.Timestamp(6)
   email              String?    @unique @db.VarChar(256)
-  fullname           String?   @db.VarChar(256)
+  fullname           String?     @db.VarChar(256)
   password           String?
   refreshToken       String?
   role               Role      @default(USER)
   resetPasswordToken String?
   accessToken        String?
-  phoneNumber        String?
+  phoneNumber        String?  @unique
 
   @@map("users")
 }

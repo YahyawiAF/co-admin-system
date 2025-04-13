@@ -1,8 +1,13 @@
 import { configureStore, ThunkAction, Action } from "@reduxjs/toolkit";
 import { setupListeners } from "@reduxjs/toolkit/query";
-import { membersServerApi, journalServerApi, authServerApi } from "src/api";
+import {
+  membersServerApi,
+  journalServerApi,
+  authServerApi,
+} from "src/api";
 import { priceApi } from "src/api/price.repo";
 import { abonnementApi } from "src/api/abonnement.repo";
+import { userServices } from "src/api/user.repo";
 
 // Configuration du store
 export const store = configureStore({
@@ -10,27 +15,27 @@ export const store = configureStore({
     [membersServerApi.reducerPath]: membersServerApi.reducer,
     [journalServerApi.reducerPath]: journalServerApi.reducer,
     [authServerApi.reducerPath]: authServerApi.reducer,
-    [priceApi.reducerPath]: priceApi.reducer, // Ajout de priceApi ici
+    [priceApi.reducerPath]: priceApi.reducer,
     [abonnementApi.reducerPath]: abonnementApi.reducer,
+    [userServices.reducerPath]: userServices.reducer, // ✅ Ajout du reducer pour usersApi
   },
   middleware: (getDefaultMiddleware) =>
-    getDefaultMiddleware().concat([
+    getDefaultMiddleware().concat(
       membersServerApi.middleware,
       journalServerApi.middleware,
       authServerApi.middleware,
-      priceApi.middleware, // Ajout de priceApi.middleware ici
+      priceApi.middleware,
       abonnementApi.middleware,
-    ]),
+      userServices.middleware // ✅ Ajout du middleware pour usersApi
+    ),
 });
 
 // Initialisation des listeners pour le cache de RTK Query
 setupListeners(store.dispatch);
 
-// Typing pour AppDispatch et RootState
+// Typings Redux
 export type AppDispatch = typeof store.dispatch;
 export type RootState = ReturnType<typeof store.getState>;
-
-// Typing pour un thunk asynchrone dans Redux
 export type AppThunk<ReturnType = void> = ThunkAction<
   ReturnType,
   RootState,

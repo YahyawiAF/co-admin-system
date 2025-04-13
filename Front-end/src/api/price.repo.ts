@@ -57,4 +57,4 @@ export const {
   useDeletePriceMutation,
 } = priceApi;
 
-export { Price };
+export type { Price };

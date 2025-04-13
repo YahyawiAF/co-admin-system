@@ -1,5 +1,5 @@
 import { PrismaService } from '../../../database/prisma.service';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
 import { AddUserDto, CreateUserDto } from './dtos/create-user.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { TypedEventEmitter } from 'src/modules/event-emitter/typed-event-emitter.class';
@@ -96,12 +96,44 @@ export class UsersService {
         roundsOfHashing,
       );
     }
-
+  
+    // Vérification fullname
+    if (updateUserDto.fullname) {
+      const existingUserByUsername = await this.prisma.user.findFirst({
+        where: { fullname: updateUserDto.fullname },
+      });
+      if (existingUserByUsername && existingUserByUsername.id !== id) {
+        throw new ConflictException('Ce nom d\'utilisateur est déjà pris.');
+      }
+    }
+  
+    // Vérification phoneNumber
+    if (updateUserDto.phoneNumber) {
+      const existingUserByPhone = await this.prisma.user.findFirst({
+        where: { phoneNumber: updateUserDto.phoneNumber },
+      });
+      if (existingUserByPhone && existingUserByPhone.id !== id) {
+        throw new ConflictException('Ce numéro de téléphone est déjà utilisé.');
+      }
+    }
+  
+    // Mise à jour avec sélection explicite des champs retournés
     return this.prisma.user.update({
       where: { id },
       data: updateUserDto,
+      select: { // Ajout crucial
+        id: true,
+        fullname: true,
+        email: true,
+        phoneNumber: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
     });
   }
+  
+  
 
   remove(id: string) {
     return this.prisma.user.delete({ where: { id } });
