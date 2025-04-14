@@ -22,6 +22,7 @@ import {
 } from "@mui/material";
 import useAuth from "src/hooks/useAuth";
 import { Abonnement, Journal } from "src/types/shared";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // Style de la carte
 const PriceCard = styled(Card)(({ theme }) => ({
@@ -157,6 +158,8 @@ const SubscriptionSelection = () => {
   if (isError) return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
 
   return (
+    <RoleProtectedRoute allowedRoles={['USER']}>
+
     <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
       {/* Section Abonnement */}
       <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
@@ -300,6 +303,7 @@ const SubscriptionSelection = () => {
         </Button>
       </Box>
     </Box>
+    </RoleProtectedRoute>
   );
 };
 

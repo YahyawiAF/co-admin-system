@@ -12,7 +12,7 @@ import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
 import { signOut } from "src/redux/authSlice";
 import { useLogoutMutation } from "src/api/auth.repo";
-import { Tooltip, Snackbar, Alert, Button, TextField } from "@mui/material";
+import { Tooltip, Snackbar, Alert, Button, TextField, Card, CardHeader, Divider, CardContent, CardActions } from "@mui/material";
 import PublicLayout from "src/layouts/PublicLayout";
 import { AccountDetailsForm } from "src/components/pages/dashboard/account/AccountDetailsForm";
 import { AccountInfo } from "src/components/pages/dashboard/account/AccountInfo";
@@ -103,11 +103,15 @@ function Account(): React.JSX.Element {
   
     try {
       // 1. Conversion des noms de champs frontend -> backend
-      const backendData = {
+      const backendData: any = {
         fullname: updateData.username,
-        email: updateData.email,
-        phoneNumber: updateData.phone
+        phoneNumber: updateData.phone,
       };
+  
+      // Si l'email est défini, on l'ajoute aux données envoyées, sinon on ne l'ajoute pas
+      if (updateData.email) {
+        backendData.email = updateData.email;
+      }
   
       // 2. Appel API avec vérification de type explicite
       const updatedUser = await updateUser({
@@ -165,7 +169,7 @@ function Account(): React.JSX.Element {
       });
     }
   };
-
+  
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem('accessToken');
     const Role = sessionStorage.getItem('Role');
@@ -208,7 +212,11 @@ function Account(): React.JSX.Element {
 
   return (
     <RoleProtectedRoute allowedRoles={['USER']}>
-      <Box sx={{ p: 3 }}>
+      <Box  sx={{
+    p: 3,
+    minHeight: '100vh', // ✅ pour prendre toute la hauteur visible
+    overflowY: 'auto'    // ✅ scroll si contenu trop long
+  }}>
         <Snackbar
           open={notification.open}
           autoHideDuration={6000}
@@ -262,91 +270,113 @@ function Account(): React.JSX.Element {
                     phone={userData.phone}
                     onUpdate={handleUpdateUser}
                   />
-                <Box sx={{ mt: 4 }}>
-  <Typography variant="h6" component="h2" gutterBottom>
-    Change Password
-  </Typography>
-  <Stack spacing={2} sx={{ mt: 2 }}>
-    <Grid container spacing={2}>
-      {/* Old Password and New Password in the same line */}
-      <Grid item xs={6}>
-        <TextField
-          type="password"
-          label="Old password"
-          variant="outlined"
-          value={passwords.oldPassword}
-          onChange={(e) =>
-            setPasswords((prev) => ({ ...prev, oldPassword: e.target.value }))
-          }
-          fullWidth
-        />
-      </Grid>
-      <Grid item xs={6}>
-        <TextField
-          type="password"
-          label="New password"
-          variant="outlined"
-          value={passwords.newPassword}
-          onChange={(e) =>
-            setPasswords((prev) => ({ ...prev, newPassword: e.target.value }))
-          }
-          fullWidth
-        />
-      </Grid>
-    </Grid>
-    {/* Confirm New Password in the next line */}
-    <Grid container spacing={2} sx={{ mt: 2 }}>
-      <Grid item xs={6}>
-        <TextField
-          type="password"
-          label="Confirm new password"
-          variant="outlined"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          fullWidth
-        />
-      </Grid>
-    </Grid>
-    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
-      <Button
-        variant="contained"
-        color="primary"
-        onClick={() => {
-          if (passwords.newPassword !== confirmPassword) {
-            setNotification({
-              open: true,
-              message: "Les mots de passe ne correspondent pas.",
-              severity: "error",
-            });
-            return;
-          }
+             <Box sx={{ mt: 4 }}>
+  <Card
+    sx={{
+      width: '100%',
+      boxSizing: 'border-box',
+    }}
+  >
 
-          handleChangePassword();  // Assuming this method handles password change
-          
-          // After successful password change, reset the fields
-          setPasswords({
-            oldPassword: '',
-            newPassword: ''
-          });
-          setConfirmPassword(''); // Clear the confirm password field
-          
-          // Optionally show success notification here if needed
-          setNotification({
-            open: true,
-            message: "Le mot de passe a été modifié avec succès.",
-            severity: "success",
-          });
-        }}
-        sx={{ width: "auto", maxWidth: 250 }} // Ajuste la taille du bouton
-        disabled={
-          !passwords.oldPassword || !passwords.newPassword || !confirmPassword
-        }
-      >
-        Save changes
-      </Button>
-    </Stack>
-  </Stack>
+    <CardHeader
+      title="Change Password"
+      subheader="Update your password securely"
+    />
+    <Divider />
+    
+    <CardContent>
+      <Grid container spacing={3}>
+        {/* Old Password */}
+        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+          <TextField
+            type="password"
+            label="Old password"
+            variant="outlined"
+            value={passwords.oldPassword}
+            onChange={(e) =>
+              setPasswords((prev) => ({ ...prev, oldPassword: e.target.value }))
+            }
+            fullWidth
+          />
+        </Grid>
+
+        {/* Espacement vertical sur mobile */}
+        <Grid item xs={12} sx={{ display: { xs: 'block', sm: 'none' }, height: 16 }} />
+
+        {/* New Password */}
+        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+          <TextField
+            type="password"
+            label="New password"
+            variant="outlined"
+            value={passwords.newPassword}
+            onChange={(e) =>
+              setPasswords((prev) => ({ ...prev, newPassword: e.target.value }))
+            }
+            fullWidth
+          />
+        </Grid>
+
+        {/* Confirm Password */}
+        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+          <TextField
+            type="password"
+            label="Confirm new password"
+            variant="outlined"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            fullWidth
+          />
+        </Grid>
+
+        {/* Message d'erreur intégré */}
+        {passwords.newPassword && confirmPassword && passwords.newPassword !== confirmPassword && (
+          <Grid item xs={12}>
+            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+              Les mots de passe ne correspondent pas
+            </Typography>
+          </Grid>
+        )}
+      </Grid>
+    </CardContent>
+
+    {/* Divider ajouté après CardContent */}
+    <Divider />
+
+    {/* CardActions pour le bouton */}
+<CardActions sx={{ justifyContent: "flex-end", px: 2, pb: 2 }}>  <Button
+    variant="contained"
+    type="button"
+    disabled={
+      !passwords.oldPassword ||
+      !passwords.newPassword ||
+      !confirmPassword ||
+      passwords.newPassword !== confirmPassword
+    }
+    onClick={() => {
+      if (passwords.newPassword !== confirmPassword) {
+        setNotification({
+          open: true,
+          message: "Les mots de passe ne correspondent pas.",
+          severity: "error",
+        });
+        return;
+      }
+      handleChangePassword();
+    }}
+  >
+    Save changes
+  </Button>
+</CardActions>
+
+
+  </Card>
 </Box>
+
+
+
+
+
 
 
 

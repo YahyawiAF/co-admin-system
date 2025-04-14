@@ -21,18 +21,23 @@ interface AccountDetailsFormProps {
   onUpdate: (data: { username: string; email: string; phone?: string }) => Promise<void>;
 }
 
+// Validation schema modifié : Email n'est plus requis
 const validationSchema = Yup.object({
-  fullname: Yup.string().required("Full name is required").trim(),  email: Yup.string().email("Invalid email").required("Email is required"),
+  firstName: Yup.string().trim(),
+  lastName: Yup.string().trim(),
+  email: Yup.string().email("Invalid email").nullable(), // Email non requis
   phone: Yup.string().matches(/^[0-9]+$/, "Invalid phone number").nullable(),
 });
 
 export function AccountDetailsForm({ username, email, phone, onUpdate }: AccountDetailsFormProps): React.JSX.Element {
   const nameParts = username.split(" ");
   const initialFirstName = nameParts[0] || "";
+  const initialLastName = nameParts.slice(1).join(" ") || "";
 
   const formik = useFormik({
     initialValues: {
-      fullname: username || "",
+      firstName: initialFirstName,
+      lastName: initialLastName,
       email: email || "",
       phone: phone || "",
     },
@@ -41,8 +46,8 @@ export function AccountDetailsForm({ username, email, phone, onUpdate }: Account
     onSubmit: async (values) => {
       try {
         await onUpdate({
-          username: values.fullname.trim(), // Envoyer le nom complet
-          email: values.email.trim(),
+          username: `${values.firstName.trim()} ${values.lastName.trim()}`, // Envoie le nom complet
+          email: values.email?.trim(),
           phone: values.phone?.trim() || undefined,
         });
       } catch (error) {
@@ -51,8 +56,9 @@ export function AccountDetailsForm({ username, email, phone, onUpdate }: Account
     },
   });
 
-  const hasChanged = 
-  formik.values.fullname !== username ||
+  const hasChanged =
+    formik.values.firstName !== initialFirstName ||
+    formik.values.lastName !== initialLastName ||
     formik.values.email !== (email || "") ||
     formik.values.phone !== (phone || "");
 
@@ -64,22 +70,34 @@ export function AccountDetailsForm({ username, email, phone, onUpdate }: Account
         <CardContent>
           <Grid container spacing={3}>
             <Grid md={6} xs={12}>
-              <FormControl fullWidth error={!!(formik.touched.fullname && formik.errors.fullname)}>
+              <FormControl fullWidth error={!!(formik.touched.firstName && formik.errors.firstName)}>
                 <InputLabel>First name</InputLabel>
                 <OutlinedInput
-                  name="fullname"
-                  label="Full name"
-                  value={formik.values.fullname}
+                  name="firstName"
+                  label="First name"
+                  value={formik.values.firstName}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
                 />
-                {formik.touched.fullname && formik.errors.fullname && (
-                  <FormHelperText>{formik.errors.fullname}</FormHelperText>
+                {formik.touched.firstName && formik.errors.firstName && (
+                  <FormHelperText>{formik.errors.firstName}</FormHelperText>
                 )}
               </FormControl>
             </Grid>
             <Grid md={6} xs={12}>
-              
+              <FormControl fullWidth error={!!(formik.touched.lastName && formik.errors.lastName)}>
+                <InputLabel>Last name</InputLabel>
+                <OutlinedInput
+                  name="lastName"
+                  label="Last name"
+                  value={formik.values.lastName}
+                  onChange={formik.handleChange}
+                  onBlur={formik.handleBlur}
+                />
+                {formik.touched.lastName && formik.errors.lastName && (
+                  <FormHelperText>{formik.errors.lastName}</FormHelperText>
+                )}
+              </FormControl>
             </Grid>
             <Grid md={6} xs={12}>
               <FormControl fullWidth error={!!(formik.touched.email && formik.errors.email)}>
