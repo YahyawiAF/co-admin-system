@@ -109,6 +109,7 @@ import { isEmail, isMobilePhone } from 'class-validator';
         if (!isEmail(identifier) && !isMobilePhone(identifier)) {
           throw new BadRequestException('Please enter a valid email address or phone number');
         }
+        
       
         // Clean the identifier
         const isIdentifierEmail = isEmail(identifier);
@@ -219,7 +220,7 @@ import { isEmail, isMobilePhone } from 'class-validator';
         { userId: user.id, email: user.email },
         {
           secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-          expiresIn: '1h',
+          expiresIn: '3h',
         },
       );
   
@@ -286,42 +287,29 @@ import { isEmail, isMobilePhone } from 'class-validator';
     /**
      * Générer les tokens (accessToken et refreshToken)
      */
-    private async getTokens(userId: string, email: string, role: Role) {
-      try {
-        const [accessToken, refreshToken] = await Promise.all([
-          this.jwtService.signAsync(
-            {
-              sub: userId,
-              email,
-              role, // Inclure le rôle dans le payload
-            },
-            {
-              secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-              expiresIn: '15m',
-            },
-          ),
-          this.jwtService.signAsync(
-            {
-              sub: userId,
-              email,
-              role, // Inclure le rôle dans le payload
-            },
-            {
-              secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-              expiresIn: '7d',
-            },
-          ),
-        ]);
-  
+    async getTokens(userId: string, email: string, role: string) {
+        const payload = {
+          userId, // ✅ ce champ est utilisé par JwtStrategy
+          email,
+          role,   // optionnel, si tu veux faire du role-based access
+        };
+      
+        const accessToken = await this.jwtService.signAsync(payload, {
+          secret: process.env.JWT_ACCESS_SECRET,
+          expiresIn: '15m',
+        });
+      
+        const refreshToken = await this.jwtService.signAsync(payload, {
+          secret: process.env.JWT_REFRESH_SECRET,
+          expiresIn: '7d',
+        });
+      
         return {
           accessToken,
           refreshToken,
         };
-      } catch (error) {
-        console.error('Erreur lors de la génération des tokens:', error);
-        throw new InternalServerErrorException('Failed to generate tokens');
       }
-    }
+      
   
     /**
      * Mettre à jour le refreshToken dans la base de données

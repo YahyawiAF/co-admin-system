@@ -1,5 +1,5 @@
 import { PrismaService } from '../../../database/prisma.service';
-import { ConflictException, HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { AddUserDto, CreateUserDto } from './dtos/create-user.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { TypedEventEmitter } from 'src/modules/event-emitter/typed-event-emitter.class';
@@ -10,6 +10,7 @@ import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { UnauthorizedException } from '@nestjs/common';
 import { AuthEntity } from '../auth/entity/auth.entity';
+import { ChangePasswordDto } from './dtos/change-password.dto';
 
 export const roundsOfHashing = 10;
 @Injectable()
@@ -139,31 +140,49 @@ export class UsersService {
     return this.prisma.user.delete({ where: { id } });
   }
 
-  async changePassword(email: string, password: string): Promise<AuthEntity> {
+
+ async changePassword(userId: string, oldPassword: string, newPassword: string) {
+    console.log('User ID:', userId);
     const user = await this.prisma.user.findUnique({
-      where: { email: email },
+      where: { id: userId },
+      select: { password: true } 
     });
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    try {
-      if (!isPasswordValid) {
-        throw new UnauthorizedException('Invalid password');
-      }
-      return {
-        email,
-        role: user.role,
-        fullname: user.fullname,
-        id: user.id,
-        accessToken: null,
-        refreshToken: null,
-        phoneNumber:user.phoneNumber,
-      };
-    } catch (error) {
-      // Handle errors from the asynchronous operation
-      throw new GeneralException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.ALREADY_EXIST,
-        (error as Error).message,
-      );
+  
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé');
     }
+  
+    // Vérifier l'ancien mot de passe
+    const isPasswordValid = await bcrypt.compare(
+      oldPassword,
+      user.password
+    );
+  
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Ancien mot de passe incorrect');
+    }
+  
+    // Hasher le nouveau mot de passe
+    const hashedPassword = await bcrypt.hash(
+      newPassword,
+      roundsOfHashing
+    );
+  
+    // Mettre à jour le mot de passe
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        phoneNumber: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
   }
+  
+  
 }

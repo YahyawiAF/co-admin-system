@@ -12,13 +12,14 @@ import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
 import { signOut } from "src/redux/authSlice";
 import { useLogoutMutation } from "src/api/auth.repo";
-import { Tooltip, Snackbar, Alert } from "@mui/material";
+import { Tooltip, Snackbar, Alert, Button, TextField } from "@mui/material";
 import PublicLayout from "src/layouts/PublicLayout";
 import { AccountDetailsForm } from "src/components/pages/dashboard/account/AccountDetailsForm";
 import { AccountInfo } from "src/components/pages/dashboard/account/AccountInfo";
 import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import { useUpdateUserMutation } from "src/api/user.repo";
+import { useChangePasswordMutation } from "src/api/user.repo";
 
 export const metadata: Metadata = {
   title: `Account Settings | Dashboard | Collabora`,
@@ -53,7 +54,38 @@ function Account(): React.JSX.Element {
       setUserData(storedData);
     }
   }, []);
+  const [confirmPassword, setConfirmPassword] = React.useState('');
 
+  const [changePassword] = useChangePasswordMutation();
+  const [passwords, setPasswords] = React.useState({
+    oldPassword: '',
+    newPassword: '',
+  });
+  const handleChangePassword = async () => {
+    try {
+      await changePassword({
+        oldPassword: passwords.oldPassword,
+        newPassword: passwords.newPassword,
+      }).unwrap();
+  
+      setNotification({
+        open: true,
+        message: "Mot de passe changé avec succès !",
+        severity: "success",
+      });
+  
+      setPasswords({ oldPassword: '', newPassword: '' });
+    } catch (error: any) {
+      console.error("Erreur lors du changement de mot de passe:", error);
+      setNotification({
+        open: true,
+        message:
+          error?.data?.message || "Erreur lors du changement de mot de passe.",
+        severity: "error",
+      });
+    }
+  };
+  
   const handleUpdateUser = async (updateData: {
     username: string;
     email?: string;
@@ -133,7 +165,6 @@ function Account(): React.JSX.Element {
       });
     }
   };
-  
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem('accessToken');
@@ -231,6 +262,95 @@ function Account(): React.JSX.Element {
                     phone={userData.phone}
                     onUpdate={handleUpdateUser}
                   />
+                <Box sx={{ mt: 4 }}>
+  <Typography variant="h6" component="h2" gutterBottom>
+    Change Password
+  </Typography>
+  <Stack spacing={2} sx={{ mt: 2 }}>
+    <Grid container spacing={2}>
+      {/* Old Password and New Password in the same line */}
+      <Grid item xs={6}>
+        <TextField
+          type="password"
+          label="Old password"
+          variant="outlined"
+          value={passwords.oldPassword}
+          onChange={(e) =>
+            setPasswords((prev) => ({ ...prev, oldPassword: e.target.value }))
+          }
+          fullWidth
+        />
+      </Grid>
+      <Grid item xs={6}>
+        <TextField
+          type="password"
+          label="New password"
+          variant="outlined"
+          value={passwords.newPassword}
+          onChange={(e) =>
+            setPasswords((prev) => ({ ...prev, newPassword: e.target.value }))
+          }
+          fullWidth
+        />
+      </Grid>
+    </Grid>
+    {/* Confirm New Password in the next line */}
+    <Grid container spacing={2} sx={{ mt: 2 }}>
+      <Grid item xs={6}>
+        <TextField
+          type="password"
+          label="Confirm new password"
+          variant="outlined"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          fullWidth
+        />
+      </Grid>
+    </Grid>
+    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={() => {
+          if (passwords.newPassword !== confirmPassword) {
+            setNotification({
+              open: true,
+              message: "Les mots de passe ne correspondent pas.",
+              severity: "error",
+            });
+            return;
+          }
+
+          handleChangePassword();  // Assuming this method handles password change
+          
+          // After successful password change, reset the fields
+          setPasswords({
+            oldPassword: '',
+            newPassword: ''
+          });
+          setConfirmPassword(''); // Clear the confirm password field
+          
+          // Optionally show success notification here if needed
+          setNotification({
+            open: true,
+            message: "Le mot de passe a été modifié avec succès.",
+            severity: "success",
+          });
+        }}
+        sx={{ width: "auto", maxWidth: 250 }} // Ajuste la taille du bouton
+        disabled={
+          !passwords.oldPassword || !passwords.newPassword || !confirmPassword
+        }
+      >
+        Save changes
+      </Button>
+    </Stack>
+  </Stack>
+</Box>
+
+
+
+
                 </Stack>
               </Grid>
             </Grid>

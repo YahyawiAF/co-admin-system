@@ -29,6 +29,16 @@ export const userServices = createApi({
       }),
       invalidatesTags: ["users"],
     }),
+    changePassword: builder.mutation<User, { oldPassword: string; newPassword: string }>({
+      query: (data) => ({
+        url: `users/change-password`, // Chemin de ta route backend
+        method: "PATCH",
+        body: data,
+      }),
+      invalidatesTags: ["users"],
+    }),
+    
+   
     createUser: builder.mutation<User, User>({
       query: (data: User) => ({
         url: `users`,
@@ -40,4 +50,4 @@ export const userServices = createApi({
   }),
 });
 
-export const { useCreateUserMutation, useUpdateUserMutation } = userServices;
+export const { useCreateUserMutation, useUpdateUserMutation,useChangePasswordMutation,} = userServices;
