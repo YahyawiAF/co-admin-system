@@ -14,12 +14,14 @@ import { spacing } from "@mui/system";
 import useAuth from "../../hooks/useAuth";
 
 const Alert = styled(MuiAlert)(spacing);
-
 const TextField = styled(MuiTextField)<{ my?: number }>(spacing);
 
 function ResetPassword() {
   const router = useRouter();
   const { resetPassword } = useAuth();
+
+  // Lire le paramètre 'role' depuis l'URL
+  const role = router.query.role;
 
   return (
     <Formik
@@ -35,11 +37,16 @@ function ResetPassword() {
       })}
       onSubmit={async (values, { setErrors, setStatus, setSubmitting }) => {
         try {
-          resetPassword(values.email);
-          router.push("/auth/sign-in");
+          await resetPassword(values.email);
+
+          // Redirection conditionnelle selon le rôle
+          if (role === "user") {
+            router.push("/client/login");
+          } else {
+            router.push("/auth/sign-in"); // par défaut pour admin
+          }
         } catch (error: any) {
           const message = error.message || "Something went wrong";
-
           setStatus({ success: false });
           setErrors({ submit: message });
           setSubmitting(false);

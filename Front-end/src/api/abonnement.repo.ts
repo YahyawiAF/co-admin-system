@@ -11,7 +11,7 @@ interface AbonnementParams {
 
 export const abonnementApi = createApi({
   reducerPath: "abonnementApi",
-  baseQuery: fetchBaseQuery({ 
+  baseQuery: fetchBaseQuery({
     baseUrl: API_URL,
   }),
   tagTypes: ["Abonnement"],
@@ -22,22 +22,22 @@ export const abonnementApi = createApi({
         if (page) params.append('page', page.toString());
         params.append('perPage', perPage.toString());
         if (search) params.append('search', search);
-        
+
         return `abonnements?${params.toString()}`;
       },
       providesTags: ["Abonnement"],
     }),
-    
+
     getAllAbonnements: builder.query<Abonnement[], void>({
       query: () => 'abonnements/all',
       providesTags: ["Abonnement"],
     }),
-    
+
     getAbonnementById: builder.query<Abonnement, string>({
       query: (id) => `abonnements/${id}`,
       providesTags: (result, error, id) => [{ type: "Abonnement", id }],
     }),
-    
+
     createAbonnement: builder.mutation<Abonnement, Partial<Abonnement>>({
       query: (data) => ({
         url: 'abonnements',
@@ -46,19 +46,19 @@ export const abonnementApi = createApi({
       }),
       invalidatesTags: ["Abonnement"],
     }),
-    
-    updateAbonnement: builder.mutation<Abonnement, {id: string, data: Partial<Abonnement>}>({
-      query: ({id, data}) => ({
+
+    updateAbonnement: builder.mutation<Abonnement, { id: string, data: Partial<Abonnement> }>({
+      query: ({ id, data }) => ({
         url: `abonnements/${id}`,
         method: 'PATCH',
         body: data,
       }),
-      invalidatesTags: (result, error, {id}) => [
+      invalidatesTags: (result, error, { id }) => [
         { type: "Abonnement", id },
         { type: "Abonnement" }
       ],
     }),
-    
+
     deleteAbonnement: builder.mutation<void, string>({
       query: (id) => ({
         url: `abonnements/${id}`,

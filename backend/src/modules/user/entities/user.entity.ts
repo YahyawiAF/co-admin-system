@@ -6,6 +6,7 @@ export class UserEntity implements User {
   constructor(partial: Partial<UserEntity>) {
     Object.assign(this, partial);
   }
+    memberId: string;
     accessToken: string;
 
   @ApiProperty()
@@ -41,4 +42,5 @@ export class UserEntity implements User {
   resetPasswordToken :string;
   @ApiProperty()
   phoneNumber: string;
+
 }

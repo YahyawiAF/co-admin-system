@@ -39,7 +39,6 @@ model Member {
   isActive      Boolean       @default(false)
   functionality String?
   phone         Int?          @unique
-  
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]

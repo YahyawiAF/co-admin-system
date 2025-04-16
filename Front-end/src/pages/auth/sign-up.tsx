@@ -46,7 +46,7 @@ function SignUp() {
     }
 
     try {
-      await signUp({ identifier, password, fullname,role: Role.ADMIN }).unwrap();      
+      await signUp({ identifier, password, fullname, role: Role.ADMIN }).unwrap();
       Swal.fire({
         title: "Success!",
         text: "You have successfully signed up.",
@@ -156,7 +156,7 @@ function SignUp() {
             error={!!passwordError}
             helperText={passwordError}
           />
-          
+
 
           <Button
             type="submit"
@@ -168,10 +168,10 @@ function SignUp() {
             {isLoading ? <CircularProgress size={24} /> : "Sign Up"}
           </Button>
           <Box mt={2} textAlign="center">
-                    <Link href="/auth/sign-in" variant="body2">
-                     Already have account? Sign In
-                    </Link>
-                  </Box>
+            <Link href="/auth/sign-in" variant="body2">
+              Already have account? Sign In
+            </Link>
+          </Box>
           {isError && (
             <Typography color="error" align="center" mt={2}>
               {getErrorMessage()}

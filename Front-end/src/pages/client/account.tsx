@@ -373,14 +373,6 @@ function Account(): React.JSX.Element {
   </Card>
 </Box>
 
-
-
-
-
-
-
-
-
                 </Stack>
               </Grid>
             </Grid>

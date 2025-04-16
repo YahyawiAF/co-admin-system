@@ -10,13 +10,15 @@ import { ConfigModule } from '@nestjs/config';
 import { UserModule } from '../user/user.module';  // Import UserModule
 import { PrismaService } from 'database/prisma.service';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
+import { MemberModule } from '../member/member.module';
 
 @Module({
   imports: [
+    MemberModule,
     ConfigModule.forRoot(),
     JwtModule.register({
       secret: process.env.JWT_ACCESS_SECRET,
-      signOptions: { expiresIn: '1m' },
+      signOptions: { expiresIn: '1h' },
     }),
     PrismaModule,
     PassportModule,

@@ -60,25 +60,25 @@ export const authServerApi = createApi({
         body: { email },
       }),
     }),
-getProtectedResource: builder.query<{ message: string; userId: string }, void>({
-  query: () => ({
-    url: "auth/protected",
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
-    },
-  }),
-}),
-// Endpoint pour la déconnexion
-logout: builder.mutation<void, void>({
-  query: () => ({
-    url: "auth/logout",
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${sessionStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
-    },
-  }),
-}),
+    getProtectedResource: builder.query<{ message: string; userId: string }, void>({
+      query: () => ({
+        url: "auth/protected",
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+        },
+      }),
+    }),
+    // Endpoint pour la déconnexion
+    logout: builder.mutation<void, void>({
+      query: () => ({
+        url: "auth/logout",
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${sessionStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+        },
+      }),
+    }),
 
     // Endpoint pour la réinitialisation du mot de passe
     resetPassword: builder.mutation<void, { token: string; newPassword: string }>({

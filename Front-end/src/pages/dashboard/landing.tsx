@@ -42,43 +42,43 @@ function Default() {
   return (
     <RoleProtectedRoute allowedRoles={['ADMIN']}>
 
-    <React.Fragment>
-      <Helmet title="Default Dashboard" />
-      <Grid justifyContent="space-between" container spacing={6}>
-        <Grid item>
-          <Typography variant="h3">
-            {t("Welcome back")}, User! {t("We've missed you")}.{" "}
-          </Typography>
+      <React.Fragment>
+        <Helmet title="Default Dashboard" />
+        <Grid justifyContent="space-between" container spacing={6}>
+          <Grid item>
+            <Typography variant="h3">
+              {t("Welcome back")}, User! {t("We've missed you")}.{" "}
+            </Typography>
+          </Grid>
         </Grid>
-      </Grid>
 
-      <Divider my={6} />
+        <Divider my={6} />
 
-      <Grid container spacing={6}>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Members" count={members?.length || 0} icon={<User />} />
+        <Grid container spacing={6}>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats title="Members" count={members?.length || 0} icon={<User />} />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Credit Card"
+              count={cards?.length || 0}
+              icon={<CreditCard />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats title="Cash" count={3} icon={<DollarSign />} />
+          </Grid>
         </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Credit Card"
-            count={cards?.length || 0}
-            icon={<CreditCard />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Cash" count={3} icon={<DollarSign />} />
-        </Grid>
-      </Grid>
 
-      <Grid container spacing={4}>
-        <Grid display={"flex"} item xs={12} lg={6}>
-          <DoughnutChart />
+        <Grid container spacing={4}>
+          <Grid display={"flex"} item xs={12} lg={6}>
+            <DoughnutChart />
+          </Grid>
+          <Grid item xs={12} lg={6}>
+            <LineChart />
+          </Grid>
         </Grid>
-        <Grid item xs={12} lg={6}>
-          <LineChart />
-        </Grid>
-      </Grid>
-    </React.Fragment>
+      </React.Fragment>
     </RoleProtectedRoute>
   );
 }

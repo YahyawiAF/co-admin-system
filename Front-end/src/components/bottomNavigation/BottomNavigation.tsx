@@ -25,7 +25,7 @@ export default function FixedBottomNavigation() {
         onChange={handleChange}
       >
         <BottomNavigationAction label="Recents" icon={<RestoreIcon />} />
-        <BottomNavigationAction label="Scanner" icon={<QrCodeIcon />} />
+        <BottomNavigationAction label="Subscription" icon={<QrCodeIcon />} />
         <BottomNavigationAction label="Archive" icon={<ArchiveIcon />} />
       </BottomNavigation>
     </Paper>

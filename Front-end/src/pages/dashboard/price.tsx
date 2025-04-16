@@ -1,27 +1,27 @@
 import React, { useState, ChangeEvent } from "react";
-import { 
-  useGetPricesQuery, 
-  useCreatePriceMutation, 
-  useUpdatePriceMutation, 
-  useDeletePriceMutation 
+import {
+  useGetPricesQuery,
+  useCreatePriceMutation,
+  useUpdatePriceMutation,
+  useDeletePriceMutation
 } from "src/api/price.repo";
 import { Price, PriceType, TimeInterval } from "src/types/shared";
-import { 
-  Button, 
-  IconButton, 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableContainer, 
-  TableHead, 
-  TableRow, 
-  Paper, 
-  MenuItem, 
-  Select, 
-  TextField, 
-  FormHelperText, 
-  FormControl, 
-  Drawer, 
+import {
+  Button,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  MenuItem,
+  Select,
+  TextField,
+  FormHelperText,
+  FormControl,
+  Drawer,
   styled,
   Dialog,
   DialogTitle,
@@ -40,7 +40,7 @@ import {
   TableSortLabel
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
-import DashboardLayout from "../../layouts/Dashboard"; 
+import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import BulkActions from "src/components/Table/members/TableHeader";
@@ -216,12 +216,12 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
 const PriceComponent: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
-  
+
   const { data: prices, isLoading, isError, refetch } = useGetPricesQuery();
   const [createPrice] = useCreatePriceMutation();
   const [updatePrice] = useUpdatePriceMutation();
   const [deletePrice] = useDeletePriceMutation();
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<PriceType | 'all'>('all');
   const [newPrice, setNewPrice] = useState<Price>({
@@ -231,10 +231,10 @@ const PriceComponent: React.FC = () => {
     timePeriod: { start: "", end: "" },
     createdAt: null,
     updatedAt: null,
-    type: PriceType.journal, 
+    type: PriceType.journal,
     journals: []
   });
-  
+
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [priceToDelete, setPriceToDelete] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState<Price | null>(null);
@@ -321,31 +321,31 @@ const PriceComponent: React.FC = () => {
 
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
-    
+
     if (!(editPrice ? editPrice.name : newPrice.name)) errors.name = "Name is required";
     if ((editPrice ? editPrice.price : newPrice.price) <= 0) errors.price = "Price must be greater than 0";
     if (!(editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start)) errors.timePeriodStart = "Start time is required";
     if (!(editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end)) errors.timePeriodEnd = "End time is required";
     if (!(editPrice ? editPrice.type : newPrice.type)) errors.type = "Type is required";
-  
+
     setErrors(errors);
-    
+
     return Object.keys(errors).length === 0;
   };
-  
+
   const handleAddPrice = async () => {
     setErrors({});
     if (validateForm()) {
       try {
         await createPrice(newPrice).unwrap();
         setShowDrawer(false);
-        setNewPrice({ 
-          id: "", 
-          name: "", 
-          price: 0, 
-          timePeriod: { start: "", end: "" }, 
-          createdAt: null, 
-          updatedAt: null, 
+        setNewPrice({
+          id: "",
+          name: "",
+          price: 0,
+          timePeriod: { start: "", end: "" },
+          createdAt: null,
+          updatedAt: null,
           type: PriceType.journal,
           journals: []
         });
@@ -381,7 +381,7 @@ const PriceComponent: React.FC = () => {
     setPriceToDelete(id);
     setShowDeleteModal(true);
   };
-  
+
   const handleConfirmDelete = async () => {
     if (priceToDelete) {
       await deletePrice(priceToDelete);
@@ -391,7 +391,7 @@ const PriceComponent: React.FC = () => {
     }
   };
 
-  
+
 
   const formatTimeInterval = (interval: TimeInterval) => {
     return `${interval.start} - ${interval.end}`;
@@ -414,71 +414,71 @@ const PriceComponent: React.FC = () => {
     <RoleProtectedRoute allowedRoles={['ADMIN']}>
       <DashboardLayout>
         <PageContainer>
-        <Typography variant="h4" sx={{ mb: 2 }}>Rate Management</Typography>
+          <Typography variant="h4" sx={{ mb: 2 }}>Rate Management</Typography>
 
-<MainContainer>
-  <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-    {/* Partie gauche - Select */}
-    <Grid item xs={12} sm={4} md={3}>
-      <FormControl sx={{ 
-          width: '200px',
-          height: '40px',
-          '& .MuiOutlinedInput-root': {
-            height: '40px'
-          }
-        }}>
-        <Select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as PriceType | 'all')}
-          displayEmpty
-          sx={{
-            height: '40px',
-            fontSize: '14px',
-            '& .MuiSelect-select': {
-              padding: '8px 12px',
-              display: 'flex',
-              alignItems: 'center'
-            }
-          }}
-          MenuProps={{
-            PaperProps: {
-              sx: {
-                marginTop: '8px',
-                maxHeight: '300px'
-              }
-            }
-          }}
-        >
-          <MenuItem value="all" sx={{ fontSize: '14px' }}>All types</MenuItem>
-          <MenuItem value={PriceType.journal} sx={{ fontSize: '14px' }}>Journal</MenuItem>
-          <MenuItem value={PriceType.abonnement} sx={{ fontSize: '14px' }}>Subscription</MenuItem>
-        </Select>
-      </FormControl>
-    </Grid>
+          <MainContainer>
+            <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
+              {/* Partie gauche - Select */}
+              <Grid item xs={12} sm={4} md={3}>
+                <FormControl sx={{
+                  width: '200px',
+                  height: '40px',
+                  '& .MuiOutlinedInput-root': {
+                    height: '40px'
+                  }
+                }}>
+                  <Select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value as PriceType | 'all')}
+                    displayEmpty
+                    sx={{
+                      height: '40px',
+                      fontSize: '14px',
+                      '& .MuiSelect-select': {
+                        padding: '8px 12px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }
+                    }}
+                    MenuProps={{
+                      PaperProps: {
+                        sx: {
+                          marginTop: '8px',
+                          maxHeight: '300px'
+                        }
+                      }
+                    }}
+                  >
+                    <MenuItem value="all" sx={{ fontSize: '14px' }}>All types</MenuItem>
+                    <MenuItem value={PriceType.journal} sx={{ fontSize: '14px' }}>Journal</MenuItem>
+                    <MenuItem value={PriceType.abonnement} sx={{ fontSize: '14px' }}>Subscription</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
 
-    {/* Partie droite - BulkActions */}
-    <Grid item xs={12} sm={8} md={9} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-      <BulkActions 
-        handleClickOpen={() => {
-          setNewPrice({ 
-            id: "", 
-            name: "", 
-            price: 0, 
-            timePeriod: { start: "", end: "" }, 
-            createdAt: null, 
-            updatedAt: null, 
-            type: PriceType.journal,
-            journals: []
-          }); 
-          setShowDrawer(true);
-        }}
-        onHandleSearch={handleSearch}
-        search={searchTerm}
-        refetch={refetch}
-        isMobile={isMobile}
-      />
-    </Grid>
-  </Grid>
+              {/* Partie droite - BulkActions */}
+              <Grid item xs={12} sm={8} md={9} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <BulkActions
+                  handleClickOpen={() => {
+                    setNewPrice({
+                      id: "",
+                      name: "",
+                      price: 0,
+                      timePeriod: { start: "", end: "" },
+                      createdAt: null,
+                      updatedAt: null,
+                      type: PriceType.journal,
+                      journals: []
+                    });
+                    setShowDrawer(true);
+                  }}
+                  onHandleSearch={handleSearch}
+                  search={searchTerm}
+                  refetch={refetch}
+                  isMobile={isMobile}
+                />
+              </Grid>
+            </Grid>
 
             <TableWrapper>
               <StyledTableContainer>
@@ -497,8 +497,8 @@ const PriceComponent: React.FC = () => {
                     {filteredPrices?.map((price) => {
                       const isItemSelected = isSelected(price.id);
                       return (
-                        <TableRow 
-                          key={price.id} 
+                        <TableRow
+                          key={price.id}
                           hover
                           onClick={(event) => handleClick(event, price.id)}
                           role="checkbox"
@@ -525,10 +525,10 @@ const PriceComponent: React.FC = () => {
                           )}
                           <ResponsiveTableCell align="center">
                             <Box display="flex" justifyContent="center" gap={1}>
-                              <IconButton 
+                              <IconButton
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setEditPrice(price); 
+                                  setEditPrice(price);
                                   setShowDrawer(true);
                                 }}
                                 size="small"
@@ -536,7 +536,7 @@ const PriceComponent: React.FC = () => {
                               >
                                 <EditIcon fontSize={isMobile ? "small" : "medium"} />
                               </IconButton>
-                              <IconButton 
+                              <IconButton
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   confirmDeletePrice(price.id);
@@ -557,8 +557,8 @@ const PriceComponent: React.FC = () => {
             </TableWrapper>
           </MainContainer>
 
-          <Dialog 
-            open={showDeleteModal} 
+          <Dialog
+            open={showDeleteModal}
             onClose={() => setShowDeleteModal(false)}
             fullScreen={isMobile}
           >
@@ -580,34 +580,34 @@ const PriceComponent: React.FC = () => {
             anchor="right"
             open={showDrawer}
             onClose={handleCloseDrawer}
-            PaperProps={{ 
-              sx: { 
-                width: isMobile ? '100%' : "450px", 
+            PaperProps={{
+              sx: {
+                width: isMobile ? '100%' : "450px",
                 padding: isMobile ? theme.spacing(2) : theme.spacing(3),
                 display: "flex",
                 flexDirection: "column",
                 gap: "20px"
-              } 
+              }
             }}
           >
             <Typography variant="h6" sx={{ mb: 3 }}>
               {editPrice ? "Manage Rate" : "New Rate"}
             </Typography>
 
-            <TextField 
-              label="Name" 
-              fullWidth 
-              value={editPrice ? editPrice.name : newPrice.name} 
+            <TextField
+              label="Name"
+              fullWidth
+              value={editPrice ? editPrice.name : newPrice.name}
               onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}
               error={!!errors.name}
               helperText={errors.name}
             />
-            
-            <TextField 
-              label="Price (DT)" 
-              fullWidth 
-              type="number" 
-              value={editPrice ? editPrice.price : newPrice.price} 
+
+            <TextField
+              label="Price (DT)"
+              fullWidth
+              type="number"
+              value={editPrice ? editPrice.price : newPrice.price}
               onChange={(e) => {
                 const value = Math.max(0, +e.target.value);
                 editPrice
@@ -617,49 +617,49 @@ const PriceComponent: React.FC = () => {
               error={!!errors.price}
               helperText={errors.price}
             />
-            
-            <TextField 
-              label="Start Time" 
-              fullWidth 
-              value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start} 
-              onChange={(e) => 
-                editPrice 
-                  ? setEditPrice({ 
-                      ...editPrice, 
-                      timePeriod: { ...editPrice.timePeriod, start: e.target.value } 
-                    }) 
-                  : setNewPrice({ 
-                      ...newPrice, 
-                      timePeriod: { ...newPrice.timePeriod, start: e.target.value } 
-                    })
-              } 
+
+            <TextField
+              label="Start Time"
+              fullWidth
+              value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start}
+              onChange={(e) =>
+                editPrice
+                  ? setEditPrice({
+                    ...editPrice,
+                    timePeriod: { ...editPrice.timePeriod, start: e.target.value }
+                  })
+                  : setNewPrice({
+                    ...newPrice,
+                    timePeriod: { ...newPrice.timePeriod, start: e.target.value }
+                  })
+              }
               error={!!errors.timePeriodStart}
               helperText={errors.timePeriodStart}
             />
-            
-            <TextField 
-              label="End Time" 
-              fullWidth 
-              value={editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end} 
-              onChange={(e) => 
-                editPrice 
-                  ? setEditPrice({ 
-                      ...editPrice, 
-                      timePeriod: { ...editPrice.timePeriod, end: e.target.value } 
-                    }) 
-                  : setNewPrice({ 
-                      ...newPrice, 
-                      timePeriod: { ...newPrice.timePeriod, end: e.target.value } 
-                    })
-              } 
+
+            <TextField
+              label="End Time"
+              fullWidth
+              value={editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end}
+              onChange={(e) =>
+                editPrice
+                  ? setEditPrice({
+                    ...editPrice,
+                    timePeriod: { ...editPrice.timePeriod, end: e.target.value }
+                  })
+                  : setNewPrice({
+                    ...newPrice,
+                    timePeriod: { ...newPrice.timePeriod, end: e.target.value }
+                  })
+              }
               error={!!errors.timePeriodEnd}
               helperText={errors.timePeriodEnd}
             />
-            
+
             <FormControl fullWidth error={!!errors.type}>
               <Select
                 value={editPrice ? editPrice.type : newPrice.type}
-                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))} 
+                onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))}
                 label="Type"
               >
                 <MenuItem value={PriceType.journal}>Journal</MenuItem>
@@ -672,7 +672,7 @@ const PriceComponent: React.FC = () => {
               <ActionButton onClick={handleCloseDrawer}>
                 Cancel
               </ActionButton>
-              <SubmitButton 
+              <SubmitButton
                 onClick={editPrice ? handleUpdatePrice : handleAddPrice}
               >
                 {editPrice ? "Update" : "Create"}
@@ -681,7 +681,7 @@ const PriceComponent: React.FC = () => {
           </Drawer>
         </PageContainer>
       </DashboardLayout>
-      </RoleProtectedRoute>
+    </RoleProtectedRoute>
   );
 };
 

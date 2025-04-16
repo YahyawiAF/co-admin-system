@@ -29,7 +29,7 @@ const SignUpPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.repeatPassword) {
       Swal.fire({
         icon: 'error',
@@ -85,72 +85,72 @@ const SignUpPage: React.FC = () => {
           <div className="signup-content">
             <div className="signup-form">
               <h2 className="form-title">Sign up</h2>
-             <form onSubmit={handleSubmit} className="register-form" id="register-form">
-  <div className="form-group">
-    <label htmlFor="name" className="material-icons-name">
-      <span className="emoji-icon" role="img" aria-label="user"><BiSolidUser />
+              <form onSubmit={handleSubmit} className="register-form" id="register-form">
+                <div className="form-group">
+                  <label htmlFor="name" className="material-icons-name">
+                    <span className="emoji-icon" role="img" aria-label="user"><BiSolidUser />
 
 
-      </span>
-    </label>
-    <input
-      type="text"
-      name="name"
-      id="name"
-      placeholder="Your Name"
-      value={formData.name}
-      onChange={handleChange}
-      required
-    />
-  </div>
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    id="name"
+                    placeholder="Your Name"
+                    value={formData.name}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-  <div className="form-group">
-    <label htmlFor="identifier" className="material-icons-name">
-      <span className="emoji-icon" role="img" aria-label="phone"><MdPhone />
-      </span>
-    </label>
-    <input
-      type="text"
-      name="identifier"
-      id="identifier"
-      placeholder="Email or Phone Number"
-      value={formData.identifier}
-      onChange={handleChange}
-      required
-    />
-  </div>
+                <div className="form-group">
+                  <label htmlFor="identifier" className="material-icons-name">
+                    <span className="emoji-icon" role="img" aria-label="phone"><MdPhone />
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    name="identifier"
+                    id="identifier"
+                    placeholder="Email or Phone Number"
+                    value={formData.identifier}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-  <div className="form-group">
-    <label htmlFor="password" className="material-icons-name">
-      <span className="emoji-icon" role="img" aria-label="lock"><IoIosLock/>
-      </span>
-    </label>
-    <input
-      type="password"
-      name="password"
-      id="password"
-      placeholder="Password"
-      value={formData.password}
-      onChange={handleChange}
-      required
-    />
-  </div>
+                <div className="form-group">
+                  <label htmlFor="password" className="material-icons-name">
+                    <span className="emoji-icon" role="img" aria-label="lock"><IoIosLock />
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    id="password"
+                    placeholder="Your Password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-  <div className="form-group">
-    <label htmlFor="repeatPassword" className="material-icons-name">
-      <span className="emoji-icon" role="img" aria-label="lock"><CiLock />
-      </span>
-    </label>
-    <input
-      type="password"
-      name="repeatPassword"
-      id="repeatPassword"
-      placeholder="Repeat your password"
-      value={formData.repeatPassword}
-      onChange={handleChange}
-      required
-    />
-  </div>
+                <div className="form-group">
+                  <label htmlFor="repeatPassword" className="material-icons-name">
+                    <span className="emoji-icon" role="img" aria-label="lock"><CiLock />
+                    </span>
+                  </label>
+                  <input
+                    type="password"
+                    name="repeatPassword"
+                    id="repeatPassword"
+                    placeholder="Repeat Your Password"
+                    value={formData.repeatPassword}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
                 <div className="form-group">
                   <input
@@ -179,14 +179,14 @@ const SignUpPage: React.FC = () => {
             </div>
 
             <div className="signup-image">
-            <figure>
-  <img 
-    src="/images/signup-image.jpg" 
-    alt="Signup illustration" 
-    style={{ width: '100%', height: 'auto' }}
-  />
-</figure>
-             <Link href="/client/login" className="signup-image-link">
+              <figure>
+                <img
+                  src="/images/signup-image.jpg"
+                  alt="Signup illustration"
+                  style={{ width: '100%', height: 'auto' }}
+                />
+              </figure>
+              <Link href="/client/login" className="signup-image-link">
                 I am already member
               </Link>
             </div>
@@ -194,7 +194,7 @@ const SignUpPage: React.FC = () => {
         </div>
       </div>
 
-      
+
     </>
   );
 };

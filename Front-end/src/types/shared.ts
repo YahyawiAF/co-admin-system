@@ -112,10 +112,10 @@ export interface User {
   fullname?: string | null;
   password?: string | null;
   refreshToken?: string | null;
-  accessToken:string;
+  accessToken: string;
   role: Role;
-  resetPasswordToken :string;
-  phoneNumber:string;
+  resetPasswordToken: string;
+  phoneNumber: string;
 
 }
 
@@ -142,14 +142,14 @@ export interface Member {
 
 export interface Price {
   id: string;
-  name:string;
+  name: string;
   price: number;
-  timePeriod: TimeInterval; 
+  timePeriod: TimeInterval;
   createdAt: Date | null;
   updatedAt: Date | null;
-  type:PriceType;
+  type: PriceType;
   journals: Journal[];
-  
+
 }
 
 export interface Journal {
@@ -169,12 +169,12 @@ export interface Journal {
 }
 
 export interface Abonnement {
-  
+
   id: string;
   isPayed: boolean;
   registredDate: Date;
   leaveDate?: Date | null;
-  stayedPeriode?:  string | null;
+  stayedPeriode?: string | null;
   payedAmount: number;
   memberID?: string | null;
   member?: Member | null;

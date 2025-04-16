@@ -11,6 +11,12 @@ import {
   CardContent,
   Grid,
   Alert,
+  FormControlLabel,
+  Switch,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import { useForm } from "react-hook-form";
 import FormProvider from "../../../hook-form/FormProvider";
@@ -73,12 +79,12 @@ const defaultValues: Partial<ExtendedTypeOptional> = {
 const formatDuration = (startDate: Date, endDate: Date): string => {
   const diffInMilliseconds = endDate.getTime() - startDate.getTime();
   const diffInMinutes = Math.floor(diffInMilliseconds / (1000 * 60));
-  
+
   if (diffInMinutes < 0) return "0min";
-  
+
   const hours = Math.floor(diffInMinutes / 60);
   const minutes = diffInMinutes % 60;
-  
+
   if (hours > 0 && minutes > 0) {
     return `${hours}h${minutes.toString().padStart(2, '0')}m`;
   } else if (hours > 0) {
@@ -112,7 +118,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
-  const [tarifAlert, setTarifAlert] = useState<{show: boolean, message: string}>({show: false, message: ''});
+  const [tarifAlert, setTarifAlert] = useState<{ show: boolean, message: string }>({ show: false, message: '' });
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -151,43 +157,43 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr) return 0;
-    
+
     // Gérer les formats "1h", "1h30", "2h00", etc.
     const [hoursStr, minutesStr] = timeStr.split('h');
     const hours = parseInt(hoursStr) || 0;
     const minutes = parseInt(minutesStr) || 0;
-    
+
     return hours * 60 + minutes;
   };
   const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
     if (!journalPrices || journalPrices.length === 0) return null;
-    
+
     const realDurationMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
-    
+
     // Trier les prix par durée maximale croissante
     const sortedPrices = [...journalPrices].sort((a, b) => {
       const aMax = parseTimeToMinutes(a.timePeriod.end);
       const bMax = parseTimeToMinutes(b.timePeriod.end);
       return aMax - bMax;
     });
-  
+
     // Variable pour stocker le tarif correspondant
     let matchingPrice = null;
-  
+
     for (const price of sortedPrices) {
       const priceMax = parseTimeToMinutes(price.timePeriod.end);
-      
+
       // On considère le tarif valable si la durée est inférieure ou égale à sa limite +15min
       if (realDurationMinutes <= priceMax + 15) {
         matchingPrice = price;
         break; // On prend le premier tarif qui correspond
       }
     }
-  
+
     // Si aucun tarif ne correspond (durée très longue), retourner le tarif maximum
     return matchingPrice || sortedPrices[sortedPrices.length - 1];
   };
-  
+
   React.useEffect(() => {
     if (journalPrices && registredTime && leaveTime) {
       const start = new Date(registredTime);
@@ -196,30 +202,28 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   
       if (matchingPrice) {
         setValue("priceId", matchingPrice.id);
-        setValue("payedAmount", isPayed ? matchingPrice.price : 0);
-        
+        // Mettre à jour payedAmount avec le prix correspondant, indépendamment de isPayed
+        setValue("payedAmount", matchingPrice.price);
+  
         const priceMaxDuration = parseTimeToMinutes(matchingPrice.timePeriod.end);
         const realDurationMinutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
-        
-        // Afficher une alerte si on dépasse la durée nominale du tarif (sans les 15 minutes)
+  
         if (realDurationMinutes > priceMaxDuration) {
-          // Trouver le tarif suivant (le premier dont la durée minimale est supérieure à notre durée max)
           const nextPrice = journalPrices.find(p => 
             parseTimeToMinutes(p.timePeriod.start) > priceMaxDuration
           );
-          
           if (nextPrice) {
             setTarifAlert({
               show: true,
-               message: `Rate overrun: ${realDurationMinutes - priceMaxDuration} min (grace period). Next rate: ${nextPrice.timePeriod.start}-${nextPrice.timePeriod.end}`
+              message: `Dépassement de tarif: ${realDurationMinutes - priceMaxDuration} min (tolérance). Prochain tarif: ${nextPrice.timePeriod.start}-${nextPrice.timePeriod.end}`
             });
           }
         } else {
-          setTarifAlert({show: false, message: ''});
+          setTarifAlert({ show: false, message: '' });
         }
       }
     }
-  }, [registredTime, leaveTime, journalPrices, setValue, isPayed]);
+  }, [registredTime, leaveTime, journalPrices, setValue]); 
   const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
@@ -270,7 +274,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const handlePriceSelect = (price: Price) => {
     setValue("priceId", price.id);
     setValue("payedAmount", price.price);
-    setTarifAlert({show: false, message: ''});
+    setTarifAlert({ show: false, message: '' });
   };
 
   const defaultProps = React.useMemo(() => {
@@ -312,27 +316,194 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       />
     );
 
-  return (
-    <>
-      <Snackbar
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-        open={openSnak}
-        onClose={handleClose}
-        message={`Journal ${selectItem ? "updated" : "created"} !`}
-        key={"bottom" + "right"}
-      />
-      <FormProvider
-        styles={{
-          width: "100%",
-          height: "100%",
-          gap: "25px",
-          display: "flex",
-          flexDirection: "column",
-        }}
-        methods={methods as unknown as MethodeType}
-        onSubmit={handleSubmit(onSubmit)}
-      >
-        {!selectItem ? (
+    return (
+      <>
+        <Snackbar
+          anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+          open={openSnak}
+          onClose={handleClose}
+          message={`Journal ${selectItem ? "updated" : "created"} !`}
+          key={"bottom" + "right"}
+        />
+        <FormProvider
+          styles={{
+            width: "100%",
+            height: "100%",
+            gap: "25px",
+            display: "flex",
+            flexDirection: "column",
+          }}
+          methods={methods as unknown as MethodeType}
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          {!selectItem ? (
+            <Box
+              style={{
+                padding: 0,
+                display: "flex",
+                gap: "10px",
+              }}
+            >
+              <ActionButtton
+                endIcon={<PersonAdd />}
+                autoFocus
+                onClick={() => setOpenUserForm(true)}
+              >
+                New Member
+              </ActionButtton>
+            </Box>
+          ) : (
+            <></>
+          )}
+          {!isLoadingMember ? (
+            <RHFAutoCompletDropDown
+              label="Keywords Tags"
+              placeholder="Search for Keywords"
+              defaultProps={defaultProps}
+              selectedItem={member}
+              handleSelection={handleSelect}
+              name={"member"}
+              disabled={!!selectItem}
+              multiple={false}
+              error={!!errors.memberID}
+              errorMessage={errors.memberID?.message}
+            />
+          ) : (
+            <div>Loading!!</div>
+          )}
+          {member ? (
+            <>
+              <Box
+                sx={{
+                  display: "flex",
+                  columnGap: "14px",
+                }}
+              >
+                <RHFTimePeakerField
+                  name="registredTime"
+                  label="Starting Date"
+                  placeholder="Inscription Date"
+                />
+              </Box>
+  
+              {/* Début de la section prix permanente */}
+              {tarifAlert.show && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  {tarifAlert.message}
+                </Alert>
+              )}
+              
+              {!isLoadingPrices ? (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                    Select Rate
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {journalPrices?.map((price) => (
+                      <Grid item xs={6} key={price.id}>
+                        <PriceCard
+                          price={price}
+                          isSelected={priceId === price.id}
+                          onClick={() => handlePriceSelect(price)}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </Box>
+              ) : (
+                <div>Loading Prices...</div>
+              )}
+  
+              <Box
+                sx={{
+                  display: "flex",
+                  flexDirection: "column",
+                  rowGap: "14px",
+                }}
+              >
+                <RHFDatePeakerField
+                  name="leaveTime"
+                  label="Leaving Date"
+                  placeholder="Leaving Date"
+                  minTime={registredTime}
+                />
+              </Box>
+  
+              <RHFTextField
+                type="number"
+                name="payedAmount"
+                label="Price Payed (DT)"
+                placeholder="Enter amount"
+              />
+  
+              {/* Nouvelle ComboBox sous le champ Price Payed */}
+              <FormControl fullWidth>
+                <InputLabel>Payment Status</InputLabel>
+                <Select
+                  value={isPayed ? "paid" : "unpaid"}
+                  onChange={(e) => setValue("isPayed", e.target.value === "paid")}
+                  label="Payment Status"
+                  sx={{ mb: 2 }}
+                >
+                  <MenuItem value="paid">Paid</MenuItem>
+                  <MenuItem value="unpaid">Unpaid</MenuItem>
+                </Select>
+              </FormControl>
+  
+              <Divider />
+  
+              <Box
+                style={{
+                  flexDirection: "column",
+                  padding: 0,
+                  display: "flex",
+                  gap: "10px",
+                }}
+              >
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    justifyItems: "center",
+                  }}
+                >
+                  <Typography variant="subtitle2">Stayed Duration</Typography>
+                  <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+                    {stayedDuration}
+                  </Typography>
+                </Box>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    justifyItems: "center",
+                  }}
+                >
+                  <Typography variant="subtitle2">Total</Typography>
+                  <Typography sx={{ fontWeight: "Bold" }} variant="body1">
+                    {payedAmount} DT
+                  </Typography>
+                </Box>
+                <Divider />
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    justifyItems: "center",
+                  }}
+                >
+                  <Typography variant="h4">SubTotal</Typography>
+                  <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
+                    {payedAmount} DT
+                  </Typography>
+                </Box>
+                <Divider />
+              </Box>
+            </>
+          ) : (
+            <></>
+          )}
+  
           <Box
             style={{
               padding: 0,
@@ -340,220 +511,66 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               gap: "10px",
             }}
           >
-            <ActionButtton
-              endIcon={<PersonAdd />}
-              autoFocus
-              onClick={() => setOpenUserForm(true)}
-            >
-              New Member
+            <ActionButtton autoFocus onClick={handleClose}>
+              Cancel
             </ActionButtton>
+            <SubmitButtton
+              type="submit"
+              disabled={isSubmitting || isLoading}
+              style={{ marginLeft: 0 }}
+              autoFocus
+            >
+              Confirm
+            </SubmitButtton>
           </Box>
-        ) : (
-          <></>
-        )}
-        {!isLoadingMember ? (
-          <RHFAutoCompletDropDown
-            label="Keywords Tags"
-            placeholder="Search for Keywords"
-            defaultProps={defaultProps}
-            selectedItem={member}
-            handleSelection={handleSelect}
-            name={"member"}
-            disabled={!!selectItem}
-            multiple={false}
-            error={!!errors.memberID}
-            errorMessage={errors.memberID?.message}
-          />
-        ) : (
-          <div>Loading!!</div>
-        )}
-        {member ? (
-          <>
-            <Box
-              sx={{
-                display: "flex",
-                columnGap: "14px",
-              }}
-            >
-              <RHFTimePeakerField
-                name="registredTime"
-                label="Starting Date"
-                placeholder="Inscription Date"
-              />
-            </Box>
-            <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
-          </>
-        ) : (
-          <></>
-        )}
-        {isPayed && member ? (
-          <>
-            {tarifAlert.show && (
-              <Alert severity="info" sx={{ mb: 2 }}>
-                {tarifAlert.message}
-              </Alert>
-            )}
-            {!isLoadingPrices ? (
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1" sx={{ mb: 1 }}>
-                  Select Rate 
-                </Typography>
-                <Grid container spacing={2}>
-                  {journalPrices?.map((price) => (
-                    <Grid item xs={6} key={price.id}>
-                      <PriceCard
-                        price={price}
-                        isSelected={priceId === price.id}
-                        onClick={() => handlePriceSelect(price)}
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            ) : (
-              <div>Loading Prices...</div>
-            )}
-            <Box
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                rowGap: "14px",
-              }}
-            >
-              <RHFDatePeakerField
-                name="leaveTime"
-                label="Leaving Date"
-                placeholder="Leaving Date"
-                minTime={registredTime}
-              />
-            </Box>
-            <RHFTextField
-              type="number"
-              name="payedAmount"
-              label="Price Payed (DT)"
-              placeholder="Prix"
-            />
-            <Divider />
-            <Box
-              style={{
-                flexDirection: "column",
-                padding: 0,
-                display: "flex",
-                gap: "10px",
-              }}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  justifyItems: "center",
-                }}
-              >
-                <Typography variant="subtitle2">Stayed Duration </Typography>
-                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {stayedDuration} 
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  justifyItems: "center",
-                }}
-              >
-                <Typography variant="subtitle2">Total</Typography>
-                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {payedAmount} DT
-                </Typography>
-              </Box>
-              <Divider />
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  justifyItems: "center",
-                }}
-              >
-                <Typography variant="h4">SubTotal</Typography>
-                <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
-                  {payedAmount} DT
-                </Typography>
-              </Box>
-              <Divider />
-            </Box>
-          </>
-        ) : (
-          <></>
-        )}
-
-        <Box
-          style={{
-            padding: 0,
-            display: "flex",
-            gap: "10px",
-          }}
-        >
-          <ActionButtton autoFocus onClick={handleClose}>
-            Cancel
-          </ActionButtton>
-          <SubmitButtton
-            type="submit"
-            disabled={isSubmitting || isLoading}
-            style={{ marginLeft: 0 }}
-            autoFocus
-          >
-            Confirm
-          </SubmitButtton>
-        </Box>
-
-        {!!createJournalError ? (
-          <p style={{ color: "red" }}>
-            {parseErrorMessage(createJournalError)}
-          </p>
-        ) : (
-          <></>
-        )}
-      </FormProvider>
-    </>
-  );
-};
-
-const PriceCard: FC<{
-  price: Price;
-  isSelected: boolean;
-  onClick: () => void;
-}> = ({ price, isSelected, onClick }) => {
-  return (
-    <Card
-      onClick={onClick}
-      sx={{
-        cursor: 'pointer',
-        border: isSelected ? '2px solid #054547' : '1px solid #ddd',
-        backgroundColor: isSelected ? '#f5f9f9' : '#fff',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          borderColor: '#054547',
-          backgroundColor: '#f5f9f9',
-        },
-      }}
-    >
-      <CardContent>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle1" fontWeight="bold">
-            {price.name}
+  
+          {!!createJournalError ? (
+            <p style={{ color: "red" }}>
+              {parseErrorMessage(createJournalError)}
+            </p>
+          ) : (
+            <></>
+          )}
+        </FormProvider>
+      </>
+    );
+  };
+  
+  const PriceCard: FC<{
+    price: Price;
+    isSelected: boolean;
+    onClick: () => void;
+  }> = ({ price, isSelected, onClick }) => {
+    return (
+      <Card
+        onClick={onClick}
+        sx={{
+          cursor: 'pointer',
+          border: isSelected ? '2px solid #054547' : '1px solid #ddd',
+          backgroundColor: isSelected ? '#f5f9f9' : '#fff',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            borderColor: '#054547',
+            backgroundColor: '#f5f9f9',
+          },
+        }}
+      >
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {price.name}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              ({price.timePeriod.start}-{price.timePeriod.end})
+            </Typography>
+          </Box>
+          <Typography variant="h6" sx={{ mt: 1 }}>
+            {price.price} DT
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            ({price.timePeriod.start}-{price.timePeriod.end})
-          </Typography>
-        </Box>
-        <Typography variant="h6" sx={{ mt: 1 }}>
-          {price.price} DT
-        </Typography>
-      </CardContent>
-    </Card>
-  );
-};
-
+        </CardContent>
+      </Card>
+    );
+  };
 const SubmitButtton = styled(LoadingButton)(() => ({
   border: "1px solid",
   borderColor: "#054547",

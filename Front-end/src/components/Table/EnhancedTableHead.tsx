@@ -35,7 +35,7 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = (props) => {
         {headCells.map((headCell) => (
           <TableCell
             key={headCell.id}
-            sx={{ 
+            sx={{
               textWrap: "nowrap",
               // Ajoutez ceci pour prendre en compte la propriété alignment
               textAlign: headCell.alignment || (headCell.numeric ? "right" : "left")

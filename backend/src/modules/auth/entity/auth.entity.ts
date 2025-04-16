@@ -22,4 +22,7 @@ export class AuthEntity {
 
   @ApiProperty({ enum: Role, enumName: 'Role' })
   role: Role;
+  @ApiProperty()
+  memberId?: string; 
+
 }

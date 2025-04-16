@@ -209,40 +209,44 @@ import { isEmail, isMobilePhone } from 'class-validator';
      * Demande de réinitialisation de mot de passe
      */
     async requestPasswordReset(email: string): Promise<void> {
-      const user = await this.prisma.user.findUnique({ where: { email } });
-  
-      if (!user) {
-        throw new NotFoundException('Utilisateur non trouvé');
+        const user = await this.prisma.user.findUnique({ where: { email } });
+      
+        if (!user) {
+          throw new NotFoundException('Utilisateur non trouvé');
+        }
+      
+        const resetToken = this.jwtService.sign(
+          { userId: user.id, email: user.email },
+          {
+            secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+            expiresIn: '3h',
+          },
+        );
+      
+        await this.prisma.user.update({
+          where: { id: user.id },
+          data: { resetPasswordToken: resetToken },
+        });
+      
+        // 🔁 Ici on génère l'URL en fonction du rôle
+        const baseUrl =
+          user.role === 'USER'
+            ? 'http://localhost:3000/client/reset-password'
+            : 'http://localhost:3000/auth/reset-password';
+      
+        const resetUrl = `${baseUrl}?token=${resetToken}&role=${user.role.toLowerCase()}`;
+      
+        await this.mailerService.sendMail({
+          to: email,
+          subject: 'Demande de réinitialisation de mot de passe',
+          template: 'password-reset',
+          context: {
+            name: user.fullname,
+            resetUrl,
+          },
+        });
       }
-  
-      // Générer un token de réinitialisation avec l'ID et l'email de l'utilisateur
-      const resetToken = this.jwtService.sign(
-        { userId: user.id, email: user.email },
-        {
-          secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
-          expiresIn: '3h',
-        },
-      );
-  
-      // Stocker le token dans la base de données
-      await this.prisma.user.update({
-        where: { id: user.id },
-        data: { resetPasswordToken: resetToken },
-      });
-  
-      // Envoyer un email avec le lien de réinitialisation
-      const resetUrl = `http://localhost:3000/auth/reset-password?token=${resetToken}`;
-  
-      await this.mailerService.sendMail({
-        to: email,
-        subject: 'Demande de réinitialisation de mot de passe',
-        template: 'password-reset',
-        context: {
-          name: user.fullname,
-          resetUrl,
-        },
-      });
-    }
+      
   
     /**
      * Réinitialisation du mot de passe

@@ -16,6 +16,7 @@ import {
   IconButton,
   Tabs,
   Box,
+  
 } from "@mui/material";
 
 import { spacing } from "@mui/system";
@@ -262,185 +263,185 @@ function JournalPage() {
   return (
     <RoleProtectedRoute allowedRoles={['ADMIN']}>
 
-    <React.Fragment>
-      <Helmet title="Transactions" />
-      <Tabs
-  value={value}
-  onChange={handleChange}
-  aria-label="basic tabs example"
->
-<LinkTab label="Journal" {...a11yProps(0)} />
-  <LinkTab label="Membership" {...a11yProps(1)} />
-  <LinkTab label="Overview" {...a11yProps(2)} />
-  
-</Tabs>
+      <React.Fragment>
+        <Helmet title="Transactions" />
+        <Tabs
+          value={value}
+          onChange={handleChange}
+          aria-label="basic tabs example"
+        >
+          <LinkTab label="Journal" {...a11yProps(0)} />
+          <LinkTab label="Membership" {...a11yProps(1)} />
+          <LinkTab label="Overview" {...a11yProps(2)} />
 
-      <Divider my={6} />
-      <TabPanel value={value} index={0} title={"List"}>
-        <Grid container spacing={6}>
-          <Grid item xs={12}>
-            <div>
-              <Modal
-                open={openDeletModal}
-                handleClose={() => setOpenDeletModal(false)}
-                handleAction={handleAction}
-                title={"Delete Journal"}
-                contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
-              />
-              <Drawer
-                open={open}
-                handleClose={() => {
-                  setOpen(false);
-                }}
-              >
-                <SubPage title="Manage memeber">
-                  <JournalForm
-                    handleClose={() => {
-                      setOpen(false);
-                      setEditeJournal(null);
-                    }}
-                    today={today}
-                    selectItem={editeJournal}
-                  />
-                </SubPage>
-              </Drawer>
-              <Paper>
-                <TableHeadAction
-                  handleChangeDate={handleChangeDate}
-                  toDay={today}
-                  search={filters.query}
-                  handleClickOpen={handleClickOpen}
-                  onHandleSearch={onHandleSearch}
-                  refetch={refetch}
+        </Tabs>
+
+        <Divider my={6} />
+        <TabPanel value={value} index={0} title={"List"}>
+          <Grid container spacing={6}>
+            <Grid item xs={12}>
+              <div>
+                <Modal
+                  open={openDeletModal}
+                  handleClose={() => setOpenDeletModal(false)}
+                  handleAction={handleAction}
+                  title={"Delete Journal"}
+                  contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
                 />
-                <TableContainer>
-                  <Table
-                    aria-labelledby="tableTitle"
-                    aria-label="enhanced table"
-                  >
-                    <EnhancedTableHead
-                      numSelected={selected.length}
-                      order={order}
-                      orderBy={orderBy}
-                      onSelectAllClick={handleSelectAllClick}
-                      onRequestSort={handleRequestSort}
-                      rowCount={filteredRows.length}
-                      headCells={headCells}
+                <Drawer
+                  open={open}
+                  handleClose={() => {
+                    setOpen(false);
+                  }}
+                >
+                  <SubPage title="Manage memeber">
+                    <JournalForm
+                      handleClose={() => {
+                        setOpen(false);
+                        setEditeJournal(null);
+                      }}
+                      today={today}
+                      selectItem={editeJournal}
                     />
-                    <TableBody>
-                      {stableSort(filteredRows, getComparator(order, orderBy))
-                        .slice(
-                          page * rowsPerPage,
-                          page * rowsPerPage + rowsPerPage
-                        )
-                        .map((row, index) => {
-                          const isItemSelected = isSelected(row.id);
-                          const labelId = `enhanced-table-checkbox-${index}`;
+                  </SubPage>
+                </Drawer>
+                <Paper>
+                  <TableHeadAction
+                    handleChangeDate={handleChangeDate}
+                    toDay={today}
+                    search={filters.query}
+                    handleClickOpen={handleClickOpen}
+                    onHandleSearch={onHandleSearch}
+                    refetch={refetch}
+                  />
+                  <TableContainer>
+                    <Table
+                      aria-labelledby="tableTitle"
+                      aria-label="enhanced table"
+                    >
+                      <EnhancedTableHead
+                        numSelected={selected.length}
+                        order={order}
+                        orderBy={orderBy}
+                        onSelectAllClick={handleSelectAllClick}
+                        onRequestSort={handleRequestSort}
+                        rowCount={filteredRows.length}
+                        headCells={headCells}
+                      />
+                      <TableBody>
+                        {stableSort(filteredRows, getComparator(order, orderBy))
+                          .slice(
+                            page * rowsPerPage,
+                            page * rowsPerPage + rowsPerPage
+                          )
+                          .map((row, index) => {
+                            const isItemSelected = isSelected(row.id);
+                            const labelId = `enhanced-table-checkbox-${index}`;
 
-                          const dleave = row.isPayed
-                            ? row.leaveTime ?? new Date()
-                            : new Date();
-                          const hoursDifference = row.isReservation
-                            ? "Reservation"
-                            : getHourDifference(row.registredTime, dleave);
-                          return (
-                            <TableRow
-                              hover
-                              // onClick={(event) => handleClick(event, row.id)}
-                              onDoubleClick={() => handleEdite(row)}
-                              role="checkbox"
-                              aria-checked={isItemSelected}
-                              tabIndex={-1}
-                              key={row.id}
-                              selected={isItemSelected}
-                            >
-                              <TableCell padding="checkbox">
-                                <Checkbox
-                                  checked={isItemSelected}
-                                  inputProps={{ "aria-labelledby": labelId }}
-                                />
-                              </TableCell>
-                              <TableCell
-                                component="th"
-                                id={labelId}
-                                scope="row"
-                                padding="none"
+                            const dleave = row.isPayed
+                              ? row.leaveTime ?? new Date()
+                              : new Date();
+                            const hoursDifference = row.isReservation
+                              ? "Reservation"
+                              : getHourDifference(row.registredTime, dleave);
+                            return (
+                              <TableRow
+                                hover
+                                // onClick={(event) => handleClick(event, row.id)}
+                                onDoubleClick={() => handleEdite(row)}
+                                role="checkbox"
+                                aria-checked={isItemSelected}
+                                tabIndex={-1}
+                                key={row.id}
+                                selected={isItemSelected}
                               >
-                                {row.members?.fullName}
-                              </TableCell>
-                              <TableCell>
-                                {format(
-                                  new Date(row.registredTime) as Date,
-                                  "HH:mm:ss"
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {row.payedAmount
-                                  ? row.payedAmount + " DT"
-                                  : 0 + " DT"}
-                              </TableCell>
-                              {/* <TableCell>{leaveDate}</TableCell> */}
-                              <TableCell>{hoursDifference}</TableCell>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    checked={isItemSelected}
+                                    inputProps={{ "aria-labelledby": labelId }}
+                                  />
+                                </TableCell>
+                                <TableCell
+                                  component="th"
+                                  id={labelId}
+                                  scope="row"
+                                  padding="none"
+                                >
+                                  {row.members?.fullName}
+                                </TableCell>
+                                <TableCell>
+                                  {format(
+                                    new Date(row.registredTime) as Date,
+                                    "HH:mm:ss"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {row.payedAmount
+                                    ? row.payedAmount + " DT"
+                                    : 0 + " DT"}
+                                </TableCell>
+                                {/* <TableCell>{leaveDate}</TableCell> */}
+                                <TableCell>{hoursDifference}</TableCell>
 
-                              <TableCell>
-                                {row.isPayed ? <Done /> : null}
-                              </TableCell>
-                              <TableCell padding="none" align="right">
-                                <Box mr={2}>
-                                  <IconButton
-                                    onClick={() => handleEdite(row)}
-                                    aria-label="delete"
-                                    size="large"
-                                  >
-                                    <Edit />
-                                  </IconButton>
-                                  <IconButton
-                                    onClick={() => handleDelete(row)}
-                                    aria-label="delete"
-                                    size="large"
-                                  >
-                                    <Delete sx={{ color: red[400] }} />
-                                  </IconButton>
-                                </Box>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      {emptyRows > 0 && (
-                        <TableRow style={{ height: 53 * emptyRows }}>
-                          <TableCell colSpan={6} />
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <TablePagination
-                  rowsPerPageOptions={[50, 100, 200, 500]}
-                  component="div"
-                  count={filteredRows.length}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                />
-              </Paper>
-            </div>
+                                <TableCell>
+                                  {row.isPayed ? <Done /> : null}
+                                </TableCell>
+                                <TableCell padding="none" align="right">
+                                  <Box mr={2}>
+                                    <IconButton
+                                      onClick={() => handleEdite(row)}
+                                      aria-label="delete"
+                                      size="large"
+                                    >
+                                      <Edit />
+                                    </IconButton>
+                                    <IconButton
+                                      onClick={() => handleDelete(row)}
+                                      aria-label="delete"
+                                      size="large"
+                                    >
+                                      <Delete sx={{ color: red[400] }} />
+                                    </IconButton>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        {emptyRows > 0 && (
+                          <TableRow style={{ height: 53 * emptyRows }}>
+                            <TableCell colSpan={6} />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <TablePagination
+                    rowsPerPageOptions={[50, 100, 200, 500]}
+                    component="div"
+                    count={filteredRows.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={handleChangePage}
+                    onRowsPerPageChange={handleChangeRowsPerPage}
+                  />
+                </Paper>
+              </div>
+            </Grid>
           </Grid>
-        </Grid>
-      </TabPanel>
-      <TabPanel value={value} index={1} title={"Membership"}>
-  <Abonnement />
-</TabPanel>
+        </TabPanel>
+        <TabPanel value={value} index={1} title={"Membership"}>
+          <Abonnement />
+        </TabPanel>
 
-<TabPanel value={value} index={2} title={"Overview"}>
-  <JournalDetails
-    journals={rows}
-    isLoading={isLoading}
-    errorMemberReq={!!error}
-  />
-</TabPanel>
+        <TabPanel value={value} index={2} title={"Overview"}>
+          <JournalDetails
+            journals={rows}
+            isLoading={isLoading}
+            errorMemberReq={!!error}
+          />
+        </TabPanel>
       </React.Fragment>
-      </RoleProtectedRoute>
+    </RoleProtectedRoute>
   );
 }
 

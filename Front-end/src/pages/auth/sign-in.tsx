@@ -3,10 +3,10 @@ import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { Avatar, Paper, Typography, TextField, Button, CircularProgress, Box, Link, Checkbox, FormControlLabel } from "@mui/material";
-import { useLoginMutation } from "../../api/auth.repo"; 
+import { useLoginMutation } from "../../api/auth.repo";
 import AuthLayout from "../../layouts/Auth";
 import Logo from "../../vendor/logo.svg";
-import Swal from "sweetalert2"; 
+import Swal from "sweetalert2";
 
 const Brand = styled(Logo)`
   fill: ${(props) => props.theme.palette.primary.main};
@@ -38,7 +38,7 @@ function SignIn() {
     e.preventDefault();
     try {
       const user = await login({ identifier, password }).unwrap();
-  
+
       // Vérifie le rôle
       if (user.role !== "ADMIN") {
         Swal.fire({
@@ -49,12 +49,12 @@ function SignIn() {
         });
         return;
       }
-  
+
       // Connexion réussie, stocke les infos
       sessionStorage.setItem("accessToken", user.accessToken);
       sessionStorage.setItem("username", user.fullname ?? "");
       sessionStorage.setItem("Role", user.role);
-  
+
       Swal.fire({
         title: "Success!",
         text: "You have logged in successfully.",
@@ -73,8 +73,8 @@ function SignIn() {
       });
     }
   };
-  
-  
+
+
 
   // Gérer le message d'erreur
   const getErrorMessage = () => {
@@ -123,10 +123,10 @@ function SignIn() {
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          
+
           {/* Checkbox Remember Me */}
-          
-          
+
+
 
           <Button
             type="submit"
@@ -144,7 +144,7 @@ function SignIn() {
             </Box>
           )}
         </form>
-        
+
         {/* Lien Forgot Password */}
         <Box mt={2} textAlign="center">
           <Link href="/auth/forget-password/" variant="body2">
@@ -155,7 +155,7 @@ function SignIn() {
         {/* Nouveau lien Sign In */}
         <Box mt={2} textAlign="center">
           <Link href="/auth/sign-up" variant="body2">
-           Don't have an account? Sign Up
+            Don't have an account? Sign Up
           </Link>
         </Box>
       </Wrapper>
