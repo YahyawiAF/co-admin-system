@@ -478,27 +478,12 @@ const AbonnementComponent = () => {
     const registredDate = editAbonnement?.registredDate || newAbonnement.registredDate || new Date();
     let leaveDate = new Date(registredDate);
 
-    // Convertir le nom du prix en minuscules pour une comparaison insensible à la casse
-    const priceName = price.name.toLowerCase();
+    // Calcul basé sur les dates du prix
+    const start = parseInt(price.timePeriod.start, 10);
+    const end = parseInt(price.timePeriod.end, 10);
+    const durationDays = end - start;
 
-    // Calcul de la leaveDate en fonction du type de prix
-    if (priceName.includes('semaine') || priceName.includes('week')) {
-      if (priceName.includes('2') || priceName.includes('deux') || priceName.includes('two')) {
-        leaveDate.setDate(leaveDate.getDate() + 14); // 2 semaines = 14 jours
-      } else {
-        leaveDate.setDate(leaveDate.getDate() + 7); // 1 semaine = 7 jours
-      }
-    } else if (priceName.includes('mois') || priceName.includes('month')) {
-      if (priceName.includes('3')) {
-        leaveDate.setMonth(leaveDate.getMonth() + 3);
-      } else if (priceName.includes('6')) {
-        leaveDate.setMonth(leaveDate.getMonth() + 6);
-      } else {
-        leaveDate.setMonth(leaveDate.getMonth() + 1); // 1 mois par défaut
-      }
-    } else if (priceName.includes('année') || priceName.includes('year')) {
-      leaveDate.setFullYear(leaveDate.getFullYear() + 1);
-    }
+    leaveDate.setDate(leaveDate.getDate() + durationDays);
 
     const update = {
       priceId: price.id,
@@ -512,25 +497,14 @@ const AbonnementComponent = () => {
       setNewAbonnement({ ...newAbonnement, ...update });
     }
   };
-  const getDurationDescription = (priceName: string) => {
-    const name = priceName.toLowerCase();
 
-    if (name.includes('semaine') || name.includes('week')) {
-      if (name.includes('2') || name.includes('deux') || name.includes('two')) {
-        return '2 weeks';
-      }
-      return '1 week';
-    } else if (name.includes('mois') || name.includes('month')) {
-      if (name.includes('3')) {
-        return '3 months';
-      } else if (name.includes('6')) {
-        return '6 months ';
-      }
-      return '1 month ';
-    } else if (name.includes('année') || name.includes('year')) {
-      return '1 year';
-    }
-    return '';
+  // Garder l'affichage du nom original
+  const getDurationDescription = (price: Price) => {
+    const start = parseInt(price.timePeriod.start, 10);
+    const end = parseInt(price.timePeriod.end, 10);
+
+
+    return `${price.name}`; // Affiche "1week (7 jours)"
   };
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
@@ -679,7 +653,7 @@ const AbonnementComponent = () => {
                           <>
 
                             <ResponsiveTableCell>
-                              {price ? `${price.name} (${price.timePeriod.start} ${price.timePeriod.end})` : "N/A"}
+                              {price?.name}
                             </ResponsiveTableCell>
                             {abonnement.leaveDate && (
                               <ResponsiveTableCell sx={getRemainingTimeStyle(abonnement.leaveDate, theme)}>
@@ -840,6 +814,7 @@ const AbonnementComponent = () => {
           <Grid container spacing={2} sx={{ mb: 2 }}>
             {abonnementPrices.map((price) => (
               <Grid item xs={12} sm={6} key={price.id}>
+                {/* Voici le PriceCard */}
                 <PriceCard
                   sx={{
                     border: (editAbonnement?.priceId || newAbonnement.priceId) === price.id ?
@@ -850,12 +825,9 @@ const AbonnementComponent = () => {
                   onClick={() => handlePriceSelect(price)}
                 >
                   <CardContent>
-
                     <Typography variant="h6" sx={{ mt: 1 }}>
-                      <Box component="span" sx={{ fontWeight: 'bold' }}>{getDurationDescription(price.name)}</Box>
-                      {' '}
-                      <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.9em' }}>
-                        ({price.timePeriod.start}-{price.timePeriod.end})
+                      <Box component="span" sx={{ fontWeight: 'bold' }}>
+                        {getDurationDescription(price)}
                       </Box>
                     </Typography>
                     <Typography variant="h6" sx={{ mt: 1 }}>
