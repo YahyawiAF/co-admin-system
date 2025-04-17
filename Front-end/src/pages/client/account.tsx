@@ -67,13 +67,13 @@ function Account(): React.JSX.Element {
         oldPassword: passwords.oldPassword,
         newPassword: passwords.newPassword,
       }).unwrap();
-  
+
       setNotification({
         open: true,
         message: "Mot de passe changé avec succès !",
         severity: "success",
       });
-  
+
       setPasswords({ oldPassword: '', newPassword: '' });
     } catch (error: any) {
       console.error("Erreur lors du changement de mot de passe:", error);
@@ -85,7 +85,7 @@ function Account(): React.JSX.Element {
       });
     }
   };
-  
+
   const handleUpdateUser = async (updateData: {
     username: string;
     email?: string;
@@ -100,25 +100,25 @@ function Account(): React.JSX.Element {
       });
       return;
     }
-  
+
     try {
       // 1. Conversion des noms de champs frontend -> backend
       const backendData: any = {
         fullname: updateData.username,
         phoneNumber: updateData.phone,
       };
-  
+
       // Si l'email est défini, on l'ajoute aux données envoyées, sinon on ne l'ajoute pas
       if (updateData.email) {
         backendData.email = updateData.email;
       }
-  
+
       // 2. Appel API avec vérification de type explicite
       const updatedUser = await updateUser({
         id: userId,
         data: backendData
       }).unwrap();
-  
+
       // 3. Mise à jour sessionStorage avec vérification de type
       sessionStorage.setItem('username', updatedUser.fullname || '');
       if (updatedUser.email) {
@@ -127,7 +127,7 @@ function Account(): React.JSX.Element {
       if (updatedUser.phoneNumber) {
         sessionStorage.setItem('phone', updatedUser.phoneNumber);
       }
-  
+
       // 4. Mise à jour du state avec typage strict
       setUserData(prev => ({
         ...prev,
@@ -135,23 +135,23 @@ function Account(): React.JSX.Element {
         email: updatedUser.email || prev.email,
         phone: updatedUser.phoneNumber || prev.phone
       }));
-  
+
       // 5. Notification de succès
       setNotification({
         open: true,
         message: 'Profil mis à jour avec succès !',
         severity: 'success'
       });
-  
+
     } catch (error: any) {
       console.error('Erreur de mise à jour :', error);
-  
+
       // 6. Gestion d'erreur améliorée
       const errorMessage = error?.data?.message?.toLowerCase() || '';
       const statusCode = error?.status;
-  
+
       let notificationMessage = 'Échec de la mise à jour du profil. Veuillez réessayer.';
-      
+
       if (statusCode === 400 || statusCode === 409) {
         if (errorMessage.includes('nom d\'utilisateur') || errorMessage.includes('fullname')) {
           notificationMessage = 'Ce nom d\'utilisateur est déjà pris.';
@@ -161,7 +161,7 @@ function Account(): React.JSX.Element {
           notificationMessage = 'Ce numéro de téléphone est déjà utilisé.';
         }
       }
-  
+
       setNotification({
         open: true,
         message: notificationMessage,
@@ -169,7 +169,7 @@ function Account(): React.JSX.Element {
       });
     }
   };
-  
+
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem('accessToken');
     const Role = sessionStorage.getItem('Role');
@@ -211,34 +211,33 @@ function Account(): React.JSX.Element {
   };
 
   return (
-    <RoleProtectedRoute allowedRoles={['USER']}>
-      <Box  sx={{
-    p: 3,
-    minHeight: '100vh', // ✅ pour prendre toute la hauteur visible
-    overflowY: 'auto'    // ✅ scroll si contenu trop long
-  }}>
-        <Snackbar
-          open={notification.open}
-          autoHideDuration={6000}
+    <Box sx={{
+      p: 3,
+      minHeight: '100vh', // ✅ pour prendre toute la hauteur visible
+      overflowY: 'auto'    // ✅ scroll si contenu trop long
+    }}>
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={6000}
+        onClose={handleCloseNotification}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
           onClose={handleCloseNotification}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          severity={notification.severity}
+          variant="filled"
         >
-          <Alert
-            onClose={handleCloseNotification}
-            severity={notification.severity}
-            variant="filled"
-          >
-            {notification.message}
-          </Alert>
-        </Snackbar>
+          {notification.message}
+        </Alert>
+      </Snackbar>
 
-        <Stack spacing={3}>
+      <Stack spacing={3}>
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Typography variant="h4" component="h1" fontWeight="medium">
             Account Settings
           </Typography>
           <Tooltip title="Déconnexion">
-            <IconButton 
+            <IconButton
               onClick={handleSignOut}
               color="inherit"
               size="large"
@@ -248,143 +247,144 @@ function Account(): React.JSX.Element {
             </IconButton>
           </Tooltip>
         </Stack>
-          
-          <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
-            <Grid container spacing={4}>
-              <Grid item lg={4} md={6} xs={12}>
-                <AccountInfo 
-                  name={userData.username}
+
+        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+          <Grid container spacing={4}>
+            <Grid item lg={4} md={6} xs={12}>
+              <AccountInfo
+                name={userData.username}
+                email={userData.email}
+                phone={userData.phone}
+              />
+            </Grid>
+
+            <Grid item lg={8} md={6} xs={12}>
+              <Stack spacing={3}>
+                <Typography variant="h6" component="h2">
+                  Profile Details
+                </Typography>
+                <AccountDetailsForm
+                  username={userData.username}
                   email={userData.email}
                   phone={userData.phone}
+                  onUpdate={handleUpdateUser}
                 />
-              </Grid>
-              
-              <Grid item lg={8} md={6} xs={12}>
-                <Stack spacing={3}>
-                  <Typography variant="h6" component="h2">
-                    Profile Details
-                  </Typography>
-                  <AccountDetailsForm 
-                    username={userData.username}
-                    email={userData.email}
-                    phone={userData.phone}
-                    onUpdate={handleUpdateUser}
-                  />
-             <Box sx={{ mt: 4 }}>
-  <Card
-    sx={{
-      width: '100%',
-      boxSizing: 'border-box',
-    }}
-  >
+                <Box sx={{ mt: 4 }}>
+                  <Card
+                    sx={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                    }}
+                  >
 
-    <CardHeader
-      title="Change Password"
-      subheader="Update your password securely"
-    />
-    <Divider />
-    
-    <CardContent>
-      <Grid container spacing={3}>
-        {/* Old Password */}
-        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
-          <TextField
-            type="password"
-            label="Old password"
-            variant="outlined"
-            value={passwords.oldPassword}
-            onChange={(e) =>
-              setPasswords((prev) => ({ ...prev, oldPassword: e.target.value }))
-            }
-            fullWidth
-          />
-        </Grid>
+                    <CardHeader
+                      title="Change Password"
+                      subheader="Update your password securely"
+                    />
+                    <Divider />
 
-        {/* Espacement vertical sur mobile */}
-        <Grid item xs={12} sx={{ display: { xs: 'block', sm: 'none' }, height: 16 }} />
+                    <CardContent>
+                      <Grid container spacing={3}>
+                        {/* Old Password */}
+                        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+                          <TextField
+                            type="password"
+                            label="Old password"
+                            variant="outlined"
+                            value={passwords.oldPassword}
+                            onChange={(e) =>
+                              setPasswords((prev) => ({ ...prev, oldPassword: e.target.value }))
+                            }
+                            fullWidth
+                          />
+                        </Grid>
 
-        {/* New Password */}
-        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
-          <TextField
-            type="password"
-            label="New password"
-            variant="outlined"
-            value={passwords.newPassword}
-            onChange={(e) =>
-              setPasswords((prev) => ({ ...prev, newPassword: e.target.value }))
-            }
-            fullWidth
-          />
-        </Grid>
+                        {/* Espacement vertical sur mobile */}
+                        <Grid item xs={12} sx={{ display: { xs: 'block', sm: 'none' }, height: 16 }} />
 
-        {/* Confirm Password */}
-        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
-          <TextField
-            type="password"
-            label="Confirm new password"
-            variant="outlined"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            fullWidth
-          />
-        </Grid>
+                        {/* New Password */}
+                        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+                          <TextField
+                            type="password"
+                            label="New password"
+                            variant="outlined"
+                            value={passwords.newPassword}
+                            onChange={(e) =>
+                              setPasswords((prev) => ({ ...prev, newPassword: e.target.value }))
+                            }
+                            fullWidth
+                          />
+                        </Grid>
 
-        {/* Message d'erreur intégré */}
-        {passwords.newPassword && confirmPassword && passwords.newPassword !== confirmPassword && (
-          <Grid item xs={12}>
-            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
-              Les mots de passe ne correspondent pas
-            </Typography>
-          </Grid>
-        )}
-      </Grid>
-    </CardContent>
+                        {/* Confirm Password */}
+                        <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
+                          <TextField
+                            type="password"
+                            label="Confirm new password"
+                            variant="outlined"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            fullWidth
+                          />
+                        </Grid>
 
-    {/* Divider ajouté après CardContent */}
-    <Divider />
+                        {/* Message d'erreur intégré */}
+                        {passwords.newPassword && confirmPassword && passwords.newPassword !== confirmPassword && (
+                          <Grid item xs={12}>
+                            <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+                              Les mots de passe ne correspondent pas
+                            </Typography>
+                          </Grid>
+                        )}
+                      </Grid>
+                    </CardContent>
 
-    {/* CardActions pour le bouton */}
-<CardActions sx={{ justifyContent: "flex-end", px: 2, pb: 2 }}>  <Button
-    variant="contained"
-    type="button"
-    disabled={
-      !passwords.oldPassword ||
-      !passwords.newPassword ||
-      !confirmPassword ||
-      passwords.newPassword !== confirmPassword
-    }
-    onClick={() => {
-      if (passwords.newPassword !== confirmPassword) {
-        setNotification({
-          open: true,
-          message: "Les mots de passe ne correspondent pas.",
-          severity: "error",
-        });
-        return;
-      }
-      handleChangePassword();
-    }}
-  >
-    Save changes
-  </Button>
-</CardActions>
+                    {/* Divider ajouté après CardContent */}
+                    <Divider />
+
+                    {/* CardActions pour le bouton */}
+                    <CardActions sx={{ justifyContent: "flex-end", px: 2, pb: 2 }}>  <Button
+                      variant="contained"
+                      type="button"
+                      disabled={
+                        !passwords.oldPassword ||
+                        !passwords.newPassword ||
+                        !confirmPassword ||
+                        passwords.newPassword !== confirmPassword
+                      }
+                      onClick={() => {
+                        if (passwords.newPassword !== confirmPassword) {
+                          setNotification({
+                            open: true,
+                            message: "Les mots de passe ne correspondent pas.",
+                            severity: "error",
+                          });
+                          return;
+                        }
+                        handleChangePassword();
+                      }}
+                    >
+                      Save changes
+                    </Button>
+                    </CardActions>
 
 
-  </Card>
-</Box>
+                  </Card>
+                </Box>
 
-                </Stack>
-              </Grid>
+              </Stack>
             </Grid>
-          </Paper>
-        </Stack>
-      </Box>
-    </RoleProtectedRoute>
+          </Grid>
+        </Paper>
+      </Stack>
+    </Box>
+
   );
 }
 
 Account.getLayout = function getLayout(page: ReactElement) {
-  return <PublicLayout>{page}</PublicLayout>;
+  return <PublicLayout>    <RoleProtectedRoute allowedRoles={['USER']}>
+    {page} </RoleProtectedRoute></PublicLayout>;
 };
 
 export default Account;

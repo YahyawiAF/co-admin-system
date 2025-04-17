@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, ReactElement } from "react";
 import { useTheme, styled } from '@mui/material/styles';
 import {
   useGetPricesQuery,
@@ -23,6 +23,7 @@ import {
 import useAuth from "src/hooks/useAuth";
 import { Abonnement, Journal } from "src/types/shared";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
+import PublicLayout from "src/layouts/PublicLayout";
 
 const PriceCard = styled(Card)(({ theme }) => ({
   cursor: 'pointer',
@@ -152,176 +153,179 @@ const SubscriptionSelection = () => {
   if (isError) return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
 
   return (
-    <RoleProtectedRoute allowedRoles={['USER']}>
-      <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
-        {/* Subscription Type Buttons */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
-          <Button
-            variant={selectedSubscriptionType === 'abonnement' ? 'contained' : 'outlined'}
-            sx={{ mx: 2 }}
-            onClick={() => setSelectedSubscriptionType('abonnement')}
-          >
-            Abonnement (Mensuel / Hebdomadaire)
-          </Button>
-          <Button
-            variant={selectedSubscriptionType === 'journal' ? 'contained' : 'outlined'}
-            sx={{ mx: 2 }}
-            onClick={() => setSelectedSubscriptionType('journal')}
-          >
-            Journal (Quotidien)
-          </Button>
-        </Box>
-
-        {selectedSubscriptionType === 'abonnement' && (
-          <>
-            <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
-              Monthly/Weekly Subscription
-            </Typography>
-
-            {errorMessage && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {errorMessage}
-              </Alert>
-            )}
-
-            {isSuccessAbonnement && (
-              <Alert severity="success" sx={{ mb: 3 }}>
-                Abonnement activé avec succès! Redirection...
-              </Alert>
-            )}
-
-            <Grid container spacing={3}>
-              {abonnementPrices.map((price) => (
-                <Grid item xs={12} md={4} key={price.id}>
-                  <PriceCard
-                    onClick={() => setSelectedPrice(price)}
-                    sx={{
-                      border: selectedPrice?.id === price.id
-                        ? `2px solid ${theme.palette.primary.main}`
-                        : '1px solid #ddd',
-                      backgroundColor: selectedPrice?.id === price.id
-                        ? theme.palette.action.selected
-                        : theme.palette.background.paper,
-                    }}
-                  >
-                    <CardContent>
-                      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                        {price.name}
-                      </Typography>
-
-                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
-                        <Typography variant="h3" sx={{ fontWeight: 800 }}>
-                          {price.price} DT
-                        </Typography>
-                      </Box>
-
-                      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                        Période: {price.timePeriod.start} à {price.timePeriod.end}
-                      </Typography>
-                    </CardContent>
-                  </PriceCard>
-                </Grid>
-              ))}
-            </Grid>
-
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
-              <Button
-                variant="contained"
-                size="large"
-                disabled={!selectedPrice || isSubmittingAbonnement}
-                onClick={handleSubscriptionSubmit}
-                sx={{
-                  px: 6,
-                  py: 2,
-                  fontSize: '1.1rem',
-                  '&.Mui-disabled': {
-                    backgroundColor: theme.palette.action.disabledBackground,
-                  },
-                }}
-              >
-                {isSubmittingAbonnement ? (
-                  <CircularProgress size={24} sx={{ color: 'white' }} />
-                ) : (
-                  "Confirm"
-                )}
-              </Button>
-            </Box>
-          </>
-        )}
-
-        {selectedSubscriptionType === 'journal' && (
-          <>
-            <Typography variant="h4" gutterBottom sx={{ mt: 6, mb: 4, fontWeight: 'bold' }}>
-              Daily Subscription
-            </Typography>
-
-            {isSuccessJournal && (
-              <Alert severity="success" sx={{ mb: 3 }}>
-                Journal créé avec succès! Redirection...
-              </Alert>
-            )}
-
-            <Grid container spacing={3}>
-              {journalPrices.map((price) => (
-                <Grid item xs={12} md={4} key={price.id}>
-                  <PriceCard
-                    onClick={() => setSelectedJournalPrice(price)}
-                    sx={{
-                      border: selectedJournalPrice?.id === price.id
-                        ? `2px solid ${theme.palette.primary.main}`
-                        : '1px solid #ddd',
-                      backgroundColor: selectedJournalPrice?.id === price.id
-                        ? theme.palette.action.selected
-                        : theme.palette.background.paper,
-                    }}
-                  >
-                    <CardContent>
-                      <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                        {price.name}
-                      </Typography>
-
-                      <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
-                        <Typography variant="h3" sx={{ fontWeight: 800 }}>
-                          {price.price} DT
-                        </Typography>
-                      </Box>
-
-                      <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-                        Période: {price.timePeriod.start} à {price.timePeriod.end}
-                      </Typography>
-                    </CardContent>
-                  </PriceCard>
-                </Grid>
-              ))}
-            </Grid>
-
-            <Box sx={{ mt: 4, textAlign: 'center' }}>
-              <Button
-                variant="contained"
-                size="large"
-                disabled={!selectedJournalPrice || isSubmittingJournal}
-                onClick={handleJournalSubmit}
-                sx={{
-                  px: 6,
-                  py: 2,
-                  fontSize: '1.1rem',
-                  '&.Mui-disabled': {
-                    backgroundColor: theme.palette.action.disabledBackground,
-                  },
-                }}
-              >
-                {isSubmittingJournal ? (
-                  <CircularProgress size={24} sx={{ color: 'white' }} />
-                ) : (
-                  "Confirm"
-                )}
-              </Button>
-            </Box>
-          </>
-        )}
+    <Box sx={{ p: 4, maxWidth: 1200, margin: '0 auto' }}>
+      {/* Subscription Type Buttons */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 4 }}>
+        <Button
+          variant={selectedSubscriptionType === 'abonnement' ? 'contained' : 'outlined'}
+          sx={{ mx: 2 }}
+          onClick={() => setSelectedSubscriptionType('abonnement')}
+        >
+          Abonnement (Mensuel / Hebdomadaire)
+        </Button>
+        <Button
+          variant={selectedSubscriptionType === 'journal' ? 'contained' : 'outlined'}
+          sx={{ mx: 2 }}
+          onClick={() => setSelectedSubscriptionType('journal')}
+        >
+          Journal (Quotidien)
+        </Button>
       </Box>
-    </RoleProtectedRoute>
+
+      {selectedSubscriptionType === 'abonnement' && (
+        <>
+          <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
+            Monthly/Weekly Subscription
+          </Typography>
+
+          {errorMessage && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {errorMessage}
+            </Alert>
+          )}
+
+          {isSuccessAbonnement && (
+            <Alert severity="success" sx={{ mb: 3 }}>
+              Abonnement activé avec succès! Redirection...
+            </Alert>
+          )}
+
+          <Grid container spacing={3}>
+            {abonnementPrices.map((price) => (
+              <Grid item xs={12} md={4} key={price.id}>
+                <PriceCard
+                  onClick={() => setSelectedPrice(price)}
+                  sx={{
+                    border: selectedPrice?.id === price.id
+                      ? `2px solid ${theme.palette.primary.main}`
+                      : '1px solid #ddd',
+                    backgroundColor: selectedPrice?.id === price.id
+                      ? theme.palette.action.selected
+                      : theme.palette.background.paper,
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                      {price.name}
+                    </Typography>
+
+                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
+                      <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                        {price.price} DT
+                      </Typography>
+                    </Box>
+
+                    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                      Période: {price.timePeriod.start} à {price.timePeriod.end}
+                    </Typography>
+                  </CardContent>
+                </PriceCard>
+              </Grid>
+            ))}
+          </Grid>
+
+          <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Button
+              variant="contained"
+              size="large"
+              disabled={!selectedPrice || isSubmittingAbonnement}
+              onClick={handleSubscriptionSubmit}
+              sx={{
+                px: 6,
+                py: 2,
+                fontSize: '1.1rem',
+                '&.Mui-disabled': {
+                  backgroundColor: theme.palette.action.disabledBackground,
+                },
+              }}
+            >
+              {isSubmittingAbonnement ? (
+                <CircularProgress size={24} sx={{ color: 'white' }} />
+              ) : (
+                "Confirm"
+              )}
+            </Button>
+          </Box>
+        </>
+      )}
+
+      {selectedSubscriptionType === 'journal' && (
+        <>
+          <Typography variant="h4" gutterBottom sx={{ mt: 6, mb: 4, fontWeight: 'bold' }}>
+            Daily Subscription
+          </Typography>
+
+          {isSuccessJournal && (
+            <Alert severity="success" sx={{ mb: 3 }}>
+              Journal créé avec succès! Redirection...
+            </Alert>
+          )}
+
+          <Grid container spacing={3}>
+            {journalPrices.map((price) => (
+              <Grid item xs={12} md={4} key={price.id}>
+                <PriceCard
+                  onClick={() => setSelectedJournalPrice(price)}
+                  sx={{
+                    border: selectedJournalPrice?.id === price.id
+                      ? `2px solid ${theme.palette.primary.main}`
+                      : '1px solid #ddd',
+                    backgroundColor: selectedJournalPrice?.id === price.id
+                      ? theme.palette.action.selected
+                      : theme.palette.background.paper,
+                  }}
+                >
+                  <CardContent>
+                    <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                      {price.name}
+                    </Typography>
+
+                    <Box sx={{ mt: 2, display: 'flex', alignItems: 'baseline' }}>
+                      <Typography variant="h3" sx={{ fontWeight: 800 }}>
+                        {price.price} DT
+                      </Typography>
+                    </Box>
+
+                    <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+                      Période: {price.timePeriod.start} à {price.timePeriod.end}
+                    </Typography>
+                  </CardContent>
+                </PriceCard>
+              </Grid>
+            ))}
+          </Grid>
+
+          <Box sx={{ mt: 4, textAlign: 'center' }}>
+            <Button
+              variant="contained"
+              size="large"
+              disabled={!selectedJournalPrice || isSubmittingJournal}
+              onClick={handleJournalSubmit}
+              sx={{
+                px: 6,
+                py: 2,
+                fontSize: '1.1rem',
+                '&.Mui-disabled': {
+                  backgroundColor: theme.palette.action.disabledBackground,
+                },
+              }}
+            >
+              {isSubmittingJournal ? (
+                <CircularProgress size={24} sx={{ color: 'white' }} />
+              ) : (
+                "Confirm"
+              )}
+            </Button>
+          </Box>
+        </>
+      )}
+    </Box>
+
   );
+};
+SubscriptionSelection.getLayout = function getLayout(page: ReactElement) {
+  return <PublicLayout>    <RoleProtectedRoute allowedRoles={['USER']}>
+    {page} </RoleProtectedRoute></PublicLayout>;
 };
 
 export default SubscriptionSelection;

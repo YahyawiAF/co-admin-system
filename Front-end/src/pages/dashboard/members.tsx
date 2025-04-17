@@ -206,8 +206,8 @@ function EnhancedTable() {
     Math.min(rowsPerPage, filteredRows.length - page * rowsPerPage);
 
   return (
-    
-    
+
+
     <div>
       <Modal
         open={openDeletModal}
@@ -327,27 +327,27 @@ function EnhancedTable() {
 
 function MembersPage() {
   return (
-    <RoleProtectedRoute allowedRoles={['ADMIN']}>
-      <React.Fragment>
-        <Helmet title="Transactions" />
-        <Typography variant="h3" gutterBottom display="inline">
-          Members
-        </Typography>
 
-        <Divider my={6} />
+    <React.Fragment>
+      <Helmet title="Transactions" />
+      <Typography variant="h3" gutterBottom display="inline">
+        Members
+      </Typography>
 
-        <Grid container spacing={6}>
-          <Grid item xs={12}>
-            <EnhancedTable />
-          </Grid>
+      <Divider my={6} />
+
+      <Grid container spacing={6}>
+        <Grid item xs={12}>
+          <EnhancedTable />
         </Grid>
-      </React.Fragment>
-      </RoleProtectedRoute>
+      </Grid>
+    </React.Fragment>
+
   );
 }
 
 MembersPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>{page}</RoleProtectedRoute></DashboardLayout>;
 };
 
 export default MembersPage;

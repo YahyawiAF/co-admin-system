@@ -90,14 +90,14 @@ function DefaultContent() {  // Nom modifié de Default à DefaultContent
 
 function Default() {  // Nouveau composant Default qui englobe avec ProtectedRoute
   return (
-    <RoleProtectedRoute allowedRoles={['ADMIN']}>
-      <DefaultContent />
-      </RoleProtectedRoute>
+
+    <DefaultContent />
   );
 }
 
 Default.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>{page}      </RoleProtectedRoute>
+  </DashboardLayout>;
 };
 
 export default Default;

@@ -40,51 +40,51 @@ function Default() {
   if (isLoading) return <p>Loading</p>;
   if (errorMemberReq) return <p>error!</p>;
   return (
-    <RoleProtectedRoute allowedRoles={['ADMIN']}>
 
-      <React.Fragment>
-        <Helmet title="Default Dashboard" />
-        <Grid justifyContent="space-between" container spacing={6}>
-          <Grid item>
-            <Typography variant="h3">
-              {t("Welcome back")}, User! {t("We've missed you")}.{" "}
-            </Typography>
-          </Grid>
+
+    <React.Fragment>
+      <Helmet title="Default Dashboard" />
+      <Grid justifyContent="space-between" container spacing={6}>
+        <Grid item>
+          <Typography variant="h3">
+            {t("Welcome back")}, User! {t("We've missed you")}.{" "}
+          </Typography>
         </Grid>
+      </Grid>
 
-        <Divider my={6} />
+      <Divider my={6} />
 
-        <Grid container spacing={6}>
-          <Grid item xs={12} sm={12} md={6} lg={4} xl>
-            <Stats title="Members" count={members?.length || 0} icon={<User />} />
-          </Grid>
-          <Grid item xs={12} sm={12} md={6} lg={4} xl>
-            <Stats
-              title="Credit Card"
-              count={cards?.length || 0}
-              icon={<CreditCard />}
-            />
-          </Grid>
-          <Grid item xs={12} sm={12} md={6} lg={4} xl>
-            <Stats title="Cash" count={3} icon={<DollarSign />} />
-          </Grid>
+      <Grid container spacing={6}>
+        <Grid item xs={12} sm={12} md={6} lg={4} xl>
+          <Stats title="Members" count={members?.length || 0} icon={<User />} />
         </Grid>
-
-        <Grid container spacing={4}>
-          <Grid display={"flex"} item xs={12} lg={6}>
-            <DoughnutChart />
-          </Grid>
-          <Grid item xs={12} lg={6}>
-            <LineChart />
-          </Grid>
+        <Grid item xs={12} sm={12} md={6} lg={4} xl>
+          <Stats
+            title="Credit Card"
+            count={cards?.length || 0}
+            icon={<CreditCard />}
+          />
         </Grid>
-      </React.Fragment>
-    </RoleProtectedRoute>
+        <Grid item xs={12} sm={12} md={6} lg={4} xl>
+          <Stats title="Cash" count={3} icon={<DollarSign />} />
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={4}>
+        <Grid display={"flex"} item xs={12} lg={6}>
+          <DoughnutChart />
+        </Grid>
+        <Grid item xs={12} lg={6}>
+          <LineChart />
+        </Grid>
+      </Grid>
+    </React.Fragment>
+
   );
 }
 
 Default.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>{page} </RoleProtectedRoute></DashboardLayout>;
 };
 
 export default Default;
