@@ -230,7 +230,7 @@ const isSameDay = (date1: Date, date2: Date) => {
 
 const AbonnementComponent = () => {
   const theme = useTheme();
-
+  const [timeFilter, setTimeFilter] = useState<'week' | 'month' | 'all'>('all');
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   const [orderBy, setOrderBy] = useState<string>('registredDate');
@@ -268,6 +268,27 @@ const AbonnementComponent = () => {
     isReservation: false,
     stayedPeriode: "",
   });
+  // Remplacer la partie filteredData existante par ce code
+  const filteredData = React.useMemo(() => {
+    if (!abonnementsData?.data) return [];
+
+    return abonnementsData.data.filter(abonnement => {
+      const price = prices.find(p => p.id === abonnement.priceId);
+      if (!price) return false;
+
+      const priceName = price.name.toLowerCase();
+
+      switch (timeFilter) {
+        case 'week':
+          return priceName.includes('week');
+        case 'month':
+          return priceName.includes('month');
+        case 'all':
+        default:
+          return true;
+      }
+    });
+  }, [abonnementsData?.data, timeFilter, prices]);
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
@@ -600,6 +621,31 @@ const AbonnementComponent = () => {
           refetch={refetch}
           isMobile={isMobile}
         />
+        <Box sx={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'flex-start', mb: 2, mt: -12, ml: 1 }}>
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              backgroundColor: '#f5f5f5',
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Period</InputLabel>
+            <Select
+              value={timeFilter}
+              onChange={(e) => setTimeFilter(e.target.value as 'week' | 'month' | 'all')}
+              label="Period"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="week">Weekly</MenuItem>
+              <MenuItem value="month">Monthly</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+
+
 
         <TableWrapper>
           <StyledTableContainer>
@@ -610,12 +656,13 @@ const AbonnementComponent = () => {
                 orderBy={orderBy}
                 onSelectAllClick={handleSelectAllClick}
                 onRequestSort={handleRequestSort}
-                rowCount={abonnementsData?.data.length || 0}
+                rowCount={filteredData.length}
                 headCells={headCells}
                 isMobile={isMobile}
               />
               <TableBody>
-                {abonnementsData?.data.map((abonnement) => {
+
+                {filteredData.map((abonnement) => {
                   const member = members.find(m => m.id === abonnement.memberID);
                   const price = prices.find(p => p.id === abonnement.priceId);
                   const leaveDate = abonnement.leaveDate ? new Date(abonnement.leaveDate) : null;
