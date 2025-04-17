@@ -19,6 +19,7 @@ interface AccountDetailsFormProps {
   email?: string;
   phone?: string;
   onUpdate: (data: { username: string; email: string; phone?: string }) => Promise<void>;
+  phoneDisabled: boolean;
 }
 
 // Validation schema modifié : Email n'est plus requis
@@ -29,7 +30,7 @@ const validationSchema = Yup.object({
   phone: Yup.string().matches(/^[0-9]+$/, "Invalid phone number").nullable(),
 });
 
-export function AccountDetailsForm({ username, email, phone, onUpdate }: AccountDetailsFormProps): React.JSX.Element {
+export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisabled }: AccountDetailsFormProps): React.JSX.Element {
   const nameParts = username.split(" ");
   const initialFirstName = nameParts[0] || "";
   const initialLastName = nameParts.slice(1).join(" ") || "";
@@ -123,6 +124,7 @@ export function AccountDetailsForm({ username, email, phone, onUpdate }: Account
                   value={formik.values.phone}
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
+                  disabled={phoneDisabled}
                   type="tel"
                 />
                 {formik.touched.phone && formik.errors.phone && (

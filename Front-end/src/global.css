@@ -521,10 +521,34 @@ label.valid:after {
   }
 }
 
+@media (max-width: 480px) {
+  figure {
+    max-width: 250px;
+  }
+
+  .signup-image,
+  .signin-image {
+    margin: 0 15px !important;
+  }
+}
+
+
 @media screen and (max-width: 768px) {
+  main {
+    padding: 50px 0;
+    /* Réduit l'espace vertical */
+  }
+
+  .container {
+    width: 95%;
+    /* Utilisation plus efficace de l'espace */
+    margin: 0 2.5%;
+  }
 
   .signup-content,
   .signin-content {
+    margin: 0 30px !important;
+    text-align: center;
     flex-direction: column;
     -moz-flex-direction: column;
     -webkit-flex-direction: column;
@@ -536,6 +560,14 @@ label.valid:after {
     -o-justify-content: center;
     -ms-justify-content: center;
   }
+
+  figure {
+    max-width: 300px;
+    /* Limite la largeur max */
+    margin: 0 auto 50px !important;
+    /* Centrage et marge basse */
+  }
+
 
   .signup-form {
     margin-left: 0px;

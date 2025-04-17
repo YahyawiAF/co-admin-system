@@ -268,6 +268,7 @@ function Account(): React.JSX.Element {
                   email={userData.email}
                   phone={userData.phone}
                   onUpdate={handleUpdateUser}
+                  phoneDisabled={true}
                 />
                 <Box sx={{ mt: 4 }}>
                   <Card
