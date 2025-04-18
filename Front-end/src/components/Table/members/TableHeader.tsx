@@ -29,7 +29,7 @@ interface IBulkActions {
 const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search, refetch, toDay, handleChangeDate }) => {
   const isCurrentDay = () => {
     if (!toDay) return false;
-    
+
     const today = new Date();
     return (
       toDay.getDate() === today.getDate() &&
@@ -147,15 +147,15 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
                 }}
               />
             </div>
-            
+
             {/* Current Day button */}
             <Button
               variant="outlined"
               color={isCurrentDay() ? "success" : "primary"}
               onClick={setCurrentDay}
-              sx={{ 
-                width: "120px", 
-                minWidth: "120px", 
+              sx={{
+                width: "120px",
+                minWidth: "120px",
                 padding: "6px 9px",
                 marginLeft: "0px",
                 backgroundColor: isCurrentDay() ? 'rgba(46, 125, 50, 0.08)' : 'inherit'
@@ -182,7 +182,7 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
             </Button>
           </Box>
         )}
-  
+
         {/* Search bar */}
         <Box display="flex" alignItems="center">
           <CustomTextField

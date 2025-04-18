@@ -86,9 +86,8 @@ export enum Role {
 }
 
 export enum Subscription {
-  NOPSubs = "NOPSubs",
-  Monthly = "Monthly",
-  Weekly = "Weekly",
+  Journal = "Journal",
+  Membership = "Membership",
 }
 export enum PriceType {
   journal = "journal",

@@ -26,7 +26,7 @@ import {
   RHFTimePeakerField,
 } from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
-import { Journal, Member, Price } from "../../../../types/shared";
+import { Journal, Member, Price, Subscription } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -239,20 +239,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     const initializeFormValues = () => {
-      const isReservation = !isSameDay(new Date(), new Date(today));
       if (!selectItem) {
         resetAsyn({
           ...defaultValues,
           registredTime: today,
           leaveTime: today,
-          isReservation,
+          // Retirer la logique isReservation: !isSameDay(...)
         });
       } else {
+        // Conserver la logique existante pour l'édition
         const updatedJournal: Partial<Journal> = {
           ...selectItem,
-          leaveTime: selectItem.isPayed
-            ? selectItem.leaveTime
-            : today,
+          leaveTime: selectItem.isPayed ? selectItem.leaveTime : today,
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
@@ -279,7 +277,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const defaultProps = React.useMemo(() => {
     return {
-      options: membersList as any,
+      options: membersList?.filter((member) => member.plan === Subscription.Journal) || [], // Filtrage ici
       getOptionLabel: (option: any) =>
         option.fullNameWithEmail + ` (${option.plan})`,
     };
@@ -313,6 +311,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         }}
         selectItem={null}
         handleNewMember={handleNewMember}
+        defaultPlan={Subscription.Journal}
       />
     );
 
@@ -376,15 +375,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             <Box
               sx={{
                 display: "flex",
-                columnGap: "14px",
+                flexDirection: "column",
+                rowGap: "14px",
               }}
             >
-              <RHFTimePeakerField
+              <RHFDatePeakerField
                 name="registredTime"
                 label="Starting Date"
-                placeholder="Inscription Date"
+                placeholder="Starting Date"
+                minTime={isReservation ? undefined : today} // Permet les dates futures si reservation
               />
             </Box>
+
 
             {/* Début de la section prix permanente */}
             {tarifAlert.show && (
@@ -450,6 +452,23 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               </Select>
             </FormControl>
 
+            <FormControl fullWidth>
+              <InputLabel>Reservation Status</InputLabel>
+              <Select
+                value={isReservation ? "reservation" : "non-reservation"}
+                onChange={(e) => setValue("isReservation", e.target.value === "reservation")}
+                label="Reservation Status"
+                sx={{
+                  mb: 2,
+                  '& .MuiSelect-select': {
+                    color: '#054547'
+                  }
+                }}
+              >
+                <MenuItem value="non-reservation">Non-Reservation </MenuItem>
+                <MenuItem value="reservation">Reservation </MenuItem>
+              </Select>
+            </FormControl>
             <Divider />
 
             <Box
@@ -531,6 +550,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         ) : (
           <></>
         )}
+
       </FormProvider>
     </>
   );

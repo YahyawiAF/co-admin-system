@@ -11,7 +11,7 @@ import {
 } from "src/api/abonnement.repo";
 import { useGetMembersQuery } from "src/api/members.repo";
 import { useGetPricesQuery } from "src/api/price.repo";
-import { Abonnement, Member, Price } from "src/types/shared";
+import { Abonnement, Member, Price, Subscription } from "src/types/shared";
 import {
   Button,
   IconButton,
@@ -355,7 +355,9 @@ const AbonnementComponent = () => {
     },
   ];
 
-  const membersWithSubscriptionStatus = members.map(member => ({
+  const membersWithSubscriptionStatus = members
+  .filter(member => member.plan === Subscription.Membership) // Ajoutez ce filtre
+  .map(member => ({
     ...member,
     hasSubscription: abonnementsData?.data.some(abonnement => abonnement.memberID === member.id)
   }));
@@ -847,7 +849,7 @@ const AbonnementComponent = () => {
                     py: 2
                   }}
                 >
-                  {member.firstName} {member.lastName}
+                  {member.firstName} {member.lastName} ({member.plan})
                   {member.hasSubscription && !editAbonnement && ' (Already subscribed)'}
                 </MenuItem>
               ))}
@@ -1039,6 +1041,7 @@ const AbonnementComponent = () => {
           handleClose={() => setOpenMemberModal(false)}
           selectItem={null}
           handleNewMember={handleNewMember}
+          defaultPlan={Subscription.Membership}
         />
       </Drawer>
     </PageContainer>
