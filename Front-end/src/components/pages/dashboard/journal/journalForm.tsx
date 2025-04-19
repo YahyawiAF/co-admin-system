@@ -40,7 +40,7 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
-import { isSameDay } from "date-fns";
+import { addHours, isSameDay } from "date-fns";
 import { useGetPricesQuery } from "src/api/price.repo";
 
 // ----------------------------------------------------------------------
@@ -86,7 +86,7 @@ const formatDuration = (startDate: Date, endDate: Date): string => {
   const minutes = diffInMinutes % 60;
 
   if (hours > 0 && minutes > 0) {
-    return `${hours}h${minutes.toString().padStart(2, '0')}m`;
+    return `${hours}h${minutes.toString().padStart(2, "0")}m`;
   } else if (hours > 0) {
     return `${hours}h`;
   } else {
@@ -118,7 +118,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
-  const [tarifAlert, setTarifAlert] = useState<{ show: boolean, message: string }>({ show: false, message: '' });
+  const [tarifAlert, setTarifAlert] = useState<{
+    show: boolean;
+    message: string;
+  }>({ show: false, message: "" });
+  const [isManualyUpdating, setIsManualyUpdating] = useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -152,78 +156,113 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   // Filtrer les prix pour n'afficher que ceux de type "journal"
   const journalPrices = React.useMemo(() => {
-    return pricesList?.filter(price => price.type === "journal") || [];
+    return pricesList?.filter((price) => price.type === "journal") || [];
   }, [pricesList]);
 
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr) return 0;
 
     // Gérer les formats "1h", "1h30", "2h00", etc.
-    const [hoursStr, minutesStr] = timeStr.split('h');
+    const [hoursStr, minutesStr] = timeStr.split("h");
     const hours = parseInt(hoursStr) || 0;
     const minutes = parseInt(minutesStr) || 0;
 
     return hours * 60 + minutes;
   };
-  const findMatchingPrice = (startDate: Date, endDate: Date): Price | null => {
-    if (!journalPrices || journalPrices.length === 0) return null;
+  const findMatchingPrice = React.useCallback(
+    (startDate: Date, endDate: Date): Price | null => {
+      if (!journalPrices || journalPrices.length === 0) return null;
 
-    const realDurationMinutes = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60));
+      const realDurationMinutes = Math.floor(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+      );
 
-    // Trier les prix par durée maximale croissante
-    const sortedPrices = [...journalPrices].sort((a, b) => {
-      const aMax = parseTimeToMinutes(a.timePeriod.end);
-      const bMax = parseTimeToMinutes(b.timePeriod.end);
-      return aMax - bMax;
-    });
+      // Trier les prix par durée maximale croissante
+      const sortedPrices = [...journalPrices].sort((a, b) => {
+        const aMax = parseTimeToMinutes(a.timePeriod.end);
+        const bMax = parseTimeToMinutes(b.timePeriod.end);
+        return aMax - bMax;
+      });
 
-    // Variable pour stocker le tarif correspondant
-    let matchingPrice = null;
+      // Variable pour stocker le tarif correspondant
+      let matchingPrice = null;
 
-    for (const price of sortedPrices) {
-      const priceMax = parseTimeToMinutes(price.timePeriod.end);
+      for (const price of sortedPrices) {
+        const priceMax = parseTimeToMinutes(price.timePeriod.end);
 
-      // On considère le tarif valable si la durée est inférieure ou égale à sa limite +15min
-      if (realDurationMinutes <= priceMax + 15) {
-        matchingPrice = price;
-        break; // On prend le premier tarif qui correspond
+        // On considère le tarif valable si la durée est inférieure ou égale à sa limite +15min
+        if (realDurationMinutes <= priceMax + 15) {
+          matchingPrice = price;
+          break; // On prend le premier tarif qui correspond
+        }
       }
-    }
 
-    // Si aucun tarif ne correspond (durée très longue), retourner le tarif maximum
-    return matchingPrice || sortedPrices[sortedPrices.length - 1];
-  };
+      // Si aucun tarif ne correspond (durée très longue), retourner le tarif maximum
+      return matchingPrice || sortedPrices[sortedPrices.length - 1];
+    },
+    [journalPrices]
+  );
 
-  React.useEffect(() => {
-    if (journalPrices && registredTime && leaveTime) {
+  const handleCalculateTimeAndPrice = React.useCallback(
+    (registredTime: Date, leaveTime: Date) => {
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
 
       if (matchingPrice) {
         setValue("priceId", matchingPrice.id);
-        // Mettre à jour payedAmount avec le prix correspondant, indépendamment de isPayed
         setValue("payedAmount", matchingPrice.price);
-
-        const priceMaxDuration = parseTimeToMinutes(matchingPrice.timePeriod.end);
-        const realDurationMinutes = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+        // const baseDate = new Date(registredTime);
+        // setValue(
+        //   "leaveTime",
+        //   addHours(baseDate, Number(matchingPrice.timePeriod.end))
+        // );
+        // Mettre à jour payedAmount avec le prix correspondant, indépendamment de isPayed
+        const priceMaxDuration = parseTimeToMinutes(
+          matchingPrice.timePeriod.end
+        );
+        const realDurationMinutes = Math.floor(
+          (end.getTime() - start.getTime()) / (1000 * 60)
+        );
 
         if (realDurationMinutes > priceMaxDuration) {
-          const nextPrice = journalPrices.find(p =>
-            parseTimeToMinutes(p.timePeriod.start) > priceMaxDuration
+          const nextPrice = journalPrices.find(
+            (p) => parseTimeToMinutes(p.timePeriod.start) > priceMaxDuration
           );
           if (nextPrice) {
             setTarifAlert({
               show: true,
-              message: `Dépassement de tarif: ${realDurationMinutes - priceMaxDuration} min (tolérance). Prochain tarif: ${nextPrice.timePeriod.start}-${nextPrice.timePeriod.end}`
+              message: `Dépassement de tarif: ${
+                realDurationMinutes - priceMaxDuration
+              } min (tolérance). Prochain tarif: ${
+                nextPrice.timePeriod.start
+              }-${nextPrice.timePeriod.end}`,
             });
           }
         } else {
-          setTarifAlert({ show: false, message: '' });
+          setTarifAlert({ show: false, message: "" });
         }
       }
+    },
+    [journalPrices, findMatchingPrice, setValue]
+  );
+
+  React.useEffect(() => {
+    // if (!isManualyUpdating) return;
+    if (journalPrices && registredTime && leaveTime && !isPayed) {
+      console.log({ isPayed });
+      handleCalculateTimeAndPrice(registredTime, leaveTime);
+      // setIsManualyUpdating(false);
     }
-  }, [registredTime, leaveTime, journalPrices, setValue]);
+  }, [
+    registredTime,
+    leaveTime,
+    journalPrices,
+    setValue,
+    handleCalculateTimeAndPrice,
+    isPayed,
+  ]);
+
   const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
@@ -272,12 +311,16 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const handlePriceSelect = (price: Price) => {
     setValue("priceId", price.id);
     setValue("payedAmount", price.price);
-    setTarifAlert({ show: false, message: '' });
+    setValue(
+      "leaveTime",
+      addHours(new Date(registredTime), Number(price.timePeriod.end))
+    );
+    setTarifAlert({ show: false, message: "" });
   };
 
   const defaultProps = React.useMemo(() => {
     return {
-      options: membersList?.filter((member) => member.plan === Subscription.Journal) || [], // Filtrage ici
+      options: membersList || [], // Filtrage ici
       getOptionLabel: (option: any) =>
         option.fullNameWithEmail + ` (${option.plan})`,
     };
@@ -383,10 +426,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 name="registredTime"
                 label="Starting Date"
                 placeholder="Starting Date"
+                disabled={isPayed}
                 minTime={isReservation ? undefined : today} // Permet les dates futures si reservation
               />
             </Box>
-
 
             {/* Début de la section prix permanente */}
             {tarifAlert.show && (
@@ -401,15 +444,20 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                   Select Rate
                 </Typography>
                 <Grid container spacing={2}>
-                  {journalPrices?.map((price) => (
-                    <Grid item xs={6} key={price.id}>
-                      <PriceCard
-                        price={price}
-                        isSelected={priceId === price.id}
-                        onClick={() => handlePriceSelect(price)}
-                      />
-                    </Grid>
-                  ))}
+                  {journalPrices
+                    ?.filter((jp) => (isPayed ? priceId === jp.id : true))
+                    .map((price) => (
+                      <Grid item xs={6} key={price.id}>
+                        <PriceCard
+                          price={price}
+                          isSelected={priceId === price.id}
+                          onClick={() => {
+                            // setIsManualyUpdating(true);
+                            handlePriceSelect(price);
+                          }}
+                        />
+                      </Grid>
+                    ))}
                 </Grid>
               </Box>
             ) : (
@@ -427,6 +475,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 name="leaveTime"
                 label="Leaving Date"
                 placeholder="Leaving Date"
+                disabled={isPayed}
                 minTime={registredTime}
               />
             </Box>
@@ -456,13 +505,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               <InputLabel>Reservation Status</InputLabel>
               <Select
                 value={isReservation ? "reservation" : "non-reservation"}
-                onChange={(e) => setValue("isReservation", e.target.value === "reservation")}
+                onChange={(e) =>
+                  setValue("isReservation", e.target.value === "reservation")
+                }
                 label="Reservation Status"
                 sx={{
                   mb: 2,
-                  '& .MuiSelect-select': {
-                    color: '#054547'
-                  }
+                  "& .MuiSelect-select": {
+                    color: "#054547",
+                  },
                 }}
               >
                 <MenuItem value="non-reservation">Non-Reservation </MenuItem>
@@ -550,7 +601,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         ) : (
           <></>
         )}
-
       </FormProvider>
     </>
   );
@@ -565,18 +615,18 @@ const PriceCard: FC<{
     <Card
       onClick={onClick}
       sx={{
-        cursor: 'pointer',
-        border: isSelected ? '2px solid #054547' : '1px solid #ddd',
-        backgroundColor: isSelected ? '#f5f9f9' : '#fff',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          borderColor: '#054547',
-          backgroundColor: '#f5f9f9',
+        cursor: "pointer",
+        border: isSelected ? "2px solid #054547" : "1px solid #ddd",
+        backgroundColor: isSelected ? "#f5f9f9" : "#fff",
+        transition: "all 0.3s ease",
+        "&:hover": {
+          borderColor: "#054547",
+          backgroundColor: "#f5f9f9",
         },
       }}
     >
       <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography variant="subtitle1" fontWeight="bold">
             {price.name}
           </Typography>
