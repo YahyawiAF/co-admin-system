@@ -24,7 +24,7 @@ import { store } from "../redux/store";
 import createEmotionCache from "../utils/createEmotionCache";
 
 import { AuthProvider } from "../contexts/JWTContext";
-import "../global.css"
+import "../global.css";
 const inter = Inter({ subsets: ["latin"] });
 
 const clientSideEmotionCache = createEmotionCache();

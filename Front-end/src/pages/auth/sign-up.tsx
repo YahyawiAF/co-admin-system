@@ -2,7 +2,15 @@ import React, { useState } from "react";
 import { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-import { Paper, Typography, Button, TextField, CircularProgress, Box, Link } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  Button,
+  TextField,
+  CircularProgress,
+  Box,
+  Link,
+} from "@mui/material";
 import Swal from "sweetalert2";
 
 import AuthLayout from "../../layouts/Auth";
@@ -20,7 +28,7 @@ const Brand = styled(Logo)`
 
 const Wrapper = styled(Paper)`
   padding: ${(props) => props.theme.spacing(6)};
-  
+
   ${(props) => props.theme.breakpoints.up("md")} {
     padding: ${(props) => props.theme.spacing(10)};
   }
@@ -46,7 +54,12 @@ function SignUp() {
     }
 
     try {
-      await signUp({ identifier, password, fullname, role: Role.ADMIN }).unwrap();
+      await signUp({
+        identifier,
+        password,
+        fullname,
+        role: Role.ADMIN,
+      }).unwrap();
       Swal.fire({
         title: "Success!",
         text: "You have successfully signed up.",
@@ -69,10 +82,10 @@ function SignUp() {
 
   const getErrorMessage = () => {
     if (isError && error) {
-      if ('data' in error && typeof error.data === 'string') {
+      if ("data" in error && typeof error.data === "string") {
         return error.data;
       }
-      if ('message' in error) {
+      if ("message" in error) {
         return error.message;
       }
     }
@@ -83,7 +96,7 @@ function SignUp() {
     const value = e.target.value;
     setIdentifier(value);
     // Détecter si c'est un email ou un numéro de téléphone
-    setIsPhone(!value.includes('@') && /[0-9]/.test(value));
+    setIsPhone(!value.includes("@") && /[0-9]/.test(value));
   };
 
   const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +107,9 @@ function SignUp() {
     }
   };
 
-  const handleConfirmPasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleConfirmPasswordChange = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
     setConfirmPassword(e.target.value);
     // Effacer l'erreur lorsque l'utilisateur modifie la confirmation
     if (passwordError && e.target.value === password) {
@@ -156,7 +171,6 @@ function SignUp() {
             error={!!passwordError}
             helperText={passwordError}
           />
-
 
           <Button
             type="submit"

@@ -8,9 +8,9 @@ export const userServices = createApi({
   baseQuery: fetchBaseQuery({
     baseUrl: API_URL,
     prepareHeaders: (headers) => {
-      const token = sessionStorage.getItem('accessToken');
+      const token = sessionStorage.getItem("accessToken");
       if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
+        headers.set("Authorization", `Bearer ${token}`);
       }
       return headers;
     },
@@ -29,7 +29,10 @@ export const userServices = createApi({
       }),
       invalidatesTags: ["users"],
     }),
-    changePassword: builder.mutation<User, { oldPassword: string; newPassword: string }>({
+    changePassword: builder.mutation<
+      User,
+      { oldPassword: string; newPassword: string }
+    >({
       query: (data) => ({
         url: `users/change-password`, // Chemin de ta route backend
         method: "PATCH",
@@ -37,8 +40,7 @@ export const userServices = createApi({
       }),
       invalidatesTags: ["users"],
     }),
-    
-   
+
     createUser: builder.mutation<User, User>({
       query: (data: User) => ({
         url: `users`,
@@ -50,4 +52,8 @@ export const userServices = createApi({
   }),
 });
 
-export const { useCreateUserMutation, useUpdateUserMutation,useChangePasswordMutation,} = userServices;
+export const {
+  useCreateUserMutation,
+  useUpdateUserMutation,
+  useChangePasswordMutation,
+} = userServices;

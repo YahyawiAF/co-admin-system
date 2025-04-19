@@ -38,7 +38,8 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = (props) => {
             sx={{
               textWrap: "nowrap",
               // Ajoutez ceci pour prendre en compte la propriété alignment
-              textAlign: headCell.alignment || (headCell.numeric ? "right" : "left")
+              textAlign:
+                headCell.alignment || (headCell.numeric ? "right" : "left"),
             }}
             align={headCell.alignment || (headCell.numeric ? "right" : "left")}
             padding={headCell.disablePadding ? "none" : "normal"}

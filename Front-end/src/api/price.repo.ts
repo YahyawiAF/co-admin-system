@@ -15,7 +15,10 @@ export const priceApi = createApi({
       query: (id) => `prices/${id}`,
       providesTags: ["Price"],
     }),
-    createPrice: builder.mutation<Price, Omit<Price, 'id' | 'createdAt' | 'updatedAt' | 'journals'>>({
+    createPrice: builder.mutation<
+      Price,
+      Omit<Price, "id" | "createdAt" | "updatedAt" | "journals">
+    >({
       query: (data) => ({
         url: `prices`,
         method: "POST",
@@ -23,18 +26,26 @@ export const priceApi = createApi({
           name: data.name,
           price: data.price,
           timePeriod: data.timePeriod, // Format { start: string, end: string }
-          type: data.type
+          type: data.type,
         },
       }),
       invalidatesTags: ["Price"],
     }),
-    updatePrice: builder.mutation<Price, { id: string; data: Partial<Omit<Price, 'id' | 'createdAt' | 'updatedAt' | 'journals'>> }>({
+    updatePrice: builder.mutation<
+      Price,
+      {
+        id: string;
+        data: Partial<
+          Omit<Price, "id" | "createdAt" | "updatedAt" | "journals">
+        >;
+      }
+    >({
       query: ({ id, data }) => ({
         url: `prices/${id}`,
         method: "PUT",
         body: {
           ...data,
-          timePeriod: data.timePeriod // Format { start: string, end: string }
+          timePeriod: data.timePeriod, // Format { start: string, end: string }
         },
       }),
       invalidatesTags: ["Price"],

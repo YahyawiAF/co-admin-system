@@ -16,13 +16,22 @@ interface AccountInfoProps {
   country?: string;
 }
 
-export function AccountInfo({ name, email, phone, city, country }: AccountInfoProps): React.JSX.Element {
+export function AccountInfo({
+  name,
+  email,
+  phone,
+  city,
+  country,
+}: AccountInfoProps): React.JSX.Element {
   return (
     <Card>
       <CardContent>
         <Stack spacing={2} sx={{ alignItems: "center" }}>
           <div>
-            <Avatar src="/assets/avatar.png" sx={{ height: "80px", width: "80px" }} />
+            <Avatar
+              src="/assets/avatar.png"
+              sx={{ height: "80px", width: "80px" }}
+            />
           </div>
           <Stack spacing={1} sx={{ textAlign: "center" }}>
             <Typography variant="h5">{name}</Typography>

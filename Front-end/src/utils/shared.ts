@@ -16,7 +16,7 @@ export function getHourDifference(date1: Date, date2: Date): string {
 
   // Calculate the total difference in minutes
   const totalMinutes = differenceInMinutes(d2, d1);
-  
+
   // Handle negative difference (date2 before date1)
   if (totalMinutes < 0) return "0min";
 
@@ -26,7 +26,7 @@ export function getHourDifference(date1: Date, date2: Date): string {
 
   // Format the result
   if (hours > 0 && minutes > 0) {
-    return `${hours}h${minutes.toString().padStart(2, '0')}m`;
+    return `${hours}h${minutes.toString().padStart(2, "0")}m`;
   } else if (hours > 0) {
     return `${hours}h`;
   } else {

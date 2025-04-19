@@ -1,15 +1,8 @@
 import React, { useState, useEffect, ReactElement } from "react";
-import { useTheme, styled } from '@mui/material/styles';
-import {
-  useGetPricesQuery,
-  Price,
-} from "src/api/price.repo";
-import {
-  useCreateAbonnementMutation,
-} from "src/api/abonnement.repo";
-import {
-  useCreateJournalMutation,
-} from "src/api/journal.repo";
+import { useTheme, styled } from "@mui/material/styles";
+import { useGetPricesQuery, Price } from "src/api/price.repo";
+import { useCreateAbonnementMutation } from "src/api/abonnement.repo";
+import { useCreateJournalMutation } from "src/api/journal.repo";
 import {
   Grid,
   Card,
@@ -39,10 +32,10 @@ import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import PublicLayout from "src/layouts/PublicLayout";
 
 const PriceCard = styled(Card)(({ theme }) => ({
-  cursor: 'pointer',
-  transition: 'all 0.3s ease',
-  '&:hover': {
-    transform: 'translateY(-5px)',
+  cursor: "pointer",
+  transition: "all 0.3s ease",
+  "&:hover": {
+    transform: "translateY(-5px)",
     boxShadow: theme.shadows[4],
   },
 }));
@@ -51,12 +44,12 @@ const calculateLeaveDate = (price: Price, startDate: Date): Date => {
   const endDate = new Date(startDate);
   const priceName = price.name.toLowerCase();
 
-  if (priceName.includes('semaine')) {
-    endDate.setDate(endDate.getDate() + (priceName.includes('2') ? 14 : 7));
-  } else if (priceName.includes('mois')) {
+  if (priceName.includes("semaine")) {
+    endDate.setDate(endDate.getDate() + (priceName.includes("2") ? 14 : 7));
+  } else if (priceName.includes("mois")) {
     const months = priceName.match(/3/) ? 3 : priceName.match(/6/) ? 6 : 1;
     endDate.setMonth(endDate.getMonth() + months);
-  } else if (priceName.includes('année')) {
+  } else if (priceName.includes("année")) {
     endDate.setFullYear(endDate.getFullYear() + 1);
   }
 
@@ -70,21 +63,40 @@ const SubscriptionSelection = () => {
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
   const { data: prices = [], isLoading, isError } = useGetPricesQuery();
-  const [createAbonnement, { isLoading: isSubmittingAbonnement, isSuccess: isSuccessAbonnement, error: errorAbonnement }] = useCreateAbonnementMutation();
-  const [createJournal, { isLoading: isSubmittingJournal, isSuccess: isSuccessJournal, error: errorJournal }] = useCreateJournalMutation();
+  const [
+    createAbonnement,
+    {
+      isLoading: isSubmittingAbonnement,
+      isSuccess: isSuccessAbonnement,
+      error: errorAbonnement,
+    },
+  ] = useCreateAbonnementMutation();
+  const [
+    createJournal,
+    {
+      isLoading: isSubmittingJournal,
+      isSuccess: isSuccessJournal,
+      error: errorJournal,
+    },
+  ] = useCreateJournalMutation();
 
   const [selectedPrice, setSelectedPrice] = useState<Price | null>(null);
-  const [selectedJournalPrice, setSelectedJournalPrice] = useState<Price | null>(null);
-  const [selectedSubscriptionType, setSelectedSubscriptionType] = useState<'abonnement' | 'journal'>('abonnement');
-  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [selectedJournalPrice, setSelectedJournalPrice] =
+    useState<Price | null>(null);
+  const [selectedSubscriptionType, setSelectedSubscriptionType] = useState<
+    "abonnement" | "journal"
+  >("abonnement");
+  const [errorMessage, setErrorMessage] = useState<string>("");
 
-  const abonnementPrices = prices.filter(price => price.type === "abonnement");
-  const journalPrices = prices.filter(price => price.type === "journal");
+  const abonnementPrices = prices.filter(
+    (price) => price.type === "abonnement"
+  );
+  const journalPrices = prices.filter((price) => price.type === "journal");
 
   const handleSignOut = async () => {
-    const accessToken = sessionStorage.getItem('accessToken');
-    const Role = sessionStorage.getItem('Role');
-    const username = sessionStorage.getItem('username');
+    const accessToken = sessionStorage.getItem("accessToken");
+    const Role = sessionStorage.getItem("Role");
+    const username = sessionStorage.getItem("username");
 
     if (!accessToken) {
       router.replace("/client/login");
@@ -93,25 +105,25 @@ const SubscriptionSelection = () => {
 
     try {
       await logout().unwrap();
-      sessionStorage.removeItem('accessToken');
-      sessionStorage.removeItem('userID');
-      sessionStorage.removeItem('email');
-      sessionStorage.removeItem('username');
-      sessionStorage.removeItem('Role');
-      sessionStorage.removeItem('phone');
-      sessionStorage.removeItem('role');
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("userID");
+      sessionStorage.removeItem("email");
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem("Role");
+      sessionStorage.removeItem("phone");
+      sessionStorage.removeItem("role");
 
       dispatch(signOut());
       router.replace("/client/login");
     } catch (error) {
       console.error("Déconnexion échouée:", error);
-      sessionStorage.removeItem('accessToken');
-      sessionStorage.removeItem('userID');
-      sessionStorage.removeItem('role');
-      sessionStorage.removeItem('email');
-      sessionStorage.removeItem('username');
-      sessionStorage.removeItem('Role');
-      sessionStorage.removeItem('phone');
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("userID");
+      sessionStorage.removeItem("role");
+      sessionStorage.removeItem("email");
+      sessionStorage.removeItem("username");
+      sessionStorage.removeItem("Role");
+      sessionStorage.removeItem("phone");
       dispatch(signOut());
       router.replace("/client/login");
     }
@@ -126,7 +138,7 @@ const SubscriptionSelection = () => {
   }, [isSuccessAbonnement, isSuccessJournal]);
 
   const handleSubscriptionSubmit = async () => {
-    setErrorMessage('');
+    setErrorMessage("");
     if (!user || !user.id) {
       setErrorMessage("The selected member does not exist.");
       return;
@@ -153,17 +165,17 @@ const SubscriptionSelection = () => {
 
       await createAbonnement(abonnementData).unwrap();
     } catch (err: any) {
-      console.error('Erreur complète:', err);
+      console.error("Erreur complète:", err);
       setErrorMessage(
         err.data?.message ||
-        err.message ||
-        "Erreur lors de la création de l'abonnement"
+          err.message ||
+          "Erreur lors de la création de l'abonnement"
       );
     }
   };
 
   const handleJournalSubmit = async () => {
-    setErrorMessage('');
+    setErrorMessage("");
     if (!user || !user.id) {
       setErrorMessage("The selected member does not exist.");
       return;
@@ -192,23 +204,26 @@ const SubscriptionSelection = () => {
 
       await createJournal(journalData).unwrap();
     } catch (err: any) {
-      console.error('Erreur complète:', err);
+      console.error("Erreur complète:", err);
       setErrorMessage(
         err.data?.message ||
-        err.message ||
-        "Erreur lors de la création du journal"
+          err.message ||
+          "Erreur lors de la création du journal"
       );
     }
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError) return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
+  if (isError)
+    return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
 
   return (
-    <Box sx={{
-      minHeight: '100vh',
-      backgroundColor: (theme) => theme.palette.background.default
-    }}>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        backgroundColor: (theme) => theme.palette.background.default,
+      }}
+    >
       {/* Header */}
       <AppBar
         position="static"
@@ -216,15 +231,17 @@ const SubscriptionSelection = () => {
         elevation={0}
         sx={{
           borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
-          backgroundColor: (theme) => theme.palette.background.paper
+          backgroundColor: (theme) => theme.palette.background.paper,
         }}
       >
-        <Toolbar sx={{
-          maxWidth: 1280,
-          mx: 'auto',
-          width: '100%',
-          px: { xs: 2, sm: 4 }
-        }}>
+        <Toolbar
+          sx={{
+            maxWidth: 1280,
+            mx: "auto",
+            width: "100%",
+            px: { xs: 2, sm: 4 },
+          }}
+        >
           <Typography
             variant="h5"
             component="h1"
@@ -240,9 +257,9 @@ const SubscriptionSelection = () => {
               color="inherit"
               edge="end"
               sx={{
-                '&:hover': {
-                  backgroundColor: (theme) => theme.palette.action.hover
-                }
+                "&:hover": {
+                  backgroundColor: (theme) => theme.palette.action.hover,
+                },
               }}
             >
               <Power fontSize="medium" />
@@ -252,29 +269,40 @@ const SubscriptionSelection = () => {
       </AppBar>
 
       {/* Main Content */}
-      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 6 }, px: { xs: 2, sm: 4 } }}>
+      <Container
+        maxWidth="lg"
+        sx={{ py: { xs: 3, md: 6 }, px: { xs: 2, sm: 4 } }}
+      >
         {/* Subscription Type Toggle */}
-        <Box sx={{
-          textAlign: 'center',
-          mb: { xs: 3, md: 6 },
-          '& .MuiButton-root': {
-            minWidth: { xs: '100%', sm: 200 },
-            mx: { xs: 0, sm: 2 },
-            my: { xs: 1, sm: 0 }
-          }
-        }}>
+        <Box
+          sx={{
+            textAlign: "center",
+            mb: { xs: 3, md: 6 },
+            "& .MuiButton-root": {
+              minWidth: { xs: "100%", sm: 200 },
+              mx: { xs: 0, sm: 2 },
+              my: { xs: 1, sm: 0 },
+            },
+          }}
+        >
           <Button
-            variant={selectedSubscriptionType === 'abonnement' ? 'contained' : 'outlined'}
+            variant={
+              selectedSubscriptionType === "abonnement"
+                ? "contained"
+                : "outlined"
+            }
             size="large"
-            onClick={() => setSelectedSubscriptionType('abonnement')}
+            onClick={() => setSelectedSubscriptionType("abonnement")}
             sx={{ fontWeight: 600 }}
           >
             Membership
           </Button>
           <Button
-            variant={selectedSubscriptionType === 'journal' ? 'contained' : 'outlined'}
+            variant={
+              selectedSubscriptionType === "journal" ? "contained" : "outlined"
+            }
             size="large"
-            onClick={() => setSelectedSubscriptionType('journal')}
+            onClick={() => setSelectedSubscriptionType("journal")}
             sx={{ fontWeight: 600 }}
           >
             Daily Pass
@@ -288,17 +316,20 @@ const SubscriptionSelection = () => {
             borderRadius: 2,
             border: (theme) => `1px solid ${theme.palette.divider}`,
             backgroundColor: (theme) => theme.palette.background.paper,
-            p: { xs: 2, md: 4 }
+            p: { xs: 2, md: 4 },
           }}
         >
-          {selectedSubscriptionType === 'abonnement' ? (
+          {selectedSubscriptionType === "abonnement" ? (
             <>
-              <Typography variant="h4" component="h2" sx={{
-                mb: 5,
-                fontWeight: 700,
-                fontSize: { xs: '1.25rem', md: '1.25rem' }
-
-              }}>
+              <Typography
+                variant="h4"
+                component="h2"
+                sx={{
+                  mb: 5,
+                  fontWeight: 700,
+                  fontSize: { xs: "1.25rem", md: "1.25rem" },
+                }}
+              >
                 Monthly/Weekly Plans
               </Typography>
 
@@ -320,53 +351,68 @@ const SubscriptionSelection = () => {
                     <PriceCard
                       onClick={() => setSelectedPrice(price)}
                       sx={{
-                        height: '100%',
-                        transition: 'all 0.2s',
-                        cursor: 'pointer',
+                        height: "100%",
+                        transition: "all 0.2s",
+                        cursor: "pointer",
                         borderWidth: 2,
-                        borderStyle: 'solid',
-                        borderColor: selectedPrice?.id === price.id
-                          ? (theme) => theme.palette.primary.main
-                          : (theme) => theme.palette.divider,
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: 3
-                        }
+                        borderStyle: "solid",
+                        borderColor:
+                          selectedPrice?.id === price.id
+                            ? (theme) => theme.palette.primary.main
+                            : (theme) => theme.palette.divider,
+                        "&:hover": {
+                          transform: "translateY(-4px)",
+                          boxShadow: 3,
+                        },
                       }}
                     >
-                      <CardContent sx={{ p: 3, textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{
-                          fontWeight: 600,
-                          color: (theme) => theme.palette.text.secondary
-                        }}>
+                      <CardContent sx={{ p: 3, textAlign: "center" }}>
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            fontWeight: 600,
+                            color: (theme) => theme.palette.text.secondary,
+                          }}
+                        >
                           {price.name}
                         </Typography>
 
                         <Box sx={{ my: 3 }}>
-                          <Typography component="span" sx={{
-                            fontSize: '2.5rem',
-                            fontWeight: 800,
-                            lineHeight: 1,
-                            color: (theme) => theme.palette.text.primary
-                          }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              fontSize: "2.5rem",
+                              fontWeight: 800,
+                              lineHeight: 1,
+                              color: (theme) => theme.palette.text.primary,
+                            }}
+                          >
                             {price.price}
                           </Typography>
-                          <Typography component="span" variant="h5" sx={{
-                            fontWeight: 500,
-                            ml: 1,
-                            color: (theme) => theme.palette.text.secondary
-                          }}>
+                          <Typography
+                            component="span"
+                            variant="h5"
+                            sx={{
+                              fontWeight: 500,
+                              ml: 1,
+                              color: (theme) => theme.palette.text.secondary,
+                            }}
+                          >
                             DT
                           </Typography>
                         </Box>
 
                         <Divider sx={{ my: 2 }} />
 
-                        <Typography variant="body2" sx={{
-                          color: (theme) => theme.palette.text.secondary,
-                          fontSize: '0.9rem'
-                        }}>
-                          Valid from {price.timePeriod.start} to {price.timePeriod.end}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: (theme) => theme.palette.text.secondary,
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          Valid from {price.timePeriod.start} to{" "}
+                          {price.timePeriod.end}
                         </Typography>
                       </CardContent>
                     </PriceCard>
@@ -374,15 +420,17 @@ const SubscriptionSelection = () => {
                 ))}
               </Grid>
 
-              <Box sx={{
-                mt: 5,
-                textAlign: 'center',
-                '& .MuiButton-root': {
-                  width: { xs: '100%', sm: 'auto' },
-                  py: 1.5,
-                  px: 8
-                }
-              }}>
+              <Box
+                sx={{
+                  mt: 5,
+                  textAlign: "center",
+                  "& .MuiButton-root": {
+                    width: { xs: "100%", sm: "auto" },
+                    py: 1.5,
+                    px: 8,
+                  },
+                }}
+              >
                 <Button
                   variant="contained"
                   size="large"
@@ -390,7 +438,7 @@ const SubscriptionSelection = () => {
                   onClick={handleSubscriptionSubmit}
                 >
                   {isSubmittingAbonnement ? (
-                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                    <CircularProgress size={24} sx={{ color: "white" }} />
                   ) : (
                     "Confirm Selection"
                   )}
@@ -399,12 +447,15 @@ const SubscriptionSelection = () => {
             </>
           ) : (
             <>
-              <Typography variant="h4" component="h2" sx={{
-                mb: 4,
-                fontWeight: 700,
-                fontSize: { xs: '1.25rem', md: '1.25rem' }
-
-              }}>
+              <Typography
+                variant="h4"
+                component="h2"
+                sx={{
+                  mb: 4,
+                  fontWeight: 700,
+                  fontSize: { xs: "1.25rem", md: "1.25rem" },
+                }}
+              >
                 Daily Passes
               </Typography>
 
@@ -420,53 +471,68 @@ const SubscriptionSelection = () => {
                     <PriceCard
                       onClick={() => setSelectedJournalPrice(price)}
                       sx={{
-                        height: '100%',
-                        transition: 'all 0.2s',
-                        cursor: 'pointer',
+                        height: "100%",
+                        transition: "all 0.2s",
+                        cursor: "pointer",
                         borderWidth: 2,
-                        borderStyle: 'solid',
-                        borderColor: selectedJournalPrice?.id === price.id
-                          ? (theme) => theme.palette.primary.main
-                          : (theme) => theme.palette.divider,
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: 3
-                        }
+                        borderStyle: "solid",
+                        borderColor:
+                          selectedJournalPrice?.id === price.id
+                            ? (theme) => theme.palette.primary.main
+                            : (theme) => theme.palette.divider,
+                        "&:hover": {
+                          transform: "translateY(-4px)",
+                          boxShadow: 3,
+                        },
                       }}
                     >
-                      <CardContent sx={{ p: 3, textAlign: 'center' }}>
-                        <Typography variant="h6" sx={{
-                          fontWeight: 600,
-                          color: (theme) => theme.palette.text.secondary
-                        }}>
+                      <CardContent sx={{ p: 3, textAlign: "center" }}>
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            fontWeight: 600,
+                            color: (theme) => theme.palette.text.secondary,
+                          }}
+                        >
                           {price.name}
                         </Typography>
 
                         <Box sx={{ my: 3 }}>
-                          <Typography component="span" sx={{
-                            fontSize: '2.5rem',
-                            fontWeight: 800,
-                            lineHeight: 1,
-                            color: (theme) => theme.palette.text.primary
-                          }}>
+                          <Typography
+                            component="span"
+                            sx={{
+                              fontSize: "2.5rem",
+                              fontWeight: 800,
+                              lineHeight: 1,
+                              color: (theme) => theme.palette.text.primary,
+                            }}
+                          >
                             {price.price}
                           </Typography>
-                          <Typography component="span" variant="h5" sx={{
-                            fontWeight: 500,
-                            ml: 1,
-                            color: (theme) => theme.palette.text.secondary
-                          }}>
+                          <Typography
+                            component="span"
+                            variant="h5"
+                            sx={{
+                              fontWeight: 500,
+                              ml: 1,
+                              color: (theme) => theme.palette.text.secondary,
+                            }}
+                          >
                             DT
                           </Typography>
                         </Box>
 
                         <Divider sx={{ my: 2 }} />
 
-                        <Typography variant="body2" sx={{
-                          color: (theme) => theme.palette.text.secondary,
-                          fontSize: '0.9rem'
-                        }}>
-                          Valid on {price.timePeriod.start} {price.timePeriod.end}
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: (theme) => theme.palette.text.secondary,
+                            fontSize: "0.9rem",
+                          }}
+                        >
+                          Valid on {price.timePeriod.start}{" "}
+                          {price.timePeriod.end}
                         </Typography>
                       </CardContent>
                     </PriceCard>
@@ -474,15 +540,17 @@ const SubscriptionSelection = () => {
                 ))}
               </Grid>
 
-              <Box sx={{
-                mt: 5,
-                textAlign: 'center',
-                '& .MuiButton-root': {
-                  width: { xs: '100%', sm: 'auto' },
-                  py: 1.5,
-                  px: 8
-                }
-              }}>
+              <Box
+                sx={{
+                  mt: 5,
+                  textAlign: "center",
+                  "& .MuiButton-root": {
+                    width: { xs: "100%", sm: "auto" },
+                    py: 1.5,
+                    px: 8,
+                  },
+                }}
+              >
                 <Button
                   variant="contained"
                   size="large"
@@ -490,7 +558,7 @@ const SubscriptionSelection = () => {
                   onClick={handleJournalSubmit}
                 >
                   {isSubmittingJournal ? (
-                    <CircularProgress size={24} sx={{ color: 'white' }} />
+                    <CircularProgress size={24} sx={{ color: "white" }} />
                   ) : (
                     "Confirm Selection"
                   )}
@@ -502,15 +570,12 @@ const SubscriptionSelection = () => {
       </Container>
     </Box>
   );
-
 };
 
 SubscriptionSelection.getLayout = function getLayout(page: ReactElement) {
   return (
     <PublicLayout>
-      <RoleProtectedRoute allowedRoles={['USER']}>
-        {page}
-      </RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["USER"]}>{page}</RoleProtectedRoute>
     </PublicLayout>
   );
 };

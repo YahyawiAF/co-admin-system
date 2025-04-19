@@ -2,7 +2,14 @@ import React, { useState, useEffect } from "react";
 import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-import { Paper, Typography, TextField, Button, CircularProgress, Alert } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  CircularProgress,
+  Alert,
+} from "@mui/material";
 import { useResetPasswordMutation } from "../../api/auth.repo"; // Mettez le bon chemin
 import AuthLayout from "../../layouts/Auth";
 import Logo from "../../vendor/logo.svg";
@@ -32,7 +39,8 @@ const Form = styled.form`
 function ResetPassword() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [resetPassword, { isLoading, isSuccess, error }] = useResetPasswordMutation();
+  const [resetPassword, { isLoading, isSuccess, error }] =
+    useResetPasswordMutation();
   const router = useRouter(); // Utilisez useRouter pour accéder aux query parameters
   const { token } = router.query; // Récupérez le token depuis les query parameters
 
@@ -58,12 +66,17 @@ function ResetPassword() {
       // Redirigez l'utilisateur vers la page de connexion après une réinitialisation réussie
       router.push("/client/login");
     } catch (err) {
-      console.error("Erreur lors de la réinitialisation du mot de passe :", err);
+      console.error(
+        "Erreur lors de la réinitialisation du mot de passe :",
+        err
+      );
     }
   };
 
   // Fonction pour afficher le message d'erreur
-  const getErrorMessage = (error: FetchBaseQueryError | SerializedError | undefined): string => {
+  const getErrorMessage = (
+    error: FetchBaseQueryError | SerializedError | undefined
+  ): string => {
     if (error) {
       if ("status" in error) {
         // FetchBaseQueryError

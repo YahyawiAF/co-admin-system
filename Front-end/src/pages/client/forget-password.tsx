@@ -2,7 +2,14 @@ import React, { useState } from "react";
 import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-import { Paper, Typography, TextField, Button, CircularProgress, Alert } from "@mui/material";
+import {
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  CircularProgress,
+  Alert,
+} from "@mui/material";
 import { useForgotPasswordMutation } from "../../api/auth.repo"; // Mettez le bon chemin
 import AuthLayout from "../../layouts/Auth";
 import Logo from "../../vendor/logo.svg";
@@ -30,7 +37,8 @@ const Form = styled.form`
 
 function ForgetPassword() {
   const [email, setEmail] = useState("");
-  const [forgotPassword, { isLoading, isSuccess, error }] = useForgotPasswordMutation();
+  const [forgotPassword, { isLoading, isSuccess, error }] =
+    useForgotPasswordMutation();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,7 +50,9 @@ function ForgetPassword() {
   };
 
   // Fonction pour afficher le message d'erreur
-  const getErrorMessage = (error: FetchBaseQueryError | SerializedError | undefined): string => {
+  const getErrorMessage = (
+    error: FetchBaseQueryError | SerializedError | undefined
+  ): string => {
     if (error) {
       if ("status" in error) {
         // FetchBaseQueryError

@@ -91,14 +91,12 @@ export enum Subscription {
 }
 export enum PriceType {
   journal = "journal",
-  abonnement = "abonnement"
+  abonnement = "abonnement",
 }
 export interface TimeInterval {
   start: string;
   end: string;
 }
-
-
 
 export interface User {
   [key: string]: any;
@@ -115,7 +113,6 @@ export interface User {
   role: Role;
   resetPasswordToken: string;
   phoneNumber: string;
-
 }
 
 export interface Member {
@@ -148,7 +145,6 @@ export interface Price {
   updatedAt: Date | null;
   type: PriceType;
   journals: Journal[];
-
 }
 
 export interface Journal {
@@ -168,7 +164,6 @@ export interface Journal {
 }
 
 export interface Abonnement {
-
   id: string;
   isPayed: boolean;
   registredDate: Date;

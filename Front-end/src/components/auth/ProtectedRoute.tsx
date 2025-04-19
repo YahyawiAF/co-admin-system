@@ -1,38 +1,46 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/router";
 
-type Role = 'USER' | 'ADMIN';
+type Role = "USER" | "ADMIN";
 
 interface RoleProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles: Role[];
 }
 
-const RoleProtectedRoute = ({ children, allowedRoles = [] }: RoleProtectedRouteProps) => {
+const RoleProtectedRoute = ({
+  children,
+  allowedRoles = [],
+}: RoleProtectedRouteProps) => {
   const router = useRouter();
   const [isAuthorized, setIsAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
-    const token = sessionStorage.getItem('accessToken');
-    const userRole = sessionStorage.getItem('Role') as Role || 'USER';
+    const token = sessionStorage.getItem("accessToken");
+    const userRole = (sessionStorage.getItem("Role") as Role) || "USER";
     const pathname = router.pathname;
 
     const validRoles = Array.isArray(allowedRoles) ? allowedRoles : [];
 
     if (!token) {
-      const loginPath = validRoles.includes('ADMIN') ? '/auth/sign-in' : '/client/login';
+      const loginPath = validRoles.includes("ADMIN")
+        ? "/auth/sign-in"
+        : "/client/login";
       router.replace(loginPath);
       return;
     }
 
     // Logique de redirection spécifique
-    if (userRole === 'ADMIN' && pathname.startsWith('/client')) {
-      router.replace('/');
+    if (userRole === "ADMIN" && pathname.startsWith("/client")) {
+      router.replace("/");
       return;
     }
 
-    if (userRole === 'USER' && (pathname.startsWith('/auth') || pathname.startsWith('/dashboard'))) {
-      router.replace('/client/account');
+    if (
+      userRole === "USER" &&
+      (pathname.startsWith("/auth") || pathname.startsWith("/dashboard"))
+    ) {
+      router.replace("/client/account");
       return;
     }
 

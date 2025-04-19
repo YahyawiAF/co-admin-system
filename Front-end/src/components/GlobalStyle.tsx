@@ -19,7 +19,6 @@ const GlobalStyle = (props: any) => (
         width: 28px;
         height: 28px;
       }
-        
     `}
   />
 );

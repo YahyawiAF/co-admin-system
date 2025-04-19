@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import { API_URL } from "../config/axios";  // Assurez-vous que cette constante contient l'URL de votre backend
+import { API_URL } from "../config/axios"; // Assurez-vous que cette constante contient l'URL de votre backend
 import { Role, User } from "src/types/shared";
 
 interface LoginParams {
@@ -60,12 +60,15 @@ export const authServerApi = createApi({
         body: { email },
       }),
     }),
-    getProtectedResource: builder.query<{ message: string; userId: string }, void>({
+    getProtectedResource: builder.query<
+      { message: string; userId: string },
+      void
+    >({
       query: () => ({
         url: "auth/protected",
         method: "GET",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`, // Récupérez le token depuis le localStorage
         },
       }),
     }),
@@ -75,13 +78,16 @@ export const authServerApi = createApi({
         url: "auth/logout",
         method: "POST",
         headers: {
-          Authorization: `Bearer ${sessionStorage.getItem('accessToken')}`, // Récupérez le token depuis le localStorage
+          Authorization: `Bearer ${sessionStorage.getItem("accessToken")}`, // Récupérez le token depuis le localStorage
         },
       }),
     }),
 
     // Endpoint pour la réinitialisation du mot de passe
-    resetPassword: builder.mutation<void, { token: string; newPassword: string }>({
+    resetPassword: builder.mutation<
+      void,
+      { token: string; newPassword: string }
+    >({
       query: ({ token, newPassword }) => ({
         url: `auth/reset-password/${token}`, // Le token est maintenant dans le chemin
         method: "POST",

@@ -5,11 +5,7 @@
       "@/components/*": ["/src/components/*"]
     },
     "target": "es5",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -23,19 +19,10 @@
     "noEmit": true,
     "jsx": "preserve",
     "jsxImportSource": "@emotion/react",
-    "typeRoots": [
-      "src/types",
-      "node_modules/@types"
-    ],
+    "typeRoots": ["src/types", "node_modules/@types"],
     "noFallthroughCasesInSwitch": true,
-    "incremental": true,
-
+    "incremental": true
   },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
-  
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }

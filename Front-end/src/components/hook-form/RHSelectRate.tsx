@@ -50,7 +50,8 @@ const RHSelectRate: FC<IRHFTextField> = ({
 
   // Mettre à jour selectedPrice lorsque selectedId change
   useEffect(() => {
-    const newSelectedPrice = list.find((price) => price.id === selectedId) || null;
+    const newSelectedPrice =
+      list.find((price) => price.id === selectedId) || null;
     setSelectedPrice(newSelectedPrice);
   }, [selectedId, list]);
 
@@ -79,19 +80,23 @@ const RHSelectRate: FC<IRHFTextField> = ({
             onChange={handleChange}
             label={label}
             error={!!error}
-           
           >
             {list.map((price) => (
               <MenuItem key={price.id} value={price.id}>
                 {`${price.name} `}
-                
               </MenuItem>
-              
             ))}
           </Select>
           {!!error && <FormHelperText error>{error?.message}</FormHelperText>}
           {selectedPrice && (
-            <Box sx={{ marginTop: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            <Box
+              sx={{
+                marginTop: 2,
+                display: "flex",
+                flexDirection: "column",
+                gap: 2,
+              }}
+            >
               <TextField
                 label="Prix"
                 value={`${selectedPrice.price} DT`}

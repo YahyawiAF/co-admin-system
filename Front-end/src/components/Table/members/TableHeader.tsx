@@ -1,14 +1,24 @@
 import React, { FC, ReactNode, ChangeEvent } from "react";
 import KeyboardArrowLeftIcon from "@mui/icons-material/KeyboardArrowLeft";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
-import { InputAdornment, Box, Button, IconButton as MUIIconButton, TextField, Toolbar } from "@mui/material";
+import {
+  InputAdornment,
+  Box,
+  Button,
+  IconButton as MUIIconButton,
+  TextField,
+  Toolbar,
+} from "@mui/material";
 import { styled } from "@mui/material/styles";
 import { Search, AddCircleTwoTone, Refresh } from "@mui/icons-material";
 import { MobileDatePicker } from "@mui/x-date-pickers";
 
 const IconButton = styled(MUIIconButton)``;
 
-const IconCustomButton: FC<{ onClick: (event: React.MouseEvent<HTMLButtonElement>) => void; children: ReactNode }> = ({ onClick, children }) => (
+const IconCustomButton: FC<{
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  children: ReactNode;
+}> = ({ onClick, children }) => (
   <IconButton color="primary" onClick={onClick} sx={{ ml: 1, p: 1 }}>
     {children}
   </IconButton>
@@ -26,7 +36,14 @@ interface IBulkActions {
   isMobile?: boolean;
 }
 
-const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search, refetch, toDay, handleChangeDate }) => {
+const BulkActions: FC<IBulkActions> = ({
+  handleClickOpen,
+  onHandleSearch,
+  search,
+  refetch,
+  toDay,
+  handleChangeDate,
+}) => {
   const isCurrentDay = () => {
     if (!toDay) return false;
 
@@ -158,7 +175,9 @@ const BulkActions: FC<IBulkActions> = ({ handleClickOpen, onHandleSearch, search
                 minWidth: "120px",
                 padding: "6px 9px",
                 marginLeft: "0px",
-                backgroundColor: isCurrentDay() ? 'rgba(46, 125, 50, 0.08)' : 'inherit'
+                backgroundColor: isCurrentDay()
+                  ? "rgba(46, 125, 50, 0.08)"
+                  : "inherit",
               }}
             >
               Current Day
