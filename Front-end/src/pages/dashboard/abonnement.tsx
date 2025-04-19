@@ -443,8 +443,8 @@ const AbonnementComponent = () => {
       new Date(leaveDate) <=
       new Date(
         editAbonnement?.registredDate ||
-          newAbonnement.registredDate ||
-          new Date()
+        newAbonnement.registredDate ||
+        new Date()
       )
     ) {
       newErrors.leaveDate = "Leave date must be after registration date";
@@ -936,12 +936,12 @@ const AbonnementComponent = () => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}

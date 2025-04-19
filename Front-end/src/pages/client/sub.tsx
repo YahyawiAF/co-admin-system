@@ -168,8 +168,8 @@ const SubscriptionSelection = () => {
       console.error("Erreur complète:", err);
       setErrorMessage(
         err.data?.message ||
-          err.message ||
-          "Erreur lors de la création de l'abonnement"
+        err.message ||
+        "Erreur lors de la création de l'abonnement"
       );
     }
   };
@@ -207,8 +207,8 @@ const SubscriptionSelection = () => {
       console.error("Erreur complète:", err);
       setErrorMessage(
         err.data?.message ||
-          err.message ||
-          "Erreur lors de la création du journal"
+        err.message ||
+        "Erreur lors de la création du journal"
       );
     }
   };
@@ -411,8 +411,8 @@ const SubscriptionSelection = () => {
                             fontSize: "0.9rem",
                           }}
                         >
-                          Valid from {price.timePeriod.start} to{" "}
-                          {price.timePeriod.end}
+                          Valid from {price.timePeriod.start} day to{" "} {price.timePeriod.end} day
+
                         </Typography>
                       </CardContent>
                     </PriceCard>
@@ -531,8 +531,8 @@ const SubscriptionSelection = () => {
                             fontSize: "0.9rem",
                           }}
                         >
-                          Valid on {price.timePeriod.start}{" "}
-                          {price.timePeriod.end}
+                          From {price.timePeriod.start}h {"to"} {price.timePeriod.end}h
+
                         </Typography>
                       </CardContent>
                     </PriceCard>

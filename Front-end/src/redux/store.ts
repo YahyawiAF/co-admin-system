@@ -4,6 +4,7 @@ import { membersServerApi, journalServerApi, authServerApi } from "src/api";
 import { priceApi } from "src/api/price.repo";
 import { abonnementApi } from "src/api/abonnement.repo";
 import { userServices } from "src/api/user.repo";
+import { expenseApi } from "src/api/expenseApi";
 
 // Configuration du store
 export const store = configureStore({
@@ -13,23 +14,25 @@ export const store = configureStore({
     [authServerApi.reducerPath]: authServerApi.reducer,
     [priceApi.reducerPath]: priceApi.reducer,
     [abonnementApi.reducerPath]: abonnementApi.reducer,
-    [userServices.reducerPath]: userServices.reducer, // ✅ Ajout du reducer pour usersApi
+    [userServices.reducerPath]: userServices.reducer, 
+    [expenseApi.reducerPath]: expenseApi.reducer,
   },
-  middleware: (getDefaultMiddleware) =>
+  middleware: (getDefaultMiddleware)=>
     getDefaultMiddleware().concat(
       membersServerApi.middleware,
       journalServerApi.middleware,
       authServerApi.middleware,
       priceApi.middleware,
       abonnementApi.middleware,
-      userServices.middleware // ✅ Ajout du middleware pour usersApi
+      userServices.middleware,
+      expenseApi.middleware 
     ),
 });
 
 // Initialisation des listeners pour le cache de RTK Query
 setupListeners(store.dispatch);
 
-// Typings Redux
+// Typings Re dux
 export type AppDispatch = typeof store.dispatch;
 export type RootState = ReturnType<typeof store.getState>;
 export type AppThunk<ReturnType = void> = ThunkAction<

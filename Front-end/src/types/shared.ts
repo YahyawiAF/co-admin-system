@@ -190,3 +190,17 @@ export interface Reservation {
   createdAt: Date;
   updatedAt: Date;
 }
+export interface Expenses {
+  id: string;
+  name: string;
+  description?: string;
+  amount: number;
+  type: ExpenseType;
+  date: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export enum ExpenseType {
+  MENSUEL='MENSUEL',
+  JOURNALIER='JOURNALIER',
+}
