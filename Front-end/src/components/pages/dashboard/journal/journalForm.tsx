@@ -248,11 +248,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   );
 
   React.useEffect(() => {
-    // if (!isManualyUpdating) return;
     if (journalPrices && registredTime && leaveTime && !isPayed) {
-      console.log({ isPayed });
       handleCalculateTimeAndPrice(registredTime, leaveTime);
-      // setIsManualyUpdating(false);
     }
   }, [
     registredTime,
