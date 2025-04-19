@@ -32,14 +32,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleNewMember,
   defaultPlan,
 }) => {
-  const defaultValues: Partial<Member> = React.useMemo(() => ({
-    id: "",
-    email: "",
-    firstName: "",
-    lastName: "",
-    phone: "",
-    plan: defaultPlan || Subscription.Journal,
-  }), [defaultPlan]);
+  const defaultValues: Partial<Member> = React.useMemo(
+    () => ({
+      id: "",
+      email: "",
+      firstName: "",
+      lastName: "",
+      phone: "",
+      plan: defaultPlan || Subscription.Journal,
+    }),
+    [defaultPlan]
+  );
 
   const [
     createMember,
@@ -150,9 +153,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         <RHFTextField
           sx={{
             "& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button":
-            {
-              display: "none",
-            },
+              {
+                display: "none",
+              },
             "& input[type=number]": {
               MozAppearance: "textfield",
             },
@@ -165,7 +168,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         <RHFTextField name="email" label="Email" placeholder="Email" />
 
         <>
-          {(!defaultPlan || selectItem) ? (
+          {!defaultPlan || selectItem ? (
             <RHSelectDropDown
               name="plan"
               label="Plan"

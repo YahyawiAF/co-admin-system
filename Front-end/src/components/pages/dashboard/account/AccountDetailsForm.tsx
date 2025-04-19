@@ -18,7 +18,11 @@ interface AccountDetailsFormProps {
   username: string;
   email?: string;
   phone?: string;
-  onUpdate: (data: { username: string; email: string; phone?: string }) => Promise<void>;
+  onUpdate: (data: {
+    username: string;
+    email: string;
+    phone?: string;
+  }) => Promise<void>;
   phoneDisabled: boolean;
 }
 
@@ -27,10 +31,18 @@ const validationSchema = Yup.object({
   firstName: Yup.string().trim(),
   lastName: Yup.string().trim(),
   email: Yup.string().email("Invalid email").nullable(), // Email non requis
-  phone: Yup.string().matches(/^[0-9]+$/, "Invalid phone number").nullable(),
+  phone: Yup.string()
+    .matches(/^[0-9]+$/, "Invalid phone number")
+    .nullable(),
 });
 
-export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisabled }: AccountDetailsFormProps): React.JSX.Element {
+export function AccountDetailsForm({
+  username,
+  email,
+  phone,
+  onUpdate,
+  phoneDisabled,
+}: AccountDetailsFormProps): React.JSX.Element {
   const nameParts = username.split(" ");
   const initialFirstName = nameParts[0] || "";
   const initialLastName = nameParts.slice(1).join(" ") || "";
@@ -71,7 +83,10 @@ export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisa
         <CardContent>
           <Grid container spacing={3}>
             <Grid md={6} xs={12}>
-              <FormControl fullWidth error={!!(formik.touched.firstName && formik.errors.firstName)}>
+              <FormControl
+                fullWidth
+                error={!!(formik.touched.firstName && formik.errors.firstName)}
+              >
                 <InputLabel>First name</InputLabel>
                 <OutlinedInput
                   name="firstName"
@@ -86,7 +101,10 @@ export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisa
               </FormControl>
             </Grid>
             <Grid md={6} xs={12}>
-              <FormControl fullWidth error={!!(formik.touched.lastName && formik.errors.lastName)}>
+              <FormControl
+                fullWidth
+                error={!!(formik.touched.lastName && formik.errors.lastName)}
+              >
                 <InputLabel>Last name</InputLabel>
                 <OutlinedInput
                   name="lastName"
@@ -101,7 +119,10 @@ export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisa
               </FormControl>
             </Grid>
             <Grid md={6} xs={12}>
-              <FormControl fullWidth error={!!(formik.touched.email && formik.errors.email)}>
+              <FormControl
+                fullWidth
+                error={!!(formik.touched.email && formik.errors.email)}
+              >
                 <InputLabel>Email address</InputLabel>
                 <OutlinedInput
                   name="email"
@@ -116,7 +137,10 @@ export function AccountDetailsForm({ username, email, phone, onUpdate, phoneDisa
               </FormControl>
             </Grid>
             <Grid md={6} xs={12}>
-              <FormControl fullWidth error={!!(formik.touched.phone && formik.errors.phone)}>
+              <FormControl
+                fullWidth
+                error={!!(formik.touched.phone && formik.errors.phone)}
+              >
                 <InputLabel>Phone number</InputLabel>
                 <OutlinedInput
                   name="phone"

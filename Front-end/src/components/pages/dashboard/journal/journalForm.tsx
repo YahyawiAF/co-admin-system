@@ -122,6 +122,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     show: boolean;
     message: string;
   }>({ show: false, message: "" });
+
   const [isManualyUpdating, setIsManualyUpdating] = useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
@@ -205,6 +206,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const handleCalculateTimeAndPrice = React.useCallback(
     (registredTime: Date, leaveTime: Date) => {
+      console.log("handleCalculateTimeAndPrice");
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);

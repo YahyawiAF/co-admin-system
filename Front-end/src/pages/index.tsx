@@ -29,7 +29,8 @@ const Divider = styled(MuiDivider)(spacing);
 
 const Typography = styled(MuiTypography)(spacing);
 
-function DefaultContent() {  // Nom modifié de Default à DefaultContent
+function DefaultContent() {
+  // Nom modifié de Default à DefaultContent
   const { t } = useTranslation();
 
   // const { data: transaction, isLoading } = useGetTransactionsQuery();
@@ -88,16 +89,17 @@ function DefaultContent() {  // Nom modifié de Default à DefaultContent
   );
 }
 
-function Default() {  // Nouveau composant Default qui englobe avec ProtectedRoute
-  return (
-
-    <DefaultContent />
-  );
+function Default() {
+  // Nouveau composant Default qui englobe avec ProtectedRoute
+  return <DefaultContent />;
 }
 
 Default.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>{page}      </RoleProtectedRoute>
-  </DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page} </RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default Default;

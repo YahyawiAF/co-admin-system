@@ -4,7 +4,7 @@ import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import ArchiveIcon from "@mui/icons-material/Archive";
 import Paper from "@mui/material/Paper";
 import React, { useEffect, useState } from "react";
-import QrCodeIcon from '@mui/icons-material/QrCode';
+import QrCodeIcon from "@mui/icons-material/QrCode";
 
 export default function FixedBottomNavigation() {
   const [value, setValue] = useState(0);
@@ -35,7 +35,10 @@ export default function FixedBottomNavigation() {
   };
 
   return (
-    <Paper sx={{ position: "fixed", bottom: 0, left: 0, right: 0 }} elevation={3}>
+    <Paper
+      sx={{ position: "fixed", bottom: 0, left: 0, right: 0 }}
+      elevation={3}
+    >
       <BottomNavigation showLabels value={value} onChange={handleChange}>
         <BottomNavigationAction label="Profil" icon={<AccountCircleIcon />} />
         <BottomNavigationAction label="Subscription" icon={<QrCodeIcon />} />

@@ -83,17 +83,17 @@ interface Filters {
   plan: Subscription | "all";
 }
 
-const applyFilters = (
-  members: Member[],
-  filters: Filters
-): Member[] => {
+const applyFilters = (members: Member[], filters: Filters): Member[] => {
   return members.filter((member) => {
     let matches = true;
     const { query, plan } = filters;
 
     if (query) {
       matches = Object.keys(member).some((key) => {
-        return member[key]?.toString().toLowerCase().includes(query.toLowerCase());
+        return member[key]
+          ?.toString()
+          .toLowerCase()
+          .includes(query.toLowerCase());
       });
     }
 
@@ -214,8 +214,6 @@ function EnhancedTable() {
     Math.min(rowsPerPage, filteredRows.length - page * rowsPerPage);
 
   return (
-
-
     <div>
       <Modal
         open={openDeletModal}
@@ -241,43 +239,60 @@ function EnhancedTable() {
         </SubPage>
       </Drawer>
       <Paper>
-        <Box sx={{
-          display: 'flex',
-          alignItems: 'center',
-          p: 2,
-          justifyContent: 'space-between'
-        }}>
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            p: 2,
+            justifyContent: "space-between",
+          }}
+        >
           <TableHeadAction
             search={filters.query}
             handleClickOpen={handleClickOpen}
             onHandleSearch={onHandleSearch}
           />
 
-          <FormControl sx={{
-            width: 100,
-            minWidth: 100,
-            ml: 2,
-            marginLeft: 'auto'
-          }}>
-            <InputLabel id="plan-filter-label" shrink>Plan</InputLabel>
+          <FormControl
+            sx={{
+              width: 100,
+              minWidth: 100,
+              ml: 2,
+              marginLeft: "auto",
+            }}
+          >
+            <InputLabel id="plan-filter-label" shrink>
+              Plan
+            </InputLabel>
             <Select
               labelId="plan-filter-label"
               value={filters.plan}
               label="Plan"
-              onChange={(e) => setFilters({
-                ...filters,
-                plan: e.target.value as Subscription | "all"
-              })}
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  plan: e.target.value as Subscription | "all",
+                })
+              }
               sx={{
-                fontSize: '14px',
-                '& .MuiSelect-select': {
-                  padding: '8px 32px 8px 12px'
-                }
+                fontSize: "14px",
+                "& .MuiSelect-select": {
+                  padding: "8px 32px 8px 12px",
+                },
               }}
             >
-              <MenuItem value="all" sx={{ fontSize: '14px' }}>All</MenuItem>
-              <MenuItem value={Subscription.Journal} sx={{ fontSize: '14px' }}>Journal</MenuItem>
-              <MenuItem value={Subscription.Membership} sx={{ fontSize: '14px' }}>Membership</MenuItem>
+              <MenuItem value="all" sx={{ fontSize: "14px" }}>
+                All
+              </MenuItem>
+              <MenuItem value={Subscription.Journal} sx={{ fontSize: "14px" }}>
+                Journal
+              </MenuItem>
+              <MenuItem
+                value={Subscription.Membership}
+                sx={{ fontSize: "14px" }}
+              >
+                Membership
+              </MenuItem>
             </Select>
           </FormControl>
         </Box>
@@ -370,7 +385,6 @@ function EnhancedTable() {
 
 function MembersPage() {
   return (
-
     <React.Fragment>
       <Helmet title="Transactions" />
       <Typography variant="h3" gutterBottom display="inline">
@@ -385,12 +399,15 @@ function MembersPage() {
         </Grid>
       </Grid>
     </React.Fragment>
-
   );
 }
 
 MembersPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>{page}</RoleProtectedRoute></DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default MembersPage;

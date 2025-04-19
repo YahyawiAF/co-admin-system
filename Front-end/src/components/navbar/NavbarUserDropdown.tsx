@@ -36,46 +36,49 @@ function NavbarUserDropdown() {
 
   const handleSignOut = async () => {
     // Récupérez le token depuis sessionStorage
-    const accessToken = sessionStorage.getItem('accessToken');
-  
+    const accessToken = sessionStorage.getItem("accessToken");
+
     if (!accessToken) {
       console.error("Aucun token d'accès trouvé.");
       // Redirigez l'utilisateur vers la page de connexion
       router.replace("/auth/sign-in");
       return;
     }
-  
+
     try {
       // Appel à l'API de déconnexion
       await logout().unwrap();
-  
+
       // Efface les données de session
 
       sessionStorage.removeItem("username");
-      sessionStorage.removeItem('accessToken'); // Supprimez le token du sessionStorage
-      sessionStorage.removeItem('refreshToken'); // Supprimez également le refreshToken si nécessaire
-  
+      sessionStorage.removeItem("accessToken"); // Supprimez le token du sessionStorage
+      sessionStorage.removeItem("refreshToken"); // Supprimez également le refreshToken si nécessaire
+
       // Dispatcher l'action de déconnexion
       dispatch(signOut());
-  
+
       // Redirige l'utilisateur vers la page de connexion
       router.replace("/auth/sign-in");
     } catch (error) {
       console.error("Erreur lors de la déconnexion:", error);
-  
+
       // Si le token est invalide, forcez la déconnexion côté client
-      if (typeof error === 'object' && error !== null && 'status' in error) {
-        const fetchError = error as { status: number; data: { message: string } };
+      if (typeof error === "object" && error !== null && "status" in error) {
+        const fetchError = error as {
+          status: number;
+          data: { message: string };
+        };
         if (fetchError.status === 401) {
           console.error("Token invalide :", fetchError.data.message);
         }
       }
-  
+
       // Forcez la déconnexion côté client en cas d'erreur
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("username");
-      sessionStorage.removeItem('accessToken');
-      sessionStorage.removeItem('refreshToken');
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
       dispatch(signOut());
       router.replace("/auth/sign-in");
     }

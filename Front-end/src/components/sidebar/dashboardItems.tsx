@@ -1,5 +1,13 @@
 import { SidebarItemsType } from "../../types/sidebar";
-import { Sliders, User, Activity, Settings, DollarSign ,Users, CreditCard } from "react-feather"; 
+import {
+  Sliders,
+  User,
+  Activity,
+  Settings,
+  DollarSign,
+  Users,
+  CreditCard,
+} from "react-feather";
 
 const pagesSection = [
   {
@@ -17,12 +25,12 @@ const pagesSection = [
     icon: User,
     title: "Members",
   },
-  
+
   {
     href: "",
     icon: Settings,
     title: "Settings",
-    children: [  
+    children: [
       {
         href: "/dashboard/price",
         icon: DollarSign,

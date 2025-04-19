@@ -16,12 +16,15 @@ export const abonnementApi = createApi({
   }),
   tagTypes: ["Abonnement"],
   endpoints: (builder) => ({
-    getAbonnements: builder.query<PaginatedResponse<Abonnement>, AbonnementParams>({
+    getAbonnements: builder.query<
+      PaginatedResponse<Abonnement>,
+      AbonnementParams
+    >({
       query: ({ perPage = 20, page, search }) => {
         const params = new URLSearchParams();
-        if (page) params.append('page', page.toString());
-        params.append('perPage', perPage.toString());
-        if (search) params.append('search', search);
+        if (page) params.append("page", page.toString());
+        params.append("perPage", perPage.toString());
+        if (search) params.append("search", search);
 
         return `abonnements?${params.toString()}`;
       },
@@ -29,7 +32,7 @@ export const abonnementApi = createApi({
     }),
 
     getAllAbonnements: builder.query<Abonnement[], void>({
-      query: () => 'abonnements/all',
+      query: () => "abonnements/all",
       providesTags: ["Abonnement"],
     }),
 
@@ -40,29 +43,32 @@ export const abonnementApi = createApi({
 
     createAbonnement: builder.mutation<Abonnement, Partial<Abonnement>>({
       query: (data) => ({
-        url: 'abonnements',
-        method: 'POST',
+        url: "abonnements",
+        method: "POST",
         body: data,
       }),
       invalidatesTags: ["Abonnement"],
     }),
 
-    updateAbonnement: builder.mutation<Abonnement, { id: string, data: Partial<Abonnement> }>({
+    updateAbonnement: builder.mutation<
+      Abonnement,
+      { id: string; data: Partial<Abonnement> }
+    >({
       query: ({ id, data }) => ({
         url: `abonnements/${id}`,
-        method: 'PATCH',
+        method: "PATCH",
         body: data,
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: "Abonnement", id },
-        { type: "Abonnement" }
+        { type: "Abonnement" },
       ],
     }),
 
     deleteAbonnement: builder.mutation<void, string>({
       query: (id) => ({
         url: `abonnements/${id}`,
-        method: 'DELETE',
+        method: "DELETE",
       }),
       invalidatesTags: ["Abonnement"],
     }),

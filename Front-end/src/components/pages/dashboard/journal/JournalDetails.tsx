@@ -28,13 +28,15 @@ function JournalDetails({
   const {
     data: abonnementsData,
     isLoading: isLoadingAbonnements,
-    error: errorAbonnements
+    error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
 
   // Calcul des membres abonnés
   const subscribedMembersCount = useMemo(() => {
     if (!abonnementsData?.data) return 0;
-    const uniqueMemberIds = new Set(abonnementsData.data.map(a => a.memberID));
+    const uniqueMemberIds = new Set(
+      abonnementsData.data.map((a) => a.memberID)
+    );
     return uniqueMemberIds.size;
   }, [abonnementsData]);
 
@@ -78,11 +80,7 @@ function JournalDetails({
           />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Cash"
-            count={cashTotal}
-            icon={<DollarSign />}
-          />
+          <Stats title="Cash" count={cashTotal} icon={<DollarSign />} />
         </Grid>
       </Grid>
     </React.Fragment>

@@ -16,7 +16,6 @@ import {
   IconButton,
   Tabs,
   Box,
-
 } from "@mui/material";
 
 import { spacing } from "@mui/system";
@@ -261,7 +260,6 @@ function JournalPage() {
 
   if (isLoading) return <Loader />;
   return (
-
     <React.Fragment>
       <Helmet title="Transactions" />
       <Tabs
@@ -272,7 +270,6 @@ function JournalPage() {
         <LinkTab label="Journal" {...a11yProps(0)} />
         <LinkTab label="Membership" {...a11yProps(1)} />
         <LinkTab label="Overview" {...a11yProps(2)} />
-
       </Tabs>
 
       <Divider my={6} />
@@ -440,13 +437,15 @@ function JournalPage() {
         />
       </TabPanel>
     </React.Fragment>
-
   );
 }
 
 JournalPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>
-    {page}</RoleProtectedRoute></DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default JournalPage;

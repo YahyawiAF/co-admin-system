@@ -3,7 +3,7 @@ import {
   useGetPricesQuery,
   useCreatePriceMutation,
   useUpdatePriceMutation,
-  useDeletePriceMutation
+  useDeletePriceMutation,
 } from "src/api/price.repo";
 import { Price, PriceType, TimeInterval } from "src/types/shared";
 import {
@@ -37,23 +37,23 @@ import {
   Checkbox,
   CircularProgress,
   Alert,
-  TableSortLabel
+  TableSortLabel,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "../../layouts/Dashboard";
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 import BulkActions from "src/components/Table/members/TableHeader";
 import { EnhancedTableHeadProps, HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // Styles personnalisés
 const PageContainer = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  minHeight: 'calc(100vh - 64px)',
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "calc(100vh - 64px)",
   padding: theme.spacing(2),
-  [theme.breakpoints.up('sm')]: {
+  [theme.breakpoints.up("sm")]: {
     padding: theme.spacing(3),
   },
 }));
@@ -65,9 +65,9 @@ const MainContainer = styled(Paper)(({ theme }) => ({
   boxShadow: theme.shadows[1],
   marginTop: theme.spacing(2),
   flex: 1,
-  display: 'flex',
-  flexDirection: 'column',
-  [theme.breakpoints.up('sm')]: {
+  display: "flex",
+  flexDirection: "column",
+  [theme.breakpoints.up("sm")]: {
     padding: theme.spacing(3),
   },
 }));
@@ -75,48 +75,48 @@ const MainContainer = styled(Paper)(({ theme }) => ({
 const TableWrapper = styled(Box)(({ theme }) => ({
   marginTop: theme.spacing(2),
   flex: 1,
-  overflow: 'hidden',
-  display: 'flex',
-  flexDirection: 'column',
-  [theme.breakpoints.up('sm')]: {
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  [theme.breakpoints.up("sm")]: {
     marginTop: theme.spacing(3),
   },
 }));
 
 const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
   flex: 1,
-  overflow: 'auto',
-  '& .MuiTable-root': {
+  overflow: "auto",
+  "& .MuiTable-root": {
     minWidth: 650,
-    [theme.breakpoints.down('sm')]: {
-      minWidth: '100%',
+    [theme.breakpoints.down("sm")]: {
+      minWidth: "100%",
     },
   },
-  '& .MuiTableRow-root': {
+  "& .MuiTableRow-root": {
     backgroundColor: theme.palette.background.paper,
-    '&:hover': {
+    "&:hover": {
       backgroundColor: theme.palette.action.hover,
     },
   },
-  '& .MuiTableCell-root': {
+  "& .MuiTableCell-root": {
     borderBottom: `1px solid ${theme.palette.divider}`,
     padding: theme.spacing(1),
-    [theme.breakpoints.up('sm')]: {
+    [theme.breakpoints.up("sm")]: {
       padding: theme.spacing(1.5),
     },
-    [theme.breakpoints.up('md')]: {
+    [theme.breakpoints.up("md")]: {
       padding: theme.spacing(2),
     },
   },
 }));
 
 const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
-  [theme.breakpoints.down('sm')]: {
-    '&:nth-of-type(1)': { width: '30%' },
-    '&:nth-of-type(2)': { width: '20%' },
-    '&:nth-of-type(3)': { width: '25%' },
-    '&:nth-of-type(4)': { width: '15%' },
-    '&:nth-of-type(5)': { width: '10%' },
+  [theme.breakpoints.down("sm")]: {
+    "&:nth-of-type(1)": { width: "30%" },
+    "&:nth-of-type(2)": { width: "20%" },
+    "&:nth-of-type(3)": { width: "25%" },
+    "&:nth-of-type(4)": { width: "15%" },
+    "&:nth-of-type(5)": { width: "10%" },
   },
 }));
 
@@ -135,12 +135,11 @@ const SubmitButton = styled(LoadingButton)(({ theme }) => ({
     background: "#054547",
     color: "#fff",
   },
-  [theme.breakpoints.up('sm')]: {
+  [theme.breakpoints.up("sm")]: {
     width: "calc(50% - 5px)",
     marginLeft: "10px",
   },
 }));
-
 
 const ActionButton = styled(Button)(({ theme }) => ({
   border: "1px solid",
@@ -157,7 +156,7 @@ const ActionButton = styled(Button)(({ theme }) => ({
     background: "#054547",
     color: "#fff",
   },
-  [theme.breakpoints.up('sm')]: {
+  [theme.breakpoints.up("sm")]: {
     width: "calc(50% - 5px)",
   },
 }));
@@ -170,11 +169,12 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
   rowCount,
   onRequestSort,
   headCells,
-  isMobile
+  isMobile,
 }) => {
-  const createSortHandler = (property: string) => (event: React.MouseEvent<unknown>) => {
-    onRequestSort(event, property);
-  };
+  const createSortHandler =
+    (property: string) => (event: React.MouseEvent<unknown>) => {
+      onRequestSort(event, property);
+    };
 
   return (
     <TableHead>
@@ -185,25 +185,25 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
             indeterminate={numSelected > 0 && numSelected < rowCount}
             checked={rowCount > 0 && numSelected === rowCount}
             onChange={onSelectAllClick}
-            inputProps={{ 'aria-label': 'select all prices' }}
+            inputProps={{ "aria-label": "select all prices" }}
           />
         </ResponsiveTableCell>
         {headCells.map((headCell) => (
           <ResponsiveTableCell
             key={headCell.id}
-            align={headCell.numeric ? 'right' : 'left'}
-            padding={headCell.disablePadding ? 'none' : 'normal'}
+            align={headCell.numeric ? "right" : "left"}
+            padding={headCell.disablePadding ? "none" : "normal"}
             sortDirection={orderBy === headCell.id ? order : false}
           >
             <TableSortLabel
               active={orderBy === headCell.id}
-              direction={orderBy === headCell.id ? order : 'asc'}
+              direction={orderBy === headCell.id ? order : "asc"}
               onClick={createSortHandler(headCell.id)}
             >
               {headCell.label}
               {orderBy === headCell.id ? (
-                <Box component="span" sx={{ display: 'none' }}>
-                  {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                <Box component="span" sx={{ display: "none" }}>
+                  {order === "desc" ? "sorted descending" : "sorted ascending"}
                 </Box>
               ) : null}
             </TableSortLabel>
@@ -216,7 +216,9 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
 
 const PriceComponent = () => {
   const theme = useTheme();
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.down("sm")
+  );
 
   const { data: prices, isLoading, isError, refetch } = useGetPricesQuery();
   const [createPrice] = useCreatePriceMutation();
@@ -224,7 +226,7 @@ const PriceComponent = () => {
   const [deletePrice] = useDeletePriceMutation();
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [typeFilter, setTypeFilter] = useState<PriceType | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<PriceType | "all">("all");
   const [newPrice, setNewPrice] = useState<Price>({
     id: "",
     name: "",
@@ -233,7 +235,7 @@ const PriceComponent = () => {
     createdAt: null,
     updatedAt: null,
     type: PriceType.journal,
-    journals: []
+    journals: [],
   });
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -242,43 +244,43 @@ const PriceComponent = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [selected, setSelected] = useState<string[]>([]);
-  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
-  const [orderBy, setOrderBy] = useState<string>('name');
+  const [order, setOrder] = useState<"asc" | "desc">("asc");
+  const [orderBy, setOrderBy] = useState<string>("name");
 
   const headCells = [
     {
-      id: 'name',
+      id: "name",
       numeric: false,
       disablePadding: false,
-      label: 'Name',
+      label: "Name",
       alwaysVisible: false,
     },
     {
-      id: 'price',
+      id: "price",
       numeric: false,
       disablePadding: false,
-      label: 'Price',
+      label: "Price",
       alwaysVisible: false,
     },
     {
-      id: 'timePeriod',
+      id: "timePeriod",
       numeric: false,
       disablePadding: false,
-      label: 'Time Period',
+      label: "Time Period",
       alwaysVisible: !isMobile,
     },
     {
-      id: 'type',
+      id: "type",
       numeric: false,
       disablePadding: false,
-      label: 'Type',
+      label: "Type",
       alwaysVisible: !isMobile,
     },
     {
-      id: 'actions',
+      id: "actions",
       numeric: false,
       disablePadding: false,
-      label: 'Actions',
+      label: "Actions",
       alwaysVisible: false,
     },
   ];
@@ -312,9 +314,12 @@ const PriceComponent = () => {
     setSelected(newSelected);
   };
 
-  const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => {
-    const isAsc = orderBy === property && order === 'asc';
-    setOrder(isAsc ? 'desc' : 'asc');
+  const handleRequestSort = (
+    event: React.MouseEvent<unknown>,
+    property: string
+  ) => {
+    const isAsc = orderBy === property && order === "asc";
+    setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
 
@@ -323,11 +328,16 @@ const PriceComponent = () => {
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
 
-    if (!(editPrice ? editPrice.name : newPrice.name)) errors.name = "Name is required";
-    if ((editPrice ? editPrice.price : newPrice.price) <= 0) errors.price = "Price must be greater than 0";
-    if (!(editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start)) errors.timePeriodStart = "Start time is required";
-    if (!(editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end)) errors.timePeriodEnd = "End time is required";
-    if (!(editPrice ? editPrice.type : newPrice.type)) errors.type = "Type is required";
+    if (!(editPrice ? editPrice.name : newPrice.name))
+      errors.name = "Name is required";
+    if ((editPrice ? editPrice.price : newPrice.price) <= 0)
+      errors.price = "Price must be greater than 0";
+    if (!(editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start))
+      errors.timePeriodStart = "Start time is required";
+    if (!(editPrice ? editPrice.timePeriod.end : newPrice.timePeriod.end))
+      errors.timePeriodEnd = "End time is required";
+    if (!(editPrice ? editPrice.type : newPrice.type))
+      errors.type = "Type is required";
 
     setErrors(errors);
 
@@ -348,7 +358,7 @@ const PriceComponent = () => {
           createdAt: null,
           updatedAt: null,
           type: PriceType.journal,
-          journals: []
+          journals: [],
         });
         setSelected([]);
       } catch (error) {
@@ -388,19 +398,19 @@ const PriceComponent = () => {
       await deletePrice(priceToDelete);
       setShowDeleteModal(false);
       setPriceToDelete(null);
-      setSelected(selected.filter(id => id !== priceToDelete));
+      setSelected(selected.filter((id) => id !== priceToDelete));
     }
   };
-
-
 
   const formatTimeInterval = (interval: TimeInterval) => {
     return `${interval.start} - ${interval.end}`;
   };
 
   const filteredPrices = prices?.filter((price) => {
-    const matchesSearch = price.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = typeFilter === 'all' || price.type === typeFilter;
+    const matchesSearch = price.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === "all" || price.type === typeFilter;
     return matchesSearch && matchesType;
   });
 
@@ -408,56 +418,81 @@ const PriceComponent = () => {
     setSearchTerm(e.target.value);
   };
 
-  if (isLoading) return <Box display="flex" justifyContent="center" p={4}><CircularProgress /></Box>;
+  if (isLoading)
+    return (
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
   if (isError) return <Alert severity="error">Error loading prices</Alert>;
 
   return (
-
     <PageContainer>
-      <Typography variant="h4" sx={{ mb: 2 }}>Rate Management</Typography>
+      <Typography variant="h4" sx={{ mb: 2 }}>
+        Rate Management
+      </Typography>
 
       <MainContainer>
         <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
           {/* Partie gauche - Select */}
           <Grid item xs={12} sm={4} md={3}>
-            <FormControl sx={{
-              width: '200px',
-              height: '40px',
-              '& .MuiOutlinedInput-root': {
-                height: '40px'
-              }
-            }}>
+            <FormControl
+              sx={{
+                width: "200px",
+                height: "40px",
+                "& .MuiOutlinedInput-root": {
+                  height: "40px",
+                },
+              }}
+            >
               <Select
                 value={typeFilter}
-                onChange={(e) => setTypeFilter(e.target.value as PriceType | 'all')}
+                onChange={(e) =>
+                  setTypeFilter(e.target.value as PriceType | "all")
+                }
                 displayEmpty
                 sx={{
-                  height: '40px',
-                  fontSize: '14px',
-                  '& .MuiSelect-select': {
-                    padding: '8px 12px',
-                    display: 'flex',
-                    alignItems: 'center'
-                  }
+                  height: "40px",
+                  fontSize: "14px",
+                  "& .MuiSelect-select": {
+                    padding: "8px 12px",
+                    display: "flex",
+                    alignItems: "center",
+                  },
                 }}
                 MenuProps={{
                   PaperProps: {
                     sx: {
-                      marginTop: '8px',
-                      maxHeight: '300px'
-                    }
-                  }
+                      marginTop: "8px",
+                      maxHeight: "300px",
+                    },
+                  },
                 }}
               >
-                <MenuItem value="all" sx={{ fontSize: '14px' }}>All types</MenuItem>
-                <MenuItem value={PriceType.journal} sx={{ fontSize: '14px' }}>Journal</MenuItem>
-                <MenuItem value={PriceType.abonnement} sx={{ fontSize: '14px' }}>Subscription</MenuItem>
+                <MenuItem value="all" sx={{ fontSize: "14px" }}>
+                  All types
+                </MenuItem>
+                <MenuItem value={PriceType.journal} sx={{ fontSize: "14px" }}>
+                  Journal
+                </MenuItem>
+                <MenuItem
+                  value={PriceType.abonnement}
+                  sx={{ fontSize: "14px" }}
+                >
+                  Subscription
+                </MenuItem>
               </Select>
             </FormControl>
           </Grid>
 
           {/* Partie droite - BulkActions */}
-          <Grid item xs={12} sm={8} md={9} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Grid
+            item
+            xs={12}
+            sm={8}
+            md={9}
+            sx={{ display: "flex", justifyContent: "flex-end" }}
+          >
             <BulkActions
               handleClickOpen={() => {
                 setNewPrice({
@@ -468,7 +503,7 @@ const PriceComponent = () => {
                   createdAt: null,
                   updatedAt: null,
                   type: PriceType.journal,
-                  journals: []
+                  journals: [],
                 });
                 setShowDrawer(true);
               }}
@@ -510,16 +545,22 @@ const PriceComponent = () => {
                         <Checkbox
                           color="primary"
                           checked={isItemSelected}
-                          inputProps={{ 'aria-labelledby': price.id }}
+                          inputProps={{ "aria-labelledby": price.id }}
                         />
                       </ResponsiveTableCell>
                       <ResponsiveTableCell>{price.name}</ResponsiveTableCell>
-                      <ResponsiveTableCell>{price.price} DT</ResponsiveTableCell>
+                      <ResponsiveTableCell>
+                        {price.price} DT
+                      </ResponsiveTableCell>
                       {!isMobile && (
                         <>
-                          <ResponsiveTableCell>{formatTimeInterval(price.timePeriod)}</ResponsiveTableCell>
                           <ResponsiveTableCell>
-                            {price.type === PriceType.journal ? 'Journal' : 'Subscription'}
+                            {formatTimeInterval(price.timePeriod)}
+                          </ResponsiveTableCell>
+                          <ResponsiveTableCell>
+                            {price.type === PriceType.journal
+                              ? "Journal"
+                              : "Subscription"}
                           </ResponsiveTableCell>
                         </>
                       )}
@@ -534,7 +575,9 @@ const PriceComponent = () => {
                             size="small"
                             color="primary"
                           >
-                            <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                            <EditIcon
+                              fontSize={isMobile ? "small" : "medium"}
+                            />
                           </IconButton>
                           <IconButton
                             onClick={(e) => {
@@ -544,7 +587,9 @@ const PriceComponent = () => {
                             size="small"
                             color="error"
                           >
-                            <DeleteIcon fontSize={isMobile ? "small" : "medium"} />
+                            <DeleteIcon
+                              fontSize={isMobile ? "small" : "medium"}
+                            />
                           </IconButton>
                         </Box>
                       </ResponsiveTableCell>
@@ -565,7 +610,8 @@ const PriceComponent = () => {
         <DialogTitle>Delete Rate</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this rate? This action cannot be undone.
+            Are you sure you want to delete this rate? This action cannot be
+            undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -582,12 +628,12 @@ const PriceComponent = () => {
         onClose={handleCloseDrawer}
         PaperProps={{
           sx: {
-            width: isMobile ? '100%' : "450px",
+            width: isMobile ? "100%" : "450px",
             padding: isMobile ? theme.spacing(2) : theme.spacing(3),
             display: "flex",
             flexDirection: "column",
-            gap: "20px"
-          }
+            gap: "20px",
+          },
         }}
       >
         <Typography variant="h6" sx={{ mb: 3 }}>
@@ -598,7 +644,11 @@ const PriceComponent = () => {
           label="Name"
           fullWidth
           value={editPrice ? editPrice.name : newPrice.name}
-          onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, name: e.target.value }) : setNewPrice({ ...newPrice, name: e.target.value }))}
+          onChange={(e) =>
+            editPrice
+              ? setEditPrice({ ...editPrice, name: e.target.value })
+              : setNewPrice({ ...newPrice, name: e.target.value })
+          }
           error={!!errors.name}
           helperText={errors.name}
         />
@@ -621,17 +671,22 @@ const PriceComponent = () => {
         <TextField
           label="Start Time"
           fullWidth
-          value={editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start}
+          value={
+            editPrice ? editPrice.timePeriod.start : newPrice.timePeriod.start
+          }
           onChange={(e) =>
             editPrice
               ? setEditPrice({
-                ...editPrice,
-                timePeriod: { ...editPrice.timePeriod, start: e.target.value }
-              })
+                  ...editPrice,
+                  timePeriod: {
+                    ...editPrice.timePeriod,
+                    start: e.target.value,
+                  },
+                })
               : setNewPrice({
-                ...newPrice,
-                timePeriod: { ...newPrice.timePeriod, start: e.target.value }
-              })
+                  ...newPrice,
+                  timePeriod: { ...newPrice.timePeriod, start: e.target.value },
+                })
           }
           error={!!errors.timePeriodStart}
           helperText={errors.timePeriodStart}
@@ -644,13 +699,13 @@ const PriceComponent = () => {
           onChange={(e) =>
             editPrice
               ? setEditPrice({
-                ...editPrice,
-                timePeriod: { ...editPrice.timePeriod, end: e.target.value }
-              })
+                  ...editPrice,
+                  timePeriod: { ...editPrice.timePeriod, end: e.target.value },
+                })
               : setNewPrice({
-                ...newPrice,
-                timePeriod: { ...newPrice.timePeriod, end: e.target.value }
-              })
+                  ...newPrice,
+                  timePeriod: { ...newPrice.timePeriod, end: e.target.value },
+                })
           }
           error={!!errors.timePeriodEnd}
           helperText={errors.timePeriodEnd}
@@ -659,7 +714,17 @@ const PriceComponent = () => {
         <FormControl fullWidth error={!!errors.type}>
           <Select
             value={editPrice ? editPrice.type : newPrice.type}
-            onChange={(e) => (editPrice ? setEditPrice({ ...editPrice, type: e.target.value as PriceType }) : setNewPrice({ ...newPrice, type: e.target.value as PriceType }))}
+            onChange={(e) =>
+              editPrice
+                ? setEditPrice({
+                    ...editPrice,
+                    type: e.target.value as PriceType,
+                  })
+                : setNewPrice({
+                    ...newPrice,
+                    type: e.target.value as PriceType,
+                  })
+            }
             label="Type"
           >
             <MenuItem value={PriceType.journal}>Journal</MenuItem>
@@ -668,10 +733,15 @@ const PriceComponent = () => {
           {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
         </FormControl>
 
-        <Box sx={{ display: 'flex', gap: '10px', mt: 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
-          <ActionButton onClick={handleCloseDrawer}>
-            Cancel
-          </ActionButton>
+        <Box
+          sx={{
+            display: "flex",
+            gap: "10px",
+            mt: "auto",
+            flexDirection: isMobile ? "column" : "row",
+          }}
+        >
+          <ActionButton onClick={handleCloseDrawer}>Cancel</ActionButton>
           <SubmitButton
             onClick={editPrice ? handleUpdatePrice : handleAddPrice}
           >
@@ -680,13 +750,15 @@ const PriceComponent = () => {
         </Box>
       </Drawer>
     </PageContainer>
-
-
   );
 };
 PriceComponent.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>    <RoleProtectedRoute allowedRoles={['ADMIN']}>
-    {page}</RoleProtectedRoute></DashboardLayout>;
+  return (
+    <DashboardLayout>
+      {" "}
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default PriceComponent;

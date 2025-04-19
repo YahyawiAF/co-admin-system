@@ -2,7 +2,18 @@ import React, { useState } from "react";
 import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-import { Avatar, Paper, Typography, TextField, Button, CircularProgress, Box, Link, Checkbox, FormControlLabel } from "@mui/material";
+import {
+  Avatar,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  CircularProgress,
+  Box,
+  Link,
+  Checkbox,
+  FormControlLabel,
+} from "@mui/material";
 import { useLoginMutation } from "../../api/auth.repo";
 import AuthLayout from "../../layouts/Auth";
 import Logo from "../../vendor/logo.svg";
@@ -45,7 +56,7 @@ function SignIn() {
           title: "Accès refusé",
           text: "Seul un administrateur peut se connecter ici.",
           icon: "error",
-          confirmButtonText: "OK"
+          confirmButtonText: "OK",
         });
         return;
       }
@@ -59,7 +70,7 @@ function SignIn() {
         title: "Success!",
         text: "You have logged in successfully.",
         icon: "success",
-        confirmButtonText: "OK"
+        confirmButtonText: "OK",
       }).then(() => {
         window.location.href = "/"; // Redirection vers le dashboard
       });
@@ -69,20 +80,18 @@ function SignIn() {
         title: "Failed!",
         text: "An error occurred during login. Please try again.",
         icon: "error",
-        confirmButtonText: "OK"
+        confirmButtonText: "OK",
       });
     }
   };
 
-
-
   // Gérer le message d'erreur
   const getErrorMessage = () => {
     if (isError && error) {
-      if (error && 'data' in error && typeof error.data === 'string') {
+      if (error && "data" in error && typeof error.data === "string") {
         return error.data;
       }
-      if (error && 'message' in error) {
+      if (error && "message" in error) {
         return error.message;
       }
     }
@@ -125,8 +134,6 @@ function SignIn() {
           />
 
           {/* Checkbox Remember Me */}
-
-
 
           <Button
             type="submit"
