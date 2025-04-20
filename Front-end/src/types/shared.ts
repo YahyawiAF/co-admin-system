@@ -201,6 +201,6 @@ export interface Expenses {
   updatedAt: string;
 }
 export enum ExpenseType {
-  MENSUEL='MENSUEL',
-  JOURNALIER='JOURNALIER',
+  MENSUEL = "MENSUEL",
+  JOURNALIER = "JOURNALIER",
 }

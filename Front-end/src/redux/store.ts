@@ -14,10 +14,10 @@ export const store = configureStore({
     [authServerApi.reducerPath]: authServerApi.reducer,
     [priceApi.reducerPath]: priceApi.reducer,
     [abonnementApi.reducerPath]: abonnementApi.reducer,
-    [userServices.reducerPath]: userServices.reducer, 
+    [userServices.reducerPath]: userServices.reducer,
     [expenseApi.reducerPath]: expenseApi.reducer,
   },
-  middleware: (getDefaultMiddleware)=>
+  middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
       membersServerApi.middleware,
       journalServerApi.middleware,
@@ -25,7 +25,7 @@ export const store = configureStore({
       priceApi.middleware,
       abonnementApi.middleware,
       userServices.middleware,
-      expenseApi.middleware 
+      expenseApi.middleware
     ),
 });
 
