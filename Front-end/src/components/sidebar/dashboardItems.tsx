@@ -7,6 +7,9 @@ import {
   DollarSign,
   Users,
   CreditCard,
+  TrendingUp,
+  Briefcase,
+  Tag,
 } from "react-feather";
 
 const pagesSection = [
@@ -33,8 +36,13 @@ const pagesSection = [
     children: [
       {
         href: "/dashboard/price",
-        icon: DollarSign,
+        icon: Tag,
         title: "Rate",
+      },
+      {
+        href: "/dashboard/expense",
+        icon: DollarSign,
+        title: "Expense",
       },
     ],
   },
