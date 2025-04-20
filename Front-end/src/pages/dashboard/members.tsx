@@ -17,6 +17,10 @@ import {
   Typography,
   IconButton,
   Box,
+  MenuItem,
+  FormControl,
+  Select,
+  InputLabel,
 } from "@mui/material";
 import { Edit, Delete } from "@mui/icons-material";
 
@@ -24,7 +28,7 @@ import { spacing } from "@mui/system";
 
 import DashboardLayout from "../../layouts/Dashboard";
 
-import { Member } from "../../types/shared";
+import { Member, Subscription } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -36,6 +40,8 @@ import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
 import { useDeleteMemeberMutation, useGetMembersQuery } from "src/api";
 import { red } from "@mui/material/colors";
 import Modal from "src/components/Modal/BasicModal";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -73,23 +79,26 @@ const headCells: Array<HeadCell> = [
 ];
 
 interface Filters {
-  query?: string | undefined;
+  query?: string;
+  plan: Subscription | "all";
 }
 
-const applyFilters = (
-  keywordServices: Member[],
-  filters: Filters
-): Member[] => {
-  return keywordServices.filter((keywordServices) => {
+const applyFilters = (members: Member[], filters: Filters): Member[] => {
+  return members.filter((member) => {
     let matches = true;
-    const { query } = filters;
+    const { query, plan } = filters;
+
     if (query) {
-      matches = Object.keys(keywordServices).some((key) => {
-        return keywordServices[key]
+      matches = Object.keys(member).some((key) => {
+        return member[key]
           ?.toString()
           .toLowerCase()
           .includes(query.toLowerCase());
       });
+    }
+
+    if (matches && filters.plan !== "all") {
+      matches = member.plan === filters.plan;
     }
 
     return matches;
@@ -106,6 +115,7 @@ function EnhancedTable() {
   const [rowsPerPage, setRowsPerPage] = React.useState(50);
   const [filters, setFilters] = useState<Filters>({
     query: "",
+    plan: "all",
   });
   const [open, setOpen] = useState(false);
 
@@ -229,11 +239,63 @@ function EnhancedTable() {
         </SubPage>
       </Drawer>
       <Paper>
-        <TableHeadAction
-          search={filters.query}
-          handleClickOpen={handleClickOpen}
-          onHandleSearch={onHandleSearch}
-        />
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            p: 2,
+            justifyContent: "space-between",
+          }}
+        >
+          <TableHeadAction
+            search={filters.query}
+            handleClickOpen={handleClickOpen}
+            onHandleSearch={onHandleSearch}
+          />
+
+          <FormControl
+            sx={{
+              width: 100,
+              minWidth: 100,
+              ml: 2,
+              marginLeft: "auto",
+            }}
+          >
+            <InputLabel id="plan-filter-label" shrink>
+              Plan
+            </InputLabel>
+            <Select
+              labelId="plan-filter-label"
+              value={filters.plan}
+              label="Plan"
+              onChange={(e) =>
+                setFilters({
+                  ...filters,
+                  plan: e.target.value as Subscription | "all",
+                })
+              }
+              sx={{
+                fontSize: "14px",
+                "& .MuiSelect-select": {
+                  padding: "8px 32px 8px 12px",
+                },
+              }}
+            >
+              <MenuItem value="all" sx={{ fontSize: "14px" }}>
+                All
+              </MenuItem>
+              <MenuItem value={Subscription.Journal} sx={{ fontSize: "14px" }}>
+                Journal
+              </MenuItem>
+              <MenuItem
+                value={Subscription.Membership}
+                sx={{ fontSize: "14px" }}
+              >
+                Membership
+              </MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
         <TableContainer>
           <Table aria-labelledby="tableTitle" aria-label="enhanced table">
             <EnhancedTableHead
@@ -341,7 +403,11 @@ function MembersPage() {
 }
 
 MembersPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default MembersPage;

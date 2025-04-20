@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
   Query,
+  Req,
 } from '@nestjs/common';
 import { UsersService } from './user.service';
 import { CreateUserDto, AddUserDto } from './dtos/create-user.dto';
@@ -30,6 +31,7 @@ import { Roles } from '../../../common/decorator/roles.decorator';
 import { PaginatedResult } from 'prisma-pagination';
 import { LoginDto } from '../auth/dto/login.dto';
 import { AuthEntity } from '../auth/entity/auth.entity';
+import { ChangePasswordDto } from './dtos/change-password.dto';
 @Controller('users')
 @ApiTags('users')
 export class UsersController {
@@ -85,7 +87,23 @@ export class UsersController {
   async findOne(@Param('id', ParseUUIDPipe) id: string) {
     return new UserEntity(await this.usersService.findOne(id));
   }
-
+  @Patch('change-password')
+@UseGuards(JwtAuthGuard)
+@Roles([Role.ADMIN, Role.USER])
+@ApiBearerAuth()
+@ApiOkResponse({ type: UserEntity })
+async changePassword(
+  @Req() req,
+  @Body() changePasswordDto: ChangePasswordDto
+) {
+  const userId = req.user.userId; // Accéder à userId depuis le payload JWT
+  const updatedUser = await this.usersService.changePassword(
+    userId,
+    changePasswordDto.oldPassword,
+    changePasswordDto.newPassword
+  );
+  return new UserEntity(updatedUser);
+}
   @Patch(':id')
   @Roles([Role.ADMIN, Role.USER])
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -107,9 +125,5 @@ export class UsersController {
     return new UserEntity(await this.usersService.remove(id));
   }
 
-  @Post('changePassword')
-  @ApiOkResponse({ type: AuthEntity })
-  changePassword(@Body() { email, password }: LoginDto) {
-    return this.usersService.changePassword(email, password);
-  }
+ 
 }

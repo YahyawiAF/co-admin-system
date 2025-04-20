@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { JournalType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
   IsNotEmpty,
@@ -8,7 +7,7 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
-  IsEnum,
+  
 } from 'class-validator';
 
 export class AddJournalDto {
@@ -16,6 +15,12 @@ export class AddJournalDto {
   @IsString()
   @ApiProperty()
   public memberID: string;
+
+
+  
+  @IsString()
+  @ApiProperty()
+  public priceId: string;
 
   @IsNotEmpty()
   @IsDate()
@@ -40,10 +45,7 @@ export class AddJournalDto {
   @ApiProperty()
   public isReservation: boolean;
 
-  @IsEnum(JournalType)
-  @IsNotEmpty()
-  @ApiProperty()
-  journalType: JournalType;
+  
 
   @IsNotEmpty()
   @IsNumber()

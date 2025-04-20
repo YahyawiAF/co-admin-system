@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
-
 import {
   Checkbox,
   Grid,
@@ -50,6 +49,9 @@ import {
 import JournalDetails from "src/components/pages/dashboard/journal/JournalDetails";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
+import ProtectedRoute from "src/components/auth/ProtectedRoute";
+import Abonnement from "./abonnement";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
 
@@ -266,7 +268,8 @@ function JournalPage() {
         aria-label="basic tabs example"
       >
         <LinkTab label="Journal" {...a11yProps(0)} />
-        <LinkTab label="Overview" {...a11yProps(1)} />
+        <LinkTab label="Membership" {...a11yProps(1)} />
+        <LinkTab label="Overview" {...a11yProps(2)} />
       </Tabs>
 
       <Divider my={6} />
@@ -422,7 +425,11 @@ function JournalPage() {
           </Grid>
         </Grid>
       </TabPanel>
-      <TabPanel value={value} index={1} title={"Card"}>
+      <TabPanel value={value} index={1} title={"Membership"}>
+        <Abonnement />
+      </TabPanel>
+
+      <TabPanel value={value} index={2} title={"Overview"}>
         <JournalDetails
           journals={rows}
           isLoading={isLoading}
@@ -434,7 +441,11 @@ function JournalPage() {
 }
 
 JournalPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default JournalPage;

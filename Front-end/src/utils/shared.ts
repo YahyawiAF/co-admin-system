@@ -9,13 +9,29 @@ import {
   addSeconds,
 } from "date-fns";
 
-export function getHourDifference(date1: Date, date2: Date) {
+export function getHourDifference(date1: Date, date2: Date): string {
   // Parse the dates (if needed, they can already be Date objects)
   const d1 = new Date(date1);
   const d2 = new Date(date2);
 
-  // Calculate the difference in hours
-  return differenceInHours(d2, d1);
+  // Calculate the total difference in minutes
+  const totalMinutes = differenceInMinutes(d2, d1);
+
+  // Handle negative difference (date2 before date1)
+  if (totalMinutes < 0) return "0min";
+
+  // Calculate hours and remaining minutes
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  // Format the result
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h${minutes.toString().padStart(2, "0")}m`;
+  } else if (hours > 0) {
+    return `${hours}h`;
+  } else {
+    return `${minutes}min`;
+  }
 }
 
 export const updateHoursAndMinutes = (date: Date) => {

@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
+import ProtectedRoute from "src/components/auth/ProtectedRoute"; // Ligne ajoutée
 
 import {
   Grid,
@@ -12,6 +13,7 @@ import {
 import { spacing } from "@mui/system";
 
 import DashboardLayout from "src/layouts/Dashboard";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 // import LineChart from "src/components/pages/dashboard/landing/LineChart";
 // import DoughnutChart from "src/components/pages/dashboard/landing/DoughnutChart";
@@ -27,7 +29,8 @@ const Divider = styled(MuiDivider)(spacing);
 
 const Typography = styled(MuiTypography)(spacing);
 
-function Default() {
+function DefaultContent() {
+  // Nom modifié de Default à DefaultContent
   const { t } = useTranslation();
 
   // const { data: transaction, isLoading } = useGetTransactionsQuery();
@@ -86,8 +89,17 @@ function Default() {
   );
 }
 
+function Default() {
+  // Nouveau composant Default qui englobe avec ProtectedRoute
+  return <DefaultContent />;
+}
+
 Default.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout>{page}</DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page} </RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default Default;

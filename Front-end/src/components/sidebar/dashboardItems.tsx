@@ -1,6 +1,13 @@
 import { SidebarItemsType } from "../../types/sidebar";
-
-import { Sliders, User, Activity } from "react-feather";
+import {
+  Sliders,
+  User,
+  Activity,
+  Settings,
+  DollarSign,
+  Users,
+  CreditCard,
+} from "react-feather";
 
 const pagesSection = [
   {
@@ -10,19 +17,27 @@ const pagesSection = [
   },
   {
     href: "/dashboard/journal",
-    icon: Activity,
-    title: "Journal",
+    icon: CreditCard,
+    title: "Subscription",
   },
   {
     href: "/dashboard/members",
     icon: User,
     title: "Members",
   },
-  // {
-  //   href: "/dashboard/cards",
-  //   icon: CreditCard,
-  //   title: "Cards",
-  // },
+
+  {
+    href: "",
+    icon: Settings,
+    title: "Settings",
+    children: [
+      {
+        href: "/dashboard/price",
+        icon: DollarSign,
+        title: "Rate",
+      },
+    ],
+  },
 ] as SidebarItemsType[];
 
 const navItems = [

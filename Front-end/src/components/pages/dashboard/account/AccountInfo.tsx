@@ -8,31 +8,48 @@ import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
-const user = {
-  name: "Sofia Rivers",
-  avatar: "/assets/avatar.png",
-  jobTitle: "Senior Developer",
-  country: "USA",
-  city: "Los Angeles",
-  timezone: "GTM-7",
-} as const;
+interface AccountInfoProps {
+  name: string;
+  email?: string;
+  phone?: string;
+  city?: string;
+  country?: string;
+}
 
-export function AccountInfo(): React.JSX.Element {
+export function AccountInfo({
+  name,
+  email,
+  phone,
+  city,
+  country,
+}: AccountInfoProps): React.JSX.Element {
   return (
     <Card>
       <CardContent>
         <Stack spacing={2} sx={{ alignItems: "center" }}>
           <div>
-            <Avatar src={user.avatar} sx={{ height: "80px", width: "80px" }} />
+            <Avatar
+              src="/assets/avatar.png"
+              sx={{ height: "80px", width: "80px" }}
+            />
           </div>
           <Stack spacing={1} sx={{ textAlign: "center" }}>
-            <Typography variant="h5">{user.name}</Typography>
-            <Typography color="text.secondary" variant="body2">
-              {user.city} {user.country}
-            </Typography>
-            <Typography color="text.secondary" variant="body2">
-              {user.timezone}
-            </Typography>
+            <Typography variant="h5">{name}</Typography>
+            {city && country && (
+              <Typography color="text.secondary" variant="body2">
+                {city} {country}
+              </Typography>
+            )}
+            {email && (
+              <Typography color="text.secondary" variant="body2">
+                {email}
+              </Typography>
+            )}
+            {phone && (
+              <Typography color="text.secondary" variant="body2">
+                {phone}
+              </Typography>
+            )}
           </Stack>
         </Stack>
       </CardContent>

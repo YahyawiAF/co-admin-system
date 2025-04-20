@@ -1,30 +1,95 @@
-//src/auth/auth.controller.ts
-
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
-import { AuthEntity } from './entity/auth.entity';
-import { LoginDto } from './dto/login.dto';
-import { RefreshTokenGuard } from 'common/guards/refreshToken.guard';
-import { Request } from 'express';
-
-@Controller('auth')
-@ApiTags('auth')
-export class AuthController {
-  constructor(private readonly authService: AuthService) {}
-
-  @Post('login')
+import {
+    Body,
+    Controller,
+    ForbiddenException,
+    Get, // Ajoutez Get ici
+    Param,
+    Post,
+    Req,
+    UseGuards,
+  } from '@nestjs/common';
+  import { AuthService } from './auth.service';
+  import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
+  import { AuthEntity } from './entity/auth.entity';
+  import { LoginDto } from './dto/login.dto';
+  import { RefreshTokenGuard } from 'common/guards/refreshToken.guard';
+  import { Request } from 'express';
+  import { SignUpDto } from './dto/signup.dto';
+  import { ForgotPasswordDto } from './dto/forgot-password.dto';
+  import { ResetPasswordDto } from './dto/reset-password.dto';
+  import { JwtAuthGuard } from 'common/guards/accessToken.guard';
+import { Role } from '@prisma/client';
+  
+  @Controller('auth')
+  @ApiTags('auth')
+  export class AuthController {
+    constructor(private readonly authService: AuthService) {}
+  
+    @Post('login')
   @ApiOkResponse({ type: AuthEntity })
-  login(@Body() { email, password }: LoginDto) {
-    return this.authService.login(email, password);
+  login(@Body() { identifier, password }: LoginDto) {
+    return this.authService.login(identifier, password);
   }
 
-  @UseGuards(RefreshTokenGuard)
-  @Get('refresh')
-  @ApiOkResponse({ type: AuthEntity })
-  refreshTokens(@Req() req: Request) {
-    const userId = req.user['sub'];
-    const refreshToken = req.user['refreshToken'];
-    return this.authService.refreshTokens(userId, refreshToken);
-  }
+  @Post('signup')
+@ApiOkResponse({ type: AuthEntity })
+async signUp(@Body() signUpDto: SignUpDto) {
+  // Aucun contrôle spécifique sur le rôle ici, on permet l'inscription pour tous les rôles
+  return this.authService.signUp(
+    signUpDto.identifier,
+    signUpDto.password,
+    signUpDto.fullname,
+    signUpDto.role 
+  );
 }
+
+
+  
+    @UseGuards(RefreshTokenGuard)
+    @Get('refresh')
+    @ApiOkResponse({ type: AuthEntity })
+    refreshTokens(@Req() req: Request) {
+      const userId = req.user['sub'];
+      const refreshToken = req.user['refreshToken'];
+      return this.authService.refreshTokens(userId, refreshToken);
+    }
+  
+    @Post('forgot-password')
+    @ApiOkResponse({ description: 'Password reset email sent' })
+    async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+      await this.authService.requestPasswordReset(forgotPasswordDto.email);
+      return { message: 'Password reset email sent' };
+    }
+  
+    @Post('reset-password/:token')
+    @ApiOkResponse({ description: 'Password reset successfully' })
+    async resetPassword(
+      @Param('token') token: string,
+      @Body() resetPasswordDto: ResetPasswordDto,
+    ) {
+      await this.authService.resetPassword(token, resetPasswordDto.newPassword);
+      return { message: 'Password reset successfully' };
+    }
+  
+    @Post('logout')
+    @UseGuards(JwtAuthGuard)
+    @ApiOkResponse({ description: 'Logout successful' })
+    async logout(@Req() req: Request) {
+      const userId = req.user['sub'];
+      await this.authService.logout(userId);
+      return { message: 'Logout successful' };
+    }
+  
+    // Ajoutez cette nouvelle route protégée
+    @Get('protected')
+    @UseGuards(JwtAuthGuard) // Appliquez le guard pour protéger la route
+    @ApiOkResponse({ description: 'Accès à une ressource protégée' })
+    getProtectedResource(@Req() req: Request) {
+      // Vous pouvez accéder aux informations de l'utilisateur via `req.user`
+      const userId = req.user['sub'];
+      return {
+        message: 'Ceci est une ressource protégée',
+        userId: userId,
+      };
+    }
+  }

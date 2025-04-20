@@ -69,8 +69,8 @@ export class JournalController {
   }
 
   @Get('all')
-  // @Roles([Role.ADMIN])
-  // @UseGuards(JwtAuthGuard, RolesGuard)
+   //@Roles([Role.USER])
+   //@UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity, isArray: true })
   async findAll(): Promise<Array<UpdateJournalDto>> {
@@ -92,12 +92,13 @@ export class JournalController {
   @ApiCreatedResponse({ type: JournalEntity })
   async update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() updateUserDto: AddJournalDto,
+    @Body() updateJournalDto: UpdateJournalDto, // Utiliser UpdateJournalDto
   ) {
     return new JournalEntity(
-      await this.JournalService.update(id, updateUserDto),
+      await this.JournalService.update(id, updateJournalDto),
     );
   }
+  
 
   @Delete(':id')
   // @UseGuards(JwtAuthGuard)

@@ -86,9 +86,16 @@ export enum Role {
 }
 
 export enum Subscription {
-  NOPSubs = "NOPSubs",
-  Monthly = "Monthly",
-  Weekly = "Weekly",
+  Journal = "Journal",
+  Membership = "Membership",
+}
+export enum PriceType {
+  journal = "journal",
+  abonnement = "abonnement",
+}
+export interface TimeInterval {
+  start: string;
+  end: string;
 }
 
 export interface User {
@@ -102,7 +109,10 @@ export interface User {
   fullname?: string | null;
   password?: string | null;
   refreshToken?: string | null;
+  accessToken: string;
   role: Role;
+  resetPasswordToken: string;
+  phoneNumber: string;
 }
 
 export interface Member {
@@ -126,14 +136,15 @@ export interface Member {
   fullNameWithEmail: string | null;
 }
 
-export interface Prices {
+export interface Price {
   id: string;
-  journalPrice: number;
-  demiJournal: number;
-  monthSubscription: number;
-  weekSubscription: number;
-  meetingRoomHourly: number;
-  meetingRoomMonthly: number;
+  name: string;
+  price: number;
+  timePeriod: TimeInterval;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  type: PriceType;
+  journals: Journal[];
 }
 
 export interface Journal {
@@ -148,6 +159,24 @@ export interface Journal {
   createdAt: Date;
   updatedAt: Date;
   isReservation: boolean;
+  priceId?: string | null;
+  price?: Member | null;
+}
+
+export interface Abonnement {
+  id: string;
+  isPayed: boolean;
+  registredDate: Date;
+  leaveDate?: Date | null;
+  stayedPeriode?: string | null;
+  payedAmount: number;
+  memberID?: string | null;
+  member?: Member | null;
+  createdAt: Date;
+  updatedAt: Date;
+  isReservation: boolean;
+  priceId?: string | null;
+  price?: Member | null;
 }
 
 export interface Reservation {

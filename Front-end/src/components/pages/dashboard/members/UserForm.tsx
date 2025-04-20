@@ -1,7 +1,7 @@
 // components
 import { FC, useState } from "react";
 import * as React from "react";
-import { Box, styled, Button, Snackbar, MenuItem } from "@mui/material";
+import { Box, styled, Button, Snackbar } from "@mui/material";
 //Yup
 import { useForm } from "react-hook-form";
 //Form
@@ -23,22 +23,27 @@ interface IShopFilterSidebar {
   selectItem: Member | null;
   handleClose: () => void;
   handleNewMember?: (member: Member) => void;
+  defaultPlan?: Subscription;
 }
-
-const defaultValues: Partial<Member> = {
-  id: "",
-  email: "",
-  firstName: "",
-  lastName: "",
-  phone: "",
-  plan: Subscription.NOPSubs,
-};
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   handleClose,
   selectItem,
   handleNewMember,
+  defaultPlan,
 }) => {
+  const defaultValues: Partial<Member> = React.useMemo(
+    () => ({
+      id: "",
+      email: "",
+      firstName: "",
+      lastName: "",
+      phone: "",
+      plan: defaultPlan || Subscription.Journal,
+    }),
+    [defaultPlan]
+  );
+
   const [
     createMember,
     { isLoading: isLoadingCreateeM, error: errorCreateMember },
@@ -63,7 +68,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     phone: z.number({ required_error: "Phone required" }).min(1),
     email: z.union([z.literal(""), z.string().email()]),
     lastName: z.string({ required_error: "LastName required" }).min(1),
-    plan: z.enum(["NOPSubs", "Monthly", "Weekly"]),
+    plan: z.enum(["Journal", "Membership"]),
   });
 
   const methods = useForm({
@@ -77,7 +82,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     reset,
   } = methods;
 
-  const resetAsyn = React.useCallback(
+  const resetAsync = React.useCallback(
     (data: any) => {
       reset(data, { keepValues: false });
     },
@@ -86,9 +91,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     if (selectItem) {
-      resetAsyn(selectItem);
+      resetAsync(selectItem);
+    } else {
+      resetAsync(defaultValues);
     }
-  }, [selectItem, resetAsyn]);
+  }, [selectItem, resetAsync, defaultValues]);
 
   const onSubmit = async (data: Partial<Member>) => {
     if (selectItem) {
@@ -159,11 +166,17 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           placeholder="Phone"
         />
         <RHFTextField name="email" label="Email" placeholder="Email" />
-        <RHSelectDropDown
-          name="plan"
-          label="Plan"
-          list={["NOPSubs", "Monthly", "Weekly"]}
-        />
+
+        <>
+          {!defaultPlan || selectItem ? (
+            <RHSelectDropDown
+              name="plan"
+              label="Plan"
+              list={["Journal", "Membership"]}
+            />
+          ) : null}
+        </>
+
         <Box
           style={{
             padding: 0,

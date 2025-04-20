@@ -1,4 +1,3 @@
-// components
 import { FC, useState } from "react";
 import * as React from "react";
 import {
@@ -8,10 +7,18 @@ import {
   Snackbar,
   Divider,
   Typography,
+  Card,
+  CardContent,
+  Grid,
+  Alert,
+  FormControlLabel,
+  Switch,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
-//Yup
 import { useForm } from "react-hook-form";
-//Form
 import FormProvider from "../../../hook-form/FormProvider";
 import RHFTextField from "../../../hook-form/RHTextField";
 import {
@@ -19,8 +26,7 @@ import {
   RHFTimePeakerField,
 } from "../../../hook-form/RHTextFieldDate";
 import RHCheckBox from "../../../hook-form/RHCheckBox";
-
-import { Journal, Member } from "../../../../types/shared";
+import { Journal, Member, Price, Subscription } from "../../../../types/shared";
 import { MethodeType } from "../../../../types/hooksForm";
 import { LoadingButton } from "@mui/lab";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -34,30 +40,15 @@ import { useGetMembersQuery } from "src/api";
 import { parseErrorMessage } from "src/utils/api";
 import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
-import {
-  addHours,
-  differenceInHours,
-  setHours,
-  setMinutes,
-  isSameDay,
-} from "date-fns";
-import RHSelectDropDown from "src/components/hook-form/RHSelectDropDown";
-import {
-  adjustDateWithDifference,
-  getHourDifference,
-  updateHoursAndMinutes,
-} from "src/utils/shared";
+import { addHours, isSameDay } from "date-fns";
+import { useGetPricesQuery } from "src/api/price.repo";
+
 // ----------------------------------------------------------------------
 
 interface IShopFilterSidebar {
   selectItem: Journal | null;
   handleClose: () => void;
   today: Date;
-}
-
-enum JournalType {
-  DEMI_JOURNEE = "DEMI_JOURNEE",
-  JOURNEE = "JOURNEE",
 }
 
 type ExtractedType = Pick<
@@ -69,21 +60,38 @@ type ExtractedType = Pick<
   | "leaveTime"
   | "memberID"
   | "isReservation"
+  | "priceId"
 >;
 
-type ExtendedTypeOptional = ExtractedType & {
-  journalType: JournalType;
-};
+type ExtendedTypeOptional = ExtractedType & {};
 
 const defaultValues: Partial<ExtendedTypeOptional> = {
   id: "",
   isPayed: false,
-  payedAmount: 4,
+  payedAmount: 0,
   registredTime: new Date(),
   leaveTime: new Date(),
   memberID: null,
-  journalType: JournalType.DEMI_JOURNEE,
+  priceId: null,
   isReservation: false,
+};
+
+const formatDuration = (startDate: Date, endDate: Date): string => {
+  const diffInMilliseconds = endDate.getTime() - startDate.getTime();
+  const diffInMinutes = Math.floor(diffInMilliseconds / (1000 * 60));
+
+  if (diffInMinutes < 0) return "0min";
+
+  const hours = Math.floor(diffInMinutes / 60);
+  const minutes = diffInMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h${minutes.toString().padStart(2, "0")}m`;
+  } else if (hours > 0) {
+    return `${hours}h`;
+  } else {
+    return `${minutes}min`;
+  }
 };
 
 const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
@@ -95,18 +103,27 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const {
     data: membersList,
     isLoading: isLoadingMember,
-    error,
+    error: membersError,
   } = useGetMembersQuery();
+  const {
+    data: pricesList,
+    isLoading: isLoadingPrices,
+    error: pricesError,
+  } = useGetPricesQuery();
   const [createJournal, { isLoading, error: createJournalError }] =
     useCreateJournalMutation();
   const [updateMember] = useUpdateJournalMutation();
+
   // state
   const [openSnak, setOpenSnak] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
   const [openUserForm, setOpenUserForm] = useState(false);
+  const [tarifAlert, setTarifAlert] = useState<{
+    show: boolean;
+    message: string;
+  }>({ show: false, message: "" });
+
   const [isManualyUpdating, setIsManualyUpdating] = useState(false);
-  const [isManualyCalculationUpdating, setIsManualyCalculationUpdating] =
-    useState(false);
 
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -114,9 +131,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
-    journalType: z
-      .enum([JournalType.DEMI_JOURNEE, JournalType.JOURNEE])
-      .optional(),
+    priceId: z.string(),
     isReservation: z.boolean(),
   });
 
@@ -136,16 +151,121 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
-  const journalType = watch("journalType");
   const registredTime = watch("registredTime") as Date;
   const isReservation = watch("isReservation");
+  const priceId = watch("priceId");
 
-  // console.log("isReservation", isReservation);
+  // Filtrer les prix pour n'afficher que ceux de type "journal"
+  const journalPrices = React.useMemo(() => {
+    return pricesList?.filter((price) => price.type === "journal") || [];
+  }, [pricesList]);
 
-  const stayedHours = React.useMemo(() => {
+  const parseTimeToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 0;
+
+    // Gérer les formats "1h", "1h30", "2h00", etc.
+    const [hoursStr, minutesStr] = timeStr.split("h");
+    const hours = parseInt(hoursStr) || 0;
+    const minutes = parseInt(minutesStr) || 0;
+
+    return hours * 60 + minutes;
+  };
+  const findMatchingPrice = React.useCallback(
+    (startDate: Date, endDate: Date): Price | null => {
+      if (!journalPrices || journalPrices.length === 0) return null;
+
+      const realDurationMinutes = Math.floor(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+      );
+
+      // Trier les prix par durée maximale croissante
+      const sortedPrices = [...journalPrices].sort((a, b) => {
+        const aMax = parseTimeToMinutes(a.timePeriod.end);
+        const bMax = parseTimeToMinutes(b.timePeriod.end);
+        return aMax - bMax;
+      });
+
+      // Variable pour stocker le tarif correspondant
+      let matchingPrice = null;
+
+      for (const price of sortedPrices) {
+        const priceMax = parseTimeToMinutes(price.timePeriod.end);
+
+        // On considère le tarif valable si la durée est inférieure ou égale à sa limite +15min
+        if (realDurationMinutes <= priceMax + 15) {
+          matchingPrice = price;
+          break; // On prend le premier tarif qui correspond
+        }
+      }
+
+      // Si aucun tarif ne correspond (durée très longue), retourner le tarif maximum
+      return matchingPrice || sortedPrices[sortedPrices.length - 1];
+    },
+    [journalPrices]
+  );
+
+  const handleCalculateTimeAndPrice = React.useCallback(
+    (registredTime: Date, leaveTime: Date) => {
+      console.log("handleCalculateTimeAndPrice");
+      const start = new Date(registredTime);
+      const end = new Date(leaveTime);
+      const matchingPrice = findMatchingPrice(start, end);
+
+      if (matchingPrice) {
+        setValue("priceId", matchingPrice.id);
+        setValue("payedAmount", matchingPrice.price);
+        // const baseDate = new Date(registredTime);
+        // setValue(
+        //   "leaveTime",
+        //   addHours(baseDate, Number(matchingPrice.timePeriod.end))
+        // );
+        // Mettre à jour payedAmount avec le prix correspondant, indépendamment de isPayed
+        const priceMaxDuration = parseTimeToMinutes(
+          matchingPrice.timePeriod.end
+        );
+        const realDurationMinutes = Math.floor(
+          (end.getTime() - start.getTime()) / (1000 * 60)
+        );
+
+        if (realDurationMinutes > priceMaxDuration) {
+          const nextPrice = journalPrices.find(
+            (p) => parseTimeToMinutes(p.timePeriod.start) > priceMaxDuration
+          );
+          if (nextPrice) {
+            setTarifAlert({
+              show: true,
+              message: `Dépassement de tarif: ${
+                realDurationMinutes - priceMaxDuration
+              } min (tolérance). Prochain tarif: ${
+                nextPrice.timePeriod.start
+              }-${nextPrice.timePeriod.end}`,
+            });
+          }
+        } else {
+          setTarifAlert({ show: false, message: "" });
+        }
+      }
+    },
+    [journalPrices, findMatchingPrice, setValue]
+  );
+
+  React.useEffect(() => {
+    if (journalPrices && registredTime && leaveTime && !isPayed) {
+      handleCalculateTimeAndPrice(registredTime, leaveTime);
+    }
+  }, [
+    registredTime,
+    leaveTime,
+    journalPrices,
+    setValue,
+    handleCalculateTimeAndPrice,
+    isPayed,
+  ]);
+
+  const stayedDuration = React.useMemo(() => {
     const dStarting = registredTime ? new Date(registredTime) : new Date();
     const dLeaving = leaveTime ? new Date(leaveTime) : new Date();
-    return differenceInHours(dLeaving, dStarting);
+    return formatDuration(dStarting, dLeaving);
   }, [registredTime, leaveTime]);
 
   const resetAsyn = React.useCallback(
@@ -157,20 +277,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   React.useEffect(() => {
     const initializeFormValues = () => {
-      const isReservation = !isSameDay(new Date(), new Date(today));
       if (!selectItem) {
         resetAsyn({
           ...defaultValues,
-          registredTime: updateHoursAndMinutes(today),
-          leaveTime: updateHoursAndMinutes(today),
-          isReservation,
+          registredTime: today,
+          leaveTime: today,
+          // Retirer la logique isReservation: !isSameDay(...)
         });
       } else {
+        // Conserver la logique existante pour l'édition
         const updatedJournal: Partial<Journal> = {
           ...selectItem,
-          leaveTime: selectItem.isPayed
-            ? selectItem.leaveTime
-            : updateHoursAndMinutes(today),
+          leaveTime: selectItem.isPayed ? selectItem.leaveTime : today,
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
@@ -178,68 +296,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     };
     initializeFormValues();
   }, [selectItem, resetAsyn, today]);
-
-  // React.useEffect(() => {
-  //   if (!isPayed) {
-  //     setValue("payedAmount", 0);
-  //     return;
-  //   }
-  // }, [isPayed, setValue]);
-
-  React.useEffect(() => {
-    const adjustLeaveTime = async () => {
-      if (!isManualyUpdating) return;
-      if (!registredTime || !journalType) return;
-
-      const baseDate = new Date(registredTime);
-      const updatedLeaveTime =
-        journalType === JournalType.JOURNEE
-          ? addHours(baseDate, 8)
-          : addHours(baseDate, 6);
-
-      const updatedPrice = journalType === JournalType.DEMI_JOURNEE ? 4 : 8;
-      if (
-        leaveTime &&
-        new Date(leaveTime).getTime() === updatedLeaveTime.getTime()
-      ) {
-        return;
-      }
-
-      setValue("payedAmount", updatedPrice);
-      setValue("leaveTime", updatedLeaveTime);
-      setIsManualyUpdating(false);
-    };
-
-    adjustLeaveTime();
-  }, [registredTime, setValue, journalType, leaveTime, isManualyUpdating]);
-
-  React.useEffect(() => {
-    const adjustJournalType = () => {
-      if (!isManualyCalculationUpdating) return;
-      if (!registredTime || !journalType) return;
-      let hoursDifference = 0;
-      if (leaveTime) {
-        hoursDifference = getHourDifference(registredTime, leaveTime);
-      }
-      const updatedJournal =
-        hoursDifference <= 6 ? JournalType.DEMI_JOURNEE : JournalType.JOURNEE;
-      const updatedPrice = updatedJournal === JournalType.DEMI_JOURNEE ? 4 : 8;
-      if (journalType && journalType === updatedJournal) {
-        return;
-      }
-      setValue("payedAmount", updatedPrice);
-      setValue("journalType", updatedJournal);
-      setIsManualyCalculationUpdating(false);
-    };
-
-    adjustJournalType();
-  }, [
-    registredTime,
-    setValue,
-    journalType,
-    leaveTime,
-    isManualyCalculationUpdating,
-  ]);
 
   const handleSelect = (event: any) => {
     if (event) {
@@ -251,9 +307,19 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     }
   };
 
+  const handlePriceSelect = (price: Price) => {
+    setValue("priceId", price.id);
+    setValue("payedAmount", price.price);
+    setValue(
+      "leaveTime",
+      addHours(new Date(registredTime), Number(price.timePeriod.end))
+    );
+    setTarifAlert({ show: false, message: "" });
+  };
+
   const defaultProps = React.useMemo(() => {
     return {
-      options: membersList as any,
+      options: membersList || [], // Filtrage ici
       getOptionLabel: (option: any) =>
         option.fullNameWithEmail + ` (${option.plan})`,
     };
@@ -287,6 +353,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         }}
         selectItem={null}
         handleNewMember={handleNewMember}
+        defaultPlan={Subscription.Journal}
       />
     );
 
@@ -339,7 +406,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             name={"member"}
             disabled={!!selectItem}
             multiple={false}
-            error={!!!errors.memberID}
+            error={!!errors.memberID}
             errorMessage={errors.memberID?.message}
           />
         ) : (
@@ -350,27 +417,52 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             <Box
               sx={{
                 display: "flex",
-                columnGap: "14px",
+                flexDirection: "column",
+                rowGap: "14px",
               }}
             >
-              <RHFTimePeakerField
+              <RHFDatePeakerField
                 name="registredTime"
                 label="Starting Date"
-                placeholder="Inscription Date"
+                placeholder="Starting Date"
+                disabled={isPayed}
+                minTime={isReservation ? undefined : today} // Permet les dates futures si reservation
               />
             </Box>
-            <RHCheckBox defaultChecked={false} name="isPayed" label="Payed" />
-          </>
-        ) : (
-          <></>
-        )}
-        {isPayed && member ? (
-          <>
-            <RHSelectDropDown
-              name="journalType"
-              list={["DEMI_JOURNEE", "JOURNEE"]}
-              onhandleManuelUpdae={() => setIsManualyUpdating(true)}
-            />
+
+            {/* Début de la section prix permanente */}
+            {tarifAlert.show && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                {tarifAlert.message}
+              </Alert>
+            )}
+
+            {!isLoadingPrices ? (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle1" sx={{ mb: 1 }}>
+                  Select Rate
+                </Typography>
+                <Grid container spacing={2}>
+                  {journalPrices
+                    ?.filter((jp) => (isPayed ? priceId === jp.id : true))
+                    .map((price) => (
+                      <Grid item xs={6} key={price.id}>
+                        <PriceCard
+                          price={price}
+                          isSelected={priceId === price.id}
+                          onClick={() => {
+                            // setIsManualyUpdating(true);
+                            handlePriceSelect(price);
+                          }}
+                        />
+                      </Grid>
+                    ))}
+                </Grid>
+              </Box>
+            ) : (
+              <div>Loading Prices...</div>
+            )}
+
             <Box
               sx={{
                 display: "flex",
@@ -382,27 +474,53 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 name="leaveTime"
                 label="Leaving Date"
                 placeholder="Leaving Date"
+                disabled={isPayed}
                 minTime={registredTime}
               />
-              {!isReservation && (
-                <Button
-                  onClick={() => {
-                    setIsManualyCalculationUpdating(true);
-                    setValue("leaveTime", new Date());
-                  }}
-                  variant="outlined"
-                >
-                  Calculate from Now
-                </Button>
-              )}
             </Box>
+
             <RHFTextField
               type="number"
               name="payedAmount"
               label="Price Payed (DT)"
-              placeholder="Prix"
+              placeholder="Enter amount"
             />
+
+            {/* Nouvelle ComboBox sous le champ Price Payed */}
+            <FormControl fullWidth>
+              <InputLabel>Payment Status</InputLabel>
+              <Select
+                value={isPayed ? "paid" : "unpaid"}
+                onChange={(e) => setValue("isPayed", e.target.value === "paid")}
+                label="Payment Status"
+                sx={{ mb: 2 }}
+              >
+                <MenuItem value="paid">Paid</MenuItem>
+                <MenuItem value="unpaid">Unpaid</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControl fullWidth>
+              <InputLabel>Reservation Status</InputLabel>
+              <Select
+                value={isReservation ? "reservation" : "non-reservation"}
+                onChange={(e) =>
+                  setValue("isReservation", e.target.value === "reservation")
+                }
+                label="Reservation Status"
+                sx={{
+                  mb: 2,
+                  "& .MuiSelect-select": {
+                    color: "#054547",
+                  },
+                }}
+              >
+                <MenuItem value="non-reservation">Non-Reservation </MenuItem>
+                <MenuItem value="reservation">Reservation </MenuItem>
+              </Select>
+            </FormControl>
             <Divider />
+
             <Box
               style={{
                 flexDirection: "column",
@@ -418,9 +536,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                   justifyItems: "center",
                 }}
               >
-                <Typography variant="subtitle2">Stayed Hours</Typography>
+                <Typography variant="subtitle2">Stayed Duration</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {stayedHours + " hours"}
+                  {stayedDuration}
                 </Typography>
               </Box>
               <Box
@@ -432,25 +550,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               >
                 <Typography variant="subtitle2">Total</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {payedAmount
-                    ? payedAmount + " DT"
-                    : stayedHours < 1
-                    ? "0 DT"
-                    : stayedHours <= 6
-                    ? "4 DT"
-                    : "8DT"}
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  justifyItems: "center",
-                }}
-              >
-                <Typography variant="subtitle2">Discount</Typography>
-                <Typography sx={{ fontWeight: "Bold" }} variant="body1">
-                  {"0 DT"}
+                  {payedAmount} DT
                 </Typography>
               </Box>
               <Divider />
@@ -463,13 +563,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               >
                 <Typography variant="h4">SubTotal</Typography>
                 <Typography sx={{ fontWeight: "Bold" }} variant="subtitle1">
-                  {payedAmount
-                    ? payedAmount + " DT"
-                    : stayedHours < 1
-                    ? "0 DT"
-                    : stayedHours <= 6
-                    ? "4 DT"
-                    : "8DT"}
+                  {payedAmount} DT
                 </Typography>
               </Box>
               <Divider />
@@ -511,6 +605,41 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   );
 };
 
+const PriceCard: FC<{
+  price: Price;
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ price, isSelected, onClick }) => {
+  return (
+    <Card
+      onClick={onClick}
+      sx={{
+        cursor: "pointer",
+        border: isSelected ? "2px solid #054547" : "1px solid #ddd",
+        backgroundColor: isSelected ? "#f5f9f9" : "#fff",
+        transition: "all 0.3s ease",
+        "&:hover": {
+          borderColor: "#054547",
+          backgroundColor: "#f5f9f9",
+        },
+      }}
+    >
+      <CardContent>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="subtitle1" fontWeight="bold">
+            {price.name}
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            ({price.timePeriod.start}-{price.timePeriod.end})
+          </Typography>
+        </Box>
+        <Typography variant="h6" sx={{ mt: 1 }}>
+          {price.price} DT
+        </Typography>
+      </CardContent>
+    </Card>
+  );
+};
 const SubmitButtton = styled(LoadingButton)(() => ({
   border: "1px solid",
   borderColor: "#054547",
@@ -544,4 +673,5 @@ const ActionButtton = styled(Button)(() => ({
     color: "#fff",
   },
 }));
+
 export default ShopFilterSidebar;

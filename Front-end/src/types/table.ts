@@ -6,6 +6,7 @@ export interface EnhancedTableHeadProps {
   onSelectAllClick: (e: any) => void;
   onRequestSort: (e: any, property: string) => void;
   headCells: Array<HeadCell>;
+  isMobile?: boolean;
 }
 
 export type HeadCell = {

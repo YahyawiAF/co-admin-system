@@ -9,11 +9,12 @@ async function bootstrap() {
   if (process.env.GLOBAL_PREFIX) {
     app.setGlobalPrefix(process.env.GLOBAL_PREFIX);
   }
+
   app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
 
   const config = new DocumentBuilder()
-    .setTitle('Greenarrow SMTP Sttats Collector Backend')
+    .setTitle('Greenarrow SMTP Stats Collector Backend')
     .setDescription('Connector Backend APIs')
     .setVersion('1.0')
     .addBearerAuth()
@@ -21,11 +22,13 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
+
   app.enableCors({
-    origin: true,
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
+    origin: 'http://localhost:3000', // Remplacez par l'URL de votre frontend
+    methods: 'GET, POST, PATCH, DELETE, PUT', // Définissez les méthodes HTTP autorisées
+    credentials: true, // Si vous utilisez des cookies ou des sessions
   });
+
   await app.listen(4000);
 }
 bootstrap();

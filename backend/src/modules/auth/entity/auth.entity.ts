@@ -17,6 +17,12 @@ export class AuthEntity {
   @ApiProperty()
   fullname: string;
 
+  @ApiProperty()
+  phoneNumber: string; 
+
   @ApiProperty({ enum: Role, enumName: 'Role' })
   role: Role;
+  @ApiProperty()
+  memberId?: string; 
+
 }
