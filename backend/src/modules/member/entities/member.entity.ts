@@ -58,6 +58,12 @@ export class MemberEntity implements Member {
   })
   deletedAt: Date | null;
 
+  @ApiProperty({
+    description: 'userId connect member to user',
+    required: false,
+  })
+  userId: number | null;
+
   @ApiProperty({ description: 'Indicates whether the member is active' })
   isActive: boolean;
 
