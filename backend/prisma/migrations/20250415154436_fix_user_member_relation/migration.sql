@@ -1,14 +1,20 @@
 /*
-  Warnings:
-
-  - Made the column `userId` on table `members` required. This step will fail if there are existing NULL values in that column.
-
+  Modified:
+  - Kept existing members with NULL `userId`.
+  - Skipped making `userId` non-nullable.
+  - Still applies the foreign key (but allows NULLs).
 */
+
 -- DropForeignKey
 ALTER TABLE "users" DROP CONSTRAINT "users_memberId_fkey";
 
--- AlterTable
-ALTER TABLE "members" ALTER COLUMN "userId" SET NOT NULL;
+-- NOTE: We're skipping this to avoid failing on existing NULLs:
+-- ALTER TABLE "members" ALTER COLUMN "userId" SET NOT NULL;
 
--- AddForeignKey
-ALTER TABLE "members" ADD CONSTRAINT "members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+-- AddForeignKey (nullable foreign key)
+ALTER TABLE "members"
+  ADD CONSTRAINT "members_userId_fkey"
+  FOREIGN KEY ("userId")
+  REFERENCES "users"("id")
+  ON DELETE SET NULL
+  ON UPDATE CASCADE;

@@ -1,7 +1,7 @@
 /*
   Warnings:
 
-  - The values [NOPSubs] on the enum `Subscription` will be removed. If these variants are still used in the database, this will fail.
+  - The values [NOPSubs,Monthly,Weekly] on the enum `Subscription` will be removed. If these variants are still used in the database, this will fail.
 
 */
 -- AlterEnum
@@ -16,4 +16,5 @@ ALTER TABLE "members" ALTER COLUMN "plan" SET DEFAULT 'Journal';
 COMMIT;
 
 -- AlterTable
-ALTER TABLE "members" ALTER COLUMN "plan" SET DEFAULT 'Journal';
+ALTER TABLE "members" ADD COLUMN     "userId" INTEGER,
+ALTER COLUMN "plan" SET DEFAULT 'Journal';
