@@ -31,6 +31,9 @@ export class MemberEntity implements Member {
   @ApiProperty({ description: 'Phone of the member' })
   phone: number;
 
+  @ApiProperty({ description: 'user ID' })
+  userId: number | null;
+
   @ApiProperty({
     description: 'Subscription plan of the member',
     required: false,
