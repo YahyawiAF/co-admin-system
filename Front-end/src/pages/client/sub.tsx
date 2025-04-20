@@ -411,8 +411,8 @@ const SubscriptionSelection = () => {
                             fontSize: "0.9rem",
                           }}
                         >
-                          Valid from {price.timePeriod.start} to{" "}
-                          {price.timePeriod.end}
+                          Valid from {price.timePeriod.start} day to{" "}
+                          {price.timePeriod.end} day
                         </Typography>
                       </CardContent>
                     </PriceCard>
@@ -531,8 +531,8 @@ const SubscriptionSelection = () => {
                             fontSize: "0.9rem",
                           }}
                         >
-                          Valid on {price.timePeriod.start}{" "}
-                          {price.timePeriod.end}
+                          From {price.timePeriod.start}h {"to"}{" "}
+                          {price.timePeriod.end}h
                         </Typography>
                       </CardContent>
                     </PriceCard>

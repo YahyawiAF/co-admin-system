@@ -16,6 +16,7 @@ import { PriceModule } from './modules/price/price.module';
 import { PrismaService } from 'database/prisma.service';
 import { AbonnementModule } from './modules/abonnement/abonnement.module';
 import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
+import { ExpensesModule } from './modules/expense/expense.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
     MemberModule,
     PriceModule,
     AbonnementModule,
+    ExpensesModule,
   ],
   controllers: [AppController],
   providers: [AppService,PrismaService],
