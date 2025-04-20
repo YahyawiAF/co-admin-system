@@ -110,6 +110,39 @@ model Reservation {
   @@map("reservations")
 }
 
+model Product {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  purchasePrice Float     @map("prix_achat")
+  sellingPrice  Float     @map("prix_vente")
+  stock         Int
+  img           String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("products")
+}
+
+model Expense {
+  id          String       @id @default(uuid())
+  name        String
+  description String?
+  amount      Float        @map("prix")
+  type        ExpenseType
+  date        DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@map("expenses")
+}
+
+enum ExpenseType {
+  MENSUEL
+  JOURNALIER
+}
+
+
 enum PriceType {
   journal
   abonnement
