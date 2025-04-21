@@ -207,7 +207,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const handleCalculateTimeAndPrice = React.useCallback(
     (registredTime: Date, leaveTime: Date) => {
-      console.log("handleCalculateTimeAndPrice");
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
@@ -276,8 +275,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     [reset]
   );
 
-  console.log("selectItem", selectItem);
-  console.log("today", today);
   React.useEffect(() => {
     const initializeFormValues = () => {
       if (!selectItem) {
@@ -440,6 +437,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 {tarifAlert.message}
               </Alert>
             )}
+            {/* Nouvelle ComboBox sous le champ Price Payed */}
+
+            <FormControl fullWidth>
+              <RHCheckBox
+                defaultChecked={false}
+                name="isPayed"
+                label="Payment Status"
+              />
+            </FormControl>
 
             {!isLoadingPrices ? (
               <Box sx={{ mt: 2 }}>
@@ -489,20 +495,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               label="Price Payed (DT)"
               placeholder="Enter amount"
             />
-
-            {/* Nouvelle ComboBox sous le champ Price Payed */}
-            <FormControl fullWidth>
-              <InputLabel>Payment Status</InputLabel>
-              <Select
-                value={isPayed ? "paid" : "unpaid"}
-                onChange={(e) => setValue("isPayed", e.target.value === "paid")}
-                label="Payment Status"
-                sx={{ mb: 2 }}
-              >
-                <MenuItem value="paid">Paid</MenuItem>
-                <MenuItem value="unpaid">Unpaid</MenuItem>
-              </Select>
-            </FormControl>
 
             <FormControl fullWidth>
               <InputLabel>Reservation Status</InputLabel>
