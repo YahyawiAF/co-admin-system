@@ -49,6 +49,7 @@ interface IShopFilterSidebar {
   selectItem: Journal | null;
   handleClose: () => void;
   today: Date;
+  
 }
 
 type ExtractedType = Pick<

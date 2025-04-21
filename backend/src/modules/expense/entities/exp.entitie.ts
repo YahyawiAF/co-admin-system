@@ -21,8 +21,6 @@ export class ExpenseEntity {
   @ApiProperty({ enum: ExpenseType, enumName: 'ExpenseType' })
   type: ExpenseType;
 
-  @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
-  date: Date;
 
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
   createdAt: Date;

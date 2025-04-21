@@ -96,6 +96,15 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
             backgroundColor: theme.palette.action.hover,
         },
     },
+    "& .MuiTableCell-head:last-child": {
+        textAlign: "center",
+        paddingRight: theme.spacing(4), // Ajustement symétrique
+        paddingLeft: theme.spacing(4),  // Compensation du padding
+        "& .MuiTableSortLabel-root": {  // Si le titre est sortable
+            justifyContent: "center",
+            width: "100%"
+        }
+    },
     "& .MuiTableCell-root": {
         borderBottom: `1px solid ${theme.palette.divider}`,
         padding: theme.spacing(1),
@@ -173,7 +182,7 @@ const ExpenseComponent = () => {
         description: "",
         amount: 0,
         type: ExpenseType.MENSUEL,
-        date: new Date().toISOString(),
+
     });
 
     const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -207,13 +216,8 @@ const ExpenseComponent = () => {
             label: "Type",
             alwaysVisible: !isMobile,
         },
-        {
-            id: "date",
-            numeric: false,
-            disablePadding: false,
-            label: "Date",
-            alwaysVisible: !isMobile,
-        },
+
+
         {
             id: "actions",
             numeric: false,
@@ -223,10 +227,44 @@ const ExpenseComponent = () => {
         },
     ];
 
+
     // Gestion de la sélection et tri (identique à PriceComponent)
-    const handleSelectAllClick = (event: ChangeEvent<HTMLInputElement>) => { /* ... */ };
-    const handleClick = (event: React.MouseEvent<unknown>, id: string) => { /* ... */ };
-    const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => { /* ... */ };
+    const handleSelectAllClick = (event: ChangeEvent<HTMLInputElement>) => {
+        if (event.target.checked) {
+            const newSelected = filteredExpenses?.map((expense) => expense.id) || [];
+            setSelected(newSelected);
+            return;
+        }
+        setSelected([]);
+    };
+    const handleClick = (event: React.MouseEvent<unknown>, id: string) => {
+        const selectedIndex = selected.indexOf(id);
+        let newSelected: string[] = [];
+
+        if (selectedIndex === -1) {
+            newSelected = newSelected.concat(selected, id);
+        } else if (selectedIndex === 0) {
+            newSelected = newSelected.concat(selected.slice(1));
+        } else if (selectedIndex === selected.length - 1) {
+            newSelected = newSelected.concat(selected.slice(0, -1));
+        } else if (selectedIndex > 0) {
+            newSelected = newSelected.concat(
+                selected.slice(0, selectedIndex),
+                selected.slice(selectedIndex + 1)
+            );
+        }
+
+        setSelected(newSelected);
+    };
+    const handleRequestSort = (
+        event: React.MouseEvent<unknown>,
+        property: string
+    ) => {
+        const isAsc = orderBy === property && order === "asc";
+        setOrder(isAsc ? "desc" : "asc");
+        setOrderBy(property);
+    };
+
     const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
     const validateForm = () => {
@@ -254,6 +292,7 @@ const ExpenseComponent = () => {
         return Object.keys(errors).length === 0;
     };
 
+
     const handleAddExpense = async () => {
         setErrors({});
         if (validateForm()) {
@@ -266,7 +305,7 @@ const ExpenseComponent = () => {
                     description: "",
                     amount: 0,
                     type: ExpenseType.MENSUEL,
-                    date: new Date().toISOString(),
+
                 });
             } catch (error: any) {
                 console.error("Error details:", error);
@@ -311,6 +350,12 @@ const ExpenseComponent = () => {
         const matchesType = typeFilter === "all" || expense.type === typeFilter;
         return matchesSearch && matchesType;
     });
+    const sortedExpenses = filteredExpenses?.sort((a, b) => {
+        const compareResult = (a[orderBy as keyof Expenses] as string).localeCompare(
+            b[orderBy as keyof Expenses] as string
+        );
+        return order === "asc" ? compareResult : -compareResult;
+    });
 
     const handleSearch = (e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value);
 
@@ -348,7 +393,7 @@ const ExpenseComponent = () => {
                                     description: "",
                                     amount: 0,
                                     type: ExpenseType.MENSUEL,
-                                    date: new Date().toISOString(),
+
                                 });
                                 setShowDrawer(true);
                             }}
@@ -374,7 +419,7 @@ const ExpenseComponent = () => {
                                 isMobile={isMobile}
                             />
                             <TableBody>
-                                {filteredExpenses?.map((expenses) => (
+                                {sortedExpenses?.map((expenses) => (
                                     <TableRow
                                         key={expenses.id}
                                         hover
@@ -397,9 +442,7 @@ const ExpenseComponent = () => {
                                                 <ResponsiveTableCell>
                                                     {expenses.type === ExpenseType.MENSUEL ? "Monthly" : "Daily"}
                                                 </ResponsiveTableCell>
-                                                <ResponsiveTableCell>
-                                                    {new Date(expenses.date).toLocaleDateString()}
-                                                </ResponsiveTableCell>
+
                                             </>
                                         )}
                                         <ResponsiveTableCell align="center">
@@ -471,7 +514,7 @@ const ExpenseComponent = () => {
                 }}
             >
                 <Typography variant="h6" sx={{ mb: 3 }}>
-                    {editExpense ? "Edit Expense" : "New Expense"}
+                    {editExpense ? "Manage Expense" : "Manage Expense"}
                 </Typography>
 
                 <TextField
@@ -483,8 +526,8 @@ const ExpenseComponent = () => {
                             ? setEditExpense({ ...editExpense, name: e.target.value })
                             : setNewExpense({ ...newExpense, name: e.target.value })
                     }
-                    error={!!errors?.name} // <-- Ajout du ?. ici
-                    helperText={errors?.name || ''} // <-- Et ici
+                    error={!!errors?.name}
+                    helperText={errors?.name || ''}
                 />
 
                 <TextField
@@ -539,28 +582,14 @@ const ExpenseComponent = () => {
                     {errors?.type && <FormHelperText>{errors?.type}</FormHelperText>}
                 </FormControl>
 
-                <TextField
-                    label="Date"
-                    type="datetime-local"
-                    InputLabelProps={{ shrink: true }}
-                    value={editExpense?.date ?
-                        new Date(editExpense.date).toISOString().slice(0, 16) :
-                        newExpense.date.slice(0, 16)
-                    }
-                    onChange={(e) => {
-                        const date = new Date(e.target.value).toISOString();
-                        editExpense
-                            ? setEditExpense({ ...editExpense, date })
-                            : setNewExpense({ ...newExpense, date });
-                    }}
-                    error={!!errors?.date}
-                    helperText={errors?.date}
-                />
 
                 <Box sx={{ display: "flex", gap: "10px", mt: "auto", flexDirection: isMobile ? "column" : "row" }}>
-                    <ActionButton onClick={() => setShowDrawer(false)}>Cancel</ActionButton>
-                    <SubmitButton onClick={editExpense ? handleUpdateExpense : handleAddExpense}>
-                        {editExpense ? "Update" : "Create"}
+                    <ActionButton onClick={() => {
+                        setShowDrawer(false);
+                        setEditExpense(null);
+                        setErrors({});
+                    }}>Cancel</ActionButton><SubmitButton onClick={editExpense ? handleUpdateExpense : handleAddExpense}>
+                        {editExpense ? "Confirm" : "Confirm"}
                     </SubmitButton>
                 </Box>
             </Drawer>

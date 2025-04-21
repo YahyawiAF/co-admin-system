@@ -92,6 +92,10 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
       minWidth: "100%",
     },
   },
+  "& .MuiTableCell-head:last-child": {
+    textAlign: "center",
+    paddingRight: theme.spacing(3)
+  },
   "& .MuiTableRow-root": {
     backgroundColor: theme.palette.background.paper,
     "&:hover": {
@@ -677,16 +681,16 @@ const PriceComponent = () => {
           onChange={(e) =>
             editPrice
               ? setEditPrice({
-                  ...editPrice,
-                  timePeriod: {
-                    ...editPrice.timePeriod,
-                    start: e.target.value,
-                  },
-                })
+                ...editPrice,
+                timePeriod: {
+                  ...editPrice.timePeriod,
+                  start: e.target.value,
+                },
+              })
               : setNewPrice({
-                  ...newPrice,
-                  timePeriod: { ...newPrice.timePeriod, start: e.target.value },
-                })
+                ...newPrice,
+                timePeriod: { ...newPrice.timePeriod, start: e.target.value },
+              })
           }
           error={!!errors.timePeriodStart}
           helperText={errors.timePeriodStart}
@@ -699,13 +703,13 @@ const PriceComponent = () => {
           onChange={(e) =>
             editPrice
               ? setEditPrice({
-                  ...editPrice,
-                  timePeriod: { ...editPrice.timePeriod, end: e.target.value },
-                })
+                ...editPrice,
+                timePeriod: { ...editPrice.timePeriod, end: e.target.value },
+              })
               : setNewPrice({
-                  ...newPrice,
-                  timePeriod: { ...newPrice.timePeriod, end: e.target.value },
-                })
+                ...newPrice,
+                timePeriod: { ...newPrice.timePeriod, end: e.target.value },
+              })
           }
           error={!!errors.timePeriodEnd}
           helperText={errors.timePeriodEnd}
@@ -717,13 +721,13 @@ const PriceComponent = () => {
             onChange={(e) =>
               editPrice
                 ? setEditPrice({
-                    ...editPrice,
-                    type: e.target.value as PriceType,
-                  })
+                  ...editPrice,
+                  type: e.target.value as PriceType,
+                })
                 : setNewPrice({
-                    ...newPrice,
-                    type: e.target.value as PriceType,
-                  })
+                  ...newPrice,
+                  type: e.target.value as PriceType,
+                })
             }
             label="Type"
           >

@@ -15,7 +15,13 @@ interface IResponsiveDialog {
   handleAction: (id: any) => void;
   open: boolean;
   title: string;
-  contentText: string;
+  contentText?: string;
+  children?: React.ReactNode;
+  content?: React.ReactNode; 
+  actionText?: string; // Ajouté
+  closeText?: string; // Ajouté
+  fullWidth?: boolean;
+  maxWidth?: "xs" | "sm" | "md" | "lg" | "xl";
 }
 
 const ResponsiveDialog: FC<IResponsiveDialog> = ({

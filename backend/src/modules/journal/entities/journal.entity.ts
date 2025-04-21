@@ -1,16 +1,25 @@
 import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
-import { PriceEntity } from '@/modules/price/entities/price.entity'; // Importez l'entité PriceEntity
+import { PriceEntity } from '@/modules/price/entities/price.entity';
+import { ExpenseEntity } from '@/modules/expense/entities/exp.entitie';
 
-export class JournalEntity  {
-  constructor({ members, price, ...data }: Partial<JournalEntity>) {
+export class JournalEntity {
+  constructor({ members, price, expenses, ...data }: Partial<JournalEntity>) {
     Object.assign(this, data);
+    
     if (members) {
       this.members = new MemberEntity(members);
     }
+    
     if (price) {
       this.price = new PriceEntity(price);
     }
+    
+    if (expenses) {
+        // Pour la relation many-to-many
+        this.expenses = expenses.map(expense => new ExpenseEntity(expense));
+        this.expenseIds = expenses.map(e => e.id); // Extraction des IDs
+      }
   }
 
   @ApiProperty()
@@ -32,10 +41,10 @@ export class JournalEntity  {
   userId: string | null;
 
   @ApiProperty()
-  createdAt: Date | null;
+  createdAt: Date;
 
   @ApiProperty()
-  updatedAt: Date | null;
+  updatedAt: Date;
 
   @ApiProperty()
   memberID: string;
@@ -43,12 +52,17 @@ export class JournalEntity  {
   @ApiProperty()
   isReservation: boolean;
 
-  @ApiProperty({ required: false, type: MemberEntity })
-  members?: MemberEntity;
-
-  @ApiProperty({ required: false, type: PriceEntity })
-  price?: PriceEntity; // Ajoutez une référence à l'entité PriceEntity
+  @ApiProperty({ type: PriceEntity, required: false })
+  price?: PriceEntity;
 
   @ApiProperty()
-  priceId: string; // Ajoutez une propriété priceId pour la relation
+  priceId?: string;
+
+  @ApiProperty({ type: MemberEntity, required: false })
+  members?: MemberEntity;
+
+  @ApiProperty({ type: [ExpenseEntity], required: false })
+  expenses?: ExpenseEntity[];
+  @ApiProperty({ type: [String], required: false})
+  expenseIds?: string[];
 }

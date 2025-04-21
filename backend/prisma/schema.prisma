@@ -73,6 +73,7 @@ model Journal {
   priceId       String?
   members       Member?   @relation(fields: [memberID], references: [id])
   prices        Price?    @relation(fields: [priceId], references: [id])
+  expenses      Expense[]  @relation("JournalExpenses")
 
   @@map("journals")
 }
@@ -129,10 +130,9 @@ model Expense {
   description String?
   amount      Float        @map("prix")
   type        ExpenseType
-  date        DateTime
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
-
+  journals    Journal[]    @relation("JournalExpenses")
   @@map("expenses")
 }
 

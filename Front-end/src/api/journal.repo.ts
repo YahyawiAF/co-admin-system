@@ -29,19 +29,26 @@ export const journalServerApi = createApi({
       query: () => `journal`,
       providesTags: ["journalApi"],
     }),
-    createJournal: builder.mutation<Journal, Journal>({
-      query: (data: Journal) => ({
+    createJournal: builder.mutation<Journal, Partial<Journal>>({
+      query: (data) => ({
         url: `journal`,
         method: "POST",
-        body: data,
+        body: {
+          ...data,
+          expenseIds: data.expenseIds // Envoyer les IDs des dépenses
+        }
       }),
       invalidatesTags: ["journalApi"],
     }),
-    updateJournal: builder.mutation<Journal, Journal>({
+
+    updateJournal: builder.mutation<Journal, Partial<Journal>>({
       query: (data) => ({
         url: `journal/${data.id}`,
         method: "PATCH",
-        body: data,
+        body: {
+          ...data,
+          expenseIds: data.expenseIds 
+        }
       }),
       invalidatesTags: ["journalApi"],
     }),

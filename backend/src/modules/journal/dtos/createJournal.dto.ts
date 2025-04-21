@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
+  IsArray,
   
 } from 'class-validator';
 
@@ -50,5 +51,11 @@ export class AddJournalDto {
   @IsNotEmpty()
   @IsNumber()
   @ApiProperty()
+  @IsOptional()
   public payedAmount: number;
+  @IsOptional()
+  @IsArray()
+  @ApiProperty({ required: false })
+  public expenseIds?: string[];
+  
 }

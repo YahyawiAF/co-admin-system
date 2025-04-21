@@ -14,22 +14,22 @@ export const roundsOfHashing = 10;
 
 type SearchCriteria = {
   createdAt?: string;
-  // Add other fields as needed
 };
 
 @Injectable()
 export class JournalService {
   constructor(private prisma: PrismaService) {}
+
   async create(createJournalDto: AddJournalDto) {
     try {
-        console.log("Received DTO:", createJournalDto);
-      const { memberID, priceId } = createJournalDto;
-  
-      // Vérifier si le prix existe
+      console.log("Received DTO:", createJournalDto);
+      const { memberID, priceId, expenseIds } = createJournalDto;
+
+      // Validate price
       const existingPrice = await this.prisma.price.findUnique({
         where: { id: priceId },
       });
-  
+
       if (!existingPrice) {
         throw new GeneralException(
           HttpStatus.NOT_FOUND,
@@ -37,21 +37,40 @@ export class JournalService {
           `The selected price does not exist.`,
         );
       }
-  
+      const expenseConnection = expenseIds?.length 
+      ? { connect: expenseIds.map(id => ({ id })) }
+      : undefined;
+
+      // Validate expenses
+      if (expenseIds?.length) {
+        const existingExpenses = await this.prisma.expense.findMany({
+          where: { id: { in: expenseIds } }
+        });
+
+        if (existingExpenses.length !== expenseIds.length) {
+          const missingIds = expenseIds.filter(id => 
+            !existingExpenses.some(e => e.id === id)
+          );
+          throw new GeneralException(
+            HttpStatus.NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            `Expenses not found: ${missingIds.join(', ')}`
+          );
+        }
+      }
+
+      // Check existing journal
       const now = new Date(createJournalDto.registredTime);
-      const startOfTheDay = startOfDay(now);
-      const endOfTheDay = endOfDay(now);
-  
       const existingJournal = await this.prisma.journal.findFirst({
         where: {
           memberID,
           registredTime: {
-            gte: startOfTheDay,
-            lt: endOfTheDay,
+            gte: startOfDay(now),
+            lt: endOfDay(now),
           },
         },
       });
-  
+
       if (existingJournal) {
         throw new GeneralException(
           HttpStatus.CONFLICT,
@@ -59,7 +78,8 @@ export class JournalService {
           `A journal entry for this member already exists today.`,
         );
       }
-  
+
+      // Create journal with expenses
       return await this.prisma.journal.create({
         data: {
           memberID: createJournalDto.memberID,
@@ -68,10 +88,16 @@ export class JournalService {
           isPayed: createJournalDto.isPayed,
           isReservation: createJournalDto.isReservation,
           payedAmount: createJournalDto.payedAmount,
-          priceId: createJournalDto.priceId,  
+          priceId: createJournalDto.priceId,
+          ...(expenseConnection && { expenses: expenseConnection })
         },
+        include: {
+          expenses: true,
+          members: true,
+          prices: true
+        }
       });
-      
+
     } catch (error) {
       throw new GeneralException(
         HttpStatus.BAD_REQUEST,
@@ -80,62 +106,68 @@ export class JournalService {
       );
     }
   }
-  
-
-  findAllJournal() {
-    return this.prisma.journal.findMany();
-  }
-
-  findAll() {
-    return this.prisma.journal.findMany();
-  }
 
   async findMany({
     where,
-    orderBy = {
-      id: 'desc',
-    },
+    orderBy = { id: 'desc' },
     page,
     perPage = 20,
   }: {
     where?: Prisma.JournalWhereInput;
-    orderBy?: Prisma.UserOrderByWithRelationInput;
+    orderBy?: Prisma.JournalOrderByWithRelationInput;
     page?: number;
     perPage: number;
   }): Promise<PaginatedResult<Journal>> {
     const paginate = createPaginator({ perPage });
+    
     const paginatedResult = await paginate(
       this.prisma.journal,
       {
         where,
         orderBy,
         include: {
-          members: true, // Include related members
+          members: true,
+          prices: true,
+          expenses: true
         },
       },
-      {
-        page,
-      },
+      { page },
     );
 
     return {
-      data: paginatedResult.data.map((member) => new JournalEntity(member)),
+      data: paginatedResult.data.map(journal => {
+        const entity = new JournalEntity(journal);
+        if (!entity.priceId) {
+          throw new GeneralException(
+            HttpStatus.INTERNAL_SERVER_ERROR,
+            ErrorCode.INVALID_DATA,
+            'priceId is missing in JournalEntity'
+          );
+        }
+        return {
+          ...entity,
+          priceId: entity.priceId as string, // Ensure priceId is non-optional
+        };
+      }),
       meta: paginatedResult.meta,
     };
   }
+
   findOne(id: string) {
     return this.prisma.journal.findUnique({ where: { id } });
   }
 
-  findByDate(criteria: SearchCriteria) {
-    return this.prisma.journal.findMany({ where: { ...criteria } });
-  }
 
   async update(id: string, updateJournalDto: UpdateJournalDto) {
     try {
-      const { priceId } = updateJournalDto;
+      const { priceId, expenseIds, ...restDto } = updateJournalDto; // Extraction des champs spécifiques
   
-      // Vérifier si le prix existe
+      // Déclaration de expenseUpdate
+      const expenseUpdate = expenseIds !== undefined 
+        ? { set: expenseIds.map(id => ({ id })) } 
+        : undefined;
+  
+      // Validate price
       if (priceId) {
         const existingPrice = await this.prisma.price.findUnique({
           where: { id: priceId },
@@ -150,10 +182,39 @@ export class JournalService {
         }
       }
   
+      // Validate expenses
+      if (expenseIds !== undefined) {
+        const existingExpenses = await this.prisma.expense.findMany({
+          where: { id: { in: expenseIds } }
+        });
+  
+        if (existingExpenses.length !== expenseIds.length) {
+          const missingIds = expenseIds.filter(id => 
+            !existingExpenses.some(e => e.id === id)
+          );
+          throw new GeneralException(
+            HttpStatus.NOT_FOUND,
+            ErrorCode.NOT_FOUND,
+            `Expenses not found: ${missingIds.join(', ')}`
+          );
+        }
+      }
+  
+      // Update journal
       return await this.prisma.journal.update({
         where: { id },
-        data: updateJournalDto,
+        data: {
+          ...restDto, // Utilisez le reste des propriétés du DTO
+          priceId,    // Ajoutez priceId séparément si nécessaire
+          expenses: expenseUpdate
+        },
+        include: {
+          expenses: true,
+          members: true,
+          prices: true
+        }
       });
+  
     } catch (error) {
       throw new GeneralException(
         HttpStatus.BAD_REQUEST,
