@@ -42,6 +42,7 @@ import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
 import { addHours, isSameDay } from "date-fns";
 import { useGetPricesQuery } from "src/api/price.repo";
+import { updateHoursAndMinutes } from "src/utils/shared";
 
 // ----------------------------------------------------------------------
 
@@ -275,20 +276,23 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     [reset]
   );
 
+  console.log("selectItem", selectItem);
+  console.log("today", today);
   React.useEffect(() => {
     const initializeFormValues = () => {
       if (!selectItem) {
         resetAsyn({
           ...defaultValues,
-          registredTime: today,
-          leaveTime: today,
-          // Retirer la logique isReservation: !isSameDay(...)
+          registredTime: updateHoursAndMinutes(today),
+          leaveTime: updateHoursAndMinutes(today),
         });
       } else {
         // Conserver la logique existante pour l'édition
         const updatedJournal: Partial<Journal> = {
           ...selectItem,
-          leaveTime: selectItem.isPayed ? selectItem.leaveTime : today,
+          leaveTime: selectItem.isPayed
+            ? selectItem.leaveTime
+            : updateHoursAndMinutes(today),
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
