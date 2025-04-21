@@ -203,6 +203,6 @@ export interface Expenses {
   journals?: Journal[];
 }
 export enum ExpenseType {
-  MENSUEL='MENSUEL',
-  JOURNALIER='JOURNALIER',
+  MENSUEL = "MENSUEL",
+  JOURNALIER = "JOURNALIER",
 }
