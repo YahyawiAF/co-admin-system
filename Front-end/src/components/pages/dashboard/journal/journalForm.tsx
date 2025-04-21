@@ -156,6 +156,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
 
+  const createdByID = sessionStorage.getItem("userID");
+
   // Filtrer les prix pour n'afficher que ceux de type "journal"
   const journalPrices = React.useMemo(() => {
     return pricesList?.filter((price) => price.type === "journal") || [];
@@ -332,7 +334,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       handleClose();
     } else {
       try {
-        await createJournal(data as Journal).unwrap();
+        await createJournal({
+          ...data,
+          createdbyUserID: createdByID,
+        } as Journal).unwrap();
         setOpenSnak(true);
         handleClose();
       } catch (e) {

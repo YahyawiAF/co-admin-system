@@ -9,15 +9,17 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
 
 @Module({
-  imports: [EventsModule, TypedEventEmitterModule,
-     ConfigModule.forRoot(),
-        JwtModule.register({
-          secret: process.env.JWT_ACCESS_SECRET,
-          signOptions: { expiresIn: '20m' },
-        }),
+  imports: [
+    EventsModule,
+    TypedEventEmitterModule,
+    ConfigModule.forRoot(),
+    JwtModule.register({
+      secret: process.env.JWT_ACCESS_SECRET,
+      signOptions: { expiresIn: '20m' },
+    }),
   ],
   controllers: [JournalController],
-  providers: [JwtAuthGuard,JournalService, PrismaService],
+  providers: [JwtAuthGuard, JournalService, PrismaService],
   exports: [JournalService],
 })
 export class JournalModule {}

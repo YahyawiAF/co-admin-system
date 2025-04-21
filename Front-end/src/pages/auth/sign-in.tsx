@@ -45,11 +45,12 @@ function SignIn() {
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false); // État pour "Remember Me"
   const [login, { isLoading, isError, error }] = useLoginMutation(); // Utiliser le hook
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const user = await login({ identifier, password }).unwrap();
-
+      console.log("user", user);
       // Vérifie le rôle
       if (user.role !== "ADMIN") {
         Swal.fire({
@@ -63,6 +64,7 @@ function SignIn() {
 
       // Connexion réussie, stocke les infos
       sessionStorage.setItem("accessToken", user.accessToken);
+      sessionStorage.setItem("userID", user.id);
       sessionStorage.setItem("username", user.fullname ?? "");
       sessionStorage.setItem("Role", user.role);
 

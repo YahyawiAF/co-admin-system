@@ -7,7 +7,6 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
-  
 } from 'class-validator';
 
 export class AddJournalDto {
@@ -16,8 +15,10 @@ export class AddJournalDto {
   @ApiProperty()
   public memberID: string;
 
+  @IsString()
+  @ApiProperty()
+  public createdbyUserID?: string;
 
-  
   @IsString()
   @ApiProperty()
   public priceId: string;
@@ -44,8 +45,6 @@ export class AddJournalDto {
   @IsBoolean()
   @ApiProperty()
   public isReservation: boolean;
-
-  
 
   @IsNotEmpty()
   @IsNumber()
