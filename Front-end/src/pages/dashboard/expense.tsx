@@ -90,6 +90,10 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
       minWidth: "100%",
     },
   },
+  "& .MuiTableCell-head:last-child": {
+    textAlign: "center",
+    paddingRight: theme.spacing(3)
+  },
   "& .MuiTableRow-root": {
     backgroundColor: theme.palette.background.paper,
     "&:hover": {
@@ -209,13 +213,7 @@ const ExpenseComponent = () => {
             label: "Type",
             alwaysVisible: !isMobile,
         },
-        {
-            id: "date",
-            numeric: false,
-            disablePadding: false,
-            label: "Date",
-            alwaysVisible: !isMobile,
-        },
+        
         {
             id: "actions",
             numeric: false,

@@ -38,28 +38,38 @@ import { ErrorCode, GeneralException } from '@/exceptions';
     constructor(private readonly journalService: JournalService) {}
   
     @Post()
-    // @Roles([Role.ADMIN])
-    // @UseGuards(JwtAuthGuard, RolesGuard)
-    @ApiBearerAuth()
-    @ApiCreatedResponse({ type: JournalEntity })
-    async create(@Body() dto: AddJournalDto) {
-      const journal = await this.journalService.create(dto);
-      if (!journal.members) {
-        throw new GeneralException(
-          HttpStatus.INTERNAL_SERVER_ERROR,
-          ErrorCode.INTERNAL_ERROR,
-          'Member data is missing',
-        );
-      }
-      return new JournalEntity({
-        ...journal,
-        members: {
-          ...journal.members,
-          fullName: `${journal.members.firstName} ${journal.members.lastName}`,
-          fullNameWithEmail: `${journal.members.firstName} ${journal.members.lastName} <${journal.members.email}>`,
-        },
-      });
+@ApiBearerAuth()
+@ApiCreatedResponse({ type: JournalEntity })
+async create(@Body() dto: AddJournalDto) {
+  try {
+    const journal = await this.journalService.create(dto);
+    if (!journal.members) {
+      throw new GeneralException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        ErrorCode.INTERNAL_ERROR,
+        'Member data is missing',
+      );
     }
+    return new JournalEntity({
+      ...journal,
+      members: {
+        ...journal.members,
+        fullName: `${journal.members.firstName} ${journal.members.lastName}`,
+        fullNameWithEmail: `${journal.members.firstName} ${journal.members.lastName} <${journal.members.email}>`,
+      },
+    });
+  } catch (error) {
+    // Ensure the error is properly propagated
+    if (error instanceof GeneralException) {
+      throw error;
+    }
+    throw new GeneralException(
+      HttpStatus.INTERNAL_SERVER_ERROR,
+      ErrorCode.INTERNAL_ERROR,
+      'An unexpected error occurred',
+    );
+  }
+}
   
     @Get()
     // @Roles([Role.ADMIN])
@@ -76,7 +86,7 @@ import { ErrorCode, GeneralException } from '@/exceptions';
       if (journalDate) {
         const date = new Date(journalDate);
         where = {
-          registredTime: {
+            registredTime: {
             gte: startOfDay(date),
             lt: endOfDay(date),
           },
@@ -133,7 +143,7 @@ import { ErrorCode, GeneralException } from '@/exceptions';
     @Delete(':id')
     // @UseGuards(JwtAuthGuard)
     // @Roles([Role.ADMIN])
-    @ApiBearerAuth()
+    @ApiBearerAuth()²
     @ApiOkResponse({ type: JournalEntity })
     async remove(@Param('id', ParseUUIDPipe) id: string) {
       const journal = await this.journalService.remove(id);

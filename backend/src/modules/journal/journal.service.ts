@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { UpdateJournalDto } from './dtos/updateJournal.dto';
 import { Journal, Prisma } from '@prisma/client';
@@ -24,29 +24,24 @@ export class JournalService {
     try {
       console.log("Received DTO:", createJournalDto);
       const { memberID, priceId, expenseIds } = createJournalDto;
-
-      // Validate price
+  
+      // Validate price exists
       const existingPrice = await this.prisma.price.findUnique({
         where: { id: priceId },
       });
-
       if (!existingPrice) {
         throw new GeneralException(
           HttpStatus.NOT_FOUND,
           ErrorCode.NOT_FOUND,
-          `The selected price does not exist.`,
+          `Price with ID ${priceId} not found.`,
         );
       }
-      const expenseConnection = expenseIds?.length 
-      ? { connect: expenseIds.map(id => ({ id })) }
-      : undefined;
-
-      // Validate expenses
+  
+      // Validate expenses (if provided)
       if (expenseIds?.length) {
         const existingExpenses = await this.prisma.expense.findMany({
-          where: { id: { in: expenseIds } }
+          where: { id: { in: expenseIds } },
         });
-
         if (existingExpenses.length !== expenseIds.length) {
           const missingIds = expenseIds.filter(id => 
             !existingExpenses.some(e => e.id === id)
@@ -54,12 +49,12 @@ export class JournalService {
           throw new GeneralException(
             HttpStatus.NOT_FOUND,
             ErrorCode.NOT_FOUND,
-            `Expenses not found: ${missingIds.join(', ')}`
+            `Expenses not found: ${missingIds.join(', ')}`,
           );
         }
       }
-
-      // Check existing journal
+  
+      // Check for existing journal for the same day
       const now = new Date(createJournalDto.registredTime);
       const existingJournal = await this.prisma.journal.findFirst({
         where: {
@@ -70,7 +65,6 @@ export class JournalService {
           },
         },
       });
-
       if (existingJournal) {
         throw new GeneralException(
           HttpStatus.CONFLICT,
@@ -78,31 +72,40 @@ export class JournalService {
           `A journal entry for this member already exists today.`,
         );
       }
-
-      // Create journal with expenses
+  
+      // Create the journal
+      const expenseConnection = expenseIds?.length 
+        ? { connect: expenseIds.map(id => ({ id })) } 
+        : undefined;
+  
       return await this.prisma.journal.create({
         data: {
-          memberID: createJournalDto.memberID,
+          memberID,
           registredTime: createJournalDto.registredTime,
           leaveTime: createJournalDto.leaveTime,
           isPayed: createJournalDto.isPayed,
           isReservation: createJournalDto.isReservation,
           payedAmount: createJournalDto.payedAmount,
-          priceId: createJournalDto.priceId,
-          ...(expenseConnection && { expenses: expenseConnection })
+          priceId,
+          ...(expenseConnection && { expenses: expenseConnection }),
         },
         include: {
           expenses: true,
           members: true,
-          prices: true
-        }
+          prices: true,
+        },
       });
-
+  
     } catch (error) {
+      console.error('Detailed Error:', {
+        message: error.message,
+        stack: error.stack,
+        raw: error,
+      });
       throw new GeneralException(
-        HttpStatus.BAD_REQUEST,
-        ErrorCode.ALREADY_EXIST,
-        (error as Error).message,
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        ErrorCode.INTERNAL_ERROR,
+        error.message || 'Failed to create journal entry',
       );
     }
   }

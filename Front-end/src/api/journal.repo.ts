@@ -35,7 +35,7 @@ export const journalServerApi = createApi({
         method: "POST",
         body: {
           ...data,
-          expenseIds: data.expenseIds // Envoyer les IDs des dépenses
+          expenseIds: data.expenseIds || []// Envoyer les IDs des dépenses
         }
       }),
       invalidatesTags: ["journalApi"],

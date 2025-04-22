@@ -29,7 +29,7 @@ export class AddJournalDto {
   @ApiProperty()
   public registredTime: Date;
 
-  @IsNotEmpty()
+
   @IsDate()
   @Type(() => Date)
   @IsOptional()

@@ -6,6 +6,7 @@ export class MemberEntity implements Member {
   constructor(partial: Partial<MemberEntity>) {
     Object.assign(this, partial);
   }
+    userId: number;
 
   @ApiProperty({ description: 'Unique identifier for the member' })
   id: string;

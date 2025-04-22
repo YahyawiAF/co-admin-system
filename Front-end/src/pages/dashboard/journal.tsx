@@ -52,6 +52,7 @@ import { format } from "date-fns";
 import {
   useDeleteJournalMutation,
   useGetJournalQuery,
+  useUpdateJournalMutation,
 } from "src/api/journal.repo";
 import JournalDetails from "src/components/pages/dashboard/journal/JournalDetails";
 import { getHourDifference } from "src/utils/shared";
@@ -230,7 +231,8 @@ function JournalPage() {
   const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-CA'));
 
 
-
+  const [updateJournal] = useUpdateJournalMutation();
+  // Modifiez la fonction handleConfirmExpense
   const handleConfirmExpense = async () => {
     try {
       let newExpense: Expenses;
@@ -241,9 +243,19 @@ function JournalPage() {
           type: ExpenseType.JOURNALIER,
         }).unwrap();
       } else {
+        // Vérifier si la dépense est déjà dans le journal du jour
+        const isExpenseAlreadyAdded = rows.some(journal =>
+          journal.expenseIds?.includes(selectedExpense)
+        );
+
+        if (isExpenseAlreadyAdded) {
+          alert("Cette dépense a déjà été ajoutée aujourd'hui");
+          return;
+        }
+
         const selected = dailyExpenses?.find(e => e.id === selectedExpense);
         if (!selected) return;
-        // Créer une nouvelle instance avec la date actuelle
+
         newExpense = await createExpense({
           name: selected.name,
           amount: selected.amount,
@@ -392,6 +404,7 @@ function JournalPage() {
                 <SubPage title="Gestion des Dépenses Journalières">
                   <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
                     <FormControl fullWidth>
+
                       <Select
                         value={selectedExpense}
                         onChange={(e) => setSelectedExpense(e.target.value as string)}
@@ -401,11 +414,15 @@ function JournalPage() {
                           Sélectionner une dépense existante
                         </MenuItem>
                         <MenuItem value="new">+ Créer nouvelle dépense</MenuItem>
-                        {dailyExpenses?.map((expense) => (
-                          <MenuItem key={expense.id} value={expense.id}>
-                            {expense.name} ({expense.amount} DT)
-                          </MenuItem>
-                        ))}
+                        {dailyExpenses
+                          ?.filter(expense =>
+                            !rows.some(journal => journal.expenseIds?.includes(expense.id))
+                          )
+                          .map((expense) => (
+                            <MenuItem key={expense.id} value={expense.id}>
+                              {expense.name} ({expense.amount} DT)
+                            </MenuItem>
+                          ))}
                       </Select>
                     </FormControl>
 
