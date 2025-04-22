@@ -108,7 +108,7 @@ export class JournalService {
         where,
         orderBy,
         include: {
-          members: true, // Include related members
+          members: true,
           createdBy: true,
         },
       },
