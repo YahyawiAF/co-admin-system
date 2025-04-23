@@ -17,7 +17,7 @@ interface IResponsiveDialog {
   title: string;
   contentText?: string;
   children?: React.ReactNode;
-  content?: React.ReactNode; 
+  content?: React.ReactNode;
   actionText?: string; // Ajouté
   closeText?: string; // Ajouté
   fullWidth?: boolean;

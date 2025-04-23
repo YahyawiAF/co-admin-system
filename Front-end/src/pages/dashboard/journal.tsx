@@ -25,8 +25,6 @@ import {
 } from "@mui/material";
 
 import { spacing } from "@mui/system";
-;
-
 import DashboardLayout from "../../layouts/Dashboard";
 import { Expenses, Journal } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
@@ -228,8 +226,9 @@ function JournalPage() {
 
   const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
   // Ajoutez ce hook useEffect en haut du composant
-  const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString('en-CA'));
-
+  const [currentDate, setCurrentDate] = useState(
+    new Date().toLocaleDateString("en-CA")
+  );
 
   const [updateJournal] = useUpdateJournalMutation();
   // Modifiez la fonction handleConfirmExpense
@@ -244,7 +243,7 @@ function JournalPage() {
         }).unwrap();
       } else {
         // Vérifier si la dépense est déjà dans le journal du jour
-        const isExpenseAlreadyAdded = rows.some(journal =>
+        const isExpenseAlreadyAdded = rows.some((journal) =>
           journal.expenseIds?.includes(selectedExpense)
         );
 
@@ -253,7 +252,7 @@ function JournalPage() {
           return;
         }
 
-        const selected = dailyExpenses?.find(e => e.id === selectedExpense);
+        const selected = dailyExpenses?.find((e) => e.id === selectedExpense);
         if (!selected) return;
 
         newExpense = await createExpense({
@@ -402,21 +401,29 @@ function JournalPage() {
                 anchor="right"
               >
                 <SubPage title="Gestion des Dépenses Journalières">
-                  <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <Box
+                    sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+                  >
                     <FormControl fullWidth>
-
                       <Select
                         value={selectedExpense}
-                        onChange={(e) => setSelectedExpense(e.target.value as string)}
+                        onChange={(e) =>
+                          setSelectedExpense(e.target.value as string)
+                        }
                         displayEmpty
                       >
                         <MenuItem value="" disabled>
                           Sélectionner une dépense existante
                         </MenuItem>
-                        <MenuItem value="new">+ Créer nouvelle dépense</MenuItem>
+                        <MenuItem value="new">
+                          + Créer nouvelle dépense
+                        </MenuItem>
                         {dailyExpenses
-                          ?.filter(expense =>
-                            !rows.some(journal => journal.expenseIds?.includes(expense.id))
+                          ?.filter(
+                            (expense) =>
+                              !rows.some((journal) =>
+                                journal.expenseIds?.includes(expense.id)
+                              )
                           )
                           .map((expense) => (
                             <MenuItem key={expense.id} value={expense.id}>
@@ -434,7 +441,10 @@ function JournalPage() {
                           required
                           value={newDailyExpense.name}
                           onChange={(e) =>
-                            setNewDailyExpense({ ...newDailyExpense, name: e.target.value })
+                            setNewDailyExpense({
+                              ...newDailyExpense,
+                              name: e.target.value,
+                            })
                           }
                         />
                         <TextField
@@ -460,7 +470,10 @@ function JournalPage() {
                           fullWidth
                           value={newDailyExpense.description}
                           onChange={(e) =>
-                            setNewDailyExpense({ ...newDailyExpense, description: e.target.value })
+                            setNewDailyExpense({
+                              ...newDailyExpense,
+                              description: e.target.value,
+                            })
                           }
                         />
                       </>
@@ -521,7 +534,7 @@ function JournalPage() {
                     sx={{
                       ml: 2,
                       bgcolor: "#054547",
-                      "&:hover": { bgcolor: "#083231" }
+                      "&:hover": { bgcolor: "#083231" },
                     }}
                   >
                     Add Expense

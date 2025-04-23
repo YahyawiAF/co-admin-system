@@ -25,10 +25,11 @@ interface JournalDetailsProps {
 
 function JournalDetails({
   journals,
-  dailyExpenses,  // Ajoutez cette prop
+  dailyExpenses, // Ajoutez cette prop
   isLoading,
   errorMemberReq,
-}: JournalDetailsProps) { // Utilisez l'interface définie
+}: JournalDetailsProps) {
+  // Utilisez l'interface définie
   const { t } = useTranslation();
   const {
     data: abonnementsData,
@@ -37,10 +38,12 @@ function JournalDetails({
   } = useGetAbonnementsQuery({ search: "" });
 
   const dailyExpensesTotal = useMemo(() => {
-    const today = new Date().toLocaleDateString('en-CA');
+    const today = new Date().toLocaleDateString("en-CA");
     return dailyExpenses
-      .filter(expense => {
-        const expenseDate = new Date(expense.createdAt).toLocaleDateString('en-CA');
+      .filter((expense) => {
+        const expenseDate = new Date(expense.createdAt).toLocaleDateString(
+          "en-CA"
+        );
         return expenseDate === today;
       })
       .reduce((acc, curr) => acc + curr.amount, 0);
@@ -99,16 +102,10 @@ function JournalDetails({
             title="Daily Expense"
             count={dailyExpensesTotal}
             icon={<TrendingUp />}
-
           />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Cash"
-            count={cashTotal}
-            icon={<DollarSign />}
-
-          />
+          <Stats title="Cash" count={cashTotal} icon={<DollarSign />} />
         </Grid>
       </Grid>
     </React.Fragment>
