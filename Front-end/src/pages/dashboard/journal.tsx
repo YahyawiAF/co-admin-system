@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
@@ -16,12 +16,17 @@ import {
   IconButton,
   Tabs,
   Box,
+  Button,
+  FormControl,
+  Select,
+  MenuItem,
+  TextField,
+  Typography,
 } from "@mui/material";
 
 import { spacing } from "@mui/system";
-
 import DashboardLayout from "../../layouts/Dashboard";
-import { Journal } from "../../types/shared";
+import { Expenses, Journal } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -45,14 +50,21 @@ import { format } from "date-fns";
 import {
   useDeleteJournalMutation,
   useGetJournalQuery,
+  useUpdateJournalMutation,
 } from "src/api/journal.repo";
 import JournalDetails from "src/components/pages/dashboard/journal/JournalDetails";
-import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
-import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import Abonnement from "./abonnement";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
+import {
+  useGetExpensesQuery,
+  useCreateExpenseMutation,
+} from "src/api/expenseApi";
+import { ExpenseType } from "src/types/shared";
+import AddIcon from "@mui/icons-material/Add";
+import ShopFilterSidebar from "src/components/Drawer";
+import { LoadingButton } from "@mui/lab";
 const Divider = styled(MuiDivider)(spacing);
 
 const Paper = styled(MuiPaper)(spacing);
@@ -106,7 +118,46 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
     return obj[key]?.toString().toLowerCase().includes(query.toLowerCase());
   });
 }
+const SubmitButton = styled(LoadingButton)(({ theme }) => ({
+  border: "1px solid",
+  borderColor: "#054547",
+  background: "#fff",
+  color: "#054547",
+  width: "100%",
+  height: "50px",
+  lineHeight: "50px",
+  cursor: "pointer",
+  borderRadius: 0,
+  margin: 0,
+  "&:hover": {
+    background: "#054547",
+    color: "#fff",
+  },
+  [theme.breakpoints.up("sm")]: {
+    width: "calc(50% - 5px)",
+    marginLeft: "10px",
+  },
+}));
 
+const ActionButton = styled(Button)(({ theme }) => ({
+  border: "1px solid",
+  borderColor: "#054547",
+  background: "#fff",
+  color: "#054547",
+  width: "100%",
+  height: "50px",
+  lineHeight: "50px",
+  cursor: "pointer",
+  borderRadius: 0,
+  margin: 0,
+  "&:hover": {
+    background: "#054547",
+    color: "#fff",
+  },
+  [theme.breakpoints.up("sm")]: {
+    width: "calc(50% - 5px)",
+  },
+}));
 const applyFilters = (
   keywordServices: Journal[],
   filters: Filters
@@ -142,7 +193,19 @@ function JournalPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
+  const [openExpenseModal, setOpenExpenseModal] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<string>("");
+  const [newDailyExpense, setNewDailyExpense] = useState({
+    name: "",
+    amount: 0,
+    description: "",
+  });
+  const { data: expenses } = useGetExpensesQuery();
+  const [createExpense] = useCreateExpenseMutation();
 
+  const dailyExpenses = expenses?.filter(
+    (expense) => expense.type === ExpenseType.JOURNALIER
+  );
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
 
@@ -162,15 +225,56 @@ function JournalPage() {
   const [deleteJournal] = useDeleteJournalMutation();
 
   const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
+  // Ajoutez ce hook useEffect en haut du composant
+  const [currentDate, setCurrentDate] = useState(
+    new Date().toLocaleDateString("en-CA")
+  );
 
-  console.log({ rows });
+  const [updateJournal] = useUpdateJournalMutation();
+  // Modifiez la fonction handleConfirmExpense
+  const handleConfirmExpense = async () => {
+    try {
+      let newExpense: Expenses;
 
+      if (selectedExpense === "new") {
+        newExpense = await createExpense({
+          ...newDailyExpense,
+          type: ExpenseType.JOURNALIER,
+        }).unwrap();
+      } else {
+        // Vérifier si la dépense est déjà dans le journal du jour
+        const isExpenseAlreadyAdded = rows.some((journal) =>
+          journal.expenseIds?.includes(selectedExpense)
+        );
+
+        if (isExpenseAlreadyAdded) {
+          alert("Cette dépense a déjà été ajoutée aujourd'hui");
+          return;
+        }
+
+        const selected = dailyExpenses?.find((e) => e.id === selectedExpense);
+        if (!selected) return;
+
+        newExpense = await createExpense({
+          name: selected.name,
+          amount: selected.amount,
+          description: selected.description,
+          type: ExpenseType.JOURNALIER,
+        }).unwrap();
+      }
+
+      setSelectedExpense("");
+      setNewDailyExpense({ name: "", amount: 0, description: "" });
+      setOpenExpenseModal(false);
+    } catch (error) {
+      console.error("Erreur création dépense:", error);
+    }
+  };
   const handleRequestSort = (event: any, property: string) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
   };
-
   const handleClick = (
     event: React.MouseEvent<HTMLTableRowElement, MouseEvent>,
     id: string
@@ -277,6 +381,7 @@ function JournalPage() {
         <Grid container spacing={6}>
           <Grid item xs={12}>
             <div>
+              {/* Modal de suppression */}
               <Modal
                 open={openDeletModal}
                 handleClose={() => setOpenDeletModal(false)}
@@ -284,13 +389,123 @@ function JournalPage() {
                 title={"Delete Journal"}
                 contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
               />
+
+              {/* Drawer pour les dépenses */}
+              <ShopFilterSidebar
+                open={openExpenseModal}
+                handleClose={() => {
+                  setOpenExpenseModal(false);
+                  setSelectedExpense("");
+                  setNewDailyExpense({ name: "", amount: 0, description: "" });
+                }}
+                anchor="right"
+              >
+                <SubPage title="Gestion des Dépenses Journalières">
+                  <Box
+                    sx={{ display: "flex", flexDirection: "column", gap: 3 }}
+                  >
+                    <FormControl fullWidth>
+                      <Select
+                        value={selectedExpense}
+                        onChange={(e) =>
+                          setSelectedExpense(e.target.value as string)
+                        }
+                        displayEmpty
+                      >
+                        <MenuItem value="" disabled>
+                          Sélectionner une dépense existante
+                        </MenuItem>
+                        <MenuItem value="new">
+                          + Créer nouvelle dépense
+                        </MenuItem>
+                        {dailyExpenses
+                          ?.filter(
+                            (expense) =>
+                              !rows.some((journal) =>
+                                journal.expenseIds?.includes(expense.id)
+                              )
+                          )
+                          .map((expense) => (
+                            <MenuItem key={expense.id} value={expense.id}>
+                              {expense.name} ({expense.amount} DT)
+                            </MenuItem>
+                          ))}
+                      </Select>
+                    </FormControl>
+
+                    {selectedExpense === "new" && (
+                      <>
+                        <TextField
+                          label="Nom de la dépense"
+                          fullWidth
+                          required
+                          value={newDailyExpense.name}
+                          onChange={(e) =>
+                            setNewDailyExpense({
+                              ...newDailyExpense,
+                              name: e.target.value,
+                            })
+                          }
+                        />
+                        <TextField
+                          label="Montant (DT)"
+                          type="number"
+                          fullWidth
+                          required
+                          value={newDailyExpense.amount}
+                          onChange={(e) =>
+                            setNewDailyExpense({
+                              ...newDailyExpense,
+                              amount: Number(e.target.value),
+                            })
+                          }
+                          InputProps={{
+                            inputProps: { min: 0, step: 0.01 },
+                          }}
+                        />
+                        <TextField
+                          label="Description"
+                          multiline
+                          rows={4}
+                          fullWidth
+                          value={newDailyExpense.description}
+                          onChange={(e) =>
+                            setNewDailyExpense({
+                              ...newDailyExpense,
+                              description: e.target.value,
+                            })
+                          }
+                        />
+                      </>
+                    )}
+
+                    <Box display="flex" gap={2} mt={3}>
+                      <SubmitButton
+                        variant="contained"
+                        size="large"
+                        onClick={handleConfirmExpense}
+                        disabled={selectedExpense === ""}
+                      >
+                        Confirmer
+                      </SubmitButton>
+                      <ActionButton
+                        variant="outlined"
+                        color="secondary"
+                        onClick={() => setOpenExpenseModal(false)}
+                      >
+                        Annuler
+                      </ActionButton>
+                    </Box>
+                  </Box>
+                </SubPage>
+              </ShopFilterSidebar>
               <Drawer
                 open={open}
                 handleClose={() => {
                   setOpen(false);
                 }}
               >
-                <SubPage title="Manage memeber">
+                <SubPage title="Manage member">
                   <JournalForm
                     handleClose={() => {
                       setOpen(false);
@@ -301,15 +516,31 @@ function JournalPage() {
                   />
                 </SubPage>
               </Drawer>
+
               <Paper>
-                <TableHeadAction
-                  handleChangeDate={handleChangeDate}
-                  toDay={today}
-                  search={filters.query}
-                  handleClickOpen={handleClickOpen}
-                  onHandleSearch={onHandleSearch}
-                  refetch={refetch}
-                />
+                <Box display="flex" alignItems="center" p={2}>
+                  <TableHeadAction
+                    handleChangeDate={handleChangeDate}
+                    toDay={today}
+                    search={filters.query}
+                    handleClickOpen={handleClickOpen}
+                    onHandleSearch={onHandleSearch}
+                    refetch={refetch}
+                  />
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => setOpenExpenseModal(true)}
+                    sx={{
+                      ml: 2,
+                      bgcolor: "#054547",
+                      "&:hover": { bgcolor: "#083231" },
+                    }}
+                  >
+                    Add Expense
+                  </Button>
+                </Box>
+
                 <TableContainer>
                   <Table
                     aria-labelledby="tableTitle"
@@ -432,6 +663,7 @@ function JournalPage() {
       <TabPanel value={value} index={2} title={"Overview"}>
         <JournalDetails
           journals={rows}
+          dailyExpenses={dailyExpenses || []}
           isLoading={isLoading}
           errorMemberReq={!!error}
         />

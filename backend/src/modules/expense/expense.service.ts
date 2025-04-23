@@ -8,15 +8,12 @@ import { PrismaService } from 'database/prisma.service';
 @Injectable()
 export class ExpensesService {
   constructor(private prisma: PrismaService) {}
-
   async create(createExpenseDto: CreateExpenseDto) {
     return new ExpenseEntity(
       await this.prisma.expense.create({
         data: {
           ...createExpenseDto,
           amount: createExpenseDto.amount,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         },
       }),
     );
@@ -25,6 +22,17 @@ export class ExpensesService {
   async findAll() {
     const expenses = await this.prisma.expense.findMany();
     return expenses.map((expense) => new ExpenseEntity(expense));
+  }
+
+  async createDailyExpense(data: { expenseId: string; date?: Date }) {
+    const date = data.date ?? new Date();
+
+    return this.prisma.dailyExpense.create({
+      data: {
+        expenseId: data.expenseId,
+        date,
+      },
+    });
   }
 
   async findOne(id: string) {
@@ -40,7 +48,6 @@ export class ExpensesService {
         data: {
           ...updateExpDto,
           amount: updateExpDto.amount,
-          updatedAt: new Date(),
         },
       }),
     );

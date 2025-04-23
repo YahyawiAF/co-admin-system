@@ -7,29 +7,47 @@ import {
   Typography as MuiTypography,
 } from "@mui/material";
 import { spacing } from "@mui/system";
-import { DollarSign, CreditCard, User } from "react-feather";
+import { DollarSign, CreditCard, User, TrendingUp } from "react-feather";
 import Stats from "../landing/stats";
-import { Journal } from "src/types/shared";
+import { Journal, Expenses } from "src/types/shared"; // Ajoutez l'import Expenses
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
+import { ExpenseType } from "src/types/shared";
 
 const Divider = styled(MuiDivider)(spacing);
 const Typography = styled(MuiTypography)(spacing);
 
-function JournalDetails({
-  journals,
-  isLoading,
-  errorMemberReq,
-}: {
-  journals: Array<Journal>;
+interface JournalDetailsProps {
+  journals: Journal[];
+  dailyExpenses: Expenses[]; // Ajoutez cette interface
   isLoading: boolean;
   errorMemberReq: boolean;
-}) {
+}
+
+function JournalDetails({
+  journals,
+  dailyExpenses, // Ajoutez cette prop
+  isLoading,
+  errorMemberReq,
+}: JournalDetailsProps) {
+  // Utilisez l'interface définie
   const { t } = useTranslation();
   const {
     data: abonnementsData,
     isLoading: isLoadingAbonnements,
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
+
+  const dailyExpensesTotal = useMemo(() => {
+    const today = new Date().toLocaleDateString("en-CA");
+    return dailyExpenses
+      .filter((expense) => {
+        const expenseDate = new Date(expense.createdAt).toLocaleDateString(
+          "en-CA"
+        );
+        return expenseDate === today;
+      })
+      .reduce((acc, curr) => acc + curr.amount, 0);
+  }, [dailyExpenses]); // Dépendance sur dailyExpenses
 
   // Calcul des membres abonnés
   const subscribedMembersCount = useMemo(() => {
@@ -49,7 +67,7 @@ function JournalDetails({
     );
   }, [abonnementsData]);
 
-  // Calcul du cash existant + abonnements
+  // Calcul du cash total
   const cashTotal = useMemo(
     () =>
       journals.reduce(
@@ -67,16 +85,23 @@ function JournalDetails({
       <Grid container spacing={6}>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
-            title="Daily Members"
+            title="Daily Membres"
             count={journals?.length || 0}
             icon={<User />}
           />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
-            title="Members Subscribed"
+            title="Membership"
             count={subscribedMembersCount}
             icon={<CreditCard />}
+          />
+        </Grid>
+        <Grid item xs={12} sm={12} md={6} lg={4} xl>
+          <Stats
+            title="Daily Expense"
+            count={dailyExpensesTotal}
+            icon={<TrendingUp />}
           />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>

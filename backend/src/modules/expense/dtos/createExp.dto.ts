@@ -38,13 +38,4 @@ export class CreateExpenseDto {
   @IsNotEmpty()
   @IsEnum(ExpenseType)
   type: ExpenseType;
-
-  @ApiProperty({
-    example: '2024-03-01T00:00:00.000Z',
-    required: true,
-  })
-  @IsNotEmpty()
-  @IsDate()
-  @Type(() => Date)
-  date: Date;
 }

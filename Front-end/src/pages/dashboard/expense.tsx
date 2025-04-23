@@ -90,6 +90,10 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
       minWidth: "100%",
     },
   },
+  "& .MuiTableCell-head:last-child": {
+    textAlign: "center",
+    paddingRight: theme.spacing(3),
+  },
   "& .MuiTableRow-root": {
     backgroundColor: theme.palette.background.paper,
     "&:hover": {
@@ -177,7 +181,6 @@ const ExpenseComponent = () => {
     description: "",
     amount: 0,
     type: ExpenseType.MENSUEL,
-    date: new Date().toISOString(),
   });
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -211,13 +214,7 @@ const ExpenseComponent = () => {
       label: "Type",
       alwaysVisible: !isMobile,
     },
-    {
-      id: "date",
-      numeric: false,
-      disablePadding: false,
-      label: "Date",
-      alwaysVisible: !isMobile,
-    },
+
     {
       id: "actions",
       numeric: false,
@@ -279,7 +276,6 @@ const ExpenseComponent = () => {
           description: "",
           amount: 0,
           type: ExpenseType.MENSUEL,
-          date: new Date().toISOString(),
         });
       } catch (error: any) {
         console.error("Error details:", error);
@@ -377,7 +373,6 @@ const ExpenseComponent = () => {
                   description: "",
                   amount: 0,
                   type: ExpenseType.MENSUEL,
-                  date: new Date().toISOString(),
                 });
                 setShowDrawer(true);
               }}
@@ -429,9 +424,6 @@ const ExpenseComponent = () => {
                           {expenses.type === ExpenseType.MENSUEL
                             ? "Monthly"
                             : "Daily"}
-                        </ResponsiveTableCell>
-                        <ResponsiveTableCell>
-                          {new Date(expenses.date).toLocaleDateString()}
                         </ResponsiveTableCell>
                       </>
                     )}
@@ -580,25 +572,6 @@ const ExpenseComponent = () => {
           </Select>
           {errors?.type && <FormHelperText>{errors?.type}</FormHelperText>}
         </FormControl>
-
-        <TextField
-          label="Date"
-          type="datetime-local"
-          InputLabelProps={{ shrink: true }}
-          value={
-            editExpense?.date
-              ? new Date(editExpense.date).toISOString().slice(0, 16)
-              : newExpense.date.slice(0, 16)
-          }
-          onChange={(e) => {
-            const date = new Date(e.target.value).toISOString();
-            editExpense
-              ? setEditExpense({ ...editExpense, date })
-              : setNewExpense({ ...newExpense, date });
-          }}
-          error={!!errors?.date}
-          helperText={errors?.date}
-        />
 
         <Box
           sx={{

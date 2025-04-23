@@ -13,7 +13,6 @@ export const expenseApi = createApi({
         response.map((expense) => ({
           ...expense,
           amount: Number(expense.amount ?? 0),
-          date: new Date(expense.date).toISOString(),
         })),
       providesTags: (result) =>
         result

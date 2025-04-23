@@ -32,6 +32,16 @@ export class ExpensesController {
     return this.expensesService.create(createExpenseDto);
   }
 
+  @Post('/dailyExpense')
+  async createDailyExpense(@Body() body: { expenseId: string; date?: string }) {
+    const date = body.date ? new Date(body.date) : undefined;
+
+    return this.expensesService.createDailyExpense({
+      expenseId: body.expenseId,
+      date,
+    });
+  }
+
   @Get()
   @ApiOperation({ summary: 'Get all expenses' })
   @ApiResponse({
