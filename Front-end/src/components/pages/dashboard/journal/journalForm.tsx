@@ -42,6 +42,7 @@ import { PersonAdd } from "@mui/icons-material";
 import UserForm from "../members/UserForm";
 import { addHours, isSameDay } from "date-fns";
 import { useGetPricesQuery } from "src/api/price.repo";
+import { updateHoursAndMinutes } from "src/utils/shared";
 
 // ----------------------------------------------------------------------
 
@@ -156,6 +157,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
 
+  const createdByID = sessionStorage.getItem("userID");
+
   // Filtrer les prix pour n'afficher que ceux de type "journal"
   const journalPrices = React.useMemo(() => {
     return pricesList?.filter((price) => price.type === "journal") || [];
@@ -207,7 +210,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
   const handleCalculateTimeAndPrice = React.useCallback(
     (registredTime: Date, leaveTime: Date) => {
-      console.log("handleCalculateTimeAndPrice");
       const start = new Date(registredTime);
       const end = new Date(leaveTime);
       const matchingPrice = findMatchingPrice(start, end);
@@ -281,15 +283,16 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       if (!selectItem) {
         resetAsyn({
           ...defaultValues,
-          registredTime: today,
-          leaveTime: today,
-          // Retirer la logique isReservation: !isSameDay(...)
+          registredTime: updateHoursAndMinutes(today),
+          leaveTime: updateHoursAndMinutes(today),
         });
       } else {
         // Conserver la logique existante pour l'édition
         const updatedJournal: Partial<Journal> = {
           ...selectItem,
-          leaveTime: selectItem.isPayed ? selectItem.leaveTime : today,
+          leaveTime: selectItem.isPayed
+            ? selectItem.leaveTime
+            : updateHoursAndMinutes(today),
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
@@ -332,7 +335,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       handleClose();
     } else {
       try {
-        await createJournal(data as Journal).unwrap();
+        await createJournal({
+          ...data,
+          createdbyUserID: createdByID,
+        } as Journal).unwrap();
         setOpenSnak(true);
         handleClose();
       } catch (e) {
@@ -437,6 +443,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 {tarifAlert.message}
               </Alert>
             )}
+            {/* Nouvelle ComboBox sous le champ Price Payed */}
+
+            <FormControl fullWidth>
+              <RHCheckBox
+                defaultChecked={false}
+                name="isPayed"
+                label="Payment Status"
+              />
+            </FormControl>
 
             {!isLoadingPrices ? (
               <Box sx={{ mt: 2 }}>
@@ -486,20 +501,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               label="Price Payed (DT)"
               placeholder="Enter amount"
             />
-
-            {/* Nouvelle ComboBox sous le champ Price Payed */}
-            <FormControl fullWidth>
-              <InputLabel>Payment Status</InputLabel>
-              <Select
-                value={isPayed ? "paid" : "unpaid"}
-                onChange={(e) => setValue("isPayed", e.target.value === "paid")}
-                label="Payment Status"
-                sx={{ mb: 2 }}
-              >
-                <MenuItem value="paid">Paid</MenuItem>
-                <MenuItem value="unpaid">Unpaid</MenuItem>
-              </Select>
-            </FormControl>
 
             <FormControl fullWidth>
               <InputLabel>Reservation Status</InputLabel>

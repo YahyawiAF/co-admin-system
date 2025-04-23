@@ -29,7 +29,7 @@ import { ExpensesModule } from './modules/expense/expense.module';
         transport: {
           host: configService.get<string>('MAILER_HOST'), // Exemple : 'smtp.gmail.com'
           port: configService.get<number>('MAILER_PORT'), // Exemple : 587
-          secure: false, // true pour le port 465, false pour les autres ports
+          secure: true, // true pour le port 465, false pour les autres ports
           auth: {
             user: configService.get<string>('MAILER_USER'), // Votre adresse e-mail
             pass: configService.get<string>('MAILER_PASSWORD'), // Votre mot de passe e-mail
@@ -58,11 +58,11 @@ import { ExpensesModule } from './modules/expense/expense.module';
     ExpensesModule,
   ],
   controllers: [AppController],
-  providers: [AppService,PrismaService],
+  providers: [AppService, PrismaService],
 })
-export class AppModule implements NestModule { // Implémentez NestModule
+export class AppModule implements NestModule {
+  // Implémentez NestModule
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SecurityMiddleware).
-    forRoutes('auth'); // Appliquez le middleware à toutes les routes
+    consumer.apply(SecurityMiddleware).forRoutes('auth'); // Appliquez le middleware à toutes les routes
   }
 }

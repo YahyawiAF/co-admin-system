@@ -160,9 +160,9 @@ export interface Journal {
   updatedAt: Date;
   isReservation: boolean;
   priceId?: string | null;
-  price?: Price | null; 
-  expenses?: Expenses[]; 
-  expenseIds?: string[]; 
+  price?: Price | null;
+  expenses?: Expenses[];
+  expenseIds?: string[];
 }
 
 export interface Abonnement {
@@ -200,7 +200,6 @@ export interface Expenses {
   type: ExpenseType;
   createdAt: string;
   updatedAt: string;
-  journals?: Journal[];
 }
 export enum ExpenseType {
   MENSUEL = "MENSUEL",

@@ -21,6 +21,7 @@ model User {
   resetPasswordToken String?
   accessToken        String?
   phoneNumber        String?  @unique
+  Journals Journal[]
 
   @@map("users")
 }
@@ -72,6 +73,9 @@ model Journal {
   memberID      String?
   isReservation Boolean   @default(false)
   priceId       String?
+  createdbyUserID        String?
+
+  createdBy     User?   @relation(fields: [createdbyUserID], references: [id])
   members       Member?   @relation(fields: [memberID], references: [id])
   prices        Price?    @relation(fields: [priceId], references: [id])
 

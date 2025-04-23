@@ -92,7 +92,7 @@ const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
   },
   "& .MuiTableCell-head:last-child": {
     textAlign: "center",
-    paddingRight: theme.spacing(3)
+    paddingRight: theme.spacing(3),
   },
   "& .MuiTableRow-root": {
     backgroundColor: theme.palette.background.paper,
@@ -172,15 +172,16 @@ const ExpenseComponent = () => {
   const [updateExpense] = useUpdateExpenseMutation();
   const [deleteExpense] = useDeleteExpenseMutation();
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [typeFilter, setTypeFilter] = useState<ExpenseType | "all">("all");
-    const [newExpense, setNewExpense] = useState<Omit<Expenses, 'id' | 'createdAt' | 'updatedAt'>>({
-        name: "",
-        description: "",
-        amount: 0,
-        type: ExpenseType.MENSUEL,
-       
-    });
+  const [searchTerm, setSearchTerm] = useState("");
+  const [typeFilter, setTypeFilter] = useState<ExpenseType | "all">("all");
+  const [newExpense, setNewExpense] = useState<
+    Omit<Expenses, "id" | "createdAt" | "updatedAt">
+  >({
+    name: "",
+    description: "",
+    amount: 0,
+    type: ExpenseType.MENSUEL,
+  });
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [expenseToDelete, setExpenseToDelete] = useState<string | null>(null);
@@ -191,43 +192,52 @@ const ExpenseComponent = () => {
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("name");
 
-    const headCells = [
-        {
-            id: "name",
-            numeric: false,
-            disablePadding: false,
-            label: "Name",
-            alwaysVisible: false,
-        },
-        {
-            id: "amount",
-            numeric: false,
-            disablePadding: false,
-            label: "Amount",
-            alwaysVisible: false,
-        },
-        {
-            id: "type",
-            numeric: false,
-            disablePadding: false,
-            label: "Type",
-            alwaysVisible: !isMobile,
-        },
-        
-        {
-            id: "actions",
-            numeric: false,
-            disablePadding: false,
-            label: "Actions",
-            alwaysVisible: false,
-        },
-    ];
+  const headCells = [
+    {
+      id: "name",
+      numeric: false,
+      disablePadding: false,
+      label: "Name",
+      alwaysVisible: false,
+    },
+    {
+      id: "amount",
+      numeric: false,
+      disablePadding: false,
+      label: "Amount",
+      alwaysVisible: false,
+    },
+    {
+      id: "type",
+      numeric: false,
+      disablePadding: false,
+      label: "Type",
+      alwaysVisible: !isMobile,
+    },
 
-    // Gestion de la sélection et tri (identique à PriceComponent)
-    const handleSelectAllClick = (event: ChangeEvent<HTMLInputElement>) => { /* ... */ };
-    const handleClick = (event: React.MouseEvent<unknown>, id: string) => { /* ... */ };
-    const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => { /* ... */ };
-    const isSelected = (id: string) => selected.indexOf(id) !== -1;
+    {
+      id: "actions",
+      numeric: false,
+      disablePadding: false,
+      label: "Actions",
+      alwaysVisible: false,
+    },
+  ];
+
+  // Gestion de la sélection et tri (identique à PriceComponent)
+  const handleSelectAllClick = (event: ChangeEvent<HTMLInputElement>) => {
+    /* ... */
+  };
+  const handleClick = (event: React.MouseEvent<unknown>, id: string) => {
+    /* ... */
+  };
+  const handleRequestSort = (
+    event: React.MouseEvent<unknown>,
+    property: string
+  ) => {
+    /* ... */
+  };
+  const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
@@ -250,32 +260,31 @@ const ExpenseComponent = () => {
       errors.type = "Le type est obligatoire";
     }
 
-        setErrors(errors);
-        return Object.keys(errors).length === 0;
-    };
+    setErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
-    const handleAddExpense = async () => {
-        setErrors({});
-        if (validateForm()) {
-            try {
-                const response = await createExpense(newExpense).unwrap();
-                console.log('Success:', response);
-                setShowDrawer(false);
-                setNewExpense({
-                    name: "",
-                    description: "",
-                    amount: 0,
-                    type: ExpenseType.MENSUEL,
-                    
-                });
-            } catch (error: any) {
-                console.error("Error details:", error);
-                if (error.data) {
-                    setErrors(error.data.errors);
-                }
-            }
+  const handleAddExpense = async () => {
+    setErrors({});
+    if (validateForm()) {
+      try {
+        const response = await createExpense(newExpense).unwrap();
+        console.log("Success:", response);
+        setShowDrawer(false);
+        setNewExpense({
+          name: "",
+          description: "",
+          amount: 0,
+          type: ExpenseType.MENSUEL,
+        });
+      } catch (error: any) {
+        console.error("Error details:", error);
+        if (error.data) {
+          setErrors(error.data.errors);
         }
-    };
+      }
+    }
+  };
 
   const handleUpdateExpense = async () => {
     setErrors({});
@@ -306,11 +315,13 @@ const ExpenseComponent = () => {
     }
   };
 
-    const filteredExpenses = expenses?.filter((expense) => {
-        const matchesSearch = expense.name.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesType = typeFilter === "all" || expense.type === typeFilter;
-        return matchesSearch && matchesType;
-    });
+  const filteredExpenses = expenses?.filter((expense) => {
+    const matchesSearch = expense.name
+      .toLowerCase()
+      .includes(searchTerm.toLowerCase());
+    const matchesType = typeFilter === "all" || expense.type === typeFilter;
+    return matchesSearch && matchesType;
+  });
 
   const handleSearch = (e: ChangeEvent<HTMLInputElement>) =>
     setSearchTerm(e.target.value);
@@ -348,98 +359,108 @@ const ExpenseComponent = () => {
             </FormControl>
           </Grid>
 
-                    <Grid item xs={12} sm={8} md={9} sx={{ display: "flex", justifyContent: "flex-end" }}>
-                        <BulkActions
-                            handleClickOpen={() => {
-                                setNewExpense({
-                                    name: "",
-                                    description: "",
-                                    amount: 0,
-                                    type: ExpenseType.MENSUEL,
-                                   
-                                });
-                                setShowDrawer(true);
-                            }}
-                            onHandleSearch={handleSearch}
-                            search={searchTerm}
-                            refetch={refetch}
-                            isMobile={isMobile}
-                        />
-                    </Grid>
-                </Grid>
+          <Grid
+            item
+            xs={12}
+            sm={8}
+            md={9}
+            sx={{ display: "flex", justifyContent: "flex-end" }}
+          >
+            <BulkActions
+              handleClickOpen={() => {
+                setNewExpense({
+                  name: "",
+                  description: "",
+                  amount: 0,
+                  type: ExpenseType.MENSUEL,
+                });
+                setShowDrawer(true);
+              }}
+              onHandleSearch={handleSearch}
+              search={searchTerm}
+              refetch={refetch}
+              isMobile={isMobile}
+            />
+          </Grid>
+        </Grid>
 
-                <TableWrapper>
-                    <StyledTableContainer>
-                        <Table stickyHeader aria-label="expenses table">
-                            <EnhancedTableHead
-                                numSelected={selected.length}
-                                order={order}
-                                orderBy={orderBy}
-                                onSelectAllClick={handleSelectAllClick}
-                                onRequestSort={handleRequestSort}
-                                rowCount={filteredExpenses?.length || 0}
-                                headCells={headCells}
-                                isMobile={isMobile}
-                            />
-                            <TableBody>
-                                {filteredExpenses?.map((expenses) => (
-                                    <TableRow
-                                        key={expenses.id}
-                                        hover
-                                        onClick={(event) => handleClick(event, expenses.id)}
-                                        selected={isSelected(expenses.id)}
-                                    >
-                                        <ResponsiveTableCell padding="checkbox">
-                                            <Checkbox
-                                                color="primary"
-                                                checked={isSelected(expenses.id)}
-                                                inputProps={{ "aria-labelledby": expenses.id }}
-                                            />
-                                        </ResponsiveTableCell>
-                                        <ResponsiveTableCell>{expenses.name}</ResponsiveTableCell>
-                                        <ResponsiveTableCell>
-                                            {expenses.amount ? `${parseFloat(expenses.amount.toString())} DT` : "0 DT"}
-                                        </ResponsiveTableCell>
-                                        {!isMobile && (
-                                            <>
-                                                <ResponsiveTableCell>
-                                                    {expenses.type === ExpenseType.MENSUEL ? "Monthly" : "Daily"}
-                                                </ResponsiveTableCell>
-                                                
-                                            </>
-                                        )}
-                                        <ResponsiveTableCell align="center">
-                                            <Box display="flex" justifyContent="center" gap={1}>
-                                                <IconButton
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setEditExpense(expenses);
-                                                        setShowDrawer(true);
-                                                    }}
-                                                    size="small"
-                                                    color="primary"
-                                                >
-                                                    <EditIcon fontSize={isMobile ? "small" : "medium"} />
-                                                </IconButton>
-                                                <IconButton
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        confirmDeleteExpense(expenses.id);
-                                                    }}
-                                                    size="small"
-                                                    color="error"
-                                                >
-                                                    <DeleteIcon fontSize={isMobile ? "small" : "medium"} />
-                                                </IconButton>
-                                            </Box>
-                                        </ResponsiveTableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </StyledTableContainer>
-                </TableWrapper>
-            </MainContainer>
+        <TableWrapper>
+          <StyledTableContainer>
+            <Table stickyHeader aria-label="expenses table">
+              <EnhancedTableHead
+                numSelected={selected.length}
+                order={order}
+                orderBy={orderBy}
+                onSelectAllClick={handleSelectAllClick}
+                onRequestSort={handleRequestSort}
+                rowCount={filteredExpenses?.length || 0}
+                headCells={headCells}
+                isMobile={isMobile}
+              />
+              <TableBody>
+                {filteredExpenses?.map((expenses) => (
+                  <TableRow
+                    key={expenses.id}
+                    hover
+                    onClick={(event) => handleClick(event, expenses.id)}
+                    selected={isSelected(expenses.id)}
+                  >
+                    <ResponsiveTableCell padding="checkbox">
+                      <Checkbox
+                        color="primary"
+                        checked={isSelected(expenses.id)}
+                        inputProps={{ "aria-labelledby": expenses.id }}
+                      />
+                    </ResponsiveTableCell>
+                    <ResponsiveTableCell>{expenses.name}</ResponsiveTableCell>
+                    <ResponsiveTableCell>
+                      {expenses.amount
+                        ? `${parseFloat(expenses.amount.toString())} DT`
+                        : "0 DT"}
+                    </ResponsiveTableCell>
+                    {!isMobile && (
+                      <>
+                        <ResponsiveTableCell>
+                          {expenses.type === ExpenseType.MENSUEL
+                            ? "Monthly"
+                            : "Daily"}
+                        </ResponsiveTableCell>
+                      </>
+                    )}
+                    <ResponsiveTableCell align="center">
+                      <Box display="flex" justifyContent="center" gap={1}>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditExpense(expenses);
+                            setShowDrawer(true);
+                          }}
+                          size="small"
+                          color="primary"
+                        >
+                          <EditIcon fontSize={isMobile ? "small" : "medium"} />
+                        </IconButton>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            confirmDeleteExpense(expenses.id);
+                          }}
+                          size="small"
+                          color="error"
+                        >
+                          <DeleteIcon
+                            fontSize={isMobile ? "small" : "medium"}
+                          />
+                        </IconButton>
+                      </Box>
+                    </ResponsiveTableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </StyledTableContainer>
+        </TableWrapper>
+      </MainContainer>
 
       <Dialog
         open={showDeleteModal}
@@ -461,38 +482,38 @@ const ExpenseComponent = () => {
         </DialogActions>
       </Dialog>
 
-            <Drawer
-                anchor="right"
-                open={showDrawer}
-                onClose={() => {
-                    setShowDrawer(false);
-                    setEditExpense(null);
-                    setErrors({});
-                }}
-                PaperProps={{
-                    sx: {
-                        width: isMobile ? "100%" : "450px",
-                        padding: isMobile ? theme.spacing(2) : theme.spacing(3),
-                        gap: "20px",
-                    },
-                }}
-            >
-                <Typography variant="h6" sx={{ mb: 3 }}>
-                    {editExpense ? "Edit Expense" : "New Expense"}
-                </Typography>
+      <Drawer
+        anchor="right"
+        open={showDrawer}
+        onClose={() => {
+          setShowDrawer(false);
+          setEditExpense(null);
+          setErrors({});
+        }}
+        PaperProps={{
+          sx: {
+            width: isMobile ? "100%" : "450px",
+            padding: isMobile ? theme.spacing(2) : theme.spacing(3),
+            gap: "20px",
+          },
+        }}
+      >
+        <Typography variant="h6" sx={{ mb: 3 }}>
+          {editExpense ? "Edit Expense" : "New Expense"}
+        </Typography>
 
-                <TextField
-                    label="Name"
-                    fullWidth
-                    value={editExpense?.name || newExpense.name}
-                    onChange={(e) =>
-                        editExpense
-                            ? setEditExpense({ ...editExpense, name: e.target.value })
-                            : setNewExpense({ ...newExpense, name: e.target.value })
-                    }
-                    error={!!errors?.name} // <-- Ajout du ?. ici
-                    helperText={errors?.name || ''} // <-- Et ici
-                />
+        <TextField
+          label="Name"
+          fullWidth
+          value={editExpense?.name || newExpense.name}
+          onChange={(e) =>
+            editExpense
+              ? setEditExpense({ ...editExpense, name: e.target.value })
+              : setNewExpense({ ...newExpense, name: e.target.value })
+          }
+          error={!!errors?.name} // <-- Ajout du ?. ici
+          helperText={errors?.name || ""} // <-- Et ici
+        />
 
         <TextField
           label="Description"
@@ -552,17 +573,26 @@ const ExpenseComponent = () => {
           {errors?.type && <FormHelperText>{errors?.type}</FormHelperText>}
         </FormControl>
 
-                
-
-                <Box sx={{ display: "flex", gap: "10px", mt: "auto", flexDirection: isMobile ? "column" : "row" }}>
-                    <ActionButton onClick={() => setShowDrawer(false)}>Cancel</ActionButton>
-                    <SubmitButton onClick={editExpense ? handleUpdateExpense : handleAddExpense}>
-                        {editExpense ? "Update" : "Create"}
-                    </SubmitButton>
-                </Box>
-            </Drawer>
-        </PageContainer>
-    );
+        <Box
+          sx={{
+            display: "flex",
+            gap: "10px",
+            mt: "auto",
+            flexDirection: isMobile ? "column" : "row",
+          }}
+        >
+          <ActionButton onClick={() => setShowDrawer(false)}>
+            Cancel
+          </ActionButton>
+          <SubmitButton
+            onClick={editExpense ? handleUpdateExpense : handleAddExpense}
+          >
+            {editExpense ? "Update" : "Create"}
+          </SubmitButton>
+        </Box>
+      </Drawer>
+    </PageContainer>
+  );
 };
 
 ExpenseComponent.getLayout = function getLayout(page: ReactElement) {

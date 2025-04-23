@@ -1,7 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ExpenseType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import { IsDate, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsDate,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export class CreateExpenseDto {
   @ApiProperty({ example: 'Loyer salle', required: true })
@@ -9,9 +16,9 @@ export class CreateExpenseDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ 
-    example: 'Paiement mensuel de la location', 
-    required: false 
+  @ApiProperty({
+    example: 'Paiement mensuel de la location',
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -22,15 +29,13 @@ export class CreateExpenseDto {
   @IsNumber()
   amount: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     enum: ExpenseType,
     enumName: 'ExpenseType',
     example: ExpenseType.MENSUEL,
-    required: true 
+    required: true,
   })
   @IsNotEmpty()
   @IsEnum(ExpenseType)
   type: ExpenseType;
-
-  
 }
