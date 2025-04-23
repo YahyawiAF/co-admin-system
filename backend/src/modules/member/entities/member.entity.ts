@@ -6,7 +6,6 @@ export class MemberEntity implements Member {
   constructor(partial: Partial<MemberEntity>) {
     Object.assign(this, partial);
   }
-    userId: number;
 
   @ApiProperty({ description: 'Unique identifier for the member' })
   id: string;
@@ -55,6 +54,12 @@ export class MemberEntity implements Member {
     required: false,
   })
   deletedAt: Date | null;
+
+  @ApiProperty({
+    description: 'userId connect member to user',
+    required: false,
+  })
+  userId: number | null;
 
   @ApiProperty({ description: 'Indicates whether the member is active' })
   isActive: boolean;
