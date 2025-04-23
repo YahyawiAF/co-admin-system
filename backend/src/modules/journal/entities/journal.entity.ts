@@ -1,25 +1,22 @@
 import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
-import { PriceEntity } from '@/modules/price/entities/price.entity';
-import { ExpenseEntity } from '@/modules/expense/entities/exp.entitie';
+import { PriceEntity } from '@/modules/price/entities/price.entity'; // Importez l'entité PriceEntity
+import { UserEntity } from '@/modules/user/entities/user.entity';
 
 export class JournalEntity {
-  constructor({ members, price, expenses, ...data }: Partial<JournalEntity>) {
+  constructor({ members, price, createdBy, ...data }: Partial<JournalEntity>) {
     Object.assign(this, data);
-    
     if (members) {
       this.members = new MemberEntity(members);
     }
-    
+
+    if (createdBy) {
+      this.createdBy = new UserEntity(createdBy);
+    }
+
     if (price) {
       this.price = new PriceEntity(price);
     }
-    
-    if (expenses) {
-        // Pour la relation many-to-many
-        this.expenses = expenses.map(expense => new ExpenseEntity(expense));
-        this.expenseIds = expenses.map(e => e.id); // Extraction des IDs
-      }
   }
 
   @ApiProperty()
@@ -38,13 +35,13 @@ export class JournalEntity {
   payedAmount: number;
 
   @ApiProperty()
-  userId: string | null;
+  createdbyUserID: string | null;
 
   @ApiProperty()
-  createdAt: Date;
+  createdAt: Date | null;
 
   @ApiProperty()
-  updatedAt: Date;
+  updatedAt: Date | null;
 
   @ApiProperty()
   memberID: string;
@@ -52,17 +49,15 @@ export class JournalEntity {
   @ApiProperty()
   isReservation: boolean;
 
-  @ApiProperty({ type: PriceEntity, required: false })
-  price?: PriceEntity;
+  @ApiProperty({ required: false, type: UserEntity })
+  createdBy?: UserEntity;
 
-  @ApiProperty()
-  priceId?: string;
-
-  @ApiProperty({ type: MemberEntity, required: false })
+  @ApiProperty({ required: false, type: MemberEntity })
   members?: MemberEntity;
 
-  @ApiProperty({ type: [ExpenseEntity], required: false })
-  expenses?: ExpenseEntity[];
-  @ApiProperty({ type: [String], required: false})
-  expenseIds?: string[];
+  @ApiProperty({ required: false, type: PriceEntity })
+  price?: PriceEntity; // Ajoutez une référence à l'entité PriceEntity
+
+  @ApiProperty()
+  priceId: string; // Ajoutez une propriété priceId pour la relation
 }
