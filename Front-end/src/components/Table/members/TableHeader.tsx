@@ -34,6 +34,7 @@ interface IBulkActions {
   toDay?: Date;
   handleChangeDate?: (date: Date | null) => void;
   isMobile?: boolean;
+  handleDailyExpenseClick: () => void;
 }
 
 const BulkActions: FC<IBulkActions> = ({
@@ -43,6 +44,7 @@ const BulkActions: FC<IBulkActions> = ({
   refetch,
   toDay,
   handleChangeDate,
+  handleDailyExpenseClick,
 }) => {
   const isCurrentDay = () => {
     if (!toDay) return false;
@@ -119,6 +121,7 @@ const BulkActions: FC<IBulkActions> = ({
                 }}
               />
 
+
               {/* MobileDatePicker */}
               <MobileDatePicker
                 value={toDay}
@@ -163,6 +166,7 @@ const BulkActions: FC<IBulkActions> = ({
                   zIndex: 1,
                 }}
               />
+
             </div>
 
             {/* Current Day button */}
@@ -181,6 +185,13 @@ const BulkActions: FC<IBulkActions> = ({
               }}
             >
               Current Day
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleDailyExpenseClick}
+              sx={{ ml: 2 }}
+            >
+              Daily Expense
             </Button>
           </Box>
         )}

@@ -9,7 +9,7 @@ import {
 import { spacing } from "@mui/system";
 import { DollarSign, CreditCard, User, TrendingUp } from "react-feather";
 import Stats from "../landing/stats";
-import { Journal, Expenses } from "src/types/shared"; // Ajoutez l'import Expenses
+import { Journal, Expenses, DailyExpense } from "src/types/shared"; // Ajoutez l'import Expenses
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
 import { ExpenseType } from "src/types/shared";
 
@@ -18,9 +18,10 @@ const Typography = styled(MuiTypography)(spacing);
 
 interface JournalDetailsProps {
   journals: Journal[];
-  dailyExpenses: Expenses[]; // Ajoutez cette interface
+  dailyExpenses: DailyExpense[]; // Ajoutez cette interface
   isLoading: boolean;
   errorMemberReq: boolean;
+  selectedDate: Date;
 }
 
 function JournalDetails({
@@ -28,6 +29,8 @@ function JournalDetails({
   dailyExpenses, // Ajoutez cette prop
   isLoading,
   errorMemberReq,
+
+  selectedDate,
 }: JournalDetailsProps) {
   // Utilisez l'interface définie
   const { t } = useTranslation();
@@ -36,47 +39,53 @@ function JournalDetails({
     isLoading: isLoadingAbonnements,
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
-
-  const dailyExpensesTotal = useMemo(() => {
-    const today = new Date().toLocaleDateString("en-CA");
-    return dailyExpenses
-      .filter((expense) => {
-        const expenseDate = new Date(expense.createdAt).toLocaleDateString(
-          "en-CA"
-        );
-        return expenseDate === today;
-      })
-      .reduce((acc, curr) => acc + curr.amount, 0);
-  }, [dailyExpenses]); // Dépendance sur dailyExpenses
-
-  // Calcul des membres abonnés
-  const subscribedMembersCount = useMemo(() => {
-    if (!abonnementsData?.data) return 0;
-    const uniqueMemberIds = new Set(
-      abonnementsData.data.map((a) => a.memberID)
+  const isSameDay = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
     );
-    return uniqueMemberIds.size;
-  }, [abonnementsData]);
+  };
+  const dailyExpensesTotal = useMemo(() => {
+    return dailyExpenses.reduce((acc, curr) => {
+      const expenseDate = new Date(curr.date || curr.createdAt);
+      if (!isSameDay(expenseDate, selectedDate)) return acc;
+      return acc + curr.expense.amount;
+    }, 0);
+  }, [dailyExpenses, selectedDate]);
+  // Calcul des membres abonnés
+  const dailySubscribedMembersCount = useMemo(() => {
+    if (!abonnementsData?.data) return 0;
+    return abonnementsData.data.filter(abonnement => {
+      const abonnementDate = new Date(abonnement.createdAt);
+      return isSameDay(abonnementDate, selectedDate);
+    }).length;
+  }, [abonnementsData, selectedDate]);
 
   // Calcul du total des paiements pour les abonnements
   const cashSubscribedTotal = useMemo(() => {
     if (!abonnementsData?.data) return 0;
-    return abonnementsData.data.reduce(
-      (acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0),
-      0
-    );
-  }, [abonnementsData]);
+
+    return abonnementsData.data
+      .filter(abonnement => {
+        const abonnementDate = new Date(abonnement.createdAt);
+        return isSameDay(abonnementDate, selectedDate);
+      })
+      .reduce((acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0), 0);
+  }, [abonnementsData, selectedDate]);
 
   // Calcul du cash total
-  const cashTotal = useMemo(
-    () =>
-      journals.reduce(
-        (acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc),
-        0
-      ) + cashSubscribedTotal,
-    [journals, cashSubscribedTotal]
-  );
-
+  const cashTotal = useMemo(() => {
+    return (
+      journals
+        .filter(journal => isSameDay(new Date(journal.registredTime), selectedDate))
+        .reduce((acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc), 0)
+      +
+      (abonnementsData?.data
+        ?.filter(abonnement => isSameDay(new Date(abonnement.createdAt), selectedDate))
+        .reduce((acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0), 0) || 0)
+    );
+  }, [journals, abonnementsData, selectedDate]);
   if (isLoading || isLoadingAbonnements) return <p>Loading</p>;
   if (errorMemberReq || errorAbonnements) return <p>Error!</p>;
 
@@ -93,7 +102,7 @@ function JournalDetails({
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
             title="Membership"
-            count={subscribedMembersCount}
+            count={dailySubscribedMembersCount}
             icon={<CreditCard />}
           />
         </Grid>

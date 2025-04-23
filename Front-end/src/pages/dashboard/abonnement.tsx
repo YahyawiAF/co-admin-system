@@ -651,8 +651,9 @@ const AbonnementComponent = () => {
           onHandleSearch={handleSearch}
           search={search}
           refetch={refetch}
-          isMobile={isMobile}
-        />
+          isMobile={isMobile} handleDailyExpenseClick={function (): void {
+            throw new Error("Function not implemented.");
+          } }        />
         <Box
           sx={{
             display: "flex",
