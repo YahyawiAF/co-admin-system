@@ -22,8 +22,8 @@ export class ExpenseEntity {
   type: ExpenseType;
 
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
-  createdAt: Date;
+  createdAt: Date | null;
 
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
-  updatedAt: Date;
+  updatedAt: Date | null;
 }

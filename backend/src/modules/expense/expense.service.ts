@@ -1,22 +1,19 @@
 // src/expenses/expenses.service.ts
 import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
 import { CreateExpenseDto } from './dtos/createExp.dto';
 import { ExpenseEntity } from './entities/exp.entitie';
 import { UpdateExpDto } from './dtos/updateExp.dto';
+import { PrismaService } from 'database/prisma.service';
 
 @Injectable()
 export class ExpensesService {
-  private prisma = new PrismaClient();
-
+  constructor(private prisma: PrismaService) {}
   async create(createExpenseDto: CreateExpenseDto) {
     return new ExpenseEntity(
       await this.prisma.expense.create({
         data: {
           ...createExpenseDto,
           amount: createExpenseDto.amount,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         },
       }),
     );
@@ -40,7 +37,6 @@ export class ExpensesService {
         data: {
           ...updateExpDto,
           amount: updateExpDto.amount,
-          updatedAt: new Date(),
         },
       }),
     );
