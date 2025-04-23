@@ -24,6 +24,17 @@ export class ExpensesService {
     return expenses.map((expense) => new ExpenseEntity(expense));
   }
 
+  async createDailyExpense(data: { expenseId: string; date?: Date }) {
+    const date = data.date ?? new Date();
+
+    return this.prisma.dailyExpense.create({
+      data: {
+        expenseId: data.expenseId,
+        date,
+      },
+    });
+  }
+
   async findOne(id: string) {
     return new ExpenseEntity(
       await this.prisma.expense.findUnique({ where: { id } }),

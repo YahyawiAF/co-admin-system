@@ -128,15 +128,26 @@ model Product {
 }
 
 model Expense {
-  id          String      @id @default(uuid())
+  id          String         @id @default(uuid())
   name        String
   description String?
-  amount      Float       @map("prix")
+  amount      Float          @map("prix")
   type        ExpenseType
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  logs        DailyExpense[]
 
   @@map("expenses")
+}
+
+model DailyExpense {
+  id        String   @id @default(uuid())
+  expenseId String
+  expense   Expense  @relation(fields: [expenseId], references: [id])
+  date      DateTime // Just the day, like 2025-04-23
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum ExpenseType {
