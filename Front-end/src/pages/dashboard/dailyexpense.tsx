@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
     Modal,
     Box,
@@ -36,6 +36,7 @@ interface DailyExpenseModalProps {
     onClose: () => void;
     expenses: Array<{ id: string; name: string; amount: number; type: ExpenseType }>;
     onSubmit: (data: { expenseId: string; date?: string }) => void;
+    initialData?: { expenseId: string; date?: string }; // Add initialData for updates
 }
 
 export default function DailyExpenseModal({
@@ -43,9 +44,14 @@ export default function DailyExpenseModal({
     onClose,
     expenses,
     onSubmit,
+    initialData,
 }: DailyExpenseModalProps) {
-    const [selectedExpenseId, setSelectedExpenseId] = useState("");
-    const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [selectedExpenseId, setSelectedExpenseId] = useState(
+        initialData?.expenseId || ""
+    );
+    const [selectedDate, setSelectedDate] = useState<Date | null>(
+        initialData?.date ? new Date(initialData.date) : null
+    );
     const [openNewExpenseDialog, setOpenNewExpenseDialog] = useState(false);
     const [newExpense, setNewExpense] = useState({
         name: "",
@@ -56,7 +62,19 @@ export default function DailyExpenseModal({
     const [createExpense] = useCreateExpenseMutation();
 
     // Filtrer les dépenses de type JOURNALIER
-    const journalierExpenses = expenses.filter(expense => expense.type === "JOURNALIER");
+    const journalierExpenses = expenses.filter(
+        (expense) => expense.type === "JOURNALIER"
+    );
+
+    // Update state when initialData changes
+    useEffect(() => {
+        if (initialData) {
+            setSelectedExpenseId(initialData.expenseId || "");
+            setSelectedDate(
+                initialData.date ? new Date(initialData.date) : null
+            );
+        }
+    }, [initialData]);
 
     const handleCreateNewExpense = async () => {
         try {
@@ -94,10 +112,10 @@ export default function DailyExpenseModal({
             <Modal open={open} onClose={onClose}>
                 <Box sx={style}>
                     <Typography variant="h6" mb={2}>
-                        Add Daily Expense
+                        {initialData ? "Update Daily Expense" : "Add Daily Expense"}
                     </Typography>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <TextField
                             select
                             fullWidth
@@ -116,15 +134,15 @@ export default function DailyExpenseModal({
 
                         <IconButton
                             sx={{
-                                backgroundColor: 'primary.main',
-                                color: 'white',
-                                '&:hover': {
-                                    backgroundColor: 'primary.dark',
+                                backgroundColor: "primary.main",
+                                color: "white",
+                                "&:hover": {
+                                    backgroundColor: "primary.dark",
                                 },
-                                borderRadius: '50%',
+                                borderRadius: "50%",
                                 width: 30,
                                 height: 30,
-                                mt: 2
+                                mt: 2,
                             }}
                             onClick={() => setOpenNewExpenseDialog(true)}
                         >
@@ -149,7 +167,7 @@ export default function DailyExpenseModal({
                             onClick={handleSubmit}
                             disabled={!selectedExpenseId}
                         >
-                            Confirmer
+                            {initialData ? "Update" : "Confirmer"}
                         </Button>
                     </Stack>
                 </Box>

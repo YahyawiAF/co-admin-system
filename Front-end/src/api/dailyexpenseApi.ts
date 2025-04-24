@@ -1,22 +1,6 @@
-// src/services/dailyExpenseApi.ts
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { API_URL } from "../config/axios";
-import { ExpenseType } from "src/types/shared";
-
-export interface DailyExpense {
-    id: string;
-    expenseId: string;
-    date: string;
-    expense?: {
-        id: string;
-        name: string;
-        description?: string;
-        amount: number;
-        type: ExpenseType;
-        createdAt: string;
-        updatedAt: string;
-    };
-}
+import { DailyExpense, ExpenseType, Expenses } from "src/types/shared";
 
 export const dailyExpenseApi = createApi({
     reducerPath: "dailyExpenseApi",
@@ -27,8 +11,20 @@ export const dailyExpenseApi = createApi({
             query: () => `expenses/daily/all`,
             transformResponse: (response: any[]) =>
                 response.map((expense) => ({
-                    ...expense,
-                    date: new Date(expense.date).toISOString(),
+                    id: expense.id,
+                    expenseId: expense.expenseId,
+                    date: expense.date ? new Date(expense.date).toISOString() : undefined,
+                    createdAt: expense.createdAt || new Date().toISOString(), // Valeur par défaut
+                    updatedAt: expense.updatedAt || new Date().toISOString(), // Valeur par défaut
+                    expense: expense.expense || {
+                        id: expense.expenseId,
+                        name: "Inconnu",
+                        description: "",
+                        amount: 0,
+                        type: "JOURNALIER" as ExpenseType,
+                        createdAt: expense.createdAt || new Date().toISOString(),
+                        updatedAt: expense.updatedAt || new Date().toISOString(),
+                    },
                 })),
             providesTags: (result) =>
                 result
@@ -42,8 +38,20 @@ export const dailyExpenseApi = createApi({
         getDailyExpenseById: builder.query<DailyExpense, string>({
             query: (id) => `expenses/daily/${id}`,
             transformResponse: (response: any) => ({
-                ...response,
-                date: new Date(response.date).toISOString(),
+                id: response.id,
+                expenseId: response.expenseId,
+                date: response.date ? new Date(response.date).toISOString() : undefined,
+                createdAt: response.createdAt || new Date().toISOString(),
+                updatedAt: response.updatedAt || new Date().toISOString(),
+                expense: response.expense || {
+                    id: response.expenseId,
+                    name: "Inconnu",
+                    description: "",
+                    amount: 0,
+                    type: "JOURNALIER" as ExpenseType,
+                    createdAt: response.createdAt || new Date().toISOString(),
+                    updatedAt: response.updatedAt || new Date().toISOString(),
+                },
             }),
             providesTags: (result, error, id) => [{ type: "DailyExpense", id }],
         }),
@@ -58,6 +66,22 @@ export const dailyExpenseApi = createApi({
                 body: {
                     expenseId: data.expenseId,
                     date: data.date ? new Date(data.date).toISOString() : undefined,
+                },
+            }),
+            transformResponse: (response: any) => ({
+                id: response.id,
+                expenseId: response.expenseId,
+                date: response.date ? new Date(response.date).toISOString() : undefined,
+                createdAt: response.createdAt || new Date().toISOString(),
+                updatedAt: response.updatedAt || new Date().toISOString(),
+                expense: response.expense || {
+                    id: response.expenseId,
+                    name: "Inconnu",
+                    description: "",
+                    amount: 0,
+                    type: "JOURNALIER" as ExpenseType,
+                    createdAt: response.createdAt || new Date().toISOString(),
+                    updatedAt: response.updatedAt || new Date().toISOString(),
                 },
             }),
             invalidatesTags: [{ type: "DailyExpense", id: "LIST" }],
@@ -76,6 +100,22 @@ export const dailyExpenseApi = createApi({
                 body: {
                     expenseId: data.expenseId,
                     date: data.date ? new Date(data.date).toISOString() : undefined,
+                },
+            }),
+            transformResponse: (response: any) => ({
+                id: response.id,
+                expenseId: response.expenseId,
+                date: response.date ? new Date(response.date).toISOString() : undefined,
+                createdAt: response.createdAt || new Date().toISOString(),
+                updatedAt: response.updatedAt || new Date().toISOString(),
+                expense: response.expense || {
+                    id: response.expenseId,
+                    name: "Inconnu",
+                    description: "",
+                    amount: 0,
+                    type: "JOURNALIER" as ExpenseType,
+                    createdAt: response.createdAt || new Date().toISOString(),
+                    updatedAt: response.updatedAt || new Date().toISOString(),
                 },
             }),
             invalidatesTags: (result, error, { id }) => [
@@ -97,7 +137,6 @@ export const dailyExpenseApi = createApi({
     }),
 });
 
-// Export des hooks
 export const {
     useGetAllDailyExpensesQuery,
     useGetDailyExpenseByIdQuery,

@@ -460,10 +460,10 @@ function JournalPage() {
           journals={rows}
           isLoading={isLoading}
           errorMemberReq={!!error}
-          dailyExpenses={dailyExpenses as unknown as DailyExpense[]}
-          selectedDate={today} />
-
-
+          dailyExpenses={dailyExpenses}
+          expenses={expenses} // Ajouter expenses
+          selectedDate={today}
+        />
       </TabPanel>
 
 
