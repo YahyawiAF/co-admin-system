@@ -34,7 +34,8 @@ interface IBulkActions {
   toDay?: Date;
   handleChangeDate?: (date: Date | null) => void;
   isMobile?: boolean;
-  handleDailyExpenseClick: () => void;
+  handleDailyExpenseClick?: () => void;
+  showDailyExpenseButton?: boolean;
 }
 
 const BulkActions: FC<IBulkActions> = ({
@@ -45,10 +46,10 @@ const BulkActions: FC<IBulkActions> = ({
   toDay,
   handleChangeDate,
   handleDailyExpenseClick,
+  showDailyExpenseButton = false,
 }) => {
   const isCurrentDay = () => {
     if (!toDay) return false;
-
     const today = new Date();
     return (
       toDay.getDate() === today.getDate() &&
@@ -89,7 +90,6 @@ const BulkActions: FC<IBulkActions> = ({
         marginBottom: { xs: "12px", md: "unset" },
       }}
     >
-      {/* Left part: DatePicker and Current Day */}
       <Box display="flex" alignItems="center" gap="10px">
         {handleChangeDate && (
           <Box display="flex" alignItems="center" gap="10px">
@@ -102,7 +102,6 @@ const BulkActions: FC<IBulkActions> = ({
                 borderRadius: "4px",
               }}
             >
-              {/* Left arrow */}
               <Button
                 onClick={goToPreviousDay}
                 variant="outlined"
@@ -120,9 +119,6 @@ const BulkActions: FC<IBulkActions> = ({
                   zIndex: 1,
                 }}
               />
-
-
-              {/* MobileDatePicker */}
               <MobileDatePicker
                 value={toDay}
                 onChange={(value) => handleChangeDate(value)}
@@ -147,8 +143,6 @@ const BulkActions: FC<IBulkActions> = ({
                   },
                 }}
               />
-
-              {/* Right arrow */}
               <Button
                 onClick={goToNextDay}
                 variant="outlined"
@@ -166,10 +160,7 @@ const BulkActions: FC<IBulkActions> = ({
                   zIndex: 1,
                 }}
               />
-
             </div>
-
-            {/* Current Day button */}
             <Button
               variant="outlined"
               color={isCurrentDay() ? "success" : "primary"}
@@ -179,27 +170,24 @@ const BulkActions: FC<IBulkActions> = ({
                 minWidth: "120px",
                 padding: "6px 9px",
                 marginLeft: "0px",
-                backgroundColor: isCurrentDay()
-                  ? "rgba(46, 125, 50, 0.08)"
-                  : "inherit",
+                backgroundColor: isCurrentDay() ? "rgba(46, 125, 50, 0.08)" : "inherit",
               }}
             >
               Current Day
             </Button>
-            <Button
-              variant="contained"
-              onClick={handleDailyExpenseClick}
-              sx={{ ml: 2 }}
-            >
-              Daily Expense
-            </Button>
+            {showDailyExpenseButton && handleDailyExpenseClick && (
+              <Button
+                variant="contained"
+                onClick={handleDailyExpenseClick}
+                sx={{ ml: 2 }}
+              >
+                Daily Expense
+              </Button>
+            )}
           </Box>
         )}
       </Box>
-
-      {/* Right part: Refresh and Search */}
       <Box display="flex" alignItems="center" gap="10px">
-        {/* Refresh button */}
         {refetch && (
           <Box display="flex" alignItems="center">
             <Button
@@ -212,8 +200,6 @@ const BulkActions: FC<IBulkActions> = ({
             </Button>
           </Box>
         )}
-
-        {/* Search bar */}
         <Box display="flex" alignItems="center">
           <CustomTextField
             placeholder="Search"
@@ -232,7 +218,6 @@ const BulkActions: FC<IBulkActions> = ({
   );
 };
 
-// Custom styled TextField
 const CustomTextField = styled(TextField)`
   && {
     box-shadow: unset;

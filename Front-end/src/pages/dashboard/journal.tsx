@@ -1,3 +1,4 @@
+
 import React, { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
@@ -16,11 +17,8 @@ import {
   IconButton,
   Tabs,
   Box,
-
 } from "@mui/material";
-
 import { spacing } from "@mui/system";
-
 import DashboardLayout from "../../layouts/Dashboard";
 import { DailyExpense, Journal } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
@@ -30,11 +28,9 @@ import {
   Edit as ArchiveIcon,
   Delete,
   Edit,
-  Delete as RemoveRedEyeIcon,
   Done,
 } from "@mui/icons-material";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
-// import CardBank from "src/components/pages/dashboard/card/BankCard";
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
@@ -50,15 +46,13 @@ import {
 import JournalDetails from "src/components/pages/dashboard/journal/JournalDetails";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
-import ProtectedRoute from "src/components/auth/ProtectedRoute";
-import Abonnement from "./abonnement";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
+import Abonnement from "./abonnement";
 import { useGetExpensesQuery } from "src/api/expenseApi";
 import { useCreateDailyExpenseMutation, useGetAllDailyExpensesQuery } from "src/api/dailyexpenseApi";
 import DailyExpenseModal from "./dailyexpense";
 
 const Divider = styled(MuiDivider)(spacing);
-
 const Paper = styled(MuiPaper)(spacing);
 
 const headCells: Array<HeadCell> = [
@@ -111,10 +105,10 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
   });
 }
 
-const applyFilters = (
+function applyFilters(
   keywordServices: Journal[],
   filters: Filters
-): Journal[] => {
+): Journal[] {
   return keywordServices?.filter((keywordServices) => {
     let matches = true;
     const { query } = filters;
@@ -129,10 +123,9 @@ const applyFilters = (
             .includes(query.toLowerCase());
       });
     }
-
     return matches;
   });
-};
+}
 
 function JournalPage() {
   const { data: dailyExpenses = [] } = useGetAllDailyExpensesQuery();
@@ -150,7 +143,6 @@ function JournalPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
-
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
 
@@ -170,8 +162,6 @@ function JournalPage() {
   const [deleteJournal] = useDeleteJournalMutation();
 
   const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
-
-  console.log({ rows });
 
   const handleRequestSort = (event: any, property: string) => {
     const isAsc = orderBy === property && order === "asc";
@@ -198,7 +188,29 @@ function JournalPage() {
         selected.slice(selectedIndex + 1)
       );
     }
+    setSelected(newSelected);
+  };
 
+  // New handler for Checkbox onChange
+  const handleCheckboxChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+    id: string
+  ) => {
+    const selectedIndex = selected.indexOf(id);
+    let newSelected: Array<string> = [];
+
+    if (selectedIndex === -1) {
+      newSelected = newSelected.concat(selected, id);
+    } else if (selectedIndex === 0) {
+      newSelected = newSelected.concat(selected.slice(1));
+    } else if (selectedIndex === selected.length - 1) {
+      newSelected = newSelected.concat(selected.slice(0, -1));
+    } else if (selectedIndex > 0) {
+      newSelected = newSelected.concat(
+        selected.slice(0, selectedIndex),
+        selected.slice(selectedIndex + 1)
+      );
+    }
     setSelected(newSelected);
   };
 
@@ -215,6 +227,7 @@ function JournalPage() {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
+
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
   const handleClickOpen = () => {
@@ -262,24 +275,22 @@ function JournalPage() {
     if (date) setToday(date);
   };
 
+  const handleCreateDailyExpense = async (data: { expenseId: string; date?: string }) => {
+    try {
+      await createDailyExpense(data).unwrap();
+      setDailyExpenseOpen(false);
+    } catch (error) {
+      console.error("Failed to create daily expense:", error);
+    }
+  };
+
   const emptyRows =
     rowsPerPage -
     Math.min(rowsPerPage, filteredRows.length - page * rowsPerPage);
 
   if (isLoading) return <Loader />;
 
-
-  const handleCreateDailyExpense = async (data: { expenseId: string; date?: string }) => {
-    try {
-      await createDailyExpense(data).unwrap();
-      // Vous pouvez ajouter un toast/snackbar pour confirmer la création
-    } catch (error) {
-      console.error("Failed to create daily expense:", error);
-      // Gérer l'erreur (toast/snackbar)
-    }
-  };
   return (
-
     <React.Fragment>
       <Helmet title="Transactions" />
       <Tabs
@@ -290,7 +301,6 @@ function JournalPage() {
         <LinkTab label="Journal" {...a11yProps(0)} />
         <LinkTab label="Membership" {...a11yProps(1)} />
         <LinkTab label="Overview" {...a11yProps(2)} />
-
       </Tabs>
       <DailyExpenseModal
         open={dailyExpenseOpen}
@@ -316,7 +326,7 @@ function JournalPage() {
                   setOpen(false);
                 }}
               >
-                <SubPage title="Manage memeber">
+                <SubPage title="Manage member">
                   <JournalForm
                     handleClose={() => {
                       setOpen(false);
@@ -334,7 +344,9 @@ function JournalPage() {
                   search={filters.query}
                   handleClickOpen={handleClickOpen}
                   onHandleSearch={onHandleSearch}
-                  refetch={refetch} handleDailyExpenseClick={() => setDailyExpenseOpen(true)}
+                  refetch={refetch}
+                  showDailyExpenseButton={true}
+                  handleDailyExpenseClick={() => setDailyExpenseOpen(true)}
                 />
                 <TableContainer>
                   <Table
@@ -359,7 +371,6 @@ function JournalPage() {
                         .map((row, index) => {
                           const isItemSelected = isSelected(row.id);
                           const labelId = `enhanced-table-checkbox-${index}`;
-
                           const dleave = row.isPayed
                             ? row.leaveTime ?? new Date()
                             : new Date();
@@ -369,7 +380,6 @@ function JournalPage() {
                           return (
                             <TableRow
                               hover
-                              // onClick={(event) => handleClick(event, row.id)}
                               onDoubleClick={() => handleEdite(row)}
                               role="checkbox"
                               aria-checked={isItemSelected}
@@ -381,6 +391,7 @@ function JournalPage() {
                                 <Checkbox
                                   checked={isItemSelected}
                                   inputProps={{ "aria-labelledby": labelId }}
+                                  onChange={(event) => handleCheckboxChange(event, row.id)}
                                 />
                               </TableCell>
                               <TableCell
@@ -402,9 +413,7 @@ function JournalPage() {
                                   ? row.payedAmount + " DT"
                                   : 0 + " DT"}
                               </TableCell>
-                              {/* <TableCell>{leaveDate}</TableCell> */}
                               <TableCell>{hoursDifference}</TableCell>
-
                               <TableCell>
                                 {row.isPayed ? <Done /> : null}
                               </TableCell>
@@ -412,7 +421,7 @@ function JournalPage() {
                                 <Box mr={2}>
                                   <IconButton
                                     onClick={() => handleEdite(row)}
-                                    aria-label="delete"
+                                    aria-label="edit"
                                     size="large"
                                   >
                                     <Edit />
@@ -454,28 +463,28 @@ function JournalPage() {
       <TabPanel value={value} index={1} title={"Membership"}>
         <Abonnement />
       </TabPanel>
-
       <TabPanel value={value} index={2} title={"Overview"}>
         <JournalDetails
           journals={rows}
           isLoading={isLoading}
           errorMemberReq={!!error}
           dailyExpenses={dailyExpenses}
-          expenses={expenses} // Ajouter expenses
+          expenses={expenses}
           selectedDate={today}
         />
       </TabPanel>
-
-
-
     </React.Fragment>
-
   );
 }
 
 JournalPage.getLayout = function getLayout(page: ReactElement) {
-  return <DashboardLayout><RoleProtectedRoute allowedRoles={['ADMIN']}>
-    {page}</RoleProtectedRoute></DashboardLayout>;
+  return (
+    <DashboardLayout>
+      <RoleProtectedRoute allowedRoles={['ADMIN']}>
+        {page}
+      </RoleProtectedRoute>
+    </DashboardLayout>
+  );
 };
 
 export default JournalPage;

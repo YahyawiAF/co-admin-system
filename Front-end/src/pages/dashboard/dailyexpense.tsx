@@ -58,6 +58,11 @@ export default function DailyExpenseModal({
         amount: 0,
         description: "",
     });
+    const [errors, setErrors] = useState({
+        name: false,
+        amount: false,
+        description: false,
+    });
 
     const [createExpense] = useCreateExpenseMutation();
 
@@ -76,7 +81,19 @@ export default function DailyExpenseModal({
         }
     }, [initialData]);
 
+    const validateForm = () => {
+        const newErrors = {
+            name: newExpense.name.trim() === "",
+            amount: newExpense.amount <= 0,
+            description: newExpense.description.trim() === "",
+        };
+        setErrors(newErrors);
+        return !Object.values(newErrors).some(Boolean);
+    };
+
     const handleCreateNewExpense = async () => {
+        if (!validateForm()) return;
+
         try {
             const createdExpense = await createExpense({
                 name: newExpense.name,
@@ -182,22 +199,29 @@ export default function DailyExpenseModal({
                     <TextField
                         autoFocus
                         margin="dense"
-                        label="Nom"
+                        label="Name"
                         fullWidth
                         value={newExpense.name}
                         onChange={(e) =>
                             setNewExpense({ ...newExpense, name: e.target.value })
                         }
+                        required
+                        error={errors.name}
+                        helperText={errors.name ? "name is required" : ""}
                     />
                     <TextField
                         margin="dense"
-                        label="Montant (DT)"
+                        label="Amount (DT)"
                         type="number"
                         fullWidth
                         value={newExpense.amount}
                         onChange={(e) =>
                             setNewExpense({ ...newExpense, amount: Number(e.target.value) })
                         }
+                        required
+                        error={errors.amount}
+                        helperText={errors.amount ? "amount must be greater than 0." : ""}
+                        inputProps={{ min: 0.01, step: 0.01 }}
                     />
                     <TextField
                         margin="dense"
@@ -209,6 +233,9 @@ export default function DailyExpenseModal({
                         onChange={(e) =>
                             setNewExpense({ ...newExpense, description: e.target.value })
                         }
+                        required
+                        error={errors.description}
+                        helperText={errors.description ? "Description is required" : ""}
                     />
                 </DialogContent>
                 <DialogActions>
