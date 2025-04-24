@@ -174,8 +174,8 @@ function JournalDetails({
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: "20%" }}>Nom</TableCell>
-                <TableCell sx={{ width: "15%" }}>Montant (DT)</TableCell>
+                <TableCell sx={{ width: "20%" }}>Name</TableCell>
+                <TableCell sx={{ width: "15%" }}>Amount (DT)</TableCell>
                 <TableCell sx={{ width: "30%" }}>Description</TableCell>
                 <TableCell sx={{ width: "20%" }}>Date</TableCell>
                 <TableCell sx={{ width: "15%" }}>Action</TableCell>
