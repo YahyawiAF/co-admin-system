@@ -72,8 +72,12 @@ export const productApi = createApi({
           method: "PATCH",
           body: {
             ...data,
-            purchasePrice: data.purchasePrice ? Number(data.purchasePrice.toFixed(2)) : undefined,
-            sellingPrice: data.sellingPrice ? Number(data.sellingPrice.toFixed(2)) : undefined,
+            purchasePrice: data.purchasePrice
+              ? Number(data.purchasePrice.toFixed(2))
+              : undefined,
+            sellingPrice: data.sellingPrice
+              ? Number(data.sellingPrice.toFixed(2))
+              : undefined,
           },
         };
       },

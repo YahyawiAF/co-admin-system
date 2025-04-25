@@ -170,7 +170,9 @@ const BulkActions: FC<IBulkActions> = ({
                 minWidth: "120px",
                 padding: "6px 9px",
                 marginLeft: "0px",
-                backgroundColor: isCurrentDay() ? "rgba(46, 125, 50, 0.08)" : "inherit",
+                backgroundColor: isCurrentDay()
+                  ? "rgba(46, 125, 50, 0.08)"
+                  : "inherit",
               }}
             >
               Current Day

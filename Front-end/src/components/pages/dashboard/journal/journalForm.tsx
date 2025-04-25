@@ -69,14 +69,14 @@ type ExtendedTypeOptional = ExtractedType & {};
 // Configuration de Fuse.js pour la recherche des membres
 const memberSearchOptions = {
   keys: [
-    { name: 'fullName', weight: 0.5 },
-    { name: 'email', weight: 0.3 },
-    { name: 'phone', weight: 0.2 }
+    { name: "fullName", weight: 0.5 },
+    { name: "email", weight: 0.3 },
+    { name: "phone", weight: 0.2 },
   ],
   threshold: 0.4,
   includeScore: true,
   minMatchCharLength: 2,
-  shouldSort: true
+  shouldSort: true,
 };
 
 const defaultValues: Partial<ExtendedTypeOptional> = {
@@ -143,7 +143,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
 
     const fuse = new Fuse(members, memberSearchOptions);
     const results = fuse.search(searchTerm);
-    return results.map(result => result.item);
+    return results.map((result) => result.item);
   };
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
@@ -255,9 +255,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           if (nextPrice) {
             setTarifAlert({
               show: true,
-              message: `Dépassement de tarif: ${realDurationMinutes - priceMaxDuration
-                } min (tolérance). Prochain tarif: ${nextPrice.timePeriod.start
-                }-${nextPrice.timePeriod.end}`,
+              message: `Dépassement de tarif: ${
+                realDurationMinutes - priceMaxDuration
+              } min (tolérance). Prochain tarif: ${
+                nextPrice.timePeriod.start
+              }-${nextPrice.timePeriod.end}`,
             });
           }
         } else {
@@ -341,10 +343,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       options: membersList || [],
       getOptionLabel: (option: Member) =>
         option.fullNameWithEmail + ` (${option.plan})`,
-      filterOptions: (options: Member[], { inputValue }: { inputValue: string }) => {
+      filterOptions: (
+        options: Member[],
+        { inputValue }: { inputValue: string }
+      ) => {
         if (!inputValue || inputValue.length < 2) return options;
         return fuzzySearchMembers(options, inputValue);
-      }
+      },
     };
   }, [membersList]);
 
@@ -430,10 +435,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               options: membersList || [],
               getOptionLabel: (option: Member) =>
                 option.fullNameWithEmail + ` (${option.plan})`,
-              filterOptions: (options: Member[], { inputValue }: { inputValue: string }) => {
+              filterOptions: (
+                options: Member[],
+                { inputValue }: { inputValue: string }
+              ) => {
                 if (!inputValue || inputValue.length < 2) return options;
                 return fuzzySearchMembers(options, inputValue);
-              }
+              },
             }}
             selectedItem={member}
             handleSelection={handleSelect}
@@ -442,7 +450,6 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             multiple={false}
             error={!!errors.memberID}
             errorMessage={errors.memberID?.message}
-
             helperText="Tapez au moins 2 caractères pour rechercher un membre"
           />
         ) : (

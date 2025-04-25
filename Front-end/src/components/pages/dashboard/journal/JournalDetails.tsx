@@ -17,7 +17,13 @@ import {
   IconButton,
 } from "@mui/material";
 import { spacing } from "@mui/system";
-import { DollarSign, CreditCard, User, TrendingUp, Activity } from "react-feather";
+import {
+  DollarSign,
+  CreditCard,
+  User,
+  TrendingUp,
+  Activity,
+} from "react-feather";
 import { format } from "date-fns";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -60,7 +66,9 @@ function JournalDetails({
   const [updateDailyExpense] = useUpdateDailyExpenseMutation();
 
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
+    null
+  );
 
   const isSameDay = (date1: Date, date2: Date) => {
     return (
@@ -78,7 +86,10 @@ function JournalDetails({
   }, [dailyExpenses, selectedDate]);
 
   const dailyExpensesTotal = useMemo(() => {
-    return filteredDailyExpenses.reduce((acc, curr) => acc + curr.expense.amount, 0);
+    return filteredDailyExpenses.reduce(
+      (acc, curr) => acc + curr.expense.amount,
+      0
+    );
   }, [filteredDailyExpenses]);
 
   const dailyMembersCount = useMemo(() => {
@@ -98,12 +109,23 @@ function JournalDetails({
 
   const cashTotal = useMemo(() => {
     const dailyJournalsTotal = journals
-      .filter((journal) => isSameDay(new Date(journal.registredTime), selectedDate))
-      .reduce((acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc), 0);
+      .filter((journal) =>
+        isSameDay(new Date(journal.registredTime), selectedDate)
+      )
+      .reduce(
+        (acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc),
+        0
+      );
 
-    const dailySubscriptionsTotal = abonnementsData?.data
-      ?.filter((abonnement) => isSameDay(new Date(abonnement.createdAt), selectedDate))
-      .reduce((acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0), 0) || 0;
+    const dailySubscriptionsTotal =
+      abonnementsData?.data
+        ?.filter((abonnement) =>
+          isSameDay(new Date(abonnement.createdAt), selectedDate)
+        )
+        .reduce(
+          (acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0),
+          0
+        ) || 0;
 
     return dailyJournalsTotal + dailySubscriptionsTotal;
   }, [journals, abonnementsData, selectedDate]);
@@ -124,14 +146,19 @@ function JournalDetails({
     setOpenUpdateModal(true);
   };
 
-  const handleUpdateSubmit = async (data: { expenseId: string; date?: string }) => {
+  const handleUpdateSubmit = async (data: {
+    expenseId: string;
+    date?: string;
+  }) => {
     if (!selectedExpense) return;
     try {
       await updateDailyExpense({
         id: selectedExpense.id,
         data: {
           expenseId: data.expenseId,
-          date: data.date ? format(new Date(data.date), "yyyy-MM-dd") : undefined, // Ensure correct date format
+          date: data.date
+            ? format(new Date(data.date), "yyyy-MM-dd")
+            : undefined, // Ensure correct date format
         },
       }).unwrap();
       setOpenUpdateModal(false);
@@ -148,7 +175,11 @@ function JournalDetails({
     <React.Fragment>
       <Grid container spacing={6}>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Membres" count={dailyMembersCount} icon={<User />} />
+          <Stats
+            title="Daily Membres"
+            count={dailyMembersCount}
+            icon={<User />}
+          />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
@@ -169,11 +200,7 @@ function JournalDetails({
         </Grid>
       </Grid>
       <Grid item xs={12} sm={12} md={6} lg={3} xl>
-        <Stats
-          title="Net"
-          count={netTotal}
-          icon={<Activity />}
-        />
+        <Stats title="Net" count={netTotal} icon={<Activity />} />
       </Grid>
       <Box mt={4}>
         <Typography variant="h6" mb={2}>

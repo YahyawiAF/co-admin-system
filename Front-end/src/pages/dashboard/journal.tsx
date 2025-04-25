@@ -1,4 +1,3 @@
-
 import React, { useCallback, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
@@ -24,12 +23,7 @@ import { DailyExpense, Journal } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
-import {
-  Edit as ArchiveIcon,
-  Delete,
-  Edit,
-  Done,
-} from "@mui/icons-material";
+import { Edit as ArchiveIcon, Delete, Edit, Done } from "@mui/icons-material";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
@@ -49,7 +43,10 @@ import { getHourDifference } from "src/utils/shared";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import Abonnement from "./abonnement";
 import { useGetExpensesQuery } from "src/api/expenseApi";
-import { useCreateDailyExpenseMutation, useGetAllDailyExpensesQuery } from "src/api/dailyexpenseApi";
+import {
+  useCreateDailyExpenseMutation,
+  useGetAllDailyExpensesQuery,
+} from "src/api/dailyexpenseApi";
 import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexpense";
 import Fuse from "fuse.js";
 
@@ -102,7 +99,7 @@ interface Filters {
 
 function doesObjectContainQuery(obj: Record<any, any>, query: string) {
   if (!query || query.length < 2) return false;
-  
+
   return Object.keys(obj).some((key) => {
     const value = obj[key];
     if (value === null || value === undefined) return false;
@@ -111,32 +108,28 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
 }
 const journalSearchOptions = {
   keys: [
-    { name: 'members.fullName', weight: 0.5 },
-    { name: 'registredTime', weight: 0.3 },
-    { name: 'payedAmount', weight: 0.2 },
-    { name: 'id', weight: 0.1 }
+    { name: "members.fullName", weight: 0.5 },
+    { name: "registredTime", weight: 0.3 },
+    { name: "payedAmount", weight: 0.2 },
+    { name: "id", weight: 0.1 },
   ],
   threshold: 0.4,
   includeScore: true,
   minMatchCharLength: 2,
-  shouldSort: true
+  shouldSort: true,
 };
 
-function applyFilters(
-  journals: Journal[],
-  filters: Filters
-): Journal[] {
+function applyFilters(journals: Journal[], filters: Filters): Journal[] {
   if (!filters.query || filters.query.length < 2) {
     return journals;
   }
 
   const fuse = new Fuse(journals, journalSearchOptions);
   const results = fuse.search(filters.query);
-  return results.map(result => result.item);
+  return results.map((result) => result.item);
 }
 
 function JournalPage() {
-  
   const { data: dailyExpenses = [] } = useGetAllDailyExpensesQuery();
   const [dailyExpenseOpen, setDailyExpenseOpen] = useState(false);
   const { data: expenses = [] } = useGetExpensesQuery();
@@ -152,7 +145,7 @@ function JournalPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
-  
+
   // Configuration de Fuse.js pour la recherche des journaux
 
   const [open, setOpen] = useState(false);
@@ -287,7 +280,10 @@ function JournalPage() {
     if (date) setToday(date);
   };
 
-  const handleCreateDailyExpense = async (data: { expenseId: string; date?: string }) => {
+  const handleCreateDailyExpense = async (data: {
+    expenseId: string;
+    date?: string;
+  }) => {
     try {
       await createDailyExpense(data).unwrap();
       setDailyExpenseOpen(false);
@@ -403,7 +399,9 @@ function JournalPage() {
                                 <Checkbox
                                   checked={isItemSelected}
                                   inputProps={{ "aria-labelledby": labelId }}
-                                  onChange={(event) => handleCheckboxChange(event, row.id)}
+                                  onChange={(event) =>
+                                    handleCheckboxChange(event, row.id)
+                                  }
                                 />
                               </TableCell>
                               <TableCell
@@ -492,9 +490,7 @@ function JournalPage() {
 JournalPage.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      <RoleProtectedRoute allowedRoles={['ADMIN']}>
-        {page}
-      </RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );
 };

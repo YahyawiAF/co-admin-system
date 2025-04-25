@@ -20,7 +20,6 @@ export const store = configureStore({
     [expenseApi.reducerPath]: expenseApi.reducer,
     [dailyExpenseApi.reducerPath]: dailyExpenseApi.reducer,
     [productApi.reducerPath]: productApi.reducer,
-
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
