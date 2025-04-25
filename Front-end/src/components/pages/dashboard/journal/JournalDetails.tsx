@@ -17,7 +17,7 @@ import {
   IconButton,
 } from "@mui/material";
 import { spacing } from "@mui/system";
-import { DollarSign, CreditCard, User, TrendingUp } from "react-feather";
+import { DollarSign, CreditCard, User, TrendingUp, Activity } from "react-feather";
 import { format } from "date-fns";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -107,6 +107,9 @@ function JournalDetails({
 
     return dailyJournalsTotal + dailySubscriptionsTotal;
   }, [journals, abonnementsData, selectedDate]);
+  const netTotal = useMemo(() => {
+    return cashTotal - dailyExpensesTotal;
+  }, [cashTotal, dailyExpensesTotal]);
 
   const handleDelete = async (id: string) => {
     try {
@@ -165,7 +168,13 @@ function JournalDetails({
           <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
         </Grid>
       </Grid>
-
+      <Grid item xs={12} sm={12} md={6} lg={3} xl>
+        <Stats
+          title="Net"
+          count={netTotal}
+          icon={<Activity />}
+        />
+      </Grid>
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
           Daily Expenses ({format(selectedDate, "dd/MM/yyyy")})
