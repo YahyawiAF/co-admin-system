@@ -2,6 +2,7 @@ import React, { ReactElement, useState } from "react";
 import { useTheme } from "@mui/material/styles";
 import { PersonAdd } from "@mui/icons-material";
 import DashboardLayout from "../../layouts/Dashboard";
+import Fuse from 'fuse.js';
 
 import {
   useGetAbonnementsQuery,
@@ -132,6 +133,7 @@ const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
     "&:nth-of-type(6)": { display: "none" },
     "&:nth-of-type(7)": { width: "30%" },
   },
+  // Ajoutez cette partie pour forcer l'alignement à droite pour la colonne actions
   '&[data-align="right"]': {
     textAlign: "right",
     justifyContent: "flex-end",
@@ -225,26 +227,49 @@ const isSameDay = (date1: Date, date2: Date) => {
 };
 
 const AbonnementComponent = () => {
-  const [today, setToday] = React.useState<Date>(new Date());
   const theme = useTheme();
+  const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.down("sm")
+  );
+  const fuseOptions = {
+    keys: ['firstName', 'lastName', 'email'],
+    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    includeScore: true,
+    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+  };
+
+  // Configuration de Fuse.js pour la recherche des abonnements
+  const abonnementSearchOptions = {
+    keys: [
+      'member.firstName',
+      'member.lastName',
+      'price.name',
+      'id',
+      'stayedPeriode'
+    ],
+    threshold: 0.4,
+    includeScore: true,
+    minMatchCharLength: 2
+  };
+
 
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({
-    search: search,
-  });
+  } = useGetAbonnementsQuery({}); // Retirez le paramètre search
 
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
-  const abonnementPrices = prices.filter((price) => price.type === "abonnement");
+  const abonnementPrices = prices.filter(
+    (price) => price.type === "abonnement"
+  );
   const [openUserForm, setOpenUserForm] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
 
@@ -264,44 +289,47 @@ const AbonnementComponent = () => {
     isReservation: false,
     stayedPeriode: "",
   });
-
-  // Updated filteredData logic
+  // Remplacer la partie filteredData existante par ce code
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
 
-    return abonnementsData.data.filter((abonnement) => {
-      const registerDate = new Date(abonnement.registredDate);
-      const isSameDate =
-        registerDate.getFullYear() === today.getFullYear() &&
-        registerDate.getMonth() === today.getMonth() &&
-        registerDate.getDate() === today.getDate();
+    // Crée un tableau enrichi avec les données des membres et des prix
+    const enrichedData = abonnementsData.data.map(abonnement => ({
+      ...abonnement,
+      member: members.find(m => m.id === abonnement.memberID),
+      price: prices.find(p => p.id === abonnement.priceId)
+    }));
 
-      // If search is active, include all memberships regardless of date
-      if (search) {
-        const member = members.find((m) => m.id === abonnement.memberID);
-        const price = prices.find((p) => p.id === abonnement.priceId);
-        const searchLower = search.toLowerCase();
-        return (
-          (member &&
-            (`${member.firstName} ${member.lastName}`.toLowerCase().includes(searchLower) ||
-             member.email?.toLowerCase().includes(searchLower))) ||
-          (price && price.name.toLowerCase().includes(searchLower)) ||
-          abonnement.id.toLowerCase().includes(searchLower)
-        );
+    // Applique d'abord le filtre de période
+    const timeFilteredData = enrichedData.filter((abonnement) => {
+      if (!abonnement.price) return false;
+      const priceName = abonnement.price.name.toLowerCase();
+
+      switch (timeFilter) {
+        case "week": return priceName.includes("week");
+        case "month": return priceName.includes("month");
+        case "all":
+        default: return true;
       }
-
-      // Otherwise, filter by selected date
-      return isSameDate;
     });
-  }, [abonnementsData?.data, search, today, members, prices]);
 
+    // Ensuite applique la recherche floue si un terme de recherche est présent
+    if (search && search.length >= 2) {
+      const fuse = new Fuse(timeFilteredData, abonnementSearchOptions);
+      const results = fuse.search(search);
+      return results.map(result => result.item);
+    }
+
+    return timeFilteredData;
+  }, [abonnementsData?.data, timeFilter, prices, search, members]);
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
+  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
+    null
+  );
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
-
   const headCells: Array<HeadCell> = [
     {
       id: "member",
@@ -345,6 +373,7 @@ const AbonnementComponent = () => {
       disablePadding: false,
       label: "Status",
     },
+
     {
       id: "actions",
       numeric: false,
@@ -354,12 +383,14 @@ const AbonnementComponent = () => {
     },
   ];
 
-  const membersWithSubscriptionStatus = members.map((member) => ({
-    ...member,
-    hasSubscription: abonnementsData?.data.some(
-      (abonnement) => abonnement.memberID === member.id
-    ),
-  }));
+  const membersWithSubscriptionStatus = members
+    // .filter((member) => member.plan === Subscription.Membership) // Ajoutez ce filtre
+    .map((member) => ({
+      ...member,
+      hasSubscription: abonnementsData?.data.some(
+        (abonnement) => abonnement.memberID === member.id
+      ),
+    }));
 
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return "N/A";
@@ -369,7 +400,6 @@ const AbonnementComponent = () => {
       return "Invalid date";
     }
   };
-
   const handleSelect = (selectedMember: Member | null) => {
     setMember(selectedMember);
     if (editAbonnement) {
@@ -384,7 +414,6 @@ const AbonnementComponent = () => {
       });
     }
   };
-
   const handleRequestSort = (
     event: React.MouseEvent<unknown>,
     property: string
@@ -465,7 +494,6 @@ const AbonnementComponent = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
-
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
@@ -500,7 +528,6 @@ const AbonnementComponent = () => {
       console.error("Error saving subscription:", error);
     }
   };
-
   const handleDelete = async () => {
     if (abonnementToDelete) {
       try {
@@ -535,6 +562,7 @@ const AbonnementComponent = () => {
       new Date();
     let leaveDate = new Date(registredDate);
 
+    // Calcul basé sur les dates du prix
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
@@ -554,10 +582,12 @@ const AbonnementComponent = () => {
     }
   };
 
+  // Garder l'affichage du nom original
   const getDurationDescription = (price: Price) => {
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
-    return `${price.name}`;
+
+    return `${price.name}`; // Affiche "1week (7 jours)"
   };
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
@@ -565,7 +595,6 @@ const AbonnementComponent = () => {
   if (isLoading) return <CircularProgress />;
   if (isError)
     return <Alert severity="error">Error loading subscriptions</Alert>;
-
   const handleNewMember = (member: Member) => {
     setMember(member);
     if (editAbonnement) {
@@ -574,7 +603,6 @@ const AbonnementComponent = () => {
       setNewAbonnement({ ...newAbonnement, memberID: member.id });
     }
   };
-
   const calculateRemainingTime = (leaveDate: Date | string | null) => {
     if (!leaveDate) return "N/A";
 
@@ -582,15 +610,20 @@ const AbonnementComponent = () => {
       const endDate = new Date(leaveDate);
       const now = new Date();
 
+      // Si la date est déjà passée
       if (endDate < now) return "Expired";
 
+      // Calcul de la différence en millisecondes
       const diffMs = endDate.getTime() - now.getTime();
+
+      // Calcul des différentes unités de temps
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(
         (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
       const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
+      // Formatage du résultat
       if (diffDays > 30) {
         const months = Math.floor(diffDays / 30);
         const remainingDays = diffDays % 30;
@@ -643,25 +676,51 @@ const AbonnementComponent = () => {
         handleNewMember={handleNewMember}
       />
     );
-
-  const handleChangeDate = (date: Date | null) => {
-    if (date) setToday(date);
-  };
-
   return (
     <PageContainer>
       <MainContainer>
         <TableHeadAction
-          handleChangeDate={handleChangeDate}
-          toDay={today}
           handleClickOpen={() => setShowDrawer(true)}
           onHandleSearch={handleSearch}
           search={search}
           refetch={refetch}
-          isMobile={isMobile}
-          handleDailyExpenseClick={() => {}}
-          showDailyExpenseButton={false}
-        />
+          isMobile={isMobile} handleDailyExpenseClick={function (): void {
+            throw new Error("Function not implemented.");
+          }} />
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "flex-start",
+            alignItems: "flex-start",
+            mb: 2,
+            mt: -12,
+            ml: 1,
+          }}
+        >
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              backgroundColor: "#f5f5f5",
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Period</InputLabel>
+            <Select
+              value={timeFilter}
+              onChange={(e) =>
+                setTimeFilter(e.target.value as "week" | "month" | "all")
+              }
+              label="Period"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="week">Weekly</MenuItem>
+              <MenuItem value="month">Monthly</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
 
         <TableWrapper>
           <StyledTableContainer>
@@ -759,12 +818,15 @@ const AbonnementComponent = () => {
                           <IconButton
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditAbonnement({
+                              // Crée un nouvel objet Abonnement sans les propriétés enrichies
+                              const abonnementToEdit = {
                                 ...abonnement,
-                                leaveDate: abonnement.leaveDate
-                                  ? new Date(abonnement.leaveDate)
-                                  : new Date(),
-                              });
+                                leaveDate: abonnement.leaveDate ? new Date(abonnement.leaveDate) : new Date(),
+                                // On supprime les propriétés enrichies qui ne font pas partie de l'interface Abonnement
+                                member: undefined,
+                                price: undefined
+                              };
+                              setEditAbonnement(abonnementToEdit);
                               setShowDrawer(true);
                             }}
                             size={isMobile ? "small" : "medium"}
@@ -838,14 +900,15 @@ const AbonnementComponent = () => {
               onClick={() => setOpenMemberModal(true)}
               sx={{
                 height: "56px",
-                width: "200px",
-                alignSelf: "flex-start",
+                width: "200px", // Largeur fixe pour le bouton
+                alignSelf: "flex-start", // Alignement à gauche
               }}
             >
               New Member
             </ActionButton>
           )}
 
+          {/* Sélecteur de membre avec largeur réduite */}
           <Autocomplete
             options={membersWithSubscriptionStatus}
             getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.plan})`}
@@ -862,12 +925,20 @@ const AbonnementComponent = () => {
                 setNewAbonnement({ ...newAbonnement, memberID: value });
               }
             }}
+            filterOptions={(options, { inputValue }) => {
+              if (!inputValue || inputValue.length < 2) {
+                return options;
+              }
+              const fuse = new Fuse(options, fuseOptions);
+              const results = fuse.search(inputValue);
+              return results.map(result => result.item);
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
                 label="Member *"
                 error={!!errors.memberID}
-                helperText={errors.memberID}
+                helperText={errors.memberID || "Type at least 2 characters to search"}
               />
             )}
             disabled={!!editAbonnement}
@@ -888,14 +959,17 @@ const AbonnementComponent = () => {
         <Grid container spacing={2} sx={{ mb: 2 }}>
           {abonnementPrices.map((price) => (
             <Grid item xs={12} sm={6} key={price.id}>
+              {/* Voici le PriceCard */}
               <PriceCard
                 sx={{
                   border:
-                    (editAbonnement?.priceId || newAbonnement.priceId) === price.id
+                    (editAbonnement?.priceId || newAbonnement.priceId) ===
+                      price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
-                    (editAbonnement?.priceId || newAbonnement.priceId) === price.id
+                    (editAbonnement?.priceId || newAbonnement.priceId) ===
+                      price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
@@ -1080,10 +1154,10 @@ const AbonnementComponent = () => {
     </PageContainer>
   );
 };
-
 AbonnementComponent.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
+      {" "}
       <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );

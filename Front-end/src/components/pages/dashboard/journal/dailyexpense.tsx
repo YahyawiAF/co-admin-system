@@ -167,24 +167,18 @@ export default function DailyExpenseModal({
                         </IconButton>
                     </Box>
 
-                    <DatePicker
-                        label="Date (optionnelle)"
-                        value={selectedDate}
-                        onChange={setSelectedDate}
-                        slots={{ textField: TextField }}
-                        slotProps={{ textField: { fullWidth: true, margin: "normal" } }}
-                    />
+
 
                     <Stack direction="row" spacing={2} mt={3} justifyContent="flex-end">
                         <Button variant="outlined" onClick={onClose}>
-                            Annuler
+                            Cancel
                         </Button>
                         <Button
                             variant="contained"
                             onClick={handleSubmit}
                             disabled={!selectedExpenseId}
                         >
-                            {initialData ? "Update" : "Confirmer"}
+                            {initialData ? "Confirm" : "Confirm"}
                         </Button>
                     </Stack>
                 </Box>

@@ -28,7 +28,7 @@ import {
   useDeleteDailyExpenseMutation,
   useUpdateDailyExpenseMutation,
 } from "src/api/dailyexpenseApi";
-import DailyExpenseModal from "src/pages/dashboard/dailyexpense";
+import DailyExpenseModal from "src/components/pages/dashboard/journal/dailyexpense";
 
 const Divider = styled(MuiDivider)(spacing);
 const Typography = styled(MuiTypography)(spacing);

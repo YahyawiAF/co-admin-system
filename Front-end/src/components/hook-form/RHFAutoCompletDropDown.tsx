@@ -12,6 +12,7 @@ type IRHFTextFieldAutoComplet = {
   defaultProps: {
     options: any[];
     getOptionLabel: (option: any) => any;
+    filterOptions?: (options: any[], state: { inputValue: string }) => any[];
   };
   selectedItem: any | undefined | null;
   handleSelection: (event: any) => void;

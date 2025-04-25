@@ -50,7 +50,8 @@ import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import Abonnement from "./abonnement";
 import { useGetExpensesQuery } from "src/api/expenseApi";
 import { useCreateDailyExpenseMutation, useGetAllDailyExpensesQuery } from "src/api/dailyexpenseApi";
-import DailyExpenseModal from "./dailyexpense";
+import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexpense";
+import Fuse from "fuse.js";
 
 const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
@@ -100,34 +101,42 @@ interface Filters {
 }
 
 function doesObjectContainQuery(obj: Record<any, any>, query: string) {
+  if (!query || query.length < 2) return false;
+  
   return Object.keys(obj).some((key) => {
-    return obj[key]?.toString().toLowerCase().includes(query.toLowerCase());
+    const value = obj[key];
+    if (value === null || value === undefined) return false;
+    return value.toString().toLowerCase().includes(query.toLowerCase());
   });
 }
+const journalSearchOptions = {
+  keys: [
+    { name: 'members.fullName', weight: 0.5 },
+    { name: 'registredTime', weight: 0.3 },
+    { name: 'payedAmount', weight: 0.2 },
+    { name: 'id', weight: 0.1 }
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+  shouldSort: true
+};
 
 function applyFilters(
-  keywordServices: Journal[],
+  journals: Journal[],
   filters: Filters
 ): Journal[] {
-  return keywordServices?.filter((keywordServices) => {
-    let matches = true;
-    const { query } = filters;
-    if (query) {
-      matches = Object.keys(keywordServices).some((key) => {
-        if (key === "members")
-          return doesObjectContainQuery(keywordServices["members"], query);
-        else
-          return keywordServices[key]
-            ?.toString()
-            .toLowerCase()
-            .includes(query.toLowerCase());
-      });
-    }
-    return matches;
-  });
+  if (!filters.query || filters.query.length < 2) {
+    return journals;
+  }
+
+  const fuse = new Fuse(journals, journalSearchOptions);
+  const results = fuse.search(filters.query);
+  return results.map(result => result.item);
 }
 
 function JournalPage() {
+  
   const { data: dailyExpenses = [] } = useGetAllDailyExpensesQuery();
   const [dailyExpenseOpen, setDailyExpenseOpen] = useState(false);
   const { data: expenses = [] } = useGetExpensesQuery();
@@ -143,6 +152,9 @@ function JournalPage() {
   const [filters, setFilters] = useState<Filters>({
     query: "",
   });
+  
+  // Configuration de Fuse.js pour la recherche des journaux
+
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
 
