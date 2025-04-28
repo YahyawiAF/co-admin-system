@@ -5,6 +5,8 @@ import { priceApi } from "src/api/price.repo";
 import { abonnementApi } from "src/api/abonnement.repo";
 import { userServices } from "src/api/user.repo";
 import { expenseApi } from "src/api/expenseApi";
+import { dailyExpenseApi } from "src/api/dailyexpenseApi";
+import { productApi } from "src/api/productApi";
 
 // Configuration du store
 export const store = configureStore({
@@ -16,6 +18,8 @@ export const store = configureStore({
     [abonnementApi.reducerPath]: abonnementApi.reducer,
     [userServices.reducerPath]: userServices.reducer,
     [expenseApi.reducerPath]: expenseApi.reducer,
+    [dailyExpenseApi.reducerPath]: dailyExpenseApi.reducer,
+    [productApi.reducerPath]: productApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -25,7 +29,9 @@ export const store = configureStore({
       priceApi.middleware,
       abonnementApi.middleware,
       userServices.middleware,
-      expenseApi.middleware
+      expenseApi.middleware,
+      dailyExpenseApi.middleware,
+      productApi.middleware
     ),
 });
 

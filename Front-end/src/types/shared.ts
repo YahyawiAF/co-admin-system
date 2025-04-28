@@ -201,6 +201,26 @@ export interface Expenses {
   createdAt: string;
   updatedAt: string;
 }
+export interface DailyExpense {
+  id: string;
+  expenseId: string;
+  date?: string; // Optionnel, format: "YYYY-MM-DD"
+  createdAt: string;
+  updatedAt: string;
+  expense: Expenses; // On inclut l'objet Expense complet
+}
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  stock: number;
+  img?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export enum ExpenseType {
   MENSUEL = "MENSUEL",
   JOURNALIER = "JOURNALIER",

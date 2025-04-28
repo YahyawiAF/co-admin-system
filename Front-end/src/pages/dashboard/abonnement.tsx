@@ -2,6 +2,7 @@ import React, { ReactElement, useState } from "react";
 import { useTheme } from "@mui/material/styles";
 import { PersonAdd } from "@mui/icons-material";
 import DashboardLayout from "../../layouts/Dashboard";
+import Fuse from "fuse.js";
 
 import {
   useGetAbonnementsQuery,
@@ -46,6 +47,7 @@ import {
   Checkbox,
   useMediaQuery,
   Theme,
+  Autocomplete,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DatePicker } from "@mui/x-date-pickers";
@@ -234,15 +236,33 @@ const AbonnementComponent = () => {
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
+  const fuseOptions = {
+    keys: ["firstName", "lastName", "email"],
+    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    includeScore: true,
+    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+  };
+
+  // Configuration de Fuse.js pour la recherche des abonnements
+  const abonnementSearchOptions = {
+    keys: [
+      "member.firstName",
+      "member.lastName",
+      "price.name",
+      "id",
+      "stayedPeriode",
+    ],
+    threshold: 0.4,
+    includeScore: true,
+    minMatchCharLength: 2,
+  };
 
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({
-    search: search,
-  });
+  } = useGetAbonnementsQuery({}); // Retirez le paramètre search
 
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
@@ -272,11 +292,17 @@ const AbonnementComponent = () => {
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
 
-    return abonnementsData.data.filter((abonnement) => {
-      const price = prices.find((p) => p.id === abonnement.priceId);
-      if (!price) return false;
+    // Crée un tableau enrichi avec les données des membres et des prix
+    const enrichedData = abonnementsData.data.map((abonnement) => ({
+      ...abonnement,
+      member: members.find((m) => m.id === abonnement.memberID),
+      price: prices.find((p) => p.id === abonnement.priceId),
+    }));
 
-      const priceName = price.name.toLowerCase();
+    // Applique d'abord le filtre de période
+    const timeFilteredData = enrichedData.filter((abonnement) => {
+      if (!abonnement.price) return false;
+      const priceName = abonnement.price.name.toLowerCase();
 
       switch (timeFilter) {
         case "week":
@@ -288,7 +314,16 @@ const AbonnementComponent = () => {
           return true;
       }
     });
-  }, [abonnementsData?.data, timeFilter, prices]);
+
+    // Ensuite applique la recherche floue si un terme de recherche est présent
+    if (search && search.length >= 2) {
+      const fuse = new Fuse(timeFilteredData, abonnementSearchOptions);
+      const results = fuse.search(search);
+      return results.map((result) => result.item);
+    }
+
+    return timeFilteredData;
+  }, [abonnementsData?.data, timeFilter, prices, search, members]);
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
@@ -652,6 +687,9 @@ const AbonnementComponent = () => {
           search={search}
           refetch={refetch}
           isMobile={isMobile}
+          handleDailyExpenseClick={function (): void {
+            throw new Error("Function not implemented.");
+          }}
         />
         <Box
           sx={{
@@ -784,12 +822,17 @@ const AbonnementComponent = () => {
                           <IconButton
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditAbonnement({
+                              // Crée un nouvel objet Abonnement sans les propriétés enrichies
+                              const abonnementToEdit = {
                                 ...abonnement,
                                 leaveDate: abonnement.leaveDate
                                   ? new Date(abonnement.leaveDate)
                                   : new Date(),
-                              });
+                                // On supprime les propriétés enrichies qui ne font pas partie de l'interface Abonnement
+                                member: undefined,
+                                price: undefined,
+                              };
+                              setEditAbonnement(abonnementToEdit);
                               setShowDrawer(true);
                             }}
                             size={isMobile ? "small" : "medium"}
@@ -872,57 +915,55 @@ const AbonnementComponent = () => {
           )}
 
           {/* Sélecteur de membre avec largeur réduite */}
-          <FormControl
+          <Autocomplete
+            options={membersWithSubscriptionStatus}
+            getOptionLabel={(option) =>
+              `${option.firstName} ${option.lastName} (${option.plan})`
+            }
+            value={
+              membersWithSubscriptionStatus.find(
+                (m) =>
+                  m.id === (editAbonnement?.memberID || newAbonnement.memberID)
+              ) || null
+            }
+            onChange={(event, newValue) => {
+              const value = newValue ? newValue.id : "";
+              if (editAbonnement) {
+                setEditAbonnement({ ...editAbonnement, memberID: value });
+              } else {
+                setNewAbonnement({ ...newAbonnement, memberID: value });
+              }
+            }}
+            filterOptions={(options, { inputValue }) => {
+              if (!inputValue || inputValue.length < 2) {
+                return options;
+              }
+              const fuse = new Fuse(options, fuseOptions);
+              const results = fuse.search(inputValue);
+              return results.map((result) => result.item);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Member *"
+                error={!!errors.memberID}
+                helperText={
+                  errors.memberID || "Type at least 2 characters to search"
+                }
+              />
+            )}
+            disabled={!!editAbonnement}
+            getOptionDisabled={(option) =>
+              !!option.hasSubscription && !editAbonnement
+            }
             sx={{
               width: "100%",
-              maxWidth: "400", // Largeur maximale réduite
+              maxWidth: "400px",
               "& .MuiInputBase-root": {
                 height: "50px",
               },
             }}
-            error={!!errors.memberID}
-          >
-            <InputLabel>Member *</InputLabel>
-            <Select
-              value={editAbonnement?.memberID || newAbonnement.memberID || ""}
-              onChange={(e) => {
-                const value = e.target.value as string;
-                if (editAbonnement) {
-                  setEditAbonnement({ ...editAbonnement, memberID: value });
-                } else {
-                  setNewAbonnement({ ...newAbonnement, memberID: value });
-                }
-              }}
-              label="Member *"
-              disabled={!!editAbonnement}
-            >
-              <MenuItem value="">Select a member</MenuItem>
-              {membersWithSubscriptionStatus.map((member) => (
-                <MenuItem
-                  key={member.id}
-                  value={member.id}
-                  disabled={member.hasSubscription && !editAbonnement}
-                  sx={{
-                    opacity:
-                      member.hasSubscription && !editAbonnement ? 0.7 : 1,
-                    fontStyle:
-                      member.hasSubscription && !editAbonnement
-                        ? "italic"
-                        : "normal",
-                    py: 2,
-                  }}
-                >
-                  {member.firstName} {member.lastName} ({member.plan})
-                  {member.hasSubscription &&
-                    !editAbonnement &&
-                    " (Already subscribed)"}
-                </MenuItem>
-              ))}
-            </Select>
-            {errors.memberID && (
-              <FormHelperText>{errors.memberID}</FormHelperText>
-            )}
-          </FormControl>
+          />
         </Box>
 
         <Typography variant="subtitle1" sx={{ mb: 0 }}>
