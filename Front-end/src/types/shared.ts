@@ -204,10 +204,11 @@ export interface Expenses {
 export interface DailyExpense {
   id: string;
   expenseId: string;
-  date?: string; // Optionnel, format: "YYYY-MM-DD"
+  date?: string;
+  Summary?: string 
   createdAt: string;
   updatedAt: string;
-  expense: Expenses; // On inclut l'objet Expense complet
+  expense: Expenses; 
 }
 export interface Product {
   id: string;

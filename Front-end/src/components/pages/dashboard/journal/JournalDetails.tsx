@@ -253,13 +253,14 @@ function JournalDetails({
     setOpenUpdateModal(true);
   };
 
-  const handleUpdateSubmit = async (data: { expenseId: string; date?: string }) => {
+  const handleUpdateSubmit = async (data: { expenseId: string; date?: string; Summary?: string; }) => {
     if (!selectedExpense) return;
     try {
       await updateDailyExpense({
         id: selectedExpense.id,
         data: {
           expenseId: data.expenseId,
+          Summary: data.Summary || undefined,
           date: data.date ? format(new Date(data.date), "yyyy-MM-dd") : undefined,
         },
       }).unwrap();
@@ -292,7 +293,7 @@ function JournalDetails({
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
-            title="Total Ventes"
+            title="Total Sales"
             count={parseFloat(dailySalesTotal.toFixed(2))}
             icon={<DollarSign />}
 
@@ -303,7 +304,7 @@ function JournalDetails({
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
-            title="Articles vendus"
+            title="Items sold"
             count={dailySoldItemsCount}
             icon={<ShoppingCart />}
           />
@@ -312,55 +313,6 @@ function JournalDetails({
           <Stats title="Net" count={netTotal} icon={<Activity />} />
         </Grid>
       </Grid>
-
-      {/* Daily Expenses Table */}
-      <Box mt={4}>
-        <Typography variant="h6" mb={2}>
-          Daily Expenses ({format(selectedDate, "dd/MM/yyyy")})
-        </Typography>
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: "20%" }}>Name</TableCell>
-                <TableCell sx={{ width: "15%" }}>Amount (DT)</TableCell>
-                <TableCell sx={{ width: "30%" }}>Description</TableCell>
-                <TableCell sx={{ width: "20%" }}>Date</TableCell>
-                <TableCell sx={{ width: "15%" }}>Action</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredDailyExpenses.length > 0 ? (
-                filteredDailyExpenses.map((expense) => (
-                  <TableRow key={expense.id}>
-                    <TableCell>{expense.expense.name}</TableCell>
-                    <TableCell>{expense.expense.amount.toFixed(2)}</TableCell>
-                    <TableCell>{expense.expense.description || "-"}</TableCell>
-                    <TableCell>
-                      {format(new Date(expense.date || expense.createdAt), "dd/MM/yyyy HH:mm")}
-                    </TableCell>
-                    <TableCell>
-                      <IconButton color="primary" onClick={() => handleUpdateExpense(expense)}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton color="error" onClick={() => handleDeleteExpense(expense.id)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    No expenses recorded for this date.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Box>
-
       {/* Daily Products Table */}
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
@@ -370,10 +322,10 @@ function JournalDetails({
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Produit</TableCell>
-                <TableCell>Prix de vente (DT)</TableCell>
+                <TableCell>Product</TableCell>
+                <TableCell>Selling price (DT)</TableCell>
                 <TableCell>Stock</TableCell>
-                <TableCell>Quantité vendue</TableCell>
+                <TableCell>Quantity sold</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -418,6 +370,59 @@ function JournalDetails({
         </TableContainer>
       </Box>
 
+      {/* Daily Expenses Table */}
+      <Box mt={4}>
+        <Typography variant="h6" mb={2}>
+          Daily Expenses ({format(selectedDate, "dd/MM/yyyy")})
+        </Typography>
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ width: "20%" }}>Name</TableCell>
+                <TableCell sx={{ width: "15%" }}>Amount (DT)</TableCell>
+                <TableCell sx={{ width: "15%" }}>Description</TableCell>
+                <TableCell sx={{ width: "15%" }}>Summary</TableCell>
+                <TableCell sx={{ width: "20%" }}>Date</TableCell>
+                <TableCell sx={{ width: "30%" }}>Action</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {filteredDailyExpenses.length > 0 ? (
+                filteredDailyExpenses.map((expense) => (
+                  <TableRow key={expense.id}>
+                    <TableCell>{expense.expense.name}</TableCell>
+                    <TableCell>{expense.expense.amount.toFixed(2)}</TableCell>
+                    <TableCell>{expense.expense.description || "-"}</TableCell>
+                    <TableCell>{expense.Summary || "-"}</TableCell>
+
+                    <TableCell>
+                      {format(new Date(expense.date || expense.createdAt), "dd/MM/yyyy HH:mm")}
+                    </TableCell>
+                    <TableCell>
+                      <IconButton color="primary" onClick={() => handleUpdateExpense(expense)}>
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton color="error" onClick={() => handleDeleteExpense(expense.id)}>
+                        <DeleteIcon />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={5} align="center">
+                    No expenses recorded for this date.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Box>
+
+
+
       {/* Expense Update Modal */}
       {selectedExpense && (
         <DailyExpenseModal
@@ -434,6 +439,7 @@ function JournalDetails({
           initialData={{
             expenseId: selectedExpense.expenseId,
             date: selectedExpense.date,
+            Summary: selectedExpense.Summary,
           }}
         />
       )}

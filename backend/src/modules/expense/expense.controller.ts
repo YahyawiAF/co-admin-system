@@ -81,11 +81,13 @@ export class ExpensesController {
     status: 201,
     description: 'Daily expense successfully created',
   })
-  async createDailyExpense(@Body() body: { expenseId: string; date?: string }) {
+  async createDailyExpense(@Body() body: { expenseId: string; date?: string ;Summary?: string }) {
     const date = body.date ? new Date(body.date) : undefined;
     return this.expensesService.createDailyExpense({
       expenseId: body.expenseId,
       date,
+      Summary: body.Summary,
+
     });
   }
 
@@ -98,12 +100,13 @@ export class ExpensesController {
   })
   async updateDailyExpense(
     @Param('id') id: string,
-    @Body() body: { expenseId?: string; date?: string },
+    @Body() body: { expenseId?: string; date?: string ;Summary?: string },
   ) {
     const date = body.date ? new Date(body.date) : undefined;
     return this.expensesService.updateDailyExpense(id, {
       expenseId: body.expenseId,
       date,
+      Summary: body.Summary,
     });
   }
 

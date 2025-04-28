@@ -151,6 +151,7 @@ model Expense {
 model DailyExpense {
   id        String    @id @default(uuid())
   expenseId String
+  Summary   String?
   expense   Expense   @relation(fields: [expenseId], references: [id])
   date      DateTime? // Just the day, like 2025-04-23
   createdAt DateTime  @default(now())
