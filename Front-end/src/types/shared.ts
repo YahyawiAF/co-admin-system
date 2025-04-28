@@ -220,6 +220,14 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
 }
+export interface DailyProduct {
+  id: string;
+  productId: string;
+  quantite: number; 
+  createdAt: string;
+  updatedAt: string;
+  product: Product; 
+}
 
 export enum ExpenseType {
   MENSUEL = "MENSUEL",

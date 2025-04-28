@@ -95,4 +95,70 @@ import { UpdateProductDto } from './dtos/updateProduct';
     async remove(@Param('id') id: string) {
       return this.productsService.remove(id);
     }
+
+
+
+    @Post('daily')
+    @ApiOperation({ summary: 'Create new daily product' })
+    @ApiResponse({
+      status: 201,
+      description: 'Daily product successfully created',
+    })
+    async createDailyProduct(@Body() body: {productId?: string; quantite?: number }) {
+      return this.productsService.createDailyProduct({
+        productId: body.productId,
+        quantite: body.quantite,
+      });
+    }
+  
+    @Patch('daily/:id')
+    @ApiOperation({ summary: 'Update daily product' })
+    @ApiParam({ name: 'id', description: 'Daily product ID' })
+    @ApiResponse({
+      status: 200,
+      description: 'Daily product updated',
+    })
+    async updateDailyProduct(
+      @Param('id') id: string,
+      @Body() body: { productId?: string; quantite?: number },
+    ) {
+      return this.productsService.updateDailyProduct(id, {
+        productId: body.productId,
+        quantite: body.quantite,
+
+      });
+    }
+  
+    @Delete('daily/:id')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @ApiOperation({ summary: 'Delete daily product' })
+    @ApiParam({ name: 'id', description: 'Daily product ID' })
+    @ApiResponse({
+      status: 204,
+      description: 'Daily product successfully deleted',
+    })
+    async removeDailyProduct(@Param('id') id: string) {
+      return this.productsService.removeDailyProduct(id);
+    }
+  
+    @Get('daily/all')
+    @ApiOperation({ summary: 'Get all daily product' })
+    @ApiResponse({
+      status: 200,
+      description: 'List of all daily product',
+    })
+    async findAllDailyProduct() {
+      return this.productsService.findAllDailyProduct();
+    }
+  
+    @Get('daily/:id')
+    @ApiOperation({ summary: 'Get daily product by ID' })
+    @ApiParam({ name: 'id', description: 'Daily product ID' })
+    @ApiResponse({
+      status: 200,
+      description: 'Daily product details',
+    })
+    async findOneDailyProduct(@Param('id') id: string) {
+      return this.productsService.findOneDailyProduct(id);
+    }
   }

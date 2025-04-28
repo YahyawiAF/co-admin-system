@@ -37,7 +37,7 @@ export class CreateProductDto {
   @ApiProperty({ example: 10, required: true })
   @IsNotEmpty()
   @IsNumber()
-  @IsPositive()
+
   stock: number;
 
   @ApiProperty({
