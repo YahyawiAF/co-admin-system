@@ -8,6 +8,7 @@ import { expenseApi } from "src/api/expenseApi";
 import { dailyExpenseApi } from "src/api/dailyexpenseApi";
 import { productApi } from "src/api/productApi";
 import { dailyProductApi } from "src/api/dailyproductApi";
+import { facilityApi } from "src/api/facility.repo";
 
 // Configuration du store
 export const store = configureStore({
@@ -22,6 +23,8 @@ export const store = configureStore({
     [dailyExpenseApi.reducerPath]: dailyExpenseApi.reducer,
     [productApi.reducerPath]: productApi.reducer,
     [dailyProductApi.reducerPath]: dailyProductApi.reducer,
+    [facilityApi.reducerPath]: facilityApi.reducer,
+
 
   },
   middleware: (getDefaultMiddleware) =>
@@ -35,7 +38,8 @@ export const store = configureStore({
       expenseApi.middleware,
       dailyExpenseApi.middleware,
       productApi.middleware,
-      dailyProductApi.middleware
+      dailyProductApi.middleware,
+      facilityApi.middleware
 
     ),
 });

@@ -229,6 +229,19 @@ export interface DailyProduct {
   updatedAt: string;
   product: Product; 
 }
+export interface Facility {
+  id: string;
+  name: string;
+  numtel: string;
+  email: string;
+  adresse: string;
+  logo?: string | null;
+  nbrPlaces: number; 
+  socialNetworks: Record<string, string>; 
+  places: Record<string, unknown>; 
+  createdAt: string | Date; 
+  updatedAt: string | Date;
+}
 
 export enum ExpenseType {
   MENSUEL = "MENSUEL",

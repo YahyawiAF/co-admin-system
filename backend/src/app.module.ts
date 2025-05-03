@@ -1,8 +1,8 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'; // Importez MiddlewareConsumer et NestModule
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 
 import { AppController } from './app.controller';
@@ -18,6 +18,7 @@ import { AbonnementModule } from './modules/abonnement/abonnement.module';
 import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
 import { ExpensesModule } from './modules/expense/expense.module';
 import { ProductsModule } from './modules/product/product.module';
+import { FacilityModule } from './modules/facility/facility.module';
 
 @Module({
   imports: [
@@ -57,7 +58,8 @@ import { ProductsModule } from './modules/product/product.module';
     PriceModule,
     AbonnementModule,
     ExpensesModule,
-    ProductsModule
+    ProductsModule,
+    FacilityModule
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
@@ -65,6 +67,6 @@ import { ProductsModule } from './modules/product/product.module';
 export class AppModule implements NestModule {
   // Implémentez NestModule
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SecurityMiddleware).forRoutes('auth'); // Appliquez le middleware à toutes les routes
+    consumer.apply(SecurityMiddleware).forRoutes('auth'); 
   }
 }

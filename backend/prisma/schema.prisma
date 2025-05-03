@@ -158,6 +158,23 @@ model DailyExpense {
   updatedAt DateTime  @updatedAt
 }
 
+model Facility {
+  id             String         @id @default(uuid())
+  name           String
+  numtel         String
+  email          String
+  adresse        String
+  logo           String?
+  nbrPlaces      Int            @map("nbr_places")
+  socialNetworks Json           @map("social_networks") 
+  places         Json           @map("places")         
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+@@map("facilities")
+}
+
+
 enum ExpenseType {
   MENSUEL
   JOURNALIER

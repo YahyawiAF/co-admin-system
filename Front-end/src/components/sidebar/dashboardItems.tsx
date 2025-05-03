@@ -12,6 +12,7 @@ import {
   Tag,
   Box,
   Package,
+  Home,
 } from "react-feather";
 
 const pagesSection = [
@@ -50,6 +51,11 @@ const pagesSection = [
         href: "/dashboard/product",
         icon: Package,
         title: "Product",
+      },
+      {
+        href: "/dashboard/facility",
+        icon: Home,
+        title: "Facility",
       },
     ],
   },

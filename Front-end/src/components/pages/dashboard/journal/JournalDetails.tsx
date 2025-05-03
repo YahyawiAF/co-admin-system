@@ -43,7 +43,7 @@ import {
   useGetProductsQuery,
   useUpdateDailyProductMutation,
   useDeleteDailyProductMutation,
-  useUpdateProductMutation
+  useUpdateProductMutation,
 } from "src/api/productApi";
 
 const Divider = styled(MuiDivider)(spacing);
@@ -114,24 +114,28 @@ function JournalDetails({
     if (!dailyProducts) return [];
     return dailyProducts.filter((dailyProduct) => {
       const productDate = new Date(dailyProduct.createdAt);
-      return (
-        productDate.getFullYear() === selectedDate.getFullYear() &&
-        productDate.getMonth() === selectedDate.getMonth() &&
-        productDate.getDate() === selectedDate.getDate()
-      );
+      return isSameDay(productDate, selectedDate);
     });
   }, [dailyProducts, selectedDate]);
 
   const handleQuantityChange = async (productId: string, increment: boolean) => {
     try {
-      const product = products?.find(p => p.id === productId);
+      const product = products?.find((p) => p.id === productId);
       if (!product) return;
 
-      const existingDailyProduct = dailyProducts?.find(dp => dp.productId === productId);
+      // Format selectedDate to YYYY-MM-DD
+      const formattedDate = format(selectedDate, "yyyy-MM-dd");
+
+      // Find existing daily product for the selected date
+      const existingDailyProduct = dailyProducts?.find(
+        (dp) =>
+          dp.productId === productId &&
+          isSameDay(new Date(dp.createdAt), selectedDate)
+      );
 
       if (increment) {
         // Check stock availability
-        if (product.stock < 0) {
+        if (product.stock <= 0) {
           alert("Stock insuffisant!");
           return;
         }
@@ -140,21 +144,21 @@ function JournalDetails({
         if (existingDailyProduct) {
           await updateDailyProduct({
             id: existingDailyProduct.id,
-            data: { quantite: existingDailyProduct.quantite + 1 }
+            data: { quantite: existingDailyProduct.quantite + 1 },
           }).unwrap();
         } else {
           await createDailyProduct({
             productId,
-            quantite: 1
+            quantite: 1,
+            date: formattedDate, // Pass the selected date
           }).unwrap();
         }
 
         // Decrease stock
         await updateProduct({
           id: productId,
-          data: { stock: product.stock - 1 }
+          data: { stock: product.stock - 1 },
         }).unwrap();
-
       } else {
         // Decrement logic
         if (existingDailyProduct && existingDailyProduct.quantite > 0) {
@@ -163,7 +167,7 @@ function JournalDetails({
           if (newQuantity > 0) {
             await updateDailyProduct({
               id: existingDailyProduct.id,
-              data: { quantite: newQuantity }
+              data: { quantite: newQuantity },
             }).unwrap();
           } else {
             await deleteDailyProduct(existingDailyProduct.id).unwrap();
@@ -172,7 +176,7 @@ function JournalDetails({
           // Increase stock
           await updateProduct({
             id: productId,
-            data: { stock: product.stock + 1 }
+            data: { stock: product.stock + 1 },
           }).unwrap();
         }
       }
@@ -184,7 +188,6 @@ function JournalDetails({
       alert("Une erreur est survenue lors de la mise à jour");
     }
   };
-
 
   // Filtered data calculations
   const filteredDailyExpenses = useMemo(() => {
@@ -230,7 +233,7 @@ function JournalDetails({
   const dailySalesTotal = useMemo(() => {
     if (!filteredDailyProducts || !products) return 0;
     return filteredDailyProducts.reduce((total, dailyProduct) => {
-      const product = products.find(p => p.id === dailyProduct.productId);
+      const product = products.find((p) => p.id === dailyProduct.productId);
       return total + (product ? product.sellingPrice * dailyProduct.quantite : 0);
     }, 0);
   }, [filteredDailyProducts, products]);
@@ -253,7 +256,11 @@ function JournalDetails({
     setOpenUpdateModal(true);
   };
 
-  const handleUpdateSubmit = async (data: { expenseId: string; date?: string; Summary?: string; }) => {
+  const handleUpdateSubmit = async (data: {
+    expenseId: string;
+    date?: string;
+    Summary?: string;
+  }) => {
     if (!selectedExpense) return;
     try {
       await updateDailyExpense({
@@ -286,7 +293,11 @@ function JournalDetails({
           <Stats title="Daily Membres" count={dailyMembersCount} icon={<User />} />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Membership" count={dailySubscribedMembersCount} icon={<CreditCard />} />
+          <Stats
+            title="Daily Membership"
+            count={dailySubscribedMembersCount}
+            icon={<CreditCard />}
+          />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats title="Daily Expense" count={dailyExpensesTotal} icon={<TrendingUp />} />
@@ -296,18 +307,13 @@ function JournalDetails({
             title="Total Sales"
             count={parseFloat(dailySalesTotal.toFixed(2))}
             icon={<DollarSign />}
-
           />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Items sold"
-            count={dailySoldItemsCount}
-            icon={<ShoppingCart />}
-          />
+          <Stats title="Items sold" count={dailySoldItemsCount} icon={<ShoppingCart />} />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={3} xl>
           <Stats title="Net" count={netTotal} icon={<Activity />} />
@@ -330,41 +336,46 @@ function JournalDetails({
               </TableRow>
             </TableHead>
             <TableBody>
-              {/* Ajoutez un tri stable des produits */}
-              {products?.slice().sort((a, b) => a.name.localeCompare(b.name)).map((product) => {
-                const dailyProduct = filteredDailyProducts?.find(dp => dp.productId === product.id);
-                const quantity = dailyProduct?.quantite || 0;
-                const isOutOfStock = product.stock <= 0;
+              {products
+                ?.slice()
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((product) => {
+                  const dailyProduct = filteredDailyProducts?.find(
+                    (dp) => dp.productId === product.id
+                  );
+                  const quantity = dailyProduct?.quantite || 0;
+                  const isOutOfStock = product.stock <= 0;
 
-                return (
-                  <TableRow key={product.id} /* Utilisez l'ID comme clé stable */>
-                    <TableCell>{product.name}</TableCell>
-                    <TableCell>{product.sellingPrice.toFixed(2)}</TableCell>
-                    <TableCell>
-                      {product.stock} {isOutOfStock && <span style={{ color: 'red' }}>(Épuisé)</span>}
-                    </TableCell>
-                    <TableCell>{quantity}</TableCell>
-                    <TableCell>
-                      <IconButton
-                        color="primary"
-                        onClick={() => handleQuantityChange(product.id, true)}
-                        disabled={isOutOfStock}
-                        title={isOutOfStock ? "Stock épuisé" : "Ajouter un produit"}
-                      >
-                        <AddIcon />
-                      </IconButton>
-                      <IconButton
-                        color="secondary"
-                        onClick={() => handleQuantityChange(product.id, false)}
-                        disabled={quantity <= 0}
-                        title={quantity <= 0 ? "Aucun produit à retirer" : "Retirer un produit"}
-                      >
-                        <RemoveIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
+                  return (
+                    <TableRow key={product.id}>
+                      <TableCell>{product.name}</TableCell>
+                      <TableCell>{product.sellingPrice.toFixed(2)}</TableCell>
+                      <TableCell>
+                        {product.stock}{" "}
+                        {isOutOfStock && <span style={{ color: "red" }}>(Épuisé)</span>}
+                      </TableCell>
+                      <TableCell>{quantity}</TableCell>
+                      <TableCell>
+                        <IconButton
+                          color="primary"
+                          onClick={() => handleQuantityChange(product.id, true)}
+                          disabled={isOutOfStock}
+                          title={isOutOfStock ? "Stock épuisé" : "Ajouter un produit"}
+                        >
+                          <AddIcon />
+                        </IconButton>
+                        <IconButton
+                          color="secondary"
+                          onClick={() => handleQuantityChange(product.id, false)}
+                          disabled={quantity <= 0}
+                          title={quantity <= 0 ? "Aucun produit à retirer" : "Retirer un produit"}
+                        >
+                          <RemoveIcon />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -395,7 +406,6 @@ function JournalDetails({
                     <TableCell>{expense.expense.amount.toFixed(2)}</TableCell>
                     <TableCell>{expense.expense.description || "-"}</TableCell>
                     <TableCell>{expense.Summary || "-"}</TableCell>
-
                     <TableCell>
                       {format(new Date(expense.date || expense.createdAt), "dd/MM/yyyy HH:mm")}
                     </TableCell>
@@ -421,8 +431,6 @@ function JournalDetails({
         </TableContainer>
       </Box>
 
-
-
       {/* Expense Update Modal */}
       {selectedExpense && (
         <DailyExpenseModal
@@ -443,7 +451,6 @@ function JournalDetails({
           }}
         />
       )}
-
     </React.Fragment>
   );
 }
