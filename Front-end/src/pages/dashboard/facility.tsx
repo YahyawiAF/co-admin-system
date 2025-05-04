@@ -73,11 +73,12 @@ function a11yProps(index: number) {
   };
 }
 
-interface Place {
+interface Space {
   id: string;
   name: string;
   description?: string;
   capacity?: number;
+  image?: string;
 }
 
 const FacilityProfile = () => {
@@ -87,9 +88,10 @@ const FacilityProfile = () => {
   const [value, setValue] = useState(0);
   const [formData, setFormData] = useState<Partial<Facility>>({});
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
-  const [editingPlace, setEditingPlace] = useState<Place | null>(null);
-  const [newPlace, setNewPlace] = useState<Place>({ id: '', name: '', description: '', capacity: 0 });
+  const [editingSpace, setEditingSpace] = useState<Space | null>(null);
+  const [newSpace, setNewSpace] = useState<Space>({ id: '', name: '', description: '', capacity: 0, image: '' });
   const [openAddDialog, setOpenAddDialog] = useState(false);
+  const [openEditDialog, setOpenEditDialog] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
   // Initialize formData when facility is loaded
@@ -123,14 +125,42 @@ const FacilityProfile = () => {
     setSocialLinks(prev => ({ ...prev, [platform]: value }));
   };
 
-  const handlePlaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSpaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setEditingPlace(prev => prev ? { ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value } : prev);
+    setEditingSpace(prev => prev ? { ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value } : prev);
   };
 
-  const handleNewPlaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNewSpaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setNewPlace(prev => ({ ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value }));
+    setNewSpace(prev => ({ ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value }));
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewSpace: boolean) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+
+      const uploadedImageUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          resolve(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      if (isNewSpace) {
+        setNewSpace(prev => ({ ...prev, image: uploadedImageUrl }));
+      } else if (editingSpace) {
+        setEditingSpace(prev => prev ? { ...prev, image: uploadedImageUrl } : prev);
+      }
+
+    } catch (error) {
+      console.error('Failed to upload image:', error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,8 +170,6 @@ const FacilityProfile = () => {
     try {
       setIsUploading(true);
 
-      // Ici vous devez implémenter le vrai upload vers votre backend
-      // Pour l'exemple, nous utilisons une simulation qui retourne une data URL
       const uploadedLogoUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -150,7 +178,6 @@ const FacilityProfile = () => {
         reader.readAsDataURL(file);
       });
 
-      // Mettre à jour le backend
       await updateFacility({
         id: facilityId,
         data: {
@@ -158,7 +185,6 @@ const FacilityProfile = () => {
         },
       }).unwrap();
 
-      // Mettre à jour le state local
       setFormData(prev => ({
         ...prev,
         logo: uploadedLogoUrl,
@@ -186,58 +212,59 @@ const FacilityProfile = () => {
     }
   };
 
-  const handlePlaceSubmit = async (placeId: string) => {
-    if (!editingPlace) return;
+  const handleSpaceSubmit = async () => {
+    if (!editingSpace) return;
     try {
-      const updatedPlaces = {
+      const updatedSpaces = {
         ...facility?.places,
-        [placeId]: editingPlace,
+        [editingSpace.id]: editingSpace,
       };
       await updateFacility({
         id: facilityId,
         data: {
-          places: updatedPlaces,
+          places: updatedSpaces,
         },
       }).unwrap();
-      setEditingPlace(null);
+      setEditingSpace(null);
+      setOpenEditDialog(false);
     } catch (error) {
-      console.error('Failed to update place:', error);
+      console.error('Failed to update space:', error);
     }
   };
 
-  const handleAddPlace = async () => {
-    if (!newPlace.name) return;
+  const handleAddSpace = async () => {
+    if (!newSpace.name) return;
     try {
-      const newPlaceId = crypto.randomUUID();
-      const updatedPlaces = {
+      const newSpaceId = crypto.randomUUID();
+      const updatedSpaces = {
         ...facility?.places,
-        [newPlaceId]: { ...newPlace, id: newPlaceId },
+        [newSpaceId]: { ...newSpace, id: newSpaceId },
       };
       await updateFacility({
         id: facilityId,
         data: {
-          places: updatedPlaces,
+          places: updatedSpaces,
         },
       }).unwrap();
-      setNewPlace({ id: '', name: '', description: '', capacity: 0 });
+      setNewSpace({ id: '', name: '', description: '', capacity: 0, image: '' });
       setOpenAddDialog(false);
     } catch (error) {
-      console.error('Failed to add place:', error);
+      console.error('Failed to add space:', error);
     }
   };
 
-  const handleDeletePlace = async (placeId: string) => {
+  const handleDeleteSpace = async (spaceId: string) => {
     try {
-      const updatedPlaces = { ...facility?.places };
-      delete updatedPlaces[placeId];
+      const updatedSpaces = { ...facility?.places };
+      delete updatedSpaces[spaceId];
       await updateFacility({
         id: facilityId,
         data: {
-          places: updatedPlaces,
+          places: updatedSpaces,
         },
       }).unwrap();
     } catch (error) {
-      console.error('Failed to delete place:', error);
+      console.error('Failed to delete space:', error);
     }
   };
 
@@ -267,12 +294,11 @@ const FacilityProfile = () => {
               src={formData.logo || '/default-logo.png'}
               sx={{
                 width: 150,
-
                 height: 150,
                 border: '3px solid',
                 borderColor: 'primary.main',
                 boxShadow: 3,
-                mb: 2, // Margin-bottom to create space between avatar and button
+                mb: 2,
               }}
             />
             <Box sx={{ width: '100%', textAlign: 'center' }}>
@@ -326,7 +352,7 @@ const FacilityProfile = () => {
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
               <Tabs value={value} onChange={handleChange} aria-label="facility tabs">
                 <Tab label="General" {...a11yProps(0)} />
-                <Tab label="Places" {...a11yProps(1)} />
+                <Tab label="Spaces" {...a11yProps(1)} />
                 <Tab label="Social Networks" {...a11yProps(2)} />
               </Tabs>
             </Box>
@@ -398,7 +424,7 @@ const FacilityProfile = () => {
                     />
                     <TextField
                       fullWidth
-                      label="Number of Places"
+                      label="Number of Spaces"
                       name="nbrPlaces"
                       type="number"
                       value={formData.nbrPlaces ?? ''}
@@ -418,7 +444,7 @@ const FacilityProfile = () => {
 
               <TabPanel value={value} index={1}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Places Configuration</Typography>
+                  <Typography variant="h6" gutterBottom>Spaces Configuration</Typography>
                   <IconButton
                     color="primary"
                     onClick={() => setOpenAddDialog(true)}
@@ -427,91 +453,46 @@ const FacilityProfile = () => {
                   </IconButton>
                 </Box>
                 <Grid container spacing={3}>
-                  {Object.entries(facility.places || {}).map(([placeId, place]: [string, any]) => (
-                    <Grid item xs={12} sm={6} md={4} key={placeId}>
+                  {Object.entries(facility.places || {}).map(([spaceId, space]: [string, any]) => (
+                    <Grid item xs={12} sm={6} md={4} key={spaceId}>
                       <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <Avatar
+                          src={space.image || '/default-space.png'}
+                          sx={{
+                            width: '100%',
+                            height: 150,
+                            borderRadius: '4px 4px 0 0',
+                            objectFit: 'cover'
+                          }}
+                          variant="square"
+                        />
                         <CardContent sx={{ flexGrow: 1 }}>
-                          {editingPlace?.id === placeId ? (
-                            <>
-                              <TextField
-                                fullWidth
-                                label="Place Name"
-                                name="name"
-                                value={editingPlace.name}
-                                onChange={handlePlaceChange}
-                                margin="normal"
-                                variant="outlined"
-                              />
-                              <TextField
-                                fullWidth
-                                label="Description"
-                                name="description"
-                                value={editingPlace.description || ''}
-                                onChange={handlePlaceChange}
-                                margin="normal"
-                                variant="outlined"
-                                multiline
-                                rows={3}
-                              />
-                              <TextField
-                                fullWidth
-                                label="Capacity"
-                                name="capacity"
-                                type="number"
-                                value={editingPlace.capacity || ''}
-                                onChange={handlePlaceChange}
-                                margin="normal"
-                                variant="outlined"
-                              />
-                            </>
-                          ) : (
-                            <>
-                              <Typography variant="h6">{place.name}</Typography>
-                              <Typography variant="body2" color="text.secondary">
-                                {place.description || 'No description'}
-                              </Typography>
-                              <Typography variant="body2" color="text.secondary" mt={1}>
-                                Capacity: {place.capacity || 'N/A'}
-                              </Typography>
-                            </>
-                          )}
+                          <Typography variant="h6">{space.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {space.description || 'No description'}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" mt={1}>
+                            Capacity: {space.capacity || 'N/A'}
+                          </Typography>
                         </CardContent>
                         <CardActions>
-                          {editingPlace?.id === placeId ? (
-                            <>
-                              <Button
-                                size="small"
-                                onClick={() => handlePlaceSubmit(placeId)}
-                                color="primary"
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                size="small"
-                                onClick={() => setEditingPlace(null)}
-                                color="secondary"
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : (
-                            <>
-                              <Button
-                                size="small"
-                                startIcon={<EditIcon />}
-                                onClick={() => setEditingPlace({ id: placeId, ...place })}
-                              >
+                          <Button
+                            size="small"
+                            startIcon={<EditIcon />}
+                            onClick={() => {
+                              setEditingSpace({ id: spaceId, ...space });
+                              setOpenEditDialog(true);
+                            }}
+                          >
 
-                              </Button>
-                              <IconButton
-                                size="small"
-                                color="error"
-                                onClick={() => handleDeletePlace(placeId)}
-                              >
-                                <DeleteIcon />
-                              </IconButton>
-                            </>
-                          )}
+                          </Button>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteSpace(spaceId)}
+                          >
+                            <DeleteIcon />
+                          </IconButton>
                         </CardActions>
                       </Card>
                     </Grid>
@@ -519,14 +500,40 @@ const FacilityProfile = () => {
                 </Grid>
 
                 <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-                  <DialogTitle>Add New Place</DialogTitle>
+                  <DialogTitle>Add New Space</DialogTitle>
                   <DialogContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                      <Avatar
+                        src={newSpace.image || '/default-space.png'}
+                        sx={{ width: 100, height: 100 }}
+                      />
+                    </Box>
+                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                      <input
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="space-image-upload"
+                        type="file"
+                        onChange={(e) => handleImageUpload(e, true)}
+                        disabled={isUploading}
+                      />
+                      <label htmlFor="space-image-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
+                          disabled={isUploading}
+                        >
+                          {isUploading ? 'Uploading...' : 'Upload Space Image'}
+                        </Button>
+                      </label>
+                    </Box>
                     <TextField
                       fullWidth
-                      label="Place Name"
+                      label="Space Name"
                       name="name"
-                      value={newPlace.name}
-                      onChange={handleNewPlaceChange}
+                      value={newSpace.name}
+                      onChange={handleNewSpaceChange}
                       margin="normal"
                       variant="outlined"
                       required
@@ -535,8 +542,8 @@ const FacilityProfile = () => {
                       fullWidth
                       label="Description"
                       name="description"
-                      value={newPlace.description}
-                      onChange={handleNewPlaceChange}
+                      value={newSpace.description}
+                      onChange={handleNewSpaceChange}
                       margin="normal"
                       variant="outlined"
                       multiline
@@ -547,8 +554,8 @@ const FacilityProfile = () => {
                       label="Capacity"
                       name="capacity"
                       type="number"
-                      value={newPlace.capacity}
-                      onChange={handleNewPlaceChange}
+                      value={newSpace.capacity}
+                      onChange={handleNewSpaceChange}
                       margin="normal"
                       variant="outlined"
                     />
@@ -557,8 +564,79 @@ const FacilityProfile = () => {
                     <Button onClick={() => setOpenAddDialog(false)} color="secondary">
                       Cancel
                     </Button>
-                    <Button onClick={handleAddPlace} color="primary" disabled={!newPlace.name}>
+                    <Button onClick={handleAddSpace} color="primary" disabled={!newSpace.name}>
                       Add
+                    </Button>
+                  </DialogActions>
+                </Dialog>
+
+                <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+                  <DialogTitle>Edit Space</DialogTitle>
+                  <DialogContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                      <Avatar
+                        src={editingSpace?.image || '/default-space.png'}
+                        sx={{ width: 100, height: 100 }}
+                      />
+                    </Box>
+                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                      <input
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="edit-space-image-upload"
+                        type="file"
+                        onChange={(e) => handleImageUpload(e, false)}
+                        disabled={isUploading}
+                      />
+                      <label htmlFor="edit-space-image-upload">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
+                          disabled={isUploading}
+                        >
+                          {isUploading ? 'Uploading...' : 'Upload Space Image'}
+                        </Button>
+                      </label>
+                    </Box>
+                    <TextField
+                      fullWidth
+                      label="Space Name"
+                      name="name"
+                      value={editingSpace?.name || ''}
+                      onChange={handleSpaceChange}
+                      margin="normal"
+                      variant="outlined"
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      label="Description"
+                      name="description"
+                      value={editingSpace?.description || ''}
+                      onChange={handleSpaceChange}
+                      margin="normal"
+                      variant="outlined"
+                      multiline
+                      rows={3}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Capacity"
+                      name="capacity"
+                      type="number"
+                      value={editingSpace?.capacity || ''}
+                      onChange={handleSpaceChange}
+                      margin="normal"
+                      variant="outlined"
+                    />
+                  </DialogContent>
+                  <DialogActions>
+                    <Button onClick={() => setOpenEditDialog(false)} color="secondary">
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSpaceSubmit} color="primary" disabled={!editingSpace?.name}>
+                      Save
                     </Button>
                   </DialogActions>
                 </Dialog>
