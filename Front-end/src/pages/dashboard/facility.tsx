@@ -302,7 +302,13 @@ const FacilityProfile = () => {
                 mb: 2,
               }}
             />
-            <Box sx={{ width: '100%', textAlign: 'center', position: 'absolute', bottom: 0, left: "15%" }}>
+            <Box sx={{
+              width: '100%',
+              textAlign: 'center',
+              position: 'absolute',
+              bottom: 0,
+              left: "18%"
+            }}>
               <input
                 accept="image/*"
                 style={{ display: 'none' }}
@@ -313,14 +319,34 @@ const FacilityProfile = () => {
               />
               <label htmlFor="logo-upload">
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   component="span"
-                  startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
-                  sx={{
-                    width: '100%',
-                    mb: 1,
-                  }}
+                  size="medium"
+                  startIcon={isUploading ? <CircularProgress size={20} color="inherit" /> : <AddAPhotoIcon />}
                   disabled={isUploading}
+                  sx={{
+                    px: 3,
+                    minWidth: '120px',
+                    borderRadius: '50px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    backgroundColor: '#ffffff', // Fond blanc
+                    color: '#1976d2', // Texte bleu (comme primary.main)
+                    border: '1px solid #e0e0e0', // Bordure légère
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                    '&:hover': {
+                      backgroundColor: '#f5f5f5', // Gris très clair au survol
+                      transform: 'translateY(-1px)',
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
+                      borderColor: '#bdbdbd'
+                    },
+                    '&.Mui-disabled': {
+                      backgroundColor: '#ffffff',
+                      color: 'rgba(0, 0, 0, 0.26)',
+                      borderColor: 'rgba(0, 0, 0, 0.12)'
+                    },
+                    transition: 'all 0.2s ease-in-out'
+                  }}
                 >
                   {isUploading ? 'Uploading...' : 'Upload Logo'}
                 </Button>
@@ -436,10 +462,29 @@ const FacilityProfile = () => {
                   </Grid>
                 </Grid>
                 <Box mt={4} display="flex" justifyContent="flex-start">
-                  <IconButton color="error">
-                    <DeleteIcon />
-                    <Typography ml={1}>Delete Facility</Typography>
-                  </IconButton>
+                  <Button
+                    startIcon={<DeleteIcon />}
+                    color="error"
+                    variant="outlined"
+                    sx={{
+                      borderRadius: '50px',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      px: 3,
+                      py: 1,
+                      borderColor: (theme) => theme.palette.error.main,
+                      color: (theme) => theme.palette.error.main,
+                      '&:hover': {
+                        backgroundColor: (theme) => theme.palette.error.light,
+                        borderColor: (theme) => theme.palette.error.main,
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 2px 6px rgba(244, 67, 54, 0.2)'
+                      },
+                      transition: 'all 0.2s ease-in-out'
+                    }}
+                  >
+                    Delete Facility
+                  </Button>
                 </Box>
               </TabPanel>
 
@@ -582,7 +627,7 @@ const FacilityProfile = () => {
                 </Grid>
 
                 <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
-                  <DialogTitle>Add New Space</DialogTitle>
+                  <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
                       <Avatar
@@ -647,13 +692,13 @@ const FacilityProfile = () => {
                       Cancel
                     </Button>
                     <Button onClick={handleAddSpace} color="primary" disabled={!newSpace.name}>
-                      Add
+                      Confirm
                     </Button>
                   </DialogActions>
                 </Dialog>
 
                 <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
-                  <DialogTitle>Edit Space</DialogTitle>
+                  <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
                     <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
                       <Avatar
@@ -718,7 +763,7 @@ const FacilityProfile = () => {
                       Cancel
                     </Button>
                     <Button onClick={handleSpaceSubmit} color="primary" disabled={!editingSpace?.name}>
-                      Save
+                      Confirm
                     </Button>
                   </DialogActions>
                 </Dialog>
@@ -799,10 +844,19 @@ const FacilityProfile = () => {
                   type="submit"
                   variant="contained"
                   color="primary"
-                  size="large"
+                  size="medium"
                   sx={{
-                    px: 4,
-                    minWidth: '200px',
+                    px: 3,
+                    minWidth: '120px',
+                    borderRadius: '50px', // Bords arrondis pour un look pill
+                    textTransform: 'none', // Texte non capitalisé
+                    fontWeight: 600, // Texte légèrement plus gras
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)', // Ombre subtile
+                    '&:hover': {
+                      transform: 'translateY(-1px)', // Effet de léger soulèvement au survol
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
+                    },
+                    transition: 'all 0.2s ease-in-out' // Animation fluide
                   }}
                 >
                   Save Changes
