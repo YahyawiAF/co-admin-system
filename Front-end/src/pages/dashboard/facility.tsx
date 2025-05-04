@@ -36,6 +36,7 @@ import {
   AddAPhoto as AddAPhotoIcon,
   Edit as EditIcon,
   Add as AddIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import RoleProtectedRoute from 'src/components/auth/ProtectedRoute';
 import DashboardLayout from "../../layouts/Dashboard";
@@ -282,7 +283,7 @@ const FacilityProfile = () => {
               alignItems: 'center',
               minWidth: 200,
               position: 'sticky',
-              top: 230,
+              top: 240,
               mt: 3,
               backgroundColor: 'background.paper',
               borderRadius: 2,
@@ -301,7 +302,7 @@ const FacilityProfile = () => {
                 mb: 2,
               }}
             />
-            <Box sx={{ width: '100%', textAlign: 'center' }}>
+            <Box sx={{ width: '100%', textAlign: 'center', position: 'absolute', bottom: 0, left: "15%" }}>
               <input
                 accept="image/*"
                 style={{ display: 'none' }}
@@ -448,6 +449,20 @@ const FacilityProfile = () => {
                   <IconButton
                     color="primary"
                     onClick={() => setOpenAddDialog(true)}
+                    sx={{
+                      backgroundColor: 'primary.main',
+                      color: 'white',
+                      borderRadius: 'px',
+                      width: 26,  // Taille réduite
+                      height: 26, // Taille réduite
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                        boxShadow: 'none',
+                      },
+                      '& .MuiSvgIcon-root': {
+                        fontSize: '1.2rem' // Taille de l'icône réduite
+                      }
+                    }}
                   >
                     <AddIcon />
                   </IconButton>
@@ -455,48 +470,115 @@ const FacilityProfile = () => {
                 <Grid container spacing={3}>
                   {Object.entries(facility.places || {}).map(([spaceId, space]: [string, any]) => (
                     <Grid item xs={12} sm={6} md={4} key={spaceId}>
-                      <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                        <Avatar
-                          src={space.image || '/default-space.png'}
+                      <Card
+                        sx={{
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          borderRadius: '12px',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                          transition: 'transform 0.3s, box-shadow 0.3s',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: '0 6px 16px rgba(0,0,0,0.15)'
+                          }
+                        }}
+                      >
+                        <Box
                           sx={{
-                            width: '100%',
-                            height: 150,
-                            borderRadius: '4px 4px 0 0',
-                            objectFit: 'cover'
+                            height: 180,
+                            position: 'relative',
+                            overflow: 'hidden',
+                            '& img': {
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover',
+                              transition: 'transform 0.3s',
+                            },
+                            '&:hover img': {
+                              transform: 'scale(1.05)'
+                            }
                           }}
-                          variant="square"
-                        />
-                        <CardContent sx={{ flexGrow: 1 }}>
-                          <Typography variant="h6">{space.name}</Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {space.description || 'No description'}
+                        >
+                          <img
+                            src={space.image || '/default-space.png'}
+                            alt={space.name}
+                          />
+                        </Box>
+                        <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              mb: 1,
+                              fontWeight: 600,
+                              color: 'text.primary'
+                            }}
+                          >
+                            {space.name}
                           </Typography>
-                          <Typography variant="body2" color="text.secondary" mt={1}>
-                            Capacity: {space.capacity || 'N/A'}
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              mb: 2,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              minHeight: '40px'
+                            }}
+                          >
+                            {space.description || 'No description provided'}
                           </Typography>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
+                              borderRadius: '6px',
+                              p: '6px 12px',
+                              width: 'fit-content'
+                            }}
+                          >
+                            <PeopleIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
+                            <Typography variant="body2" color="text.secondary">
+                              Capacity: {space.capacity || 'N/A'}
+                            </Typography>
+                          </Box>
                         </CardContent>
-                        <CardActions>
-                          <Button
-                            size="small"
-                            startIcon={<EditIcon />}
+                        <CardActions sx={{ p: 2, justifyContent: 'flex-end' }}>
+                          <IconButton
                             onClick={() => {
                               setEditingSpace({ id: spaceId, ...space });
                               setOpenEditDialog(true);
                             }}
+                            sx={{
+                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(25, 118, 210, 0.15)'
+                              }
+                            }}
                           >
-                           
-                          </Button>
+                            <EditIcon fontSize="small" color="primary" />
+                          </IconButton>
                           <IconButton
-                            size="small"
-                            color="error"
                             onClick={() => handleDeleteSpace(spaceId)}
+                            sx={{
+                              backgroundColor: 'rgba(211, 47, 47, 0.08)',
+                              '&:hover': {
+                                backgroundColor: 'rgba(211, 47, 47, 0.15)'
+                              }
+                            }}
                           >
-                            <DeleteIcon />
+                            <DeleteIcon fontSize="small" color="error" />
                           </IconButton>
                         </CardActions>
                       </Card>
                     </Grid>
                   ))}
+
+
                 </Grid>
 
                 <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
@@ -508,7 +590,7 @@ const FacilityProfile = () => {
                         sx={{ width: 100, height: 100 }}
                       />
                     </Box>
-                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                    <Box sx={{ textAlign: 'center', mb: 2, position: 'absolute', bottom: "15%", left: "4%", whiteSpace: 'nowrap' }}>
                       <input
                         accept="image/*"
                         style={{ display: 'none' }}
@@ -560,7 +642,7 @@ const FacilityProfile = () => {
                       variant="outlined"
                     />
                   </DialogContent>
-                  <DialogActions>
+                  <DialogActions sx={{ pt: 15 }}>
                     <Button onClick={() => setOpenAddDialog(false)} color="secondary">
                       Cancel
                     </Button>
@@ -579,7 +661,7 @@ const FacilityProfile = () => {
                         sx={{ width: 100, height: 100 }}
                       />
                     </Box>
-                    <Box sx={{ textAlign: 'center', mb: 2 }}>
+                    <Box sx={{ textAlign: 'center', mb: 2, position: 'absolute', bottom: "15%", left: "4%", whiteSpace: 'nowrap' }}>
                       <input
                         accept="image/*"
                         style={{ display: 'none' }}
@@ -631,7 +713,7 @@ const FacilityProfile = () => {
                       variant="outlined"
                     />
                   </DialogContent>
-                  <DialogActions>
+                  <DialogActions sx={{ pt: 15 }}>
                     <Button onClick={() => setOpenEditDialog(false)} color="secondary">
                       Cancel
                     </Button>

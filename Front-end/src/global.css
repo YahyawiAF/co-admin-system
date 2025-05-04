@@ -313,13 +313,13 @@ input[type="checkbox"]:not(old) {
   display: none;
 }
 
-input[type="checkbox"]:not(old) + label {
+input[type="checkbox"]:not(old)+label {
   display: inline-block;
   line-height: 1.5em;
   margin-top: 6px;
 }
 
-input[type="checkbox"]:not(old) + label > span {
+input[type="checkbox"]:not(old)+label>span {
   display: inline-block;
   width: 13px;
   height: 13px;
@@ -340,7 +340,7 @@ input[type="checkbox"]:not(old) + label > span {
   vertical-align: bottom;
 }
 
-input[type="checkbox"]:not(old):checked + label > span {
+input[type="checkbox"]:not(old):checked+label>span {
   background-image: -moz-linear-gradient(white, white);
   background-image: -ms-linear-gradient(white, white);
   background-image: -o-linear-gradient(white, white);
@@ -348,7 +348,7 @@ input[type="checkbox"]:not(old):checked + label > span {
   background-image: linear-gradient(white, white);
 }
 
-input[type="checkbox"]:not(old):checked + label > span:before {
+input[type="checkbox"]:not(old):checked+label>span:before {
   content: "✓";
   display: block;
   color: #222;
@@ -634,3 +634,4 @@ label.valid:after {
     margin-bottom: 10px;
   }
 }
+

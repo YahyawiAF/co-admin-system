@@ -449,7 +449,30 @@ const ProductComponent = () => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {editProduct ? "Manage Product" : "Manage Product"}
         </Typography>
+        <Box sx={{ width: '100%', textAlign: 'center', position: 'absolute', bottom: "15%", left: "34%" }}>
+          <input
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="product-image-upload"
+            type="file"
+            onChange={handleImageUpload}
+            disabled={isUploading}
+          />
+          <label htmlFor="product-image-upload">
+            <Button
+              variant="outlined"
+              component="span"
+              startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
+              sx={{ width: '100%', mb: 1 }}
+              disabled={isUploading}
+            >
+              {isUploading ? 'Uploading...' : 'Upload Image'}
+            </Button>
+          </label>
+          <Typography variant="caption" color="text.secondary">
 
+          </Typography>
+        </Box>
         {/* Image Upload Section */}
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <Avatar
@@ -464,30 +487,7 @@ const ProductComponent = () => {
             variant="rounded"
           />
 
-          <Box sx={{ width: '100%', textAlign: 'center' }}>
-            <input
-              accept="image/*"
-              style={{ display: 'none' }}
-              id="product-image-upload"
-              type="file"
-              onChange={handleImageUpload}
-              disabled={isUploading}
-            />
-            <label htmlFor="product-image-upload">
-              <Button
-                variant="outlined"
-                component="span"
-                startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
-                sx={{ width: '100%', mb: 1 }}
-                disabled={isUploading}
-              >
-                {isUploading ? 'Uploading...' : 'Upload Image'}
-              </Button>
-            </label>
-            <Typography variant="caption" color="text.secondary">
 
-            </Typography>
-          </Box>
         </Box>
 
         {/* Product Form Fields */}
