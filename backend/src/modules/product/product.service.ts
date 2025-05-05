@@ -61,12 +61,20 @@ export class ProductsService {
       },
     });
   }
-  async updateDailyProduct(id: string, data: { productId: string , quantite: number }) {
+  async updateDailyProduct(
+    id: string, 
+    data: { 
+      productId?: string, 
+      quantite?: number,
+      date?: string  // Ajoutez ce champ
+    }
+  ) {
     return this.prisma.dailyProduct.update({
       where: { id },
       data: {
-        productId: data.productId,
-        quantite: data.quantite,
+        ...(data.productId && { productId: data.productId }),
+        ...(data.quantite && { quantite: data.quantite }),
+        ...(data.date && { date: new Date(data.date) }),  // Ajoutez cette ligne
       },
     });
   }

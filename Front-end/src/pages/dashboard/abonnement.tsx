@@ -133,7 +133,6 @@ const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
     "&:nth-of-type(6)": { display: "none" },
     "&:nth-of-type(7)": { width: "30%" },
   },
-  // Ajoutez cette partie pour forcer l'alignement à droite pour la colonne actions
   '&[data-align="right"]': {
     textAlign: "right",
     justifyContent: "flex-end",
@@ -229,6 +228,7 @@ const isSameDay = (date1: Date, date2: Date) => {
 const AbonnementComponent = () => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "expired" | "all">("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
@@ -238,12 +238,11 @@ const AbonnementComponent = () => {
   );
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
-    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    threshold: 0.4,
     includeScore: true,
-    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+    minMatchCharLength: 2,
   };
 
-  // Configuration de Fuse.js pour la recherche des abonnements
   const abonnementSearchOptions = {
     keys: [
       "member.firstName",
@@ -262,8 +261,7 @@ const AbonnementComponent = () => {
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({}); // Retirez le paramètre search
-
+  } = useGetAbonnementsQuery({});
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(
@@ -288,42 +286,65 @@ const AbonnementComponent = () => {
     isReservation: false,
     stayedPeriode: "",
   });
-  // Remplacer la partie filteredData existante par ce code
+
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
 
-    // Crée un tableau enrichi avec les données des membres et des prix
     const enrichedData = abonnementsData.data.map((abonnement) => ({
       ...abonnement,
       member: members.find((m) => m.id === abonnement.memberID),
       price: prices.find((p) => p.id === abonnement.priceId),
     }));
 
-    // Applique d'abord le filtre de période
-    const timeFilteredData = enrichedData.filter((abonnement) => {
-      if (!abonnement.price) return false;
-      const priceName = abonnement.price.name.toLowerCase();
+    let filtered = enrichedData;
+
+    // Apply period filter based on duration between registredDate and leaveDate
+    filtered = filtered.filter((abonnement) => {
+      if (!abonnement.registredDate || !abonnement.leaveDate) return false;
+      
+      const startDate = new Date(abonnement.registredDate);
+      const endDate = new Date(abonnement.leaveDate);
+      const diffMs = endDate.getTime() - startDate.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
       switch (timeFilter) {
         case "week":
-          return priceName.includes("week");
+          return diffDays >= 7 && diffDays <= 21; // 1 to 3 weeks
         case "month":
-          return priceName.includes("month");
+          return diffDays >= 28; // Approximately 1 month or more
         case "all":
         default:
           return true;
       }
     });
 
-    // Ensuite applique la recherche floue si un terme de recherche est présent
+    // Apply status filter
+    filtered = filtered.filter((abonnement) => {
+      if (!abonnement.leaveDate) return true;
+      const leaveDate = new Date(abonnement.leaveDate);
+      const now = new Date();
+
+      switch (statusFilter) {
+        case "active":
+          return leaveDate >= now;
+        case "expired":
+          return leaveDate < now;
+        case "all":
+        default:
+          return true;
+      }
+    });
+
+    // Apply search
     if (search && search.length >= 2) {
-      const fuse = new Fuse(timeFilteredData, abonnementSearchOptions);
+      const fuse = new Fuse(filtered, abonnementSearchOptions);
       const results = fuse.search(search);
       return results.map((result) => result.item);
     }
 
-    return timeFilteredData;
-  }, [abonnementsData?.data, timeFilter, prices, search, members]);
+    return filtered;
+  }, [abonnementsData?.data, timeFilter, statusFilter, prices, search, members]);
+
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
@@ -375,7 +396,6 @@ const AbonnementComponent = () => {
       disablePadding: false,
       label: "Status",
     },
-
     {
       id: "actions",
       numeric: false,
@@ -385,14 +405,28 @@ const AbonnementComponent = () => {
     },
   ];
 
-  const membersWithSubscriptionStatus = members
-    // .filter((member) => member.plan === Subscription.Membership) // Ajoutez ce filtre
-    .map((member) => ({
+  const membersWithSubscriptionStatus = members.map((member) => {
+    const memberAbonnements = abonnementsData?.data.filter(
+      (abonnement) => abonnement.memberID === member.id
+    ) || [];
+    
+    const hasActiveSubscription = memberAbonnements.some(abonnement => {
+      if (!abonnement.leaveDate) return false;
+      return new Date(abonnement.leaveDate) >= new Date();
+    });
+    
+    const hasExpiredSubscription = memberAbonnements.some(abonnement => {
+      if (!abonnement.leaveDate) return false;
+      return new Date(abonnement.leaveDate) < new Date();
+    });
+    
+    return {
       ...member,
-      hasSubscription: abonnementsData?.data.some(
-        (abonnement) => abonnement.memberID === member.id
-      ),
-    }));
+      hasActiveSubscription,
+      hasExpiredSubscription,
+      hasAnySubscription: memberAbonnements.length > 0
+    };
+  });
 
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return "N/A";
@@ -402,6 +436,7 @@ const AbonnementComponent = () => {
       return "Invalid date";
     }
   };
+
   const handleSelect = (selectedMember: Member | null) => {
     setMember(selectedMember);
     if (editAbonnement) {
@@ -416,6 +451,7 @@ const AbonnementComponent = () => {
       });
     }
   };
+
   const handleRequestSort = (
     event: React.MouseEvent<unknown>,
     property: string
@@ -496,6 +532,7 @@ const AbonnementComponent = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
@@ -530,6 +567,7 @@ const AbonnementComponent = () => {
       console.error("Error saving subscription:", error);
     }
   };
+
   const handleDelete = async () => {
     if (abonnementToDelete) {
       try {
@@ -564,7 +602,6 @@ const AbonnementComponent = () => {
       new Date();
     let leaveDate = new Date(registredDate);
 
-    // Calcul basé sur les dates du prix
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
@@ -584,12 +621,11 @@ const AbonnementComponent = () => {
     }
   };
 
-  // Garder l'affichage du nom original
   const getDurationDescription = (price: Price) => {
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
 
-    return `${price.name}`; // Affiche "1week (7 jours)"
+    return `${price.name}`;
   };
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
@@ -597,6 +633,7 @@ const AbonnementComponent = () => {
   if (isLoading) return <CircularProgress />;
   if (isError)
     return <Alert severity="error">Error loading subscriptions</Alert>;
+
   const handleNewMember = (member: Member) => {
     setMember(member);
     if (editAbonnement) {
@@ -605,6 +642,7 @@ const AbonnementComponent = () => {
       setNewAbonnement({ ...newAbonnement, memberID: member.id });
     }
   };
+
   const calculateRemainingTime = (leaveDate: Date | string | null) => {
     if (!leaveDate) return "N/A";
 
@@ -612,20 +650,15 @@ const AbonnementComponent = () => {
       const endDate = new Date(leaveDate);
       const now = new Date();
 
-      // Si la date est déjà passée
       if (endDate < now) return "Expired";
 
-      // Calcul de la différence en millisecondes
       const diffMs = endDate.getTime() - now.getTime();
-
-      // Calcul des différentes unités de temps
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(
         (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
       const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-      // Formatage du résultat
       if (diffDays > 30) {
         const months = Math.floor(diffDays / 30);
         const remainingDays = diffDays % 30;
@@ -678,6 +711,7 @@ const AbonnementComponent = () => {
         handleNewMember={handleNewMember}
       />
     );
+
   return (
     <PageContainer>
       <MainContainer>
@@ -699,6 +733,7 @@ const AbonnementComponent = () => {
             mb: 2,
             mt: -12,
             ml: 1,
+            gap: 2,
           }}
         >
           <FormControl
@@ -722,6 +757,29 @@ const AbonnementComponent = () => {
               <MenuItem value="all">All</MenuItem>
               <MenuItem value="week">Weekly</MenuItem>
               <MenuItem value="month">Monthly</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              backgroundColor: "#f5f5f5",
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "active" | "expired" | "all")
+              }
+              label="Status"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="expired">Expired</MenuItem>
             </Select>
           </FormControl>
         </Box>
@@ -822,13 +880,11 @@ const AbonnementComponent = () => {
                           <IconButton
                             onClick={(e) => {
                               e.stopPropagation();
-                              // Crée un nouvel objet Abonnement sans les propriétés enrichies
                               const abonnementToEdit = {
                                 ...abonnement,
                                 leaveDate: abonnement.leaveDate
                                   ? new Date(abonnement.leaveDate)
                                   : new Date(),
-                                // On supprime les propriétés enrichies qui ne font pas partie de l'interface Abonnement
                                 member: undefined,
                                 price: undefined,
                               };
@@ -906,15 +962,14 @@ const AbonnementComponent = () => {
               onClick={() => setOpenMemberModal(true)}
               sx={{
                 height: "56px",
-                width: "200px", // Largeur fixe pour le bouton
-                alignSelf: "flex-start", // Alignement à gauche
+                width: "200px",
+                alignSelf: "flex-start",
               }}
             >
               New Member
             </ActionButton>
           )}
 
-          {/* Sélecteur de membre avec largeur réduite */}
           <Autocomplete
             options={membersWithSubscriptionStatus}
             getOptionLabel={(option) =>
@@ -953,9 +1008,11 @@ const AbonnementComponent = () => {
               />
             )}
             disabled={!!editAbonnement}
-            getOptionDisabled={(option) =>
-              !!option.hasSubscription && !editAbonnement
-            }
+            getOptionDisabled={(option) => {
+              if (editAbonnement) return false;
+              
+              return option.hasActiveSubscription;
+            }}
             sx={{
               width: "100%",
               maxWidth: "400px",
@@ -972,7 +1029,6 @@ const AbonnementComponent = () => {
         <Grid container spacing={2} sx={{ mb: 2 }}>
           {abonnementPrices.map((price) => (
             <Grid item xs={12} sm={6} key={price.id}>
-              {/* Voici le PriceCard */}
               <PriceCard
                 sx={{
                   border:
@@ -1167,10 +1223,10 @@ const AbonnementComponent = () => {
     </PageContainer>
   );
 };
+
 AbonnementComponent.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      {" "}
       <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );

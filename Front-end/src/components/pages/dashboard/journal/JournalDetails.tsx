@@ -123,10 +123,9 @@ function JournalDetails({
       const product = products?.find((p) => p.id === productId);
       if (!product) return;
 
-      // Format selectedDate to YYYY-MM-DD
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
-      // Find existing daily product for the selected date
+      // Trouver le dailyProduct pour la date sélectionnée
       const existingDailyProduct = dailyProducts?.find(
         (dp) =>
           dp.productId === productId &&
@@ -134,46 +133,51 @@ function JournalDetails({
       );
 
       if (increment) {
-        // Check stock availability
+        // Vérifier le stock
         if (product.stock <= 0) {
           alert("Stock insuffisant!");
           return;
         }
 
-        // Update or create daily product
         if (existingDailyProduct) {
-          await updateDailyProduct({
-            id: existingDailyProduct.id,
-            data: { quantite: existingDailyProduct.quantite + 1 },
+          // Solution alternative: suppression + création
+          await deleteDailyProduct(existingDailyProduct.id).unwrap();
+          await createDailyProduct({
+            productId,
+            quantite: existingDailyProduct.quantite + 1,
+            date: formattedDate,
           }).unwrap();
         } else {
           await createDailyProduct({
             productId,
             quantite: 1,
-            date: formattedDate, // Pass the selected date
+            date: formattedDate,
           }).unwrap();
         }
 
-        // Decrease stock
+        // Mettre à jour le stock
         await updateProduct({
           id: productId,
           data: { stock: product.stock - 1 },
         }).unwrap();
       } else {
-        // Decrement logic
+        // Logique de décrémentation
         if (existingDailyProduct && existingDailyProduct.quantite > 0) {
           const newQuantity = existingDailyProduct.quantite - 1;
 
           if (newQuantity > 0) {
-            await updateDailyProduct({
-              id: existingDailyProduct.id,
-              data: { quantite: newQuantity },
+            // Solution alternative: suppression + création
+            await deleteDailyProduct(existingDailyProduct.id).unwrap();
+            await createDailyProduct({
+              productId,
+              quantite: newQuantity,
+              date: formattedDate,
             }).unwrap();
           } else {
             await deleteDailyProduct(existingDailyProduct.id).unwrap();
           }
 
-          // Increase stock
+          // Mettre à jour le stock
           await updateProduct({
             id: productId,
             data: { stock: product.stock + 1 },
@@ -181,7 +185,7 @@ function JournalDetails({
         }
       }
 
-      // Refresh data
+      // Rafraîchir les données
       await Promise.all([refetchProducts(), refetchDailyProducts()]);
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);

@@ -139,6 +139,7 @@ export const productApi = createApi({
           data: Partial<{
             productId: string;
             quantite: number;
+            date: string; // Ajoutez cette ligne
           }>;
         }
       >({
@@ -148,6 +149,7 @@ export const productApi = createApi({
           body: {
             ...data,
             quantite: data.quantite ? Number(data.quantite) : undefined,
+            date: data.date ? data.date : undefined, // Ajoutez cette ligne
           },
         }),
         invalidatesTags: (result, error, { id }) => [
