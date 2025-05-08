@@ -99,36 +99,38 @@ import { UpdateProductDto } from './dtos/updateProduct';
 
 
     @Post('daily')
-    @ApiOperation({ summary: 'Create new daily product' })
-    @ApiResponse({
-      status: 201,
-      description: 'Daily product successfully created',
-    })
-    async createDailyProduct(@Body() body: {productId?: string; quantite?: number }) {
-      return this.productsService.createDailyProduct({
-        productId: body.productId,
-        quantite: body.quantite,
-      });
-    }
-  
-    @Patch('daily/:id')
-    @ApiOperation({ summary: 'Update daily product' })
-    @ApiParam({ name: 'id', description: 'Daily product ID' })
-    @ApiResponse({
-      status: 200,
-      description: 'Daily product updated',
-    })
-    async updateDailyProduct(
-      @Param('id') id: string,
-      @Body() body: { productId?: string; quantite?: number },
-    ) {
-      return this.productsService.updateDailyProduct(id, {
-        productId: body.productId,
-        quantite: body.quantite,
+  @ApiOperation({ summary: 'Create new daily product' })
+  @ApiResponse({
+    status: 201,
+    description: 'Daily product successfully created',
+  })
+  async createDailyProduct(
+    @Body() body: { productId?: string; quantite?: number; date?: string }
+  ) {
+    return this.productsService.createDailyProduct({
+      productId: body.productId,
+      quantite: body.quantite,
+      date: body.date, // Pass the date field
+    });
+  }
 
-      });
-    }
-  
+  @Patch('daily/:id')
+  @ApiOperation({ summary: 'Update daily product' })
+  @ApiParam({ name: 'id', description: 'Daily product ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Daily product updated',
+  })
+  async updateDailyProduct(
+    @Param('id') id: string,
+    @Body() body: { productId?: string; quantite?: number; date?: string }
+  ) {
+    return this.productsService.updateDailyProduct(id, {
+      productId: body.productId,
+      quantite: body.quantite,
+      date: body.date, // Pass the date field
+    });
+  }
     @Delete('daily/:id')
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Delete daily product' })

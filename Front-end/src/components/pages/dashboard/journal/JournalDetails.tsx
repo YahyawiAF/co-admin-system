@@ -30,7 +30,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import RemoveIcon from "@mui/icons-material/Remove";
 import AddIcon from "@mui/icons-material/Add";
 import Stats from "../landing/stats";
-import { Journal, DailyExpense, ExpenseType } from "src/types/shared";
+import { Journal, DailyExpense, ExpenseType, DailyProduct } from "src/types/shared";
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
 import {
   useDeleteDailyExpenseMutation,
@@ -39,7 +39,6 @@ import {
 import DailyExpenseModal from "src/components/pages/dashboard/journal/dailyexpense";
 import {
   useCreateDailyProductMutation,
-  useGetDailyProductsQuery,
   useGetProductsQuery,
   useUpdateDailyProductMutation,
   useDeleteDailyProductMutation,
@@ -52,6 +51,7 @@ const Typography = styled(MuiTypography)(spacing);
 interface JournalDetailsProps {
   journals: Journal[];
   dailyExpenses: DailyExpense[];
+  dailyProducts: DailyProduct[];
   isLoading: boolean;
   errorMemberReq: boolean;
   selectedDate: Date;
@@ -61,6 +61,7 @@ interface JournalDetailsProps {
 function JournalDetails({
   journals,
   dailyExpenses,
+  dailyProducts,
   isLoading,
   errorMemberReq,
   selectedDate,
@@ -100,23 +101,8 @@ function JournalDetails({
     refetch: refetchProducts,
   } = useGetProductsQuery();
 
-  const {
-    data: dailyProducts,
-    isLoading: isLoadingDailyProducts,
-    error: errorDailyProducts,
-    refetch: refetchDailyProducts,
-  } = useGetDailyProductsQuery();
-
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(null);
-
-  const filteredDailyProducts = useMemo(() => {
-    if (!dailyProducts) return [];
-    return dailyProducts.filter((dailyProduct) => {
-      const productDate = new Date(dailyProduct.createdAt);
-      return isSameDay(productDate, selectedDate);
-    });
-  }, [dailyProducts, selectedDate]);
 
   const handleQuantityChange = async (productId: string, increment: boolean) => {
     try {
@@ -125,29 +111,27 @@ function JournalDetails({
 
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
-      // Trouver le dailyProduct pour la date sélectionnée
       const existingDailyProduct = dailyProducts?.find(
-        (dp) =>
-          dp.productId === productId &&
-          isSameDay(new Date(dp.createdAt), selectedDate)
+        (dp) => dp.productId === productId && isSameDay(new Date(dp.date || dp.createdAt), selectedDate)
       );
 
       if (increment) {
-        // Vérifier le stock
         if (product.stock <= 0) {
           alert("Stock insuffisant!");
           return;
         }
 
         if (existingDailyProduct) {
-          // Solution alternative: suppression + création
-          await deleteDailyProduct(existingDailyProduct.id).unwrap();
-          await createDailyProduct({
-            productId,
-            quantite: existingDailyProduct.quantite + 1,
-            date: formattedDate,
+          // Update existing daily product
+          await updateDailyProduct({
+            id: existingDailyProduct.id,
+            data: {
+              quantite: existingDailyProduct.quantite + 1,
+              date: formattedDate,
+            },
           }).unwrap();
         } else {
+          // Create new daily product
           await createDailyProduct({
             productId,
             quantite: 1,
@@ -155,29 +139,30 @@ function JournalDetails({
           }).unwrap();
         }
 
-        // Mettre à jour le stock
+        // Update product stock
         await updateProduct({
           id: productId,
           data: { stock: product.stock - 1 },
         }).unwrap();
       } else {
-        // Logique de décrémentation
         if (existingDailyProduct && existingDailyProduct.quantite > 0) {
           const newQuantity = existingDailyProduct.quantite - 1;
 
           if (newQuantity > 0) {
-            // Solution alternative: suppression + création
-            await deleteDailyProduct(existingDailyProduct.id).unwrap();
-            await createDailyProduct({
-              productId,
-              quantite: newQuantity,
-              date: formattedDate,
+            // Update existing daily product
+            await updateDailyProduct({
+              id: existingDailyProduct.id,
+              data: {
+                quantite: newQuantity,
+                date: formattedDate,
+              },
             }).unwrap();
           } else {
+            // Delete daily product if quantity is 0
             await deleteDailyProduct(existingDailyProduct.id).unwrap();
           }
 
-          // Mettre à jour le stock
+          // Update product stock
           await updateProduct({
             id: productId,
             data: { stock: product.stock + 1 },
@@ -185,25 +170,16 @@ function JournalDetails({
         }
       }
 
-      // Rafraîchir les données
-      await Promise.all([refetchProducts(), refetchDailyProducts()]);
+      await refetchProducts();
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);
       alert("Une erreur est survenue lors de la mise à jour");
     }
   };
 
-  // Filtered data calculations
-  const filteredDailyExpenses = useMemo(() => {
-    return dailyExpenses.filter((expense) => {
-      const expenseDate = new Date(expense.date || expense.createdAt);
-      return isSameDay(expenseDate, selectedDate);
-    });
-  }, [dailyExpenses, selectedDate]);
-
   const dailyExpensesTotal = useMemo(() => {
-    return filteredDailyExpenses.reduce((acc, curr) => acc + curr.expense.amount, 0);
-  }, [filteredDailyExpenses]);
+    return dailyExpenses.reduce((acc, curr) => acc + curr.expense.amount, 0);
+  }, [dailyExpenses]);
 
   const dailyMembersCount = useMemo(() => {
     return journals.filter((journal) => {
@@ -235,17 +211,17 @@ function JournalDetails({
   const netTotal = useMemo(() => cashTotal - dailyExpensesTotal, [cashTotal, dailyExpensesTotal]);
 
   const dailySalesTotal = useMemo(() => {
-    if (!filteredDailyProducts || !products) return 0;
-    return filteredDailyProducts.reduce((total, dailyProduct) => {
+    if (!dailyProducts || !products) return 0;
+    return dailyProducts.reduce((total, dailyProduct) => {
       const product = products.find((p) => p.id === dailyProduct.productId);
       return total + (product ? product.sellingPrice * dailyProduct.quantite : 0);
     }, 0);
-  }, [filteredDailyProducts, products]);
+  }, [dailyProducts, products]);
 
   const dailySoldItemsCount = useMemo(() => {
-    if (!filteredDailyProducts) return 0;
-    return filteredDailyProducts.reduce((acc, curr) => acc + curr.quantite, 0);
-  }, [filteredDailyProducts]);
+    if (!dailyProducts) return 0;
+    return dailyProducts.reduce((acc, curr) => acc + curr.quantite, 0);
+  }, [dailyProducts]);
 
   const handleDeleteExpense = async (id: string) => {
     try {
@@ -282,11 +258,11 @@ function JournalDetails({
     }
   };
 
-  if (isLoading || isLoadingAbonnements || isLoadingProducts || isLoadingDailyProducts) {
+  if (isLoading || isLoadingAbonnements || isLoadingProducts) {
     return <p>Loading...</p>;
   }
 
-  if (errorMemberReq || errorAbonnements || errorProducts || errorDailyProducts) {
+  if (errorMemberReq || errorAbonnements || errorProducts) {
     return <p>Error loading data</p>;
   }
 
@@ -294,7 +270,7 @@ function JournalDetails({
     <React.Fragment>
       <Grid container spacing={6}>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Membres" count={dailyMembersCount} icon={<User />} />
+          <Stats title="Daily Members" count={dailyMembersCount} icon={<User />} />
         </Grid>
         <Grid item xs={12} sm={12} md={6} lg={4} xl>
           <Stats
@@ -323,7 +299,6 @@ function JournalDetails({
           <Stats title="Net" count={netTotal} icon={<Activity />} />
         </Grid>
       </Grid>
-      {/* Daily Products Table */}
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
           Daily Products ({format(selectedDate, "dd/MM/yyyy")})
@@ -344,7 +319,7 @@ function JournalDetails({
                 ?.slice()
                 .sort((a, b) => a.name.localeCompare(b.name))
                 .map((product) => {
-                  const dailyProduct = filteredDailyProducts?.find(
+                  const dailyProduct = dailyProducts?.find(
                     (dp) => dp.productId === product.id
                   );
                   const quantity = dailyProduct?.quantite || 0;
@@ -384,8 +359,6 @@ function JournalDetails({
           </Table>
         </TableContainer>
       </Box>
-
-      {/* Daily Expenses Table */}
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
           Daily Expenses ({format(selectedDate, "dd/MM/yyyy")})
@@ -403,8 +376,8 @@ function JournalDetails({
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredDailyExpenses.length > 0 ? (
-                filteredDailyExpenses.map((expense) => (
+              {dailyExpenses.length > 0 ? (
+                dailyExpenses.map((expense) => (
                   <TableRow key={expense.id}>
                     <TableCell>{expense.expense.name}</TableCell>
                     <TableCell>{expense.expense.amount.toFixed(2)}</TableCell>
@@ -434,8 +407,6 @@ function JournalDetails({
           </Table>
         </TableContainer>
       </Box>
-
-      {/* Expense Update Modal */}
       {selectedExpense && (
         <DailyExpenseModal
           open={openUpdateModal}

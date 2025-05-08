@@ -25,9 +25,9 @@ export const dailyProductApi = createApi({
       providesTags: (result) =>
         result
           ? [
-              ...result.map(({ id }) => ({ type: "DailyProduct" as const, id })),
-              { type: "DailyProduct", id: "LIST" },
-            ]
+            ...result.map(({ id }) => ({ type: "DailyProduct" as const, id })),
+            { type: "DailyProduct", id: "LIST" },
+          ]
           : [{ type: "DailyProduct", id: "LIST" }],
     }),
 
@@ -51,7 +51,7 @@ export const dailyProductApi = createApi({
     // Create a new daily product
     createDailyProduct: builder.mutation<
       DailyProduct,
-      { productId: string; quantite: number }
+      { productId: string; quantite: number; date?: string }
     >({
       query: (data) => ({
         url: `products/daily`,
@@ -59,6 +59,7 @@ export const dailyProductApi = createApi({
         body: {
           productId: data.productId,
           quantite: Number(data.quantite),
+          date: data.date,
         },
       }),
       invalidatesTags: [{ type: "DailyProduct", id: "LIST" }],
@@ -72,6 +73,7 @@ export const dailyProductApi = createApi({
         data: Partial<{
           productId: string;
           quantite: number;
+          date: string;
         }>;
       }
     >({
@@ -81,6 +83,7 @@ export const dailyProductApi = createApi({
         body: {
           ...data,
           quantite: data.quantite ? Number(data.quantite) : undefined,
+          date: data.date,
         },
       }),
       invalidatesTags: (result, error, { id }) => [

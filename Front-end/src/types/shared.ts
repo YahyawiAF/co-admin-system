@@ -226,6 +226,7 @@ export interface DailyProduct {
   productId: string;
   quantite: number; 
   createdAt: string;
+  date?: string;
   updatedAt: string;
   product: Product; 
 }
