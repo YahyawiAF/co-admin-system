@@ -5,15 +5,20 @@ import {
   Grid,
   Divider as MuiDivider,
   Typography as MuiTypography,
+  Box,
+  IconButton,
+  Card,
+  CardContent,
+  CardMedia,
+  CardActions,
+  Chip,
+  Paper,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Box,
-  IconButton,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import {
@@ -25,10 +30,10 @@ import {
   ShoppingCart,
 } from "react-feather";
 import { format } from "date-fns";
+import AddIcon from "@mui/icons-material/Add";
+import RemoveIcon from "@mui/icons-material/Remove";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import RemoveIcon from "@mui/icons-material/Remove";
-import AddIcon from "@mui/icons-material/Add";
 import Stats from "../landing/stats";
 import { Journal, DailyExpense, ExpenseType, DailyProduct } from "src/types/shared";
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
@@ -47,6 +52,41 @@ import {
 
 const Divider = styled(MuiDivider)(spacing);
 const Typography = styled(MuiTypography)(spacing);
+
+const ProductCard = styled(Card)(({ theme }) => ({
+  height: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  transition: 'transform 0.3s, box-shadow 0.3s',
+  '&:hover': {
+    transform: 'translateY(-5px)',
+    boxShadow: theme.shadows[6],
+  },
+}));
+
+const ProductMedia = styled(CardMedia)(({ theme }) => ({
+  height: 140,
+  backgroundSize: 'contain',
+  backgroundColor: theme.palette.grey[100],
+  position: 'relative',
+}));
+
+const StockChip = styled(Chip)(({ theme }) => ({
+  position: 'absolute',
+  top: theme.spacing(1),
+  right: theme.spacing(1),
+  fontWeight: 'bold',
+}));
+
+const ProductContent = styled(CardContent)(({ theme }) => ({
+  flexGrow: 1,
+}));
+
+const ProductPrice = styled(Typography)(({ theme }) => ({
+  color: theme.palette.success.dark,
+  fontWeight: 'bold',
+  marginTop: theme.spacing(1),
+}));
 
 interface JournalDetailsProps {
   journals: Journal[];
@@ -303,61 +343,64 @@ function JournalDetails({
         <Typography variant="h6" mb={2}>
           Daily Products ({format(selectedDate, "dd/MM/yyyy")})
         </Typography>
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Product</TableCell>
-                <TableCell>Selling price (DT)</TableCell>
-                <TableCell>Stock</TableCell>
-                <TableCell>Quantity sold</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {products
-                ?.slice()
-                .sort((a, b) => a.name.localeCompare(b.name))
-                .map((product) => {
-                  const dailyProduct = dailyProducts?.find(
-                    (dp) => dp.productId === product.id
-                  );
-                  const quantity = dailyProduct?.quantite || 0;
-                  const isOutOfStock = product.stock <= 0;
+        <Grid container spacing={3}>
+          {products
+            ?.slice()
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((product) => {
+              const dailyProduct = dailyProducts?.find(
+                (dp) => dp.productId === product.id
+              );
+              const quantity = dailyProduct?.quantite || 0;
+              const isOutOfStock = product.stock <= 0;
 
-                  return (
-                    <TableRow key={product.id}>
-                      <TableCell>{product.name}</TableCell>
-                      <TableCell>{product.sellingPrice.toFixed(2)}</TableCell>
-                      <TableCell>
-                        {product.stock}{" "}
-                        {isOutOfStock && <span style={{ color: "red" }}>(Épuisé)</span>}
-                      </TableCell>
-                      <TableCell>{quantity}</TableCell>
-                      <TableCell>
-                        <IconButton
-                          color="primary"
-                          onClick={() => handleQuantityChange(product.id, true)}
-                          disabled={isOutOfStock}
-                          title={isOutOfStock ? "Stock épuisé" : "Ajouter un produit"}
-                        >
-                          <AddIcon />
-                        </IconButton>
-                        <IconButton
-                          color="secondary"
-                          onClick={() => handleQuantityChange(product.id, false)}
-                          disabled={quantity <= 0}
-                          title={quantity <= 0 ? "Aucun produit à retirer" : "Retirer un produit"}
-                        >
-                          <RemoveIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              return (
+                <Grid item key={product.id} xs={12} sm={6} md={4} lg={3}>
+                  <ProductCard>
+                    <ProductMedia
+                      image={product.img || "/default-product.png"}
+                      title={product.name}
+                    >
+                      <StockChip
+                        label={`Stock: ${product.stock}`}
+                        color={product.stock > 10 ? "success" : product.stock > 0 ? "warning" : "error"}
+                        size="small"
+                      />
+                    </ProductMedia>
+                    <ProductContent>
+                      <Typography gutterBottom variant="h6" >
+                        {product.name}
+                      </Typography>
+                      <ProductPrice variant="h6">
+                        {product.sellingPrice.toFixed(2)} DT
+                      </ProductPrice>
+                      <Typography variant="body2" color="text.secondary">
+                        Quantity Sold: {quantity}
+                      </Typography>
+                    </ProductContent>
+                    <CardActions sx={{ justifyContent: 'space-between', p: 2 }}>
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleQuantityChange(product.id, true)}
+                        disabled={isOutOfStock}
+                        title={isOutOfStock ? "Stock épuisé" : "Ajouter un produit"}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                      <IconButton
+                        color="secondary"
+                        onClick={() => handleQuantityChange(product.id, false)}
+                        disabled={quantity <= 0}
+                        title={quantity <= 0 ? "Aucun produit à retirer" : "Retirer un produit"}
+                      >
+                        <RemoveIcon />
+                      </IconButton>
+                    </CardActions>
+                  </ProductCard>
+                </Grid>
+              );
+            })}
+        </Grid>
       </Box>
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
@@ -367,12 +410,12 @@ function JournalDetails({
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ width: "20%" }}>Name</TableCell>
-                <TableCell sx={{ width: "15%" }}>Amount (DT)</TableCell>
-                <TableCell sx={{ width: "15%" }}>Description</TableCell>
-                <TableCell sx={{ width: "15%" }}>Summary</TableCell>
-                <TableCell sx={{ width: "20%" }}>Date</TableCell>
-                <TableCell sx={{ width: "30%" }}>Action</TableCell>
+                <TableCell>Name</TableCell>
+                <TableCell>Amount (DT)</TableCell>
+                <TableCell>Description</TableCell>
+                <TableCell>Summary</TableCell>
+                <TableCell>Date</TableCell>
+                <TableCell>Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -398,7 +441,7 @@ function JournalDetails({
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} align="center">
+                  <TableCell colSpan={6} align="center">
                     No expenses recorded for this date.
                   </TableCell>
                 </TableRow>

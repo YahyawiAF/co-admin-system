@@ -813,7 +813,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 {filteredData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={headCells.length} align="center">
-                      No subscriptions found for the selected date.
+                      No subscriptions found.
                     </TableCell>
                   </TableRow>
                 ) : (
