@@ -507,7 +507,7 @@ function JournalPage() {
         </Grid>
       </TabPanel>
       <TabPanel value={value} index={1} title={"Membership"}>
-        <Abonnement />
+        <Abonnement selectedDate={today} />
       </TabPanel>
       <TabPanel value={value} index={2} title={"Overview"}>
         <JournalDetails
