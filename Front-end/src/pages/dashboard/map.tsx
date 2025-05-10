@@ -129,13 +129,14 @@ function SeatingChart() {
   }, 0)
 
   const handleBookSeats = async () => {
-    if (selectedSeats.length === 0) return
+    if (selectedSeats.length === 0) return;
 
-    setIsBooking(true)
-    setBookingError(null)
+    setIsBooking(true);
+    setBookingError(null);
 
     try {
-      const response = await fetch('https://api-sa.seatsio.net', {
+      // Utilisez maintenant votre endpoint NestJS au lieu de l'API directe
+      const response = await fetch('http://localhost:4000/booking', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -144,22 +145,22 @@ function SeatingChart() {
           eventKey: '180346ed-b27d-4677-8975-f4b168d98cc0',
           seats: selectedSeats.map((seat) => seat.label),
         }),
-      })
+      });
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || 'Échec de la réservation')
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Échec de la réservation');
       }
 
-      setBookingSuccess(true)
-      setSelectedSeats([])
-      setTimeout(() => setBookingSuccess(false), 3000)
+      setBookingSuccess(true);
+      setSelectedSeats([]);
+      setTimeout(() => setBookingSuccess(false), 3000);
     } catch (error: unknown) {
-      setBookingError(error instanceof Error ? error.message : 'Une erreur inconnue est survenue')
+      setBookingError(error instanceof Error ? error.message : 'Une erreur inconnue est survenue');
     } finally {
-      setIsBooking(false)
+      setIsBooking(false);
     }
-  }
+  };
 
   return (
     <PageContainer>
@@ -201,6 +202,9 @@ function SeatingChart() {
                   const category = object.category?.key || '1'
                   const priceInfo = pricing.find((p) => p.category === category)
                   return `${object.label} - ${priceInfo?.label || 'Standard'}: ${priceInfo?.price || 0}€`
+                }}
+                messages={{
+                  notAvailable: 'Réservé', // Remplace "indisponible" par "réservé"
                 }}
               />
             </ChartContainer>

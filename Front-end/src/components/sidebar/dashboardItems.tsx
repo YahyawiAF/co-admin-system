@@ -13,7 +13,12 @@ import {
   Box,
   Package,
   Home,
+  MapPin,
+  Compass,
+  Globe,
+  Calendar,
 } from "react-feather";
+
 
 const pagesSection = [
   {
@@ -56,6 +61,11 @@ const pagesSection = [
         href: "/dashboard/facility",
         icon: Home,
         title: "Facility",
+      },
+      {
+        href: "/dashboard/map",
+        icon: Calendar   ,
+        title: "Reservation",
       },
     ],
   },

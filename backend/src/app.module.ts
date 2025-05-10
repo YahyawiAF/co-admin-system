@@ -19,6 +19,10 @@ import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
 import { ExpensesModule } from './modules/expense/expense.module';
 import { ProductsModule } from './modules/product/product.module';
 import { FacilityModule } from './modules/facility/facility.module';
+import { BookingController } from './proxy/booking.controller';
+import { ProxyService } from './proxy/proxy.service';
+import { BookingModule } from './proxy/book.module';
+import { ProxyModule } from './proxy/proxy.module';
 
 @Module({
   imports: [
@@ -59,7 +63,9 @@ import { FacilityModule } from './modules/facility/facility.module';
     AbonnementModule,
     ExpensesModule,
     ProductsModule,
-    FacilityModule
+    FacilityModule,
+    BookingModule,
+    ProxyModule
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
