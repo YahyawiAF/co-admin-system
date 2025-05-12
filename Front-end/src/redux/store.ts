@@ -9,6 +9,7 @@ import { dailyExpenseApi } from "src/api/dailyexpenseApi";
 import { productApi } from "src/api/productApi";
 import { dailyProductApi } from "src/api/dailyproductApi";
 import { facilityApi } from "src/api/facility.repo";
+import { bookingService } from "src/api/bookingservice";
 
 // Configuration du store
 export const store = configureStore({
@@ -24,7 +25,6 @@ export const store = configureStore({
     [productApi.reducerPath]: productApi.reducer,
     [dailyProductApi.reducerPath]: dailyProductApi.reducer,
     [facilityApi.reducerPath]: facilityApi.reducer,
-
 
   },
   middleware: (getDefaultMiddleware) =>

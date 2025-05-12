@@ -44,6 +44,7 @@ model Member {
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
+  seatBookings  SeatBooking[]
 
   @@map("members")
 }
@@ -173,6 +174,20 @@ model Facility {
   updatedAt      DateTime       @updatedAt
 
 @@map("facilities")
+}
+model SeatBooking {
+  id        String   @id @default(uuid())
+  eventKey  String
+  seatId    String
+  isBooked  Boolean  @default(false)
+  bookedAt  DateTime?
+  memberId  String?
+  member    Member?  @relation(fields: [memberId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventKey, seatId])
+  @@map("seat_bookings")
 }
 
 

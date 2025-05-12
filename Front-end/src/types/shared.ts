@@ -243,6 +243,34 @@ export interface Facility {
   createdAt: string | Date; 
   updatedAt: string | Date;
 }
+export interface SeatBooking {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  isBooked: boolean;
+  bookedAt?: string;
+  memberId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookSeatsPayload {
+  eventKey: string;
+  seats: string[];
+  memberId: string;
+}
+
+export interface BookingResponse {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  memberId: string | null;
+  isBooked: boolean;
+  bookedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  success: boolean;
+}
 
 export enum ExpenseType {
   MENSUEL = "MENSUEL",
