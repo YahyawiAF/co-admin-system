@@ -1,5 +1,5 @@
 'use client';
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { SeatsioSeatingChart } from '@seatsio/seatsio-react';
 import type { SelectableObject } from '@seatsio/seatsio-types';
 import {
@@ -7,29 +7,22 @@ import {
   Paper,
   Typography,
   Button,
-  Grid,
   useTheme,
   useMediaQuery,
   CircularProgress,
   Alert,
   styled,
   Card,
-  CardContent,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
-  Divider,
   Snackbar,
 } from '@mui/material';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import DashboardLayout from '../../layouts/Dashboard';
 import RoleProtectedRoute from 'src/components/auth/ProtectedRoute';
 import type { ReactElement } from 'react';
@@ -41,12 +34,6 @@ import { BookingResponse } from 'src/types/shared';
 interface SeatSelection {
   label: string;
   category?: { key: string };
-}
-
-interface Pricing {
-  category: string;
-  price: number;
-  label?: string;
 }
 
 // Styled Components
@@ -67,23 +54,8 @@ const MainContainer = styled(Paper)(({ theme }) => ({
 }));
 
 const ChartContainer = styled(Card)(({ theme }) => ({
-  marginBottom: theme.spacing(3),
   overflow: 'hidden',
   height: '500px',
-  boxShadow: theme.shadows[2],
-}));
-
-const BookingPanel = styled(Card)(({ theme }) => ({
-  backgroundColor: '#f9fafb',
-  marginBottom: theme.spacing(3),
-  position: 'sticky',
-  top: theme.spacing(2),
-  zIndex: 1,
-  boxShadow: theme.shadows[2],
-}));
-
-const BookingsList = styled(Card)(({ theme }) => ({
-  backgroundColor: '#f9fafb',
   boxShadow: theme.shadows[2],
 }));
 
@@ -100,34 +72,23 @@ const SubmitButton = styled(Button)(({ theme }) => ({
   },
 }));
 
-const ActionButton = styled(IconButton)(({ theme }) => ({
-  color: theme.palette.grey[600],
-  '&:hover': {
-    color: theme.palette.primary.main,
-  },
-}));
-
 // Main Component
 function SeatingChart() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const [selectedSeats, setSelectedSeats] = useState<SeatSelection[]>([]);
   const [isBooking, setIsBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   const [bookings, setBookings] = useState<BookingResponse[]>([]);
+  const [showModal, setShowModal] = useState<boolean>(false);
+  const [currentSeat, setCurrentSeat] = useState<SeatSelection | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<BookingResponse | null>(null);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
   const [memberId, setMemberId] = useState<string>('');
+  const [modalMode, setModalMode] = useState<'add' | 'update' | 'view'>('add');
 
   const { data: members = [], isLoading: isMembersLoading, error: membersError } = useGetMembersQuery();
-
-  const pricing: Pricing[] = [
-    { category: '1', price: 20, label: 'Standard' },
-    { category: '2', price: 30, label: 'Premium' },
-  ];
 
   // Fetch bookings
   useEffect(() => {
@@ -143,136 +104,111 @@ function SeatingChart() {
     }
   };
 
-  const handleObjectSelected = useCallback((object: SelectableObject) => {
-    if (object.selectable) {
-      setSelectedSeats((prev) => [
-        ...prev,
-        {
-          label: object.label,
-          category: object.category
-            ? { key: String((object.category as { key: string | number }).key) }
-            : undefined,
-        },
-      ]);
+  const handleObjectClicked = useCallback(
+    async (object: SelectableObject) => {
+      const seat = {
+        label: object.label,
+        category: object.category ? { key: String((object.category as { key: string | number }).key) } : undefined,
+      };
+      setCurrentSeat(seat);
       setBookingError(null);
-    }
-  }, []);
 
-  const handleObjectDeselected = useCallback((object: SelectableObject) => {
-    setSelectedSeats((prev) => prev.filter((seat) => seat.label !== object.label));
-  }, []);
+      // Check if the seat is booked
+      const booking = bookings.find((b) => b.seatId === seat.label);
+      if (booking) {
+        // Reserved seat: Show view/update modal
+        try {
+          const fetchedBooking = await bookingService.getBookingById(booking.id);
+          setSelectedBooking(fetchedBooking);
+          setMemberId(fetchedBooking.memberId || '');
+          setModalMode('view');
+        } catch (error: any) {
+          setBookingError(error.message);
+          return;
+        }
+      } else {
+        // Free seat: Show add booking modal
+        setSelectedBooking(null);
+        setMemberId('');
+        setModalMode('add');
+      }
+      setShowModal(true);
+    },
+    [bookings]
+  );
 
-  const totalPrice = useMemo(() => {
-    return selectedSeats.reduce((sum, seat) => {
-      const seatCategory = seat.category?.key || '1';
-      const priceInfo = pricing.find((p) => p.category === seatCategory);
-      return sum + (priceInfo?.price || 0);
-    }, 0);
-  }, [selectedSeats, pricing]);
-  const confirmUpdate = async () => {
-    if (window.confirm('Are you sure you want to update this booking? The old seat will be released and the new one will be booked.')) {
-      await handleBookSeats();
-    }
-  };
-
-  // Dans le JSX, remplacez onClick={handleBookSeats} par onClick={confirmUpdate}
-
-  const handleBookSeats = async () => {
-    if (selectedSeats.length === 0 || !memberId) return;
+  const handleBookSeat = async () => {
+    if (!currentSeat || !memberId) return;
 
     setIsBooking(true);
     setBookingError(null);
 
     const payload = {
       eventKey: '180346ed-b27d-4677-8975-f4b168d98cc0',
-      seats: selectedSeats.map((seat) => seat.label),
+      seats: [currentSeat.label],
       memberId,
     };
 
     try {
-      if (isEditing && selectedBooking) {
-        if (!selectedBooking.id) {
-          throw new Error('Invalid booking ID');
-        }
-
-        // Étape 1: Supprimer l'ancienne réservation
+      if (modalMode === 'update' && selectedBooking) {
+        if (!selectedBooking.id) throw new Error('Invalid booking ID');
         await bookingService.deleteBooking(selectedBooking.id);
-
-        // Étape 2: Créer une nouvelle réservation avec les nouveaux sièges
-        const response = await bookingService.createBooking(payload);
-
+        await bookingService.createBooking(payload);
         setBookingSuccess('Booking updated successfully!');
-        setIsEditing(false);
-        setSelectedBooking(null);
       } else {
-        const response = await bookingService.createBooking(payload);
+        await bookingService.createBooking(payload);
         setBookingSuccess('Booking created successfully!');
       }
 
-      setSelectedSeats([]);
+      setShowModal(false);
+      setCurrentSeat(null);
       setMemberId('');
+      setSelectedBooking(null);
       await fetchBookings();
     } catch (error: any) {
       const errorMessage = error.message.includes('suggestion')
         ? `${error.message.split('suggestion')[0]} - Suggestion: ${error.message.split('suggestion')[1]}`
         : error.message;
       setBookingError(errorMessage);
-
-      // En cas d'échec, recharger les réservations pour s'assurer que l'état est cohérent
       await fetchBookings();
     } finally {
       setIsBooking(false);
     }
   };
 
-  const handleViewBooking = async (bookingId: string) => {
-    if (!bookingId) {
+  const handleDeleteBooking = async () => {
+    if (!selectedBooking?.id) {
       setBookingError('Invalid booking ID');
       return;
     }
+
+    setIsBooking(true);
+    setBookingError(null);
 
     try {
-      const booking = await bookingService.getBookingById(bookingId);
-      setSelectedBooking(booking);
-      setBookingError(null);
-    } catch (error: any) {
-      setBookingError(error.message);
-    }
-  };
-
-  const handleEditBooking = (booking: BookingResponse) => {
-    if (!booking.id) {
-      setBookingError('Invalid booking ID');
-      return;
-    }
-
-    setSelectedBooking(booking);
-    setSelectedSeats([
-      {
-        label: booking.seatId,
-        category: { key: '1' },
-      },
-    ]);
-    setMemberId(booking.memberId || '');
-    setIsEditing(true);
-  };
-
-  const handleDeleteBooking = async (bookingId: string) => {
-    if (!bookingId) {
-      setBookingError('Invalid booking ID');
-      return;
-    }
-
-    try {
-      await bookingService.deleteBooking(bookingId);
+      await bookingService.deleteBooking(selectedBooking.id);
       setBookingSuccess('Booking deleted successfully!');
+      setShowModal(false);
+      setCurrentSeat(null);
+      setSelectedBooking(null);
       await fetchBookings();
-      if (selectedBooking && selectedBooking.id === bookingId) {
-        setSelectedBooking(null);
-      }
     } catch (error: any) {
       setBookingError(error.message);
+    } finally {
+      setIsBooking(false);
     }
+  };
+
+  const handleSwitchToUpdate = () => {
+    setModalMode('update');
+  };
+
+  const handleCloseModal = () => {
+    setShowModal(false);
+    setCurrentSeat(null);
+    setSelectedBooking(null);
+    setMemberId('');
+    setModalMode('add');
   };
 
   const handleCloseSnackbar = () => {
@@ -287,162 +223,104 @@ function SeatingChart() {
       </Typography>
 
       <MainContainer>
-        <Grid container spacing={3}>
-          <Grid item xs={12}>
-            <ChartContainer>
-              <SeatsioSeatingChart
-                workspaceKey="f1e63d51-d4b8-4993-ab7c-345a9904a899"
-                event="180346ed-b27d-4677-8975-f4b168d98cc0"
-                region="sa"
-                onObjectSelected={handleObjectSelected}
-                onObjectDeselected={handleObjectDeselected}
-                onChartRendered={() => setChartError(null)}
-                colors={{
-                  colorSelected: theme.palette.primary.main,
-                  availableObjectColor: theme.palette.grey[200],
-                  errorColor: theme.palette.error.main,
-                }}
-                showLegend={true}
-                language="en"
-                pricing={pricing}
-                priceFormatter={(price: number) => `${price} €`}
-                tooltipInfo={(object: SelectableObject) => {
-                  const category = object.category?.key || '1';
-                  const priceInfo = pricing.find((p) => p.category === category);
-                  return `${object.label} - ${priceInfo?.label || 'Standard'}: ${priceInfo?.price || 0}€`;
-                }}
-                messages={{
-                  notAvailable: 'Booked',
-                }}
-              />
-            </ChartContainer>
-          </Grid>
+        <ChartContainer>
+          <SeatsioSeatingChart
+            workspaceKey="f1e63d51-d4b8-4993-ab7c-345a9904a899"
+            event="180346ed-b27d-4677-8975-f4b168d98cc0"
+            region="sa"
+            onObjectClicked={handleObjectClicked}
+            onChartRendered={() => setChartError(null)}
+            colors={{
+              colorSelected: theme.palette.primary.main,
+              availableObjectColor: theme.palette.grey[200],
+              errorColor: theme.palette.error.main,
+            }}
+            showLegend={true}
+            language="en"
+            tooltipInfo={(object: SelectableObject) => {
+              const booking = bookings.find((b) => b.seatId === object.label);
+              let memberName: string | null = null;
+              if (booking && booking.memberId) {
+                const member = members.find((m) => m.id === booking.memberId);
+                memberName = member && member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : null;
+              }
+              if (memberName) {
+                return `Member: ${memberName}`;
+              }
+              return '';
+            }}
+            messages={{
+              notAvailable: 'Booked',
+            }}
+          />
+        </ChartContainer>
 
-          <Grid item xs={12}>
-            <BookingPanel>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
-                  {isEditing ? 'Edit booking' : 'Your selection'}
+        {/* Booking Modal */}
+        <Dialog open={showModal} onClose={handleCloseModal}>
+          <DialogTitle>
+            {modalMode === 'add' ? 'Book Seat' : modalMode === 'update' ? 'Update Booking' : 'View Booking'}
+          </DialogTitle>
+          <DialogContent>
+            <Typography variant="subtitle1" sx={{ mb: 2 }}>
+              Seat: {currentSeat?.label}
+            </Typography>
+            {modalMode === 'view' && selectedBooking && (
+              <>
+                <Typography sx={{ mb: 2 }}>
+                  Member:{' '}
+                  {members.find((m) => m.id === selectedBooking.memberId)?.firstName
+                    ? `${members.find((m) => m.id === selectedBooking.memberId)?.firstName} ${members.find((m) => m.id === selectedBooking.memberId)?.lastName
+                    }`
+                    : 'Unknown'}
                 </Typography>
-
-                <FormControl fullWidth sx={{ mb: 2 }} disabled={isBooking || isMembersLoading}>
-                  <InputLabel id="member-select-label">Member</InputLabel>
-                  <Select
-                    labelId="member-select-label"
-                    value={memberId}
-                    label="Member"
-                    onChange={(e) => setMemberId(e.target.value as string)}
-                  >
-                    {members.map((member) => (
-                      <MenuItem key={member.id} value={member.id}>
-                        {member.firstName}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                {isMembersLoading && (
-                  <Typography color="text.secondary" sx={{ mb: 2 }}>
-                    Loading members...
-                  </Typography>
-                )}
-
-                {selectedSeats.length > 0 ? (
-                  <>
-                    <List dense>
-                      {selectedSeats.map((seat) => {
-                        const category = seat.category?.key || '1';
-                        const priceInfo = pricing.find((p) => p.category === category);
-                        return (
-                          <ListItem key={seat.label}>
-                            <ListItemText
-                              primary={`Seat ${seat.label} (${priceInfo?.label || 'Standard'})`}
-                              secondary={`${priceInfo?.price || 0}€`}
-                            />
-                          </ListItem>
-                        );
-                      })}
-                    </List>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                        Total: {totalPrice}€
-                      </Typography>
-                      <SubmitButton
-                        onClick={handleBookSeats}
-                        disabled={isBooking || !memberId || isMembersLoading}
-                        sx={{ minWidth: isMobile ? '100%' : '200px' }}
-                      >
-                        {isBooking ? (
-                          <CircularProgress size={24} color="inherit" />
-                        ) : isEditing ? (
-                          'Update'
-                        ) : (
-                          'Confirm'
-                        )}
-                      </SubmitButton>
-                    </Box>
-                  </>
-                ) : (
-                  <Typography color="text.secondary">Select seats on the chart.</Typography>
-                )}
-              </CardContent>
-            </BookingPanel>
-          </Grid>
-
-          <Grid item xs={12}>
-            <BookingsList>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
-                  All bookings
+                <Typography sx={{ mb: 2 }}>
+                  Date: {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString() : ''}
                 </Typography>
-                {bookings.length > 0 ? (
-                  <List dense>
-                    {bookings.map((booking) => {
-                      const member = members.find((m) => m.id === booking.memberId);
-                      return (
-                        <ListItem key={booking.id} divider>
-                          <ListItemText
-                            primary={`Booking ${booking.seatId}`}
-                            secondary={`Seat: ${booking.seatId} | Member: ${member ? member.firstName : booking.memberId || 'Unknown'}`}
-                          />
-                          <ListItemSecondaryAction>
-                            <ActionButton onClick={() => handleViewBooking(booking.id)}>
-                              <VisibilityIcon />
-                            </ActionButton>
-                            <ActionButton onClick={() => handleEditBooking(booking)}>
-                              <EditIcon />
-                            </ActionButton>
-                            <ActionButton onClick={() => handleDeleteBooking(booking.id)}>
-                              <DeleteIcon />
-                            </ActionButton>
-                          </ListItemSecondaryAction>
-                        </ListItem>
-                      );
-                    })}
-                  </List>
+              </>
+            )}
+            {(modalMode === 'add' || modalMode === 'update') && (
+              <FormControl fullWidth sx={{ mb: 2 }} disabled={isBooking || isMembersLoading}>
+                <InputLabel id="member-select-label">Member</InputLabel>
+                <Select
+                  labelId="member-select-label"
+                  value={memberId}
+                  label="Member"
+                  onChange={(e) => setMemberId(e.target.value as string)}
+                >
+                  {members.map((member) => (
+                    <MenuItem key={member.id} value={member.id}>
+                      {member.firstName} {member.lastName}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseModal}>Cancel</Button>
+            {modalMode === 'view' && (
+              <>
+                <Button onClick={handleSwitchToUpdate} disabled={isBooking}>
+                  Edit
+                </Button>
+                <SubmitButton onClick={handleDeleteBooking} disabled={isBooking}>
+                  {isBooking ? <CircularProgress size={24} color="inherit" /> : 'Delete'}
+                </SubmitButton>
+              </>
+            )}
+            {(modalMode === 'add' || modalMode === 'update') && (
+              <SubmitButton onClick={handleBookSeat} disabled={isBooking || !memberId || isMembersLoading}>
+                {isBooking ? (
+                  <CircularProgress size={24} color="inherit" />
+                ) : modalMode === 'update' ? (
+                  'Update'
                 ) : (
-                  <Typography color="text.secondary">No bookings found.</Typography>
+                  'Confirm'
                 )}
-
-                {selectedBooking && (
-                  <>
-                    <Divider sx={{ my: 2 }} />
-                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 'medium' }}>
-                      Booking details
-                    </Typography>
-                    <Typography>Date: {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString() : ''}</Typography>
-                    <Typography>Seat: {selectedBooking.seatId}</Typography>
-                    <Typography>
-                      Member:{' '}
-                      {members.find((m) => m.id === selectedBooking.memberId)?.firstName ||
-                        selectedBooking.memberId || 'Unknown'}
-                    </Typography>
-                  </>
-                )}
-              </CardContent>
-            </BookingsList>
-          </Grid>
-        </Grid>
+              </SubmitButton>
+            )}
+          </DialogActions>
+        </Dialog>
 
         <Snackbar
           open={!!bookingSuccess}
