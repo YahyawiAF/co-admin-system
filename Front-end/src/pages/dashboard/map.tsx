@@ -22,6 +22,9 @@ import {
   FormControl,
   InputLabel,
   Snackbar,
+  IconButton,
+  Avatar,
+  Divider,
 } from '@mui/material';
 import DashboardLayout from '../../layouts/Dashboard';
 import RoleProtectedRoute from 'src/components/auth/ProtectedRoute';
@@ -29,6 +32,15 @@ import type { ReactElement } from 'react';
 import { bookingService } from 'src/api/bookingservice';
 import { useGetMembersQuery } from 'src/api/members.repo';
 import { BookingResponse } from 'src/types/shared';
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Close as CloseIcon,
+  CheckCircle as CheckCircleIcon,
+  Person as PersonIcon,
+  EventSeat as SeatIcon,
+  EventAvailable as DateIcon,
+} from '@mui/icons-material';
 
 // Types
 interface SeatSelection {
@@ -59,17 +71,75 @@ const ChartContainer = styled(Card)(({ theme }) => ({
   boxShadow: theme.shadows[2],
 }));
 
-const SubmitButton = styled(Button)(({ theme }) => ({
-  backgroundColor: '#054547',
-  color: '#fff',
+const RectangularModal = styled(Dialog)(({ theme }) => ({
+  '& .MuiDialog-paper': {
+    borderRadius: '4px', // Bordes droits pour un look rectangulaire
+    width: '100%',
+    maxWidth: '500px',
+    margin: theme.spacing(2),
+    overflow: 'hidden',
+  },
+}));
+
+const ModalHeader = styled(DialogTitle)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
+  padding: theme.spacing(2),
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+}));
+
+const ModalContent = styled(DialogContent)(({ theme }) => ({
+  padding: theme.spacing(3),
+}));
+
+const ModalFooter = styled(DialogActions)(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderTop: `1px solid ${theme.palette.divider}`,
+  justifyContent: 'space-between',
+}));
+
+const InfoRow = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  marginBottom: theme.spacing(2),
   padding: theme.spacing(1.5),
-  borderRadius: theme.shape.borderRadius,
+  backgroundColor: theme.palette.grey[50],
+  borderRadius: '4px',
+}));
+
+const InfoIconWrapper = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: theme.palette.primary.light,
+  color: theme.palette.primary.main,
+  borderRadius: '4px',
+  width: '40px',
+  height: '40px',
+  marginRight: theme.spacing(2),
+  flexShrink: 0,
+}));
+
+const PrimaryButton = styled(Button)(({ theme }) => ({
+  backgroundColor: theme.palette.primary.main,
+  color: theme.palette.common.white,
   '&:hover': {
-    backgroundColor: '#033a3b',
+    backgroundColor: theme.palette.primary.dark,
   },
-  '&:disabled': {
-    backgroundColor: theme.palette.grey[400],
-  },
+  padding: theme.spacing(1, 3),
+  borderRadius: '4px',
+  textTransform: 'none',
+}));
+
+const SecondaryButton = styled(Button)(({ theme }) => ({
+  borderColor: theme.palette.grey[400],
+  color: theme.palette.text.primary,
+  padding: theme.spacing(1, 3),
+  borderRadius: '4px',
+  textTransform: 'none',
+  marginRight: theme.spacing(1),
 }));
 
 // Main Component
@@ -216,10 +286,15 @@ function SeatingChart() {
     setBookingError(null);
   };
 
+  const getMemberName = (id: string) => {
+    const member = members.find((m) => m.id === id);
+    return member ? `${member.firstName} ${member.lastName}` : 'Unknown';
+  };
+
   return (
     <PageContainer>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold', color: theme.palette.text.primary }}>
-        Coworking space booking
+        Coworking Space Booking
       </Typography>
 
       <MainContainer>
@@ -239,13 +314,8 @@ function SeatingChart() {
             language="en"
             tooltipInfo={(object: SelectableObject) => {
               const booking = bookings.find((b) => b.seatId === object.label);
-              let memberName: string | null = null;
               if (booking && booking.memberId) {
-                const member = members.find((m) => m.id === booking.memberId);
-                memberName = member && member.firstName && member.lastName ? `${member.firstName} ${member.lastName}` : null;
-              }
-              if (memberName) {
-                return `Member: ${memberName}`;
+                return `Member: ${getMemberName(booking.memberId)}`;
               }
               return '';
             }}
@@ -255,72 +325,147 @@ function SeatingChart() {
           />
         </ChartContainer>
 
-        {/* Booking Modal */}
-        <Dialog open={showModal} onClose={handleCloseModal}>
-          <DialogTitle>
-            {modalMode === 'add' ? 'Book Seat' : modalMode === 'update' ? 'Update Booking' : 'View Booking'}
-          </DialogTitle>
-          <DialogContent>
-            <Typography variant="subtitle1" sx={{ mb: 2 }}>
-              Seat: {currentSeat?.label}
-            </Typography>
+        {/* Booking Modal - Version Rectangulaire */}
+        <RectangularModal
+          open={showModal}
+          onClose={handleCloseModal}
+          fullWidth
+          maxWidth="sm"
+        >
+          <ModalHeader>
+            <Box display="flex" alignItems="center">
+              {modalMode === 'add' ? (
+                <CheckCircleIcon sx={{ mr: 1, color: theme.palette.common.white }} />
+              ) : modalMode === 'update' ? (
+                <EditIcon sx={{ mr: 1, color: theme.palette.common.white }} />
+              ) : (
+                <PersonIcon sx={{ mr: 1, color: theme.palette.common.white }} />
+              )}
+              <Typography variant="h6" component="div" sx={{ color: theme.palette.common.white }}>
+                {modalMode === 'add' ? 'Book Seat' : modalMode === 'update' ? 'Update Booking' : 'Booking Details'}
+              </Typography>
+            </Box>
+            <IconButton onClick={handleCloseModal} size="small" sx={{ color: theme.palette.common.white }}>
+              <CloseIcon />
+            </IconButton>
+          </ModalHeader>
+
+          <ModalContent>
+            <InfoRow>
+              <InfoIconWrapper>
+                <SeatIcon />
+              </InfoIconWrapper>
+              <Box>
+                <Typography variant="subtitle2" color="textSecondary">
+                  Seat Number
+                </Typography>
+                <Typography variant="body1">
+                  {currentSeat?.label}
+                </Typography>
+              </Box>
+            </InfoRow>
+
             {modalMode === 'view' && selectedBooking && (
               <>
-                <Typography sx={{ mb: 2 }}>
-                  Member:{' '}
-                  {members.find((m) => m.id === selectedBooking.memberId)?.firstName
-                    ? `${members.find((m) => m.id === selectedBooking.memberId)?.firstName} ${members.find((m) => m.id === selectedBooking.memberId)?.lastName
-                    }`
-                    : 'Unknown'}
-                </Typography>
-                <Typography sx={{ mb: 2 }}>
-                  Date: {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString() : ''}
-                </Typography>
+                <InfoRow>
+                  <InfoIconWrapper>
+                    <PersonIcon />
+                  </InfoIconWrapper>
+                  <Box>
+                    <Typography variant="subtitle2" color="textSecondary">
+                      Member
+                    </Typography>
+                    <Typography variant="body1">
+                      {getMemberName(selectedBooking.memberId || '')}
+                    </Typography>
+                  </Box>
+                </InfoRow>
+                <InfoRow>
+                  <InfoIconWrapper>
+                    <DateIcon />
+                  </InfoIconWrapper>
+                  <Box>
+                    <Typography variant="subtitle2" color="textSecondary">
+                      Booking Date
+                    </Typography>
+                    <Typography variant="body1">
+                      {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString() : 'N/A'}
+                    </Typography>
+                  </Box>
+                </InfoRow>
               </>
             )}
+
             {(modalMode === 'add' || modalMode === 'update') && (
-              <FormControl fullWidth sx={{ mb: 2 }} disabled={isBooking || isMembersLoading}>
-                <InputLabel id="member-select-label">Member</InputLabel>
+              <FormControl fullWidth sx={{ mt: 2 }} disabled={isBooking || isMembersLoading}>
+                <InputLabel id="member-select-label">Select Member</InputLabel>
                 <Select
                   labelId="member-select-label"
                   value={memberId}
-                  label="Member"
+                  label="Select Member"
                   onChange={(e) => setMemberId(e.target.value as string)}
+                  MenuProps={{
+                    PaperProps: {
+                      style: {
+                        maxHeight: 300,
+                      },
+                    },
+                  }}
                 >
                   {members.map((member) => (
                     <MenuItem key={member.id} value={member.id}>
-                      {member.firstName} {member.lastName}
+                      <Box display="flex" alignItems="center">
+                        <Avatar sx={{ width: 24, height: 24, mr: 2, fontSize: '0.75rem' }}>
+                          {member.firstName?.charAt(0)}{member.lastName?.charAt(0)}
+                        </Avatar>
+                        {member.firstName} {member.lastName}
+                      </Box>
                     </MenuItem>
                   ))}
                 </Select>
               </FormControl>
             )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseModal}>Cancel</Button>
-            {modalMode === 'view' && (
+          </ModalContent>
+
+          <ModalFooter>
+            {modalMode === 'view' ? (
               <>
-                <Button onClick={handleSwitchToUpdate} disabled={isBooking}>
-                  Edit
-                </Button>
-                <SubmitButton onClick={handleDeleteBooking} disabled={isBooking}>
-                  {isBooking ? <CircularProgress size={24} color="inherit" /> : 'Delete'}
-                </SubmitButton>
+                <Box sx={{ display: 'flex', width: '100%' }}>
+                  <Box sx={{ flex: 1 }}>
+                    <IconButton
+                      onClick={handleSwitchToUpdate}
+                      disabled={isBooking}
+                      color="primary"
+                    >
+                      <EditIcon />
+                    </IconButton>
+                  </Box>
+
+                  <IconButton
+                    onClick={handleDeleteBooking}
+                    disabled={isBooking}
+                    color="error"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              </>
+            ) : (
+              <>
+                <SecondaryButton onClick={handleCloseModal} startIcon={<CloseIcon />}>
+                  Cancel
+                </SecondaryButton>
+                <PrimaryButton
+                  onClick={handleBookSeat}
+                  disabled={isBooking || !memberId || isMembersLoading}
+                  startIcon={isBooking ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />}
+                >
+                  {modalMode === 'update' ? 'Update' : 'Confirm'}
+                </PrimaryButton>
               </>
             )}
-            {(modalMode === 'add' || modalMode === 'update') && (
-              <SubmitButton onClick={handleBookSeat} disabled={isBooking || !memberId || isMembersLoading}>
-                {isBooking ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : modalMode === 'update' ? (
-                  'Update'
-                ) : (
-                  'Confirm'
-                )}
-              </SubmitButton>
-            )}
-          </DialogActions>
-        </Dialog>
+          </ModalFooter>
+        </RectangularModal>
 
         <Snackbar
           open={!!bookingSuccess}
@@ -328,7 +473,7 @@ function SeatingChart() {
           onClose={handleCloseSnackbar}
           anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          <Alert severity="success" onClose={handleCloseSnackbar}>
+          <Alert severity="success" onClose={handleCloseSnackbar} icon={<CheckCircleIcon fontSize="inherit" />}>
             {bookingSuccess}
           </Alert>
         </Snackbar>

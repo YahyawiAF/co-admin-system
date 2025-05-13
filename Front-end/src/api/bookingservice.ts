@@ -56,6 +56,8 @@ export class BookingService {
       throw new Error(error.response?.data?.error || 'Failed to fetch booking');
     }
   }
+  
+  
 }
 
 export const bookingService = new BookingService('http://localhost:4000');
