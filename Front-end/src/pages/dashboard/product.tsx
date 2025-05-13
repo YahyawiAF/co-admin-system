@@ -71,28 +71,28 @@ const ProductsGrid = styled(Grid)(({ theme }) => ({
 }));
 
 const ProductCard = styled(Card)(({ theme }) => ({
-  height: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  transition: 'transform 0.3s, box-shadow 0.3s',
-  '&:hover': {
-    transform: 'translateY(-5px)',
+  height: "100%",
+  display: "flex",
+  flexDirection: "column",
+  transition: "transform 0.3s, box-shadow 0.3s",
+  "&:hover": {
+    transform: "translateY(-5px)",
     boxShadow: theme.shadows[6],
   },
 }));
 
 const ProductMedia = styled(CardMedia)(({ theme }) => ({
   height: 180,
-  backgroundSize: 'contain',
+  backgroundSize: "contain",
   backgroundColor: theme.palette.grey[100],
-  position: 'relative',
+  position: "relative",
 }));
 
 const StockChip = styled(Chip)(({ theme }) => ({
-  position: 'absolute',
+  position: "absolute",
   top: theme.spacing(1),
   right: theme.spacing(1),
-  fontWeight: 'bold',
+  fontWeight: "bold",
 }));
 
 const ProductContent = styled(CardContent)(({ theme }) => ({
@@ -101,19 +101,19 @@ const ProductContent = styled(CardContent)(({ theme }) => ({
 
 const ProductPrice = styled(Typography)(({ theme }) => ({
   color: theme.palette.success.dark,
-  fontWeight: 'bold',
+  fontWeight: "bold",
   marginTop: theme.spacing(1),
 }));
 
 const ProductCost = styled(Typography)(({ theme }) => ({
   color: theme.palette.text.secondary,
-  textDecoration: 'line-through',
-  fontSize: '0.875rem',
+  textDecoration: "line-through",
+  fontSize: "0.875rem",
 }));
 
 const ProductProfit = styled(Typography)(({ theme }) => ({
   color: theme.palette.success.main,
-  fontSize: '0.875rem',
+  fontSize: "0.875rem",
 }));
 
 const ActionButton = styled(Button)(({ theme }) => ({
@@ -214,9 +214,8 @@ const ProductComponent = () => {
       } else {
         setNewProduct({ ...newProduct, img: uploadedImageUrl });
       }
-
     } catch (error) {
-      console.error('Failed to upload image:', error);
+      console.error("Failed to upload image:", error);
     } finally {
       setIsUploading(false);
     }
@@ -357,7 +356,13 @@ const ProductComponent = () => {
                 >
                   <StockChip
                     label={`Stock: ${product.stock}`}
-                    color={product.stock > 10 ? "success" : product.stock > 0 ? "warning" : "error"}
+                    color={
+                      product.stock > 10
+                        ? "success"
+                        : product.stock > 0
+                        ? "warning"
+                        : "error"
+                    }
                     size="small"
                   />
                 </ProductMedia>
@@ -365,29 +370,37 @@ const ProductComponent = () => {
                   <Typography gutterBottom variant="h6" component="h3">
                     {product.name}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    mb: 1
-                  }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      display: "-webkit-box",
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: "vertical",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      mb: 1,
+                    }}
+                  >
                     {product.description}
                   </Typography>
                   <ProductPrice variant="h6">
                     {product.sellingPrice.toFixed(2)} DT
                   </ProductPrice>
-                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
                     <ProductCost variant="body2">
                       {product.purchasePrice.toFixed(2)} DT
                     </ProductCost>
                     <ProductProfit variant="body2">
-                      ({(product.sellingPrice - product.purchasePrice).toFixed(2)} DT profit)
+                      (
+                      {(product.sellingPrice - product.purchasePrice).toFixed(
+                        2
+                      )}{" "}
+                      DT profit)
                     </ProductProfit>
                   </Box>
                 </ProductContent>
-                <CardActions sx={{ justifyContent: 'space-between', p: 2 }}>
+                <CardActions sx={{ justifyContent: "space-between", p: 2 }}>
                   <IconButton
                     onClick={() => {
                       setEditProduct(product);
@@ -453,28 +466,37 @@ const ProductComponent = () => {
         </Typography>
 
         {/* Image Upload Section */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            position: "relative",
+          }}
+        >
           <Avatar
             src={editProduct?.img || newProduct.img || "/default-product.png"}
             sx={{
               width: 150,
               height: 150,
-              border: '2px solid',
-              borderColor: 'primary.main',
+              border: "2px solid",
+              borderColor: "primary.main",
               mb: 2,
-              cursor: isUploading ? 'default' : 'pointer',
+              cursor: isUploading ? "default" : "pointer",
               opacity: isUploading ? 0.6 : 1,
-              transition: 'opacity 0.2s ease-in-out',
-              '&:hover': {
+              transition: "opacity 0.2s ease-in-out",
+              "&:hover": {
                 opacity: isUploading ? 0.6 : 0.8,
               },
             }}
             variant="rounded"
-            onClick={() => !isUploading && productImageInputRef.current?.click()}
+            onClick={() =>
+              !isUploading && productImageInputRef.current?.click()
+            }
           />
           <input
             accept="image/*"
-            style={{ display: 'none' }}
+            style={{ display: "none" }}
             id="product-image-upload"
             type="file"
             ref={productImageInputRef}
@@ -484,7 +506,12 @@ const ProductComponent = () => {
           {isUploading && (
             <CircularProgress
               size={30}
-              sx={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)' }}
+              sx={{
+                position: "absolute",
+                top: "30%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+              }}
             />
           )}
           <Typography variant="caption" color="text.secondary">
@@ -527,7 +554,9 @@ const ProductComponent = () => {
               fullWidth
               type="number"
               value={
-                editProduct ? editProduct.purchasePrice : newProduct.purchasePrice
+                editProduct
+                  ? editProduct.purchasePrice
+                  : newProduct.purchasePrice
               }
               onChange={(e) => {
                 const value = Math.max(0, parseFloat(e.target.value) || 0);

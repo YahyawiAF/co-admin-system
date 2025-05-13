@@ -1,5 +1,9 @@
-import React, { ReactElement, useState, useEffect } from 'react';
-import { Facility, useGetFacilityByIdQuery, useUpdateFacilityMutation } from 'src/api/facility.repo';
+import React, { ReactElement, useState, useEffect } from "react";
+import {
+  Facility,
+  useGetFacilityByIdQuery,
+  useUpdateFacilityMutation,
+} from "src/api/facility.repo";
 import {
   Box,
   Tab,
@@ -23,7 +27,7 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Delete as DeleteIcon,
   Facebook as FacebookIcon,
@@ -36,8 +40,8 @@ import {
   Edit as EditIcon,
   Add as AddIcon,
   People as PeopleIcon,
-} from '@mui/icons-material';
-import RoleProtectedRoute from 'src/components/auth/ProtectedRoute';
+} from "@mui/icons-material";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import DashboardLayout from "../../layouts/Dashboard";
 
 interface TabPanelProps {
@@ -57,11 +61,7 @@ function TabPanel(props: TabPanelProps) {
       aria-labelledby={`simple-tab-${index}`}
       {...other}
     >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
     </div>
   );
 }
@@ -69,7 +69,7 @@ function TabPanel(props: TabPanelProps) {
 function a11yProps(index: number) {
   return {
     id: `simple-tab-${index}`,
-    'aria-controls': `simple-tabpanel-${index}`,
+    "aria-controls": `simple-tabpanel-${index}`,
   };
 }
 
@@ -82,14 +82,20 @@ interface Space {
 }
 
 const FacilityProfile = () => {
-  const facilityId = 'a69401f8-df5d-46cc-959d-026293d00114';
+  const facilityId = "a69401f8-df5d-46cc-959d-026293d00114";
   const { data: facility, isLoading } = useGetFacilityByIdQuery(facilityId);
   const [updateFacility] = useUpdateFacilityMutation();
   const [value, setValue] = useState(0);
   const [formData, setFormData] = useState<Partial<Facility>>({});
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
   const [editingSpace, setEditingSpace] = useState<Space | null>(null);
-  const [newSpace, setNewSpace] = useState<Space>({ id: '', name: '', description: '', capacity: 0, image: '' });
+  const [newSpace, setNewSpace] = useState<Space>({
+    id: "",
+    name: "",
+    description: "",
+    capacity: 0,
+    image: "",
+  });
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -120,27 +126,40 @@ const FacilityProfile = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: name === 'nbrPlaces' ? parseInt(value) || 0 : value,
+      [name]: name === "nbrPlaces" ? parseInt(value) || 0 : value,
     }));
   };
 
   const handleSocialLinkChange = (platform: string, value: string) => {
-    setSocialLinks(prev => ({ ...prev, [platform]: value }));
+    setSocialLinks((prev) => ({ ...prev, [platform]: value }));
   };
 
   const handleSpaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setEditingSpace(prev => prev ? { ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value } : prev);
+    setEditingSpace((prev) =>
+      prev
+        ? {
+            ...prev,
+            [name]: name === "capacity" ? parseInt(value) || 0 : value,
+          }
+        : prev
+    );
   };
 
   const handleNewSpaceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setNewSpace(prev => ({ ...prev, [name]: name === 'capacity' ? parseInt(value) || 0 : value }));
+    setNewSpace((prev) => ({
+      ...prev,
+      [name]: name === "capacity" ? parseInt(value) || 0 : value,
+    }));
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, isNewSpace: boolean) => {
+  const handleImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    isNewSpace: boolean
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -156,13 +175,14 @@ const FacilityProfile = () => {
       });
 
       if (isNewSpace) {
-        setNewSpace(prev => ({ ...prev, image: uploadedImageUrl }));
+        setNewSpace((prev) => ({ ...prev, image: uploadedImageUrl }));
       } else if (editingSpace) {
-        setEditingSpace(prev => prev ? { ...prev, image: uploadedImageUrl } : prev);
+        setEditingSpace((prev) =>
+          prev ? { ...prev, image: uploadedImageUrl } : prev
+        );
       }
-
     } catch (error) {
-      console.error('Failed to upload image:', error);
+      console.error("Failed to upload image:", error);
     } finally {
       setIsUploading(false);
     }
@@ -190,13 +210,12 @@ const FacilityProfile = () => {
         },
       }).unwrap();
 
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         logo: uploadedLogoUrl,
       }));
-
     } catch (error) {
-      console.error('Failed to upload logo:', error);
+      console.error("Failed to upload logo:", error);
     } finally {
       setIsUploading(false);
     }
@@ -213,7 +232,7 @@ const FacilityProfile = () => {
         },
       }).unwrap();
     } catch (error) {
-      console.error('Failed to update facility:', error);
+      console.error("Failed to update facility:", error);
     }
   };
 
@@ -233,7 +252,7 @@ const FacilityProfile = () => {
       setEditingSpace(null);
       setOpenEditDialog(false);
     } catch (error) {
-      console.error('Failed to update space:', error);
+      console.error("Failed to update space:", error);
     }
   };
 
@@ -251,10 +270,16 @@ const FacilityProfile = () => {
           places: updatedSpaces,
         },
       }).unwrap();
-      setNewSpace({ id: '', name: '', description: '', capacity: 0, image: '' });
+      setNewSpace({
+        id: "",
+        name: "",
+        description: "",
+        capacity: 0,
+        image: "",
+      });
       setOpenAddDialog(false);
     } catch (error) {
-      console.error('Failed to add space:', error);
+      console.error("Failed to add space:", error);
     }
   };
 
@@ -269,7 +294,7 @@ const FacilityProfile = () => {
         },
       }).unwrap();
     } catch (error) {
-      console.error('Failed to delete space:', error);
+      console.error("Failed to delete space:", error);
     }
   };
 
@@ -278,36 +303,36 @@ const FacilityProfile = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper sx={{ width: '100%', p: 3 }}>
+      <Paper sx={{ width: "100%", p: 3 }}>
         <Stack direction="row" spacing={4} alignItems="flex-start">
           <Box
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
               minWidth: 200,
-              position: 'sticky',
+              position: "sticky",
               top: 240,
               mt: 3,
-              backgroundColor: 'background.paper',
+              backgroundColor: "background.paper",
               borderRadius: 2,
               zIndex: 1,
               padding: 7,
             }}
           >
             <Avatar
-              src={formData.logo || '/default-logo.png'}
+              src={formData.logo || "/default-logo.png"}
               sx={{
                 width: 150,
                 height: 150,
-                border: '3px solid',
-                borderColor: 'primary.main',
+                border: "3px solid",
+                borderColor: "primary.main",
                 boxShadow: 3,
                 mb: 2,
-                cursor: isUploading ? 'default' : 'pointer',
+                cursor: isUploading ? "default" : "pointer",
                 opacity: isUploading ? 0.6 : 1,
-                transition: 'opacity 0.2s ease-in-out',
-                '&:hover': {
+                transition: "opacity 0.2s ease-in-out",
+                "&:hover": {
                   opacity: isUploading ? 0.6 : 0.8,
                 },
               }}
@@ -315,7 +340,7 @@ const FacilityProfile = () => {
             />
             <input
               accept="image/*"
-              style={{ display: 'none' }}
+              style={{ display: "none" }}
               id="logo-upload"
               type="file"
               ref={logoInputRef}
@@ -325,14 +350,19 @@ const FacilityProfile = () => {
             {isUploading && (
               <CircularProgress
                 size={30}
-                sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                sx={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                }}
               />
             )}
             <Typography
               variant="caption"
               color="text.secondary"
               sx={{
-                textAlign: 'center',
+                textAlign: "center",
               }}
             >
               Click image to upload logo
@@ -347,13 +377,17 @@ const FacilityProfile = () => {
                 mb: 3,
                 ml: -65,
                 pl: 20,
-                position: 'relative',
+                position: "relative",
               }}
             >
               Facility Profile
             </Typography>
-            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-              <Tabs value={value} onChange={handleChange} aria-label="facility tabs">
+            <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+              <Tabs
+                value={value}
+                onChange={handleChange}
+                aria-label="facility tabs"
+              >
                 <Tab label="General" {...a11yProps(0)} />
                 <Tab label="Spaces" {...a11yProps(1)} />
                 <Tab label="Social Networks" {...a11yProps(2)} />
@@ -364,12 +398,14 @@ const FacilityProfile = () => {
               <TabPanel value={value} index={0}>
                 <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>Basic Information</Typography>
+                    <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                      Basic Information
+                    </Typography>
                     <TextField
                       fullWidth
                       label="Name"
                       name="name"
-                      value={formData.name ?? ''}
+                      value={formData.name ?? ""}
                       onChange={handleInputChange}
                       margin="normal"
                       variant="outlined"
@@ -378,7 +414,7 @@ const FacilityProfile = () => {
                       fullWidth
                       label="Phone Number"
                       name="numtel"
-                      value={formData.numtel ?? ''}
+                      value={formData.numtel ?? ""}
                       onChange={handleInputChange}
                       margin="normal"
                       variant="outlined"
@@ -394,7 +430,7 @@ const FacilityProfile = () => {
                       fullWidth
                       label="Email"
                       name="email"
-                      value={formData.email ?? ''}
+                      value={formData.email ?? ""}
                       onChange={handleInputChange}
                       margin="normal"
                       variant="outlined"
@@ -408,12 +444,14 @@ const FacilityProfile = () => {
                     />
                   </Grid>
                   <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>Location</Typography>
+                    <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
+                      Location
+                    </Typography>
                     <TextField
                       fullWidth
                       label="Address"
                       name="adresse"
-                      value={formData.adresse ?? ''}
+                      value={formData.adresse ?? ""}
                       onChange={handleInputChange}
                       margin="normal"
                       variant="outlined"
@@ -430,7 +468,7 @@ const FacilityProfile = () => {
                       label="Number of Spaces"
                       name="nbrPlaces"
                       type="number"
-                      value={formData.nbrPlaces ?? ''}
+                      value={formData.nbrPlaces ?? ""}
                       onChange={handleInputChange}
                       margin="normal"
                       variant="outlined"
@@ -443,20 +481,20 @@ const FacilityProfile = () => {
                     color="error"
                     variant="outlined"
                     sx={{
-                      borderRadius: '50px',
-                      textTransform: 'none',
+                      borderRadius: "50px",
+                      textTransform: "none",
                       fontWeight: 500,
                       px: 3,
                       py: 1,
                       borderColor: (theme) => theme.palette.error.main,
                       color: (theme) => theme.palette.error.main,
-                      '&:hover': {
+                      "&:hover": {
                         backgroundColor: (theme) => theme.palette.error.light,
                         borderColor: (theme) => theme.palette.error.main,
-                        transform: 'translateY(-1px)',
-                        boxShadow: '0 2px 6px rgba(244, 67, 54, 0.2)'
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 2px 6px rgba(244, 67, 54, 0.2)",
                       },
-                      transition: 'all 0.2s ease-in-out'
+                      transition: "all 0.2s ease-in-out",
                     }}
                   >
                     Delete Facility
@@ -465,169 +503,205 @@ const FacilityProfile = () => {
               </TabPanel>
 
               <TabPanel value={value} index={1}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Spaces Configuration</Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    mb: 3,
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    Spaces Configuration
+                  </Typography>
                   <IconButton
                     color="primary"
                     onClick={() => setOpenAddDialog(true)}
                     sx={{
-                      backgroundColor: 'primary.main',
-                      color: 'white',
-                      borderRadius: 'px',
+                      backgroundColor: "primary.main",
+                      color: "white",
+                      borderRadius: "px",
                       width: 26,
                       height: 26,
-                      '&:hover': {
-                        backgroundColor: 'primary.dark',
-                        boxShadow: 'none',
+                      "&:hover": {
+                        backgroundColor: "primary.dark",
+                        boxShadow: "none",
                       },
-                      '& .MuiSvgIcon-root': {
-                        fontSize: '1.2rem'
-                      }
+                      "& .MuiSvgIcon-root": {
+                        fontSize: "1.2rem",
+                      },
                     }}
                   >
                     <AddIcon />
                   </IconButton>
                 </Box>
                 <Grid container spacing={3}>
-                  {Object.entries(facility.places || {}).map(([spaceId, space]: [string, any]) => (
-                    <Grid item xs={12} sm={6} md={4} key={spaceId}>
-                      <Card
-                        sx={{
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          borderRadius: '12px',
-                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-                          transition: 'transform 0.3s, box-shadow 0.3s',
-                          '&:hover': {
-                            transform: 'translateY(-4px)',
-                            boxShadow: '0 6px 16px rgba(0,0,0,0.15)'
-                          }
-                        }}
-                      >
-                        <Box
+                  {Object.entries(facility.places || {}).map(
+                    ([spaceId, space]: [string, any]) => (
+                      <Grid item xs={12} sm={6} md={4} key={spaceId}>
+                        <Card
                           sx={{
-                            height: 180,
-                            position: 'relative',
-                            overflow: 'hidden',
-                            '& img': {
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover',
-                              transition: 'transform 0.3s',
+                            height: "100%",
+                            display: "flex",
+                            flexDirection: "column",
+                            borderRadius: "12px",
+                            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                            transition: "transform 0.3s, box-shadow 0.3s",
+                            "&:hover": {
+                              transform: "translateY(-4px)",
+                              boxShadow: "0 6px 16px rgba(0,0,0,0.15)",
                             },
-                            '&:hover img': {
-                              transform: 'scale(1.05)'
-                            }
                           }}
                         >
-                          <img
-                            src={space.image || '/default-space.png'}
-                            alt={space.name}
-                          />
-                        </Box>
-                        <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                          <Typography
-                            variant="h6"
-                            sx={{
-                              mb: 1,
-                              fontWeight: 600,
-                              color: 'text.primary'
-                            }}
-                          >
-                            {space.name}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            color="text.secondary"
-                            sx={{
-                              mb: 2,
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              minHeight: '40px'
-                            }}
-                          >
-                            {space.description || 'No description provided'}
-                          </Typography>
                           <Box
                             sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              backgroundColor: 'rgba(0, 0, 0, 0.04)',
-                              borderRadius: '6px',
-                              p: '6px 12px',
-                              width: 'fit-content'
+                              height: 180,
+                              position: "relative",
+                              overflow: "hidden",
+                              "& img": {
+                                width: "100%",
+                                height: "100%",
+                                objectFit: "cover",
+                                transition: "transform 0.3s",
+                              },
+                              "&:hover img": {
+                                transform: "scale(1.05)",
+                              },
                             }}
                           >
-                            <PeopleIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />
-                            <Typography variant="body2" color="text.secondary">
-                              Capacity: {space.capacity || 'N/A'}
-                            </Typography>
+                            <img
+                              src={space.image || "/default-space.png"}
+                              alt={space.name}
+                            />
                           </Box>
-                        </CardContent>
-                        <CardActions sx={{ p: 2, justifyContent: 'flex-end' }}>
-                          <IconButton
-                            onClick={() => {
-                              setEditingSpace({ id: spaceId, ...space });
-                              setOpenEditDialog(true);
-                            }}
-                            sx={{
-                              backgroundColor: 'rgba(25, 118, 210, 0.08)',
-                              '&:hover': {
-                                backgroundColor: 'rgba(25, 118, 210, 0.15)'
-                              }
-                            }}
+                          <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                            <Typography
+                              variant="h6"
+                              sx={{
+                                mb: 1,
+                                fontWeight: 600,
+                                color: "text.primary",
+                              }}
+                            >
+                              {space.name}
+                            </Typography>
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{
+                                mb: 2,
+                                display: "-webkit-box",
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: "vertical",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                minHeight: "40px",
+                              }}
+                            >
+                              {space.description || "No description provided"}
+                            </Typography>
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                backgroundColor: "rgba(0, 0, 0, 0.04)",
+                                borderRadius: "6px",
+                                p: "6px 12px",
+                                width: "fit-content",
+                              }}
+                            >
+                              <PeopleIcon
+                                fontSize="small"
+                                sx={{ mr: 1, color: "text.secondary" }}
+                              />
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                              >
+                                Capacity: {space.capacity || "N/A"}
+                              </Typography>
+                            </Box>
+                          </CardContent>
+                          <CardActions
+                            sx={{ p: 2, justifyContent: "flex-end" }}
                           >
-                            <EditIcon fontSize="small" color="primary" />
-                          </IconButton>
-                          <IconButton
-                            onClick={() => handleDeleteSpace(spaceId)}
-                            sx={{
-                              backgroundColor: 'rgba(211, 47, 47, 0.08)',
-                              '&:hover': {
-                                backgroundColor: 'rgba(211, 47, 47, 0.15)'
-                              }
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" color="error" />
-                          </IconButton>
-                        </CardActions>
-                      </Card>
-                    </Grid>
-                  ))}
+                            <IconButton
+                              onClick={() => {
+                                setEditingSpace({ id: spaceId, ...space });
+                                setOpenEditDialog(true);
+                              }}
+                              sx={{
+                                backgroundColor: "rgba(25, 118, 210, 0.08)",
+                                "&:hover": {
+                                  backgroundColor: "rgba(25, 118, 210, 0.15)",
+                                },
+                              }}
+                            >
+                              <EditIcon fontSize="small" color="primary" />
+                            </IconButton>
+                            <IconButton
+                              onClick={() => handleDeleteSpace(spaceId)}
+                              sx={{
+                                backgroundColor: "rgba(211, 47, 47, 0.08)",
+                                "&:hover": {
+                                  backgroundColor: "rgba(211, 47, 47, 0.15)",
+                                },
+                              }}
+                            >
+                              <DeleteIcon fontSize="small" color="error" />
+                            </IconButton>
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    )
+                  )}
                 </Grid>
 
-                <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
+                <Dialog
+                  open={openAddDialog}
+                  onClose={() => setOpenAddDialog(false)}
+                >
                   <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative' }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        mb: 2,
+                        position: "relative",
+                      }}
+                    >
                       <Avatar
-                        src={newSpace.image || '/default-space.png'}
+                        src={newSpace.image || "/default-space.png"}
                         sx={{
                           width: 100,
                           height: 100,
-                          cursor: isUploading ? 'default' : 'pointer',
+                          cursor: isUploading ? "default" : "pointer",
                           opacity: isUploading ? 0.6 : 1,
-                          transition: 'opacity 0.2s ease-in-out',
-                          '&:hover': {
+                          transition: "opacity 0.2s ease-in-out",
+                          "&:hover": {
                             opacity: isUploading ? 0.6 : 0.8,
                           },
                         }}
-                        onClick={() => !isUploading && newSpaceInputRef.current?.click()}
+                        onClick={() =>
+                          !isUploading && newSpaceInputRef.current?.click()
+                        }
                       />
                       {isUploading && (
                         <CircularProgress
                           size={30}
-                          sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                          sx={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                          }}
                         />
                       )}
                     </Box>
                     <input
                       accept="image/*"
-                      style={{ display: 'none' }}
+                      style={{ display: "none" }}
                       id="space-image-upload"
                       type="file"
                       ref={newSpaceInputRef}
@@ -637,7 +711,7 @@ const FacilityProfile = () => {
                     <Typography
                       variant="caption"
                       color="text.secondary"
-                      sx={{ display: 'block', textAlign: 'center', mb: 2 }}
+                      sx={{ display: "block", textAlign: "center", mb: 2 }}
                     >
                       Click image to upload
                     </Typography>
@@ -674,43 +748,67 @@ const FacilityProfile = () => {
                     />
                   </DialogContent>
                   <DialogActions sx={{ pt: 2 }}>
-                    <Button onClick={() => setOpenAddDialog(false)} color="secondary">
+                    <Button
+                      onClick={() => setOpenAddDialog(false)}
+                      color="secondary"
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleAddSpace} color="primary" disabled={!newSpace.name}>
+                    <Button
+                      onClick={handleAddSpace}
+                      color="primary"
+                      disabled={!newSpace.name}
+                    >
                       Confirm
                     </Button>
                   </DialogActions>
                 </Dialog>
 
-                <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
+                <Dialog
+                  open={openEditDialog}
+                  onClose={() => setOpenEditDialog(false)}
+                >
                   <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative' }}>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        mb: 2,
+                        position: "relative",
+                      }}
+                    >
                       <Avatar
-                        src={editingSpace?.image || '/default-space.png'}
+                        src={editingSpace?.image || "/default-space.png"}
                         sx={{
                           width: 100,
                           height: 100,
-                          cursor: isUploading ? 'default' : 'pointer',
+                          cursor: isUploading ? "default" : "pointer",
                           opacity: isUploading ? 0.6 : 1,
-                          transition: 'opacity 0.2s ease-in-out',
-                          '&:hover': {
+                          transition: "opacity 0.2s ease-in-out",
+                          "&:hover": {
                             opacity: isUploading ? 0.6 : 0.8,
                           },
                         }}
-                        onClick={() => !isUploading && editSpaceInputRef.current?.click()}
+                        onClick={() =>
+                          !isUploading && editSpaceInputRef.current?.click()
+                        }
                       />
                       {isUploading && (
                         <CircularProgress
                           size={30}
-                          sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                          sx={{
+                            position: "absolute",
+                            top: "50%",
+                            left: "50%",
+                            transform: "translate(-50%, -50%)",
+                          }}
                         />
                       )}
                     </Box>
                     <input
                       accept="image/*"
-                      style={{ display: 'none' }}
+                      style={{ display: "none" }}
                       id="edit-space-image-upload"
                       type="file"
                       ref={editSpaceInputRef}
@@ -720,7 +818,7 @@ const FacilityProfile = () => {
                     <Typography
                       variant="caption"
                       color="text.secondary"
-                      sx={{ display: 'block', textAlign: 'center', mb: 2 }}
+                      sx={{ display: "block", textAlign: "center", mb: 2 }}
                     >
                       Click image to upload
                     </Typography>
@@ -728,7 +826,7 @@ const FacilityProfile = () => {
                       fullWidth
                       label="Space Name"
                       name="name"
-                      value={editingSpace?.name || ''}
+                      value={editingSpace?.name || ""}
                       onChange={handleSpaceChange}
                       margin="normal"
                       variant="outlined"
@@ -738,7 +836,7 @@ const FacilityProfile = () => {
                       fullWidth
                       label="Description"
                       name="description"
-                      value={editingSpace?.description || ''}
+                      value={editingSpace?.description || ""}
                       onChange={handleSpaceChange}
                       margin="normal"
                       variant="outlined"
@@ -750,17 +848,24 @@ const FacilityProfile = () => {
                       label="Capacity"
                       name="capacity"
                       type="number"
-                      value={editingSpace?.capacity || ''}
+                      value={editingSpace?.capacity || ""}
                       onChange={handleSpaceChange}
                       margin="normal"
                       variant="outlined"
                     />
                   </DialogContent>
                   <DialogActions sx={{ pt: 2 }}>
-                    <Button onClick={() => setOpenEditDialog(false)} color="secondary">
+                    <Button
+                      onClick={() => setOpenEditDialog(false)}
+                      color="secondary"
+                    >
                       Cancel
                     </Button>
-                    <Button onClick={handleSpaceSubmit} color="primary" disabled={!editingSpace?.name}>
+                    <Button
+                      onClick={handleSpaceSubmit}
+                      color="primary"
+                      disabled={!editingSpace?.name}
+                    >
                       Confirm
                     </Button>
                   </DialogActions>
@@ -768,14 +873,18 @@ const FacilityProfile = () => {
               </TabPanel>
 
               <TabPanel value={value} index={2}>
-                <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>Social Networks</Typography>
+                <Typography variant="h6" gutterBottom sx={{ mb: 3 }}>
+                  Social Networks
+                </Typography>
                 <Grid container spacing={3}>
                   <Grid item xs={12} md={6}>
                     <TextField
                       fullWidth
                       label="Facebook"
-                      value={socialLinks.facebook || ''}
-                      onChange={(e) => handleSocialLinkChange('facebook', e.target.value)}
+                      value={socialLinks.facebook || ""}
+                      onChange={(e) =>
+                        handleSocialLinkChange("facebook", e.target.value)
+                      }
                       margin="normal"
                       variant="outlined"
                       InputProps={{
@@ -789,8 +898,10 @@ const FacilityProfile = () => {
                     <TextField
                       fullWidth
                       label="Instagram"
-                      value={socialLinks.instagram || ''}
-                      onChange={(e) => handleSocialLinkChange('instagram', e.target.value)}
+                      value={socialLinks.instagram || ""}
+                      onChange={(e) =>
+                        handleSocialLinkChange("instagram", e.target.value)
+                      }
                       margin="normal"
                       variant="outlined"
                       InputProps={{
@@ -806,8 +917,10 @@ const FacilityProfile = () => {
                     <TextField
                       fullWidth
                       label="LinkedIn"
-                      value={socialLinks.linkedin || ''}
-                      onChange={(e) => handleSocialLinkChange('linkedin', e.target.value)}
+                      value={socialLinks.linkedin || ""}
+                      onChange={(e) =>
+                        handleSocialLinkChange("linkedin", e.target.value)
+                      }
                       margin="normal"
                       variant="outlined"
                       InputProps={{
@@ -821,8 +934,10 @@ const FacilityProfile = () => {
                     <TextField
                       fullWidth
                       label="Twitter"
-                      value={socialLinks.twitter || ''}
-                      onChange={(e) => handleSocialLinkChange('twitter', e.target.value)}
+                      value={socialLinks.twitter || ""}
+                      onChange={(e) =>
+                        handleSocialLinkChange("twitter", e.target.value)
+                      }
                       margin="normal"
                       variant="outlined"
                       InputProps={{
@@ -837,7 +952,12 @@ const FacilityProfile = () => {
                 </Grid>
               </TabPanel>
 
-              <Box mt={4} display="flex" justifyContent="flex-end" sx={{ pr: 2 }}>
+              <Box
+                mt={4}
+                display="flex"
+                justifyContent="flex-end"
+                sx={{ pr: 2 }}
+              >
                 <Button
                   type="submit"
                   variant="contained"
@@ -845,16 +965,16 @@ const FacilityProfile = () => {
                   size="medium"
                   sx={{
                     px: 3,
-                    minWidth: '120px',
-                    borderRadius: '50px',
-                    textTransform: 'none',
+                    minWidth: "120px",
+                    borderRadius: "50px",
+                    textTransform: "none",
                     fontWeight: 600,
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    '&:hover': {
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
+                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                    "&:hover": {
+                      transform: "translateY(-1px)",
+                      boxShadow: "0 4px 8px rgba(0,0,0,0.15)",
                     },
-                    transition: 'all 0.2s ease-in-out'
+                    transition: "all 0.2s ease-in-out",
                   }}
                 >
                   Save Changes

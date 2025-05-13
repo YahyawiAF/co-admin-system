@@ -49,7 +49,7 @@ import {
   Autocomplete,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
-import { DatePicker } from "@mui/x-date-pickers";
+import { DateTimePicker } from "@mui/x-date-pickers";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
@@ -222,12 +222,16 @@ interface AbonnementProps {
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<"active" | "expired" | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "expired" | "all"
+  >("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.down("sm")
+  );
 
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
@@ -351,11 +355,21 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     });
 
     return filtered;
-  }, [abonnementsData?.data, timeFilter, statusFilter, prices, search, members, selectedDate]);
+  }, [
+    abonnementsData?.data,
+    timeFilter,
+    statusFilter,
+    prices,
+    search,
+    members,
+    selectedDate,
+  ]);
 
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
+  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
+    null
+  );
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
@@ -413,16 +427,17 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   ];
 
   const membersWithSubscriptionStatus = members.map((member) => {
-    const memberAbonnements = abonnementsData?.data.filter(
-      (abonnement) => abonnement.memberID === member.id
-    ) || [];
+    const memberAbonnements =
+      abonnementsData?.data.filter(
+        (abonnement) => abonnement.memberID === member.id
+      ) || [];
 
-    const hasActiveSubscription = memberAbonnements.some(abonnement => {
+    const hasActiveSubscription = memberAbonnements.some((abonnement) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) >= new Date();
     });
 
-    const hasExpiredSubscription = memberAbonnements.some(abonnement => {
+    const hasExpiredSubscription = memberAbonnements.some((abonnement) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) < new Date();
     });
@@ -431,14 +446,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       ...member,
       hasActiveSubscription,
       hasExpiredSubscription,
-      hasAnySubscription: memberAbonnements.length > 0
+      hasAnySubscription: memberAbonnements.length > 0,
     };
   });
 
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return "N/A";
     try {
-      return new Date(date).toLocaleDateString();
+      return new Date(date).toLocaleString();
     } catch (e) {
       return "Invalid date";
     }
@@ -509,23 +524,24 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         ? editAbonnement.registredDate
         : newAbonnement.registredDate)
     ) {
-      newErrors.registredDate = "Registration date is required";
+      newErrors.registredDate = "Registration date and time is required";
     }
 
     const leaveDate = editAbonnement
       ? editAbonnement.leaveDate
       : newAbonnement.leaveDate;
     if (!leaveDate) {
-      newErrors.leaveDate = "Leave date is required";
+      newErrors.leaveDate = "Leave date and time is required";
     } else if (
       new Date(leaveDate) <=
       new Date(
         editAbonnement?.registredDate ||
-        newAbonnement.registredDate ||
-        new Date()
+          newAbonnement.registredDate ||
+          new Date()
       )
     ) {
-      newErrors.leaveDate = "Leave date must be after registration date";
+      newErrors.leaveDate =
+        "Leave date and time must be after registration date and time";
     }
 
     if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
@@ -709,6 +725,27 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     }
   };
 
+  const handleRegistrationDateChange = (date: Date | null) => {
+    const newDate = date || selectedDate;
+    if (editAbonnement) {
+      const newLeaveDate = new Date(editAbonnement.leaveDate || selectedDate);
+      newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
+      setEditAbonnement({
+        ...editAbonnement,
+        registredDate: newDate,
+        leaveDate: newLeaveDate,
+      });
+    } else {
+      const newLeaveDate = new Date(newAbonnement.leaveDate);
+      newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
+      setNewAbonnement({
+        ...newAbonnement,
+        registredDate: newDate,
+        leaveDate: newLeaveDate,
+      });
+    }
+  };
+
   if (isLoading) return <CircularProgress />;
   if (isError)
     return <Alert severity="error">Error loading subscriptions</Alert>;
@@ -821,12 +858,15 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                     const member = members.find(
                       (m) => m.id === abonnement.memberID
                     );
-                    const price = prices.find((p) => p.id === abonnement.priceId);
+                    const price = prices.find(
+                      (p) => p.id === abonnement.priceId
+                    );
                     const leaveDate = abonnement.leaveDate
                       ? new Date(abonnement.leaveDate)
                       : null;
                     const today = new Date();
-                    const shouldBlink = leaveDate && isSameDay(leaveDate, today);
+                    const shouldBlink =
+                      leaveDate && isSameDay(leaveDate, today);
                     const TableRowComponent = shouldBlink
                       ? BlinkingTableRow
                       : TableRow;
@@ -903,6 +943,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                                   ...abonnement,
                                   leaveDate: abonnement.leaveDate
                                     ? new Date(abonnement.leaveDate)
+                                    : new Date(),
+                                  registredDate: abonnement.registredDate
+                                    ? new Date(abonnement.registredDate)
                                     : new Date(),
                                   member: undefined,
                                   price: undefined,
@@ -1052,12 +1095,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
@@ -1083,21 +1126,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           </FormHelperText>
         )}
 
-        <DatePicker
-          label="Registration Date *"
+        <DateTimePicker
+          label="Registration Date and Time *"
           value={
             editAbonnement?.registredDate
               ? new Date(editAbonnement.registredDate)
               : newAbonnement.registredDate
           }
-          onChange={(date) => {
-            const newDate = date || selectedDate;
-            if (editAbonnement) {
-              setEditAbonnement({ ...editAbonnement, registredDate: newDate });
-            } else {
-              setNewAbonnement({ ...newAbonnement, registredDate: newDate });
-            }
-          }}
+          onChange={handleRegistrationDateChange}
           sx={{ width: "100%", mb: 0 }}
         />
         {errors.registredDate && (
@@ -1106,8 +1142,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           </FormHelperText>
         )}
 
-        <DatePicker
-          label="Leave Date *"
+        <DateTimePicker
+          label="Leave Date and Time *"
           value={editAbonnement?.leaveDate || newAbonnement.leaveDate}
           onChange={(date) => {
             const newDate = date || selectedDate;

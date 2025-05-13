@@ -1,7 +1,7 @@
-'use client';
-import { useState, useCallback, useEffect } from 'react';
-import { SeatsioSeatingChart } from '@seatsio/seatsio-react';
-import type { SelectableObject } from '@seatsio/seatsio-types';
+"use client";
+import { useState, useCallback, useEffect } from "react";
+import { SeatsioSeatingChart } from "@seatsio/seatsio-react";
+import type { SelectableObject } from "@seatsio/seatsio-types";
 import {
   Box,
   Paper,
@@ -25,13 +25,13 @@ import {
   IconButton,
   Avatar,
   Divider,
-} from '@mui/material';
-import DashboardLayout from '../../layouts/Dashboard';
-import RoleProtectedRoute from 'src/components/auth/ProtectedRoute';
-import type { ReactElement } from 'react';
-import { bookingService } from 'src/api/bookingservice';
-import { useGetMembersQuery } from 'src/api/members.repo';
-import { BookingResponse } from 'src/types/shared';
+} from "@mui/material";
+import DashboardLayout from "../../layouts/Dashboard";
+import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
+import type { ReactElement } from "react";
+import { bookingService } from "src/api/bookingservice";
+import { useGetMembersQuery } from "src/api/members.repo";
+import { BookingResponse } from "src/types/shared";
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -40,7 +40,7 @@ import {
   Person as PersonIcon,
   EventSeat as SeatIcon,
   EventAvailable as DateIcon,
-} from '@mui/icons-material';
+} from "@mui/icons-material";
 
 // Types
 interface SeatSelection {
@@ -50,9 +50,9 @@ interface SeatSelection {
 
 // Styled Components
 const PageContainer = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  flexDirection: 'column',
-  minHeight: 'calc(100vh - 64px)',
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "calc(100vh - 64px)",
   padding: theme.spacing(3),
   backgroundColor: theme.palette.grey[100],
 }));
@@ -62,22 +62,22 @@ const MainContainer = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   boxShadow: theme.shadows[3],
   flex: 1,
-  backgroundColor: '#fff',
+  backgroundColor: "#fff",
 }));
 
 const ChartContainer = styled(Card)(({ theme }) => ({
-  overflow: 'hidden',
-  height: '500px',
+  overflow: "hidden",
+  height: "500px",
   boxShadow: theme.shadows[2],
 }));
 
 const RectangularModal = styled(Dialog)(({ theme }) => ({
-  '& .MuiDialog-paper': {
-    borderRadius: '4px', // Bordes droits pour un look rectangulaire
-    width: '100%',
-    maxWidth: '500px',
+  "& .MuiDialog-paper": {
+    borderRadius: "4px", // Bordes droits pour un look rectangulaire
+    width: "100%",
+    maxWidth: "500px",
     margin: theme.spacing(2),
-    overflow: 'hidden',
+    overflow: "hidden",
   },
 }));
 
@@ -85,9 +85,9 @@ const ModalHeader = styled(DialogTitle)(({ theme }) => ({
   backgroundColor: theme.palette.primary.main,
   color: theme.palette.common.white,
   padding: theme.spacing(2),
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
 }));
 
 const ModalContent = styled(DialogContent)(({ theme }) => ({
@@ -97,27 +97,27 @@ const ModalContent = styled(DialogContent)(({ theme }) => ({
 const ModalFooter = styled(DialogActions)(({ theme }) => ({
   padding: theme.spacing(2),
   borderTop: `1px solid ${theme.palette.divider}`,
-  justifyContent: 'space-between',
+  justifyContent: "space-between",
 }));
 
 const InfoRow = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
+  display: "flex",
+  alignItems: "center",
   marginBottom: theme.spacing(2),
   padding: theme.spacing(1.5),
   backgroundColor: theme.palette.grey[50],
-  borderRadius: '4px',
+  borderRadius: "4px",
 }));
 
 const InfoIconWrapper = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
   backgroundColor: theme.palette.primary.light,
   color: theme.palette.primary.main,
-  borderRadius: '4px',
-  width: '40px',
-  height: '40px',
+  borderRadius: "4px",
+  width: "40px",
+  height: "40px",
   marginRight: theme.spacing(2),
   flexShrink: 0,
 }));
@@ -125,27 +125,27 @@ const InfoIconWrapper = styled(Box)(({ theme }) => ({
 const PrimaryButton = styled(Button)(({ theme }) => ({
   backgroundColor: theme.palette.primary.main,
   color: theme.palette.common.white,
-  '&:hover': {
+  "&:hover": {
     backgroundColor: theme.palette.primary.dark,
   },
   padding: theme.spacing(1, 3),
-  borderRadius: '4px',
-  textTransform: 'none',
+  borderRadius: "4px",
+  textTransform: "none",
 }));
 
 const SecondaryButton = styled(Button)(({ theme }) => ({
   borderColor: theme.palette.grey[400],
   color: theme.palette.text.primary,
   padding: theme.spacing(1, 3),
-  borderRadius: '4px',
-  textTransform: 'none',
+  borderRadius: "4px",
+  textTransform: "none",
   marginRight: theme.spacing(1),
 }));
 
 // Main Component
 function SeatingChart() {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isResetting, setIsResetting] = useState(false);
   const [isBooking, setIsBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
@@ -154,11 +154,16 @@ function SeatingChart() {
   const [bookings, setBookings] = useState<BookingResponse[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentSeat, setCurrentSeat] = useState<SeatSelection | null>(null);
-  const [selectedBooking, setSelectedBooking] = useState<BookingResponse | null>(null);
-  const [memberId, setMemberId] = useState<string>('');
-  const [modalMode, setModalMode] = useState<'add' | 'update' | 'view'>('add');
+  const [selectedBooking, setSelectedBooking] =
+    useState<BookingResponse | null>(null);
+  const [memberId, setMemberId] = useState<string>("");
+  const [modalMode, setModalMode] = useState<"add" | "update" | "view">("add");
 
-  const { data: members = [], isLoading: isMembersLoading, error: membersError } = useGetMembersQuery();
+  const {
+    data: members = [],
+    isLoading: isMembersLoading,
+    error: membersError,
+  } = useGetMembersQuery();
 
   // Fetch bookings
   useEffect(() => {
@@ -178,7 +183,9 @@ function SeatingChart() {
     async (object: SelectableObject) => {
       const seat = {
         label: object.label,
-        category: object.category ? { key: String((object.category as { key: string | number }).key) } : undefined,
+        category: object.category
+          ? { key: String((object.category as { key: string | number }).key) }
+          : undefined,
       };
       setCurrentSeat(seat);
       setBookingError(null);
@@ -188,10 +195,12 @@ function SeatingChart() {
       if (booking) {
         // Reserved seat: Show view/update modal
         try {
-          const fetchedBooking = await bookingService.getBookingById(booking.id);
+          const fetchedBooking = await bookingService.getBookingById(
+            booking.id
+          );
           setSelectedBooking(fetchedBooking);
-          setMemberId(fetchedBooking.memberId || '');
-          setModalMode('view');
+          setMemberId(fetchedBooking.memberId || "");
+          setModalMode("view");
         } catch (error: any) {
           setBookingError(error.message);
           return;
@@ -199,8 +208,8 @@ function SeatingChart() {
       } else {
         // Free seat: Show add booking modal
         setSelectedBooking(null);
-        setMemberId('');
-        setModalMode('add');
+        setMemberId("");
+        setModalMode("add");
       }
       setShowModal(true);
     },
@@ -214,30 +223,32 @@ function SeatingChart() {
     setBookingError(null);
 
     const payload = {
-      eventKey: '180346ed-b27d-4677-8975-f4b168d98cc0',
+      eventKey: "180346ed-b27d-4677-8975-f4b168d98cc0",
       seats: [currentSeat.label],
       memberId,
     };
 
     try {
-      if (modalMode === 'update' && selectedBooking) {
-        if (!selectedBooking.id) throw new Error('Invalid booking ID');
+      if (modalMode === "update" && selectedBooking) {
+        if (!selectedBooking.id) throw new Error("Invalid booking ID");
         await bookingService.deleteBooking(selectedBooking.id);
         await bookingService.createBooking(payload);
-        setBookingSuccess('Booking updated successfully!');
+        setBookingSuccess("Booking updated successfully!");
       } else {
         await bookingService.createBooking(payload);
-        setBookingSuccess('Booking created successfully!');
+        setBookingSuccess("Booking created successfully!");
       }
 
       setShowModal(false);
       setCurrentSeat(null);
-      setMemberId('');
+      setMemberId("");
       setSelectedBooking(null);
       await fetchBookings();
     } catch (error: any) {
-      const errorMessage = error.message.includes('suggestion')
-        ? `${error.message.split('suggestion')[0]} - Suggestion: ${error.message.split('suggestion')[1]}`
+      const errorMessage = error.message.includes("suggestion")
+        ? `${error.message.split("suggestion")[0]} - Suggestion: ${
+            error.message.split("suggestion")[1]
+          }`
         : error.message;
       setBookingError(errorMessage);
       await fetchBookings();
@@ -248,7 +259,7 @@ function SeatingChart() {
 
   const handleDeleteBooking = async () => {
     if (!selectedBooking?.id) {
-      setBookingError('Invalid booking ID');
+      setBookingError("Invalid booking ID");
       return;
     }
 
@@ -257,7 +268,7 @@ function SeatingChart() {
 
     try {
       await bookingService.deleteBooking(selectedBooking.id);
-      setBookingSuccess('Booking deleted successfully!');
+      setBookingSuccess("Booking deleted successfully!");
       setShowModal(false);
       setCurrentSeat(null);
       setSelectedBooking(null);
@@ -270,15 +281,15 @@ function SeatingChart() {
   };
 
   const handleSwitchToUpdate = () => {
-    setModalMode('update');
+    setModalMode("update");
   };
 
   const handleCloseModal = () => {
     setShowModal(false);
     setCurrentSeat(null);
     setSelectedBooking(null);
-    setMemberId('');
-    setModalMode('add');
+    setMemberId("");
+    setModalMode("add");
   };
 
   const handleCloseSnackbar = () => {
@@ -288,12 +299,15 @@ function SeatingChart() {
 
   const getMemberName = (id: string) => {
     const member = members.find((m) => m.id === id);
-    return member ? `${member.firstName} ${member.lastName}` : 'Unknown';
+    return member ? `${member.firstName} ${member.lastName}` : "Unknown";
   };
 
   return (
     <PageContainer>
-      <Typography variant="h4" sx={{ mb: 3, fontWeight: 'bold', color: theme.palette.text.primary }}>
+      <Typography
+        variant="h4"
+        sx={{ mb: 3, fontWeight: "bold", color: theme.palette.text.primary }}
+      >
         Coworking Space Booking
       </Typography>
 
@@ -317,11 +331,11 @@ function SeatingChart() {
               if (booking && booking.memberId) {
                 return `Member: ${getMemberName(booking.memberId)}`;
               }
-              return 'Available';
+              return "Available";
             }}
             messages={{
-              notAvailable: 'Booked',
-              available: 'Available'
+              notAvailable: "Booked",
+              available: "Available",
             }}
           />
         </ChartContainer>
@@ -335,18 +349,32 @@ function SeatingChart() {
         >
           <ModalHeader>
             <Box display="flex" alignItems="center">
-              {modalMode === 'add' ? (
-                <CheckCircleIcon sx={{ mr: 1, color: theme.palette.common.white }} />
-              ) : modalMode === 'update' ? (
+              {modalMode === "add" ? (
+                <CheckCircleIcon
+                  sx={{ mr: 1, color: theme.palette.common.white }}
+                />
+              ) : modalMode === "update" ? (
                 <EditIcon sx={{ mr: 1, color: theme.palette.common.white }} />
               ) : (
                 <PersonIcon sx={{ mr: 1, color: theme.palette.common.white }} />
               )}
-              <Typography variant="h6" component="div" sx={{ color: theme.palette.common.white }}>
-                {modalMode === 'add' ? 'Book Seat' : modalMode === 'update' ? 'Update Booking' : 'Booking Details'}
+              <Typography
+                variant="h6"
+                component="div"
+                sx={{ color: theme.palette.common.white }}
+              >
+                {modalMode === "add"
+                  ? "Book Seat"
+                  : modalMode === "update"
+                  ? "Update Booking"
+                  : "Booking Details"}
               </Typography>
             </Box>
-            <IconButton onClick={handleCloseModal} size="small" sx={{ color: theme.palette.common.white }}>
+            <IconButton
+              onClick={handleCloseModal}
+              size="small"
+              sx={{ color: theme.palette.common.white }}
+            >
               <CloseIcon />
             </IconButton>
           </ModalHeader>
@@ -360,13 +388,11 @@ function SeatingChart() {
                 <Typography variant="subtitle2" color="textSecondary">
                   Seat Number
                 </Typography>
-                <Typography variant="body1">
-                  {currentSeat?.label}
-                </Typography>
+                <Typography variant="body1">{currentSeat?.label}</Typography>
               </Box>
             </InfoRow>
 
-            {modalMode === 'view' && selectedBooking && (
+            {modalMode === "view" && selectedBooking && (
               <>
                 <InfoRow>
                   <InfoIconWrapper>
@@ -377,7 +403,7 @@ function SeatingChart() {
                       Member
                     </Typography>
                     <Typography variant="body1">
-                      {getMemberName(selectedBooking.memberId || '')}
+                      {getMemberName(selectedBooking.memberId || "")}
                     </Typography>
                   </Box>
                 </InfoRow>
@@ -390,15 +416,21 @@ function SeatingChart() {
                       Booking Date
                     </Typography>
                     <Typography variant="body1">
-                      {selectedBooking.createdAt ? new Date(selectedBooking.createdAt).toLocaleString() : 'N/A'}
+                      {selectedBooking.createdAt
+                        ? new Date(selectedBooking.createdAt).toLocaleString()
+                        : "N/A"}
                     </Typography>
                   </Box>
                 </InfoRow>
               </>
             )}
 
-            {(modalMode === 'add' || modalMode === 'update') && (
-              <FormControl fullWidth sx={{ mt: 2 }} disabled={isBooking || isMembersLoading}>
+            {(modalMode === "add" || modalMode === "update") && (
+              <FormControl
+                fullWidth
+                sx={{ mt: 2 }}
+                disabled={isBooking || isMembersLoading}
+              >
                 <InputLabel id="member-select-label">Select Member</InputLabel>
                 <Select
                   labelId="member-select-label"
@@ -416,8 +448,16 @@ function SeatingChart() {
                   {members.map((member) => (
                     <MenuItem key={member.id} value={member.id}>
                       <Box display="flex" alignItems="center">
-                        <Avatar sx={{ width: 24, height: 24, mr: 2, fontSize: '0.75rem' }}>
-                          {member.firstName?.charAt(0)}{member.lastName?.charAt(0)}
+                        <Avatar
+                          sx={{
+                            width: 24,
+                            height: 24,
+                            mr: 2,
+                            fontSize: "0.75rem",
+                          }}
+                        >
+                          {member.firstName?.charAt(0)}
+                          {member.lastName?.charAt(0)}
                         </Avatar>
                         {member.firstName} {member.lastName}
                       </Box>
@@ -429,9 +469,9 @@ function SeatingChart() {
           </ModalContent>
 
           <ModalFooter>
-            {modalMode === 'view' ? (
+            {modalMode === "view" ? (
               <>
-                <Box sx={{ display: 'flex', width: '100%' }}>
+                <Box sx={{ display: "flex", width: "100%" }}>
                   <Box sx={{ flex: 1 }}>
                     <IconButton
                       onClick={handleSwitchToUpdate}
@@ -453,15 +493,24 @@ function SeatingChart() {
               </>
             ) : (
               <>
-                <SecondaryButton onClick={handleCloseModal} startIcon={<CloseIcon />}>
+                <SecondaryButton
+                  onClick={handleCloseModal}
+                  startIcon={<CloseIcon />}
+                >
                   Cancel
                 </SecondaryButton>
                 <PrimaryButton
                   onClick={handleBookSeat}
                   disabled={isBooking || !memberId || isMembersLoading}
-                  startIcon={isBooking ? <CircularProgress size={20} color="inherit" /> : <CheckCircleIcon />}
+                  startIcon={
+                    isBooking ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      <CheckCircleIcon />
+                    )
+                  }
                 >
-                  {modalMode === 'update' ? 'Update' : 'Confirm'}
+                  {modalMode === "update" ? "Update" : "Confirm"}
                 </PrimaryButton>
               </>
             )}
@@ -472,9 +521,13 @@ function SeatingChart() {
           open={!!bookingSuccess}
           autoHideDuration={3000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
-          <Alert severity="success" onClose={handleCloseSnackbar} icon={<CheckCircleIcon fontSize="inherit" />}>
+          <Alert
+            severity="success"
+            onClose={handleCloseSnackbar}
+            icon={<CheckCircleIcon fontSize="inherit" />}
+          >
             {bookingSuccess}
           </Alert>
         </Snackbar>
@@ -482,14 +535,15 @@ function SeatingChart() {
           open={!!bookingError}
           autoHideDuration={6000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
           <Alert severity="error" onClose={handleCloseSnackbar}>
-            {bookingError?.split('- Suggestion:')[0]}
-            {bookingError?.includes('Suggestion:') && (
+            {bookingError?.split("- Suggestion:")[0]}
+            {bookingError?.includes("Suggestion:") && (
               <>
                 <br />
-                <strong>Suggestion:</strong> {bookingError.split('Suggestion:')[1]}
+                <strong>Suggestion:</strong>{" "}
+                {bookingError.split("Suggestion:")[1]}
               </>
             )}
           </Alert>
@@ -498,7 +552,7 @@ function SeatingChart() {
           open={!!chartError}
           autoHideDuration={6000}
           onClose={() => setChartError(null)}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
           <Alert severity="error" onClose={() => setChartError(null)}>
             Chart loading error: {chartError}
@@ -507,8 +561,8 @@ function SeatingChart() {
         <Snackbar
           open={!!membersError}
           autoHideDuration={6000}
-          onClose={() => { }}
-          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          onClose={() => {}}
+          anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
           <Alert severity="error">Members loading error.</Alert>
         </Snackbar>
@@ -521,7 +575,7 @@ function SeatingChart() {
 SeatingChart.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      <RoleProtectedRoute allowedRoles={['ADMIN']}>{page}</RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );
 };

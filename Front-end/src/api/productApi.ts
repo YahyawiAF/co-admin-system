@@ -112,80 +112,82 @@ export const productApi = createApi({
       providesTags: (result) =>
         result
           ? [
-              ...result.map(({ id }) => ({ type: "DailyProduct" as const, id })),
+              ...result.map(({ id }) => ({
+                type: "DailyProduct" as const,
+                id,
+              })),
               { type: "DailyProduct", id: "LIST" },
             ]
           : [{ type: "DailyProduct", id: "LIST" }],
     }),
-     getDailyProductById: builder.query<DailyProduct, string>({
-          query: (id) => `products/daily/${id}`,
-          transformResponse: (response: any) => ({
-            ...response,
-            quantite: Number(response.quantite),
-            createdAt: new Date(response.createdAt).toISOString(),
-            updatedAt: new Date(response.updatedAt).toISOString(),
-            product: {
-              ...response.product,
-              purchasePrice: Number(response.product.purchasePrice),
-              sellingPrice: Number(response.product.sellingPrice),
-            },
-          }),
-          providesTags: (result, error, id) => [{ type: "DailyProduct", id }],
-        }),
-        updateDailyProduct: builder.mutation<
-        DailyProduct,
-        {
-          id: string;
-          data: Partial<{
-            productId: string;
-            quantite: number;
-            date: string; // Ajoutez cette ligne
-          }>;
-        }
-      >({
-        query: ({ id, data }) => ({
-          url: `products/daily/${id}`,
-          method: "PATCH",
-          body: {
-            ...data,
-            quantite: data.quantite ? Number(data.quantite) : undefined,
-            date: data.date ? data.date : undefined, // Ajoutez cette ligne
-          },
-        }),
-        invalidatesTags: (result, error, { id }) => [
-          { type: "DailyProduct", id },
-          { type: "DailyProduct", id: "LIST" },
-        ],
+    getDailyProductById: builder.query<DailyProduct, string>({
+      query: (id) => `products/daily/${id}`,
+      transformResponse: (response: any) => ({
+        ...response,
+        quantite: Number(response.quantite),
+        createdAt: new Date(response.createdAt).toISOString(),
+        updatedAt: new Date(response.updatedAt).toISOString(),
+        product: {
+          ...response.product,
+          purchasePrice: Number(response.product.purchasePrice),
+          sellingPrice: Number(response.product.sellingPrice),
+        },
       }),
-  
-      deleteDailyProduct: builder.mutation<void, string>({
-        query: (id) => ({
-          url: `products/daily/${id}`,
-          method: "DELETE",
-        }),
-        invalidatesTags: (result, error, id) => [
-          { type: "DailyProduct", id },
-          { type: "DailyProduct", id: "LIST" },
-        ],
-      }),
-    createDailyProduct: builder.mutation<
-    DailyProduct,
-    { productId: string; quantite: number; date?: string }
-  >({
-    query: (data) => ({
-      url: `products/daily`,
-      method: "POST",
-      body: {
-        productId: data.productId,
-        quantite: Number(data.quantite),
-        date: data.date,
-      },
+      providesTags: (result, error, id) => [{ type: "DailyProduct", id }],
     }),
-    invalidatesTags: [{ type: "DailyProduct", id: "LIST" }],
-  }),
-}),
-});
+    updateDailyProduct: builder.mutation<
+      DailyProduct,
+      {
+        id: string;
+        data: Partial<{
+          productId: string;
+          quantite: number;
+          date: string; // Ajoutez cette ligne
+        }>;
+      }
+    >({
+      query: ({ id, data }) => ({
+        url: `products/daily/${id}`,
+        method: "PATCH",
+        body: {
+          ...data,
+          quantite: data.quantite ? Number(data.quantite) : undefined,
+          date: data.date ? data.date : undefined, // Ajoutez cette ligne
+        },
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "DailyProduct", id },
+        { type: "DailyProduct", id: "LIST" },
+      ],
+    }),
 
+    deleteDailyProduct: builder.mutation<void, string>({
+      query: (id) => ({
+        url: `products/daily/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: "DailyProduct", id },
+        { type: "DailyProduct", id: "LIST" },
+      ],
+    }),
+    createDailyProduct: builder.mutation<
+      DailyProduct,
+      { productId: string; quantite: number; date?: string }
+    >({
+      query: (data) => ({
+        url: `products/daily`,
+        method: "POST",
+        body: {
+          productId: data.productId,
+          quantite: Number(data.quantite),
+          date: data.date,
+        },
+      }),
+      invalidatesTags: [{ type: "DailyProduct", id: "LIST" }],
+    }),
+  }),
+});
 
 // Export des hooks
 export const {
@@ -199,6 +201,4 @@ export const {
   useGetDailyProductsQuery,
   useUpdateDailyProductMutation,
   useDeleteDailyProductMutation,
-
-
 } = productApi;

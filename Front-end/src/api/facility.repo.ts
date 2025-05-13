@@ -31,7 +31,7 @@ export const facilityApi = createApi({
           logo: data.logo,
           nbrPlaces: data.nbrPlaces,
           socialNetworks: data.socialNetworks,
-          places: data.places
+          places: data.places,
         },
       }),
       invalidatesTags: ["Facility"],

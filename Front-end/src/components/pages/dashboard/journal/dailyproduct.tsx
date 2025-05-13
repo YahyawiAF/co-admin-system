@@ -16,7 +16,10 @@ import {
 import { DatePicker } from "@mui/x-date-pickers";
 import { format } from "date-fns";
 import AddIcon from "@mui/icons-material/Add";
-import { useCreateProductMutation, useGetProductsQuery } from "src/api/productApi";
+import {
+  useCreateProductMutation,
+  useGetProductsQuery,
+} from "src/api/productApi";
 import { Product } from "src/types/shared";
 
 const style = {
@@ -34,7 +37,11 @@ const style = {
 interface DailyProductModalProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { productId: string; quantite: number; date?: string }) => void;
+  onSubmit: (data: {
+    productId: string;
+    quantite: number;
+    date?: string;
+  }) => void;
   initialData?: { productId: string; quantite: number; date?: string };
   products?: Product[]; // Optional prop to pass products directly
 }
@@ -45,7 +52,8 @@ export default function DailyProductModal({
   onSubmit,
   initialData,
 }: DailyProductModalProps) {
-  const { data: products = [], isLoading: productsLoading } = useGetProductsQuery();
+  const { data: products = [], isLoading: productsLoading } =
+    useGetProductsQuery();
   const [selectedProductId, setSelectedProductId] = useState(
     initialData?.productId || ""
   );
@@ -92,11 +100,11 @@ export default function DailyProductModal({
 
     try {
       const createdProduct = await createProduct({
-          name: newProduct.name,
-          purchasePrice: newProduct.purchasePrice,
-          sellingPrice: newProduct.sellingPrice,
-          description: newProduct.description,
-          stock: 0
+        name: newProduct.name,
+        purchasePrice: newProduct.purchasePrice,
+        sellingPrice: newProduct.sellingPrice,
+        description: newProduct.description,
+        stock: 0,
       }).unwrap();
 
       setSelectedProductId(createdProduct.id);
@@ -178,8 +186,6 @@ export default function DailyProductModal({
             inputProps={{ min: 1 }}
           />
 
-         
-
           <Stack direction="row" spacing={2} mt={3} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>
               Cancel
@@ -221,7 +227,10 @@ export default function DailyProductModal({
             fullWidth
             value={newProduct.purchasePrice}
             onChange={(e) =>
-              setNewProduct({ ...newProduct, purchasePrice: Number(e.target.value) })
+              setNewProduct({
+                ...newProduct,
+                purchasePrice: Number(e.target.value),
+              })
             }
             required
             error={errors.purchasePrice}
@@ -235,7 +244,10 @@ export default function DailyProductModal({
             fullWidth
             value={newProduct.sellingPrice}
             onChange={(e) =>
-              setNewProduct({ ...newProduct, sellingPrice: Number(e.target.value) })
+              setNewProduct({
+                ...newProduct,
+                sellingPrice: Number(e.target.value),
+              })
             }
             required
             error={errors.sellingPrice}

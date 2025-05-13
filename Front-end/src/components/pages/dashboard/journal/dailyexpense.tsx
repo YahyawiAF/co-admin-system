@@ -40,7 +40,11 @@ interface DailyExpenseModalProps {
     amount: number;
     type: ExpenseType;
   }>;
-  onSubmit: (data: { expenseId: string; date?: string; Summary?: string }) => void;
+  onSubmit: (data: {
+    expenseId: string;
+    date?: string;
+    Summary?: string;
+  }) => void;
   initialData?: { expenseId: string; date?: string; Summary?: string };
 }
 
@@ -183,8 +187,6 @@ export default function DailyExpenseModal({
             multiline
             rows={2}
           />
-
-
 
           <Stack direction="row" spacing={2} mt={3} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>

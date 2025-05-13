@@ -205,10 +205,10 @@ export interface DailyExpense {
   id: string;
   expenseId: string;
   date?: string;
-  Summary?: string 
+  Summary?: string;
   createdAt: string;
   updatedAt: string;
-  expense: Expenses; 
+  expense: Expenses;
 }
 export interface Product {
   id: string;
@@ -224,11 +224,11 @@ export interface Product {
 export interface DailyProduct {
   id: string;
   productId: string;
-  quantite: number; 
+  quantite: number;
   createdAt: string;
   date?: string;
   updatedAt: string;
-  product: Product; 
+  product: Product;
 }
 export interface Facility {
   id: string;
@@ -237,10 +237,10 @@ export interface Facility {
   email: string;
   adresse: string;
   logo?: string | null;
-  nbrPlaces: number; 
-  socialNetworks: Record<string, string>; 
-  places: Record<string, unknown>; 
-  createdAt: string | Date; 
+  nbrPlaces: number;
+  socialNetworks: Record<string, string>;
+  places: Record<string, unknown>;
+  createdAt: string | Date;
   updatedAt: string | Date;
 }
 export interface SeatBooking {

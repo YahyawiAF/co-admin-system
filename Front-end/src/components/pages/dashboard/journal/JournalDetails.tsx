@@ -35,7 +35,12 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import Stats from "../landing/stats";
-import { Journal, DailyExpense, ExpenseType, DailyProduct } from "src/types/shared";
+import {
+  Journal,
+  DailyExpense,
+  ExpenseType,
+  DailyProduct,
+} from "src/types/shared";
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
 import {
   useDeleteDailyExpenseMutation,
@@ -54,28 +59,28 @@ const Divider = styled(MuiDivider)(spacing);
 const Typography = styled(MuiTypography)(spacing);
 
 const ProductCard = styled(Card)(({ theme }) => ({
-  height: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  transition: 'transform 0.3s, box-shadow 0.3s',
-  '&:hover': {
-    transform: 'translateY(-5px)',
+  height: "100%",
+  display: "flex",
+  flexDirection: "column",
+  transition: "transform 0.3s, box-shadow 0.3s",
+  "&:hover": {
+    transform: "translateY(-5px)",
     boxShadow: theme.shadows[6],
   },
 }));
 
 const ProductMedia = styled(CardMedia)(({ theme }) => ({
   height: 140,
-  backgroundSize: 'contain',
+  backgroundSize: "contain",
   backgroundColor: theme.palette.grey[100],
-  position: 'relative',
+  position: "relative",
 }));
 
 const StockChip = styled(Chip)(({ theme }) => ({
-  position: 'absolute',
+  position: "absolute",
   top: theme.spacing(1),
   right: theme.spacing(1),
-  fontWeight: 'bold',
+  fontWeight: "bold",
 }));
 
 const ProductContent = styled(CardContent)(({ theme }) => ({
@@ -84,7 +89,7 @@ const ProductContent = styled(CardContent)(({ theme }) => ({
 
 const ProductPrice = styled(Typography)(({ theme }) => ({
   color: theme.palette.success.dark,
-  fontWeight: 'bold',
+  fontWeight: "bold",
   marginTop: theme.spacing(1),
 }));
 
@@ -142,9 +147,14 @@ function JournalDetails({
   } = useGetProductsQuery();
 
   const [openUpdateModal, setOpenUpdateModal] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
+    null
+  );
 
-  const handleQuantityChange = async (productId: string, increment: boolean) => {
+  const handleQuantityChange = async (
+    productId: string,
+    increment: boolean
+  ) => {
     try {
       const product = products?.find((p) => p.id === productId);
       if (!product) return;
@@ -152,7 +162,9 @@ function JournalDetails({
       const formattedDate = format(selectedDate, "yyyy-MM-dd");
 
       const existingDailyProduct = dailyProducts?.find(
-        (dp) => dp.productId === productId && isSameDay(new Date(dp.date || dp.createdAt), selectedDate)
+        (dp) =>
+          dp.productId === productId &&
+          isSameDay(new Date(dp.date || dp.createdAt), selectedDate)
       );
 
       if (increment) {
@@ -238,23 +250,39 @@ function JournalDetails({
 
   const cashTotal = useMemo(() => {
     const dailyJournalsTotal = journals
-      .filter((journal) => isSameDay(new Date(journal.registredTime), selectedDate))
-      .reduce((acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc), 0);
+      .filter((journal) =>
+        isSameDay(new Date(journal.registredTime), selectedDate)
+      )
+      .reduce(
+        (acc, curr) => (curr.isPayed ? acc + (curr.payedAmount || 0) : acc),
+        0
+      );
 
-    const dailySubscriptionsTotal = abonnementsData?.data
-      ?.filter((abonnement) => isSameDay(new Date(abonnement.createdAt), selectedDate))
-      .reduce((acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0), 0) || 0;
+    const dailySubscriptionsTotal =
+      abonnementsData?.data
+        ?.filter((abonnement) =>
+          isSameDay(new Date(abonnement.createdAt), selectedDate)
+        )
+        .reduce(
+          (acc, curr) => acc + (curr.isPayed ? curr.payedAmount : 0),
+          0
+        ) || 0;
 
     return dailyJournalsTotal + dailySubscriptionsTotal;
   }, [journals, abonnementsData, selectedDate]);
 
-  const netTotal = useMemo(() => cashTotal - dailyExpensesTotal, [cashTotal, dailyExpensesTotal]);
+  const netTotal = useMemo(
+    () => cashTotal - dailyExpensesTotal,
+    [cashTotal, dailyExpensesTotal]
+  );
 
   const dailySalesTotal = useMemo(() => {
     if (!dailyProducts || !products) return 0;
     return dailyProducts.reduce((total, dailyProduct) => {
       const product = products.find((p) => p.id === dailyProduct.productId);
-      return total + (product ? product.sellingPrice * dailyProduct.quantite : 0);
+      return (
+        total + (product ? product.sellingPrice * dailyProduct.quantite : 0)
+      );
     }, 0);
   }, [dailyProducts, products]);
 
@@ -288,7 +316,9 @@ function JournalDetails({
         data: {
           expenseId: data.expenseId,
           Summary: data.Summary || undefined,
-          date: data.date ? format(new Date(data.date), "yyyy-MM-dd") : undefined,
+          date: data.date
+            ? format(new Date(data.date), "yyyy-MM-dd")
+            : undefined,
         },
       }).unwrap();
       setOpenUpdateModal(false);
@@ -309,42 +339,54 @@ function JournalDetails({
   return (
     <React.Fragment>
       <Grid container spacing={6}>
-  {/* First Row */}
-  <Grid container item spacing={6}>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats title="Daily Members" count={dailyMembersCount} icon={<User />} />
-    </Grid>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats
-        title="Daily Membership"
-        count={dailySubscribedMembersCount}
-        icon={<CreditCard />}
-      />
-    </Grid>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats title="Daily Expense" count={dailyExpensesTotal} icon={<TrendingUp />} />
-    </Grid>
-  </Grid>
-  {/* Second Row */}
-  <Grid container item spacing={6}>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats
-        title="Total Sales"
-        count={parseFloat(dailySalesTotal.toFixed(2))}
-        icon={<DollarSign />}
-      />
-    </Grid>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
-    </Grid>
-    <Grid item xs={12} sm={12} md={6} lg={4} xl>
-      <Stats title="Items sold" count={dailySoldItemsCount} icon={<ShoppingCart />} />
-    </Grid>
-    <Grid item xs={12} sm={12} md={6} lg={3} xl>
-      <Stats title="Net" count={netTotal} icon={<Activity />} />
-    </Grid>
-  </Grid>
-</Grid>
+        {/* First Row */}
+        <Grid container item spacing={6}>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Daily Members"
+              count={dailyMembersCount}
+              icon={<User />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Daily Membership"
+              count={dailySubscribedMembersCount}
+              icon={<CreditCard />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Daily Expense"
+              count={dailyExpensesTotal}
+              icon={<TrendingUp />}
+            />
+          </Grid>
+        </Grid>
+        {/* Second Row */}
+        <Grid container item spacing={6}>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Total Sales"
+              count={parseFloat(dailySalesTotal.toFixed(2))}
+              icon={<DollarSign />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={4} xl>
+            <Stats
+              title="Items sold"
+              count={dailySoldItemsCount}
+              icon={<ShoppingCart />}
+            />
+          </Grid>
+          <Grid item xs={12} sm={12} md={6} lg={3} xl>
+            <Stats title="Net" count={netTotal} icon={<Activity />} />
+          </Grid>
+        </Grid>
+      </Grid>
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
           Daily Products ({format(selectedDate, "dd/MM/yyyy")})
@@ -369,12 +411,18 @@ function JournalDetails({
                     >
                       <StockChip
                         label={`Stock: ${product.stock}`}
-                        color={product.stock > 10 ? "success" : product.stock > 0 ? "warning" : "error"}
+                        color={
+                          product.stock > 10
+                            ? "success"
+                            : product.stock > 0
+                            ? "warning"
+                            : "error"
+                        }
                         size="small"
                       />
                     </ProductMedia>
                     <ProductContent>
-                      <Typography gutterBottom variant="h6" >
+                      <Typography gutterBottom variant="h6">
                         {product.name}
                       </Typography>
                       <ProductPrice variant="h6">
@@ -384,12 +432,14 @@ function JournalDetails({
                         Quantity Sold: {quantity}
                       </Typography>
                     </ProductContent>
-                    <CardActions sx={{ justifyContent: 'space-between', p: 2 }}>
+                    <CardActions sx={{ justifyContent: "space-between", p: 2 }}>
                       <IconButton
                         color="primary"
                         onClick={() => handleQuantityChange(product.id, true)}
                         disabled={isOutOfStock}
-                        title={isOutOfStock ? "Stock épuisé" : "Ajouter un produit"}
+                        title={
+                          isOutOfStock ? "Stock épuisé" : "Ajouter un produit"
+                        }
                       >
                         <AddIcon />
                       </IconButton>
@@ -397,7 +447,11 @@ function JournalDetails({
                         color="secondary"
                         onClick={() => handleQuantityChange(product.id, false)}
                         disabled={quantity <= 0}
-                        title={quantity <= 0 ? "Aucun produit à retirer" : "Retirer un produit"}
+                        title={
+                          quantity <= 0
+                            ? "Aucun produit à retirer"
+                            : "Retirer un produit"
+                        }
                       >
                         <RemoveIcon />
                       </IconButton>
@@ -433,13 +487,22 @@ function JournalDetails({
                     <TableCell>{expense.expense.description || "-"}</TableCell>
                     <TableCell>{expense.Summary || "-"}</TableCell>
                     <TableCell>
-                      {format(new Date(expense.date || expense.createdAt), "dd/MM/yyyy HH:mm")}
+                      {format(
+                        new Date(expense.date || expense.createdAt),
+                        "dd/MM/yyyy HH:mm"
+                      )}
                     </TableCell>
                     <TableCell>
-                      <IconButton color="primary" onClick={() => handleUpdateExpense(expense)}>
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleUpdateExpense(expense)}
+                      >
                         <EditIcon />
                       </IconButton>
-                      <IconButton color="error" onClick={() => handleDeleteExpense(expense.id)}>
+                      <IconButton
+                        color="error"
+                        onClick={() => handleDeleteExpense(expense.id)}
+                      >
                         <DeleteIcon />
                       </IconButton>
                     </TableCell>

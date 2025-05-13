@@ -19,7 +19,6 @@ import {
   Calendar,
 } from "react-feather";
 
-
 const pagesSection = [
   {
     href: "/dashboard/landing",
@@ -64,7 +63,7 @@ const pagesSection = [
       },
       {
         href: "/dashboard/map",
-        icon: Calendar   ,
+        icon: Calendar,
         title: "Reservation",
       },
     ],

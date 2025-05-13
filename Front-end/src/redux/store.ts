@@ -25,7 +25,6 @@ export const store = configureStore({
     [productApi.reducerPath]: productApi.reducer,
     [dailyProductApi.reducerPath]: dailyProductApi.reducer,
     [facilityApi.reducerPath]: facilityApi.reducer,
-
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -40,7 +39,6 @@ export const store = configureStore({
       productApi.middleware,
       dailyProductApi.middleware,
       facilityApi.middleware
-
     ),
 });
 

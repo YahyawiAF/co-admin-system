@@ -25,9 +25,12 @@ export const dailyProductApi = createApi({
       providesTags: (result) =>
         result
           ? [
-            ...result.map(({ id }) => ({ type: "DailyProduct" as const, id })),
-            { type: "DailyProduct", id: "LIST" },
-          ]
+              ...result.map(({ id }) => ({
+                type: "DailyProduct" as const,
+                id,
+              })),
+              { type: "DailyProduct", id: "LIST" },
+            ]
           : [{ type: "DailyProduct", id: "LIST" }],
     }),
 
