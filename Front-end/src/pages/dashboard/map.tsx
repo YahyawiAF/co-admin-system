@@ -317,10 +317,11 @@ function SeatingChart() {
               if (booking && booking.memberId) {
                 return `Member: ${getMemberName(booking.memberId)}`;
               }
-              return '';
+              return 'Available';
             }}
             messages={{
               notAvailable: 'Booked',
+              available: 'Available'
             }}
           />
         </ChartContainer>

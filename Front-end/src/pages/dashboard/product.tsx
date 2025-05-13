@@ -37,7 +37,6 @@ import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import BulkActions from "src/components/Table/members/TableHeader";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
@@ -188,6 +187,9 @@ const ProductComponent = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isUploading, setIsUploading] = useState(false);
+
+  // Ref for file input
+  const productImageInputRef = React.useRef<HTMLInputElement>(null);
 
   // Image Upload Handler
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -449,32 +451,9 @@ const ProductComponent = () => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {editProduct ? "Manage Product" : "Manage Product"}
         </Typography>
-        <Box sx={{ width: '100%', textAlign: 'center', position: 'absolute', bottom: "15%", left: "34%" }}>
-          <input
-            accept="image/*"
-            style={{ display: 'none' }}
-            id="product-image-upload"
-            type="file"
-            onChange={handleImageUpload}
-            disabled={isUploading}
-          />
-          <label htmlFor="product-image-upload">
-            <Button
-              variant="outlined"
-              component="span"
-              startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
-              sx={{ width: '100%', mb: 1 }}
-              disabled={isUploading}
-            >
-              {isUploading ? 'Uploading...' : 'Upload Image'}
-            </Button>
-          </label>
-          <Typography variant="caption" color="text.secondary">
 
-          </Typography>
-        </Box>
         {/* Image Upload Section */}
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
           <Avatar
             src={editProduct?.img || newProduct.img || "/default-product.png"}
             sx={{
@@ -483,11 +462,34 @@ const ProductComponent = () => {
               border: '2px solid',
               borderColor: 'primary.main',
               mb: 2,
+              cursor: isUploading ? 'default' : 'pointer',
+              opacity: isUploading ? 0.6 : 1,
+              transition: 'opacity 0.2s ease-in-out',
+              '&:hover': {
+                opacity: isUploading ? 0.6 : 0.8,
+              },
             }}
             variant="rounded"
+            onClick={() => !isUploading && productImageInputRef.current?.click()}
           />
-
-
+          <input
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="product-image-upload"
+            type="file"
+            ref={productImageInputRef}
+            onChange={handleImageUpload}
+            disabled={isUploading}
+          />
+          {isUploading && (
+            <CircularProgress
+              size={30}
+              sx={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)' }}
+            />
+          )}
+          <Typography variant="caption" color="text.secondary">
+            Click image to upload
+          </Typography>
         </Box>
 
         {/* Product Form Fields */}

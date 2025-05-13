@@ -309,36 +309,42 @@ function JournalDetails({
   return (
     <React.Fragment>
       <Grid container spacing={6}>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Members" count={dailyMembersCount} icon={<User />} />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Daily Membership"
-            count={dailySubscribedMembersCount}
-            icon={<CreditCard />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Expense" count={dailyExpensesTotal} icon={<TrendingUp />} />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats
-            title="Total Sales"
-            count={parseFloat(dailySalesTotal.toFixed(2))}
-            icon={<DollarSign />}
-          />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={4} xl>
-          <Stats title="Items sold" count={dailySoldItemsCount} icon={<ShoppingCart />} />
-        </Grid>
-        <Grid item xs={12} sm={12} md={6} lg={3} xl>
-          <Stats title="Net" count={netTotal} icon={<Activity />} />
-        </Grid>
-      </Grid>
+  {/* First Row */}
+  <Grid container item spacing={6}>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats title="Daily Members" count={dailyMembersCount} icon={<User />} />
+    </Grid>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats
+        title="Daily Membership"
+        count={dailySubscribedMembersCount}
+        icon={<CreditCard />}
+      />
+    </Grid>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats title="Daily Expense" count={dailyExpensesTotal} icon={<TrendingUp />} />
+    </Grid>
+  </Grid>
+  {/* Second Row */}
+  <Grid container item spacing={6}>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats
+        title="Total Sales"
+        count={parseFloat(dailySalesTotal.toFixed(2))}
+        icon={<DollarSign />}
+      />
+    </Grid>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats title="Daily Cash" count={cashTotal} icon={<DollarSign />} />
+    </Grid>
+    <Grid item xs={12} sm={12} md={6} lg={4} xl>
+      <Stats title="Items sold" count={dailySoldItemsCount} icon={<ShoppingCart />} />
+    </Grid>
+    <Grid item xs={12} sm={12} md={6} lg={3} xl>
+      <Stats title="Net" count={netTotal} icon={<Activity />} />
+    </Grid>
+  </Grid>
+</Grid>
       <Box mt={4}>
         <Typography variant="h6" mb={2}>
           Daily Products ({format(selectedDate, "dd/MM/yyyy")})

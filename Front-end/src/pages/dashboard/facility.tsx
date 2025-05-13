@@ -33,7 +33,6 @@ import {
   Phone as PhoneIcon,
   Email as EmailIcon,
   Place as AddressIcon,
-  AddAPhoto as AddAPhotoIcon,
   Edit as EditIcon,
   Add as AddIcon,
   People as PeopleIcon,
@@ -94,6 +93,11 @@ const FacilityProfile = () => {
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+
+  // Refs for file inputs
+  const logoInputRef = React.useRef<HTMLInputElement>(null);
+  const newSpaceInputRef = React.useRef<HTMLInputElement>(null);
+  const editSpaceInputRef = React.useRef<HTMLInputElement>(null);
 
   // Initialize formData when facility is loaded
   useEffect(() => {
@@ -300,58 +304,30 @@ const FacilityProfile = () => {
                 borderColor: 'primary.main',
                 boxShadow: 3,
                 mb: 2,
+                cursor: isUploading ? 'default' : 'pointer',
+                opacity: isUploading ? 0.6 : 1,
+                transition: 'opacity 0.2s ease-in-out',
+                '&:hover': {
+                  opacity: isUploading ? 0.6 : 0.8,
+                },
               }}
+              onClick={() => !isUploading && logoInputRef.current?.click()}
             />
-            <Box sx={{
-              width: '100%',
-              textAlign: 'center',
-              position: 'absolute',
-              bottom: 0,
-              left: "18%"
-            }}>
-              <input
-                accept="image/*"
-                style={{ display: 'none' }}
-                id="logo-upload"
-                type="file"
-                onChange={handleLogoUpload}
-                disabled={isUploading}
+            <input
+              accept="image/*"
+              style={{ display: 'none' }}
+              id="logo-upload"
+              type="file"
+              ref={logoInputRef}
+              onChange={handleLogoUpload}
+              disabled={isUploading}
+            />
+            {isUploading && (
+              <CircularProgress
+                size={30}
+                sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
               />
-              <label htmlFor="logo-upload">
-                <Button
-                  variant="contained"
-                  component="span"
-                  size="medium"
-                  startIcon={isUploading ? <CircularProgress size={20} color="inherit" /> : <AddAPhotoIcon />}
-                  disabled={isUploading}
-                  sx={{
-                    px: 3,
-                    minWidth: '120px',
-                    borderRadius: '50px',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    backgroundColor: '#ffffff', // Fond blanc
-                    color: '#1976d2', // Texte bleu (comme primary.main)
-                    border: '1px solid #e0e0e0', // Bordure légère
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                    '&:hover': {
-                      backgroundColor: '#f5f5f5', // Gris très clair au survol
-                      transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.15)',
-                      borderColor: '#bdbdbd'
-                    },
-                    '&.Mui-disabled': {
-                      backgroundColor: '#ffffff',
-                      color: 'rgba(0, 0, 0, 0.26)',
-                      borderColor: 'rgba(0, 0, 0, 0.12)'
-                    },
-                    transition: 'all 0.2s ease-in-out'
-                  }}
-                >
-                  {isUploading ? 'Uploading...' : 'Upload Logo'}
-                </Button>
-              </label>
-            </Box>
+            )}
             <Typography
               variant="caption"
               color="text.secondary"
@@ -359,7 +335,7 @@ const FacilityProfile = () => {
                 textAlign: 'center',
               }}
             >
-              {/* Add any caption text here if needed */}
+              Click image to upload logo
             </Typography>
           </Box>
 
@@ -498,14 +474,14 @@ const FacilityProfile = () => {
                       backgroundColor: 'primary.main',
                       color: 'white',
                       borderRadius: 'px',
-                      width: 26,  // Taille réduite
-                      height: 26, // Taille réduite
+                      width: 26,
+                      height: 26,
                       '&:hover': {
                         backgroundColor: 'primary.dark',
                         boxShadow: 'none',
                       },
                       '& .MuiSvgIcon-root': {
-                        fontSize: '1.2rem' // Taille de l'icône réduite
+                        fontSize: '1.2rem'
                       }
                     }}
                   >
@@ -622,39 +598,49 @@ const FacilityProfile = () => {
                       </Card>
                     </Grid>
                   ))}
-
-
                 </Grid>
 
                 <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)}>
                   <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative' }}>
                       <Avatar
                         src={newSpace.image || '/default-space.png'}
-                        sx={{ width: 100, height: 100 }}
+                        sx={{
+                          width: 100,
+                          height: 100,
+                          cursor: isUploading ? 'default' : 'pointer',
+                          opacity: isUploading ? 0.6 : 1,
+                          transition: 'opacity 0.2s ease-in-out',
+                          '&:hover': {
+                            opacity: isUploading ? 0.6 : 0.8,
+                          },
+                        }}
+                        onClick={() => !isUploading && newSpaceInputRef.current?.click()}
                       />
+                      {isUploading && (
+                        <CircularProgress
+                          size={30}
+                          sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                        />
+                      )}
                     </Box>
-                    <Box sx={{ textAlign: 'center', mb: 2, position: 'absolute', bottom: "15%", left: "4%", whiteSpace: 'nowrap' }}>
-                      <input
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        id="space-image-upload"
-                        type="file"
-                        onChange={(e) => handleImageUpload(e, true)}
-                        disabled={isUploading}
-                      />
-                      <label htmlFor="space-image-upload">
-                        <Button
-                          variant="outlined"
-                          component="span"
-                          startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
-                          disabled={isUploading}
-                        >
-                          {isUploading ? 'Uploading...' : 'Upload Space Image'}
-                        </Button>
-                      </label>
-                    </Box>
+                    <input
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      id="space-image-upload"
+                      type="file"
+                      ref={newSpaceInputRef}
+                      onChange={(e) => handleImageUpload(e, true)}
+                      disabled={isUploading}
+                    />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', textAlign: 'center', mb: 2 }}
+                    >
+                      Click image to upload
+                    </Typography>
                     <TextField
                       fullWidth
                       label="Space Name"
@@ -687,7 +673,7 @@ const FacilityProfile = () => {
                       variant="outlined"
                     />
                   </DialogContent>
-                  <DialogActions sx={{ pt: 15 }}>
+                  <DialogActions sx={{ pt: 2 }}>
                     <Button onClick={() => setOpenAddDialog(false)} color="secondary">
                       Cancel
                     </Button>
@@ -700,32 +686,44 @@ const FacilityProfile = () => {
                 <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)}>
                   <DialogTitle>Manage Space</DialogTitle>
                   <DialogContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2, position: 'relative' }}>
                       <Avatar
                         src={editingSpace?.image || '/default-space.png'}
-                        sx={{ width: 100, height: 100 }}
+                        sx={{
+                          width: 100,
+                          height: 100,
+                          cursor: isUploading ? 'default' : 'pointer',
+                          opacity: isUploading ? 0.6 : 1,
+                          transition: 'opacity 0.2s ease-in-out',
+                          '&:hover': {
+                            opacity: isUploading ? 0.6 : 0.8,
+                          },
+                        }}
+                        onClick={() => !isUploading && editSpaceInputRef.current?.click()}
                       />
+                      {isUploading && (
+                        <CircularProgress
+                          size={30}
+                          sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+                        />
+                      )}
                     </Box>
-                    <Box sx={{ textAlign: 'center', mb: 2, position: 'absolute', bottom: "15%", left: "4%", whiteSpace: 'nowrap' }}>
-                      <input
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        id="edit-space-image-upload"
-                        type="file"
-                        onChange={(e) => handleImageUpload(e, false)}
-                        disabled={isUploading}
-                      />
-                      <label htmlFor="edit-space-image-upload">
-                        <Button
-                          variant="outlined"
-                          component="span"
-                          startIcon={isUploading ? <CircularProgress size={20} /> : <AddAPhotoIcon />}
-                          disabled={isUploading}
-                        >
-                          {isUploading ? 'Uploading...' : 'Upload Space Image'}
-                        </Button>
-                      </label>
-                    </Box>
+                    <input
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      id="edit-space-image-upload"
+                      type="file"
+                      ref={editSpaceInputRef}
+                      onChange={(e) => handleImageUpload(e, false)}
+                      disabled={isUploading}
+                    />
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', textAlign: 'center', mb: 2 }}
+                    >
+                      Click image to upload
+                    </Typography>
                     <TextField
                       fullWidth
                       label="Space Name"
@@ -758,7 +756,7 @@ const FacilityProfile = () => {
                       variant="outlined"
                     />
                   </DialogContent>
-                  <DialogActions sx={{ pt: 15 }}>
+                  <DialogActions sx={{ pt: 2 }}>
                     <Button onClick={() => setOpenEditDialog(false)} color="secondary">
                       Cancel
                     </Button>
@@ -848,15 +846,15 @@ const FacilityProfile = () => {
                   sx={{
                     px: 3,
                     minWidth: '120px',
-                    borderRadius: '50px', // Bords arrondis pour un look pill
-                    textTransform: 'none', // Texte non capitalisé
-                    fontWeight: 600, // Texte légèrement plus gras
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)', // Ombre subtile
+                    borderRadius: '50px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                     '&:hover': {
-                      transform: 'translateY(-1px)', // Effet de léger soulèvement au survol
+                      transform: 'translateY(-1px)',
                       boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
                     },
-                    transition: 'all 0.2s ease-in-out' // Animation fluide
+                    transition: 'all 0.2s ease-in-out'
                   }}
                 >
                   Save Changes

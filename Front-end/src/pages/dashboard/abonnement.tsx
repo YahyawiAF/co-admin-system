@@ -299,12 +299,19 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
     let filtered = enrichedData;
 
-    // Filter by selected date (based on registredDate)
-    filtered = filtered.filter((abonnement) => {
-      if (!abonnement.registredDate) return false;
-      const abonnementDate = new Date(abonnement.registredDate);
-      return isSameDay(abonnementDate, selectedDate);
-    });
+    // Apply search first (if there's a search term)
+    if (search && search.length >= 2) {
+      const fuse = new Fuse(enrichedData, abonnementSearchOptions);
+      const results = fuse.search(search);
+      filtered = results.map((result) => result.item);
+    } else {
+      // If no search, filter by selected date
+      filtered = filtered.filter((abonnement) => {
+        if (!abonnement.registredDate) return false;
+        const abonnementDate = new Date(abonnement.registredDate);
+        return isSameDay(abonnementDate, selectedDate);
+      });
+    }
 
     // Apply period filter based on duration between registredDate and leaveDate
     filtered = filtered.filter((abonnement) => {
@@ -342,13 +349,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           return true;
       }
     });
-
-    // Apply search
-    if (search && search.length >= 2) {
-      const fuse = new Fuse(filtered, abonnementSearchOptions);
-      const results = fuse.search(search);
-      return results.map((result) => result.item);
-    }
 
     return filtered;
   }, [abonnementsData?.data, timeFilter, statusFilter, prices, search, members, selectedDate]);
