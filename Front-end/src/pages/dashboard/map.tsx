@@ -146,7 +146,7 @@ const SecondaryButton = styled(Button)(({ theme }) => ({
 function SeatingChart() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-
+  const [isResetting, setIsResetting] = useState(false);
   const [isBooking, setIsBooking] = useState<boolean>(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
