@@ -47,6 +47,7 @@ import {
   useMediaQuery,
   Theme,
   Autocomplete,
+  TablePagination,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DateTimePicker } from "@mui/x-date-pickers";
@@ -209,6 +210,43 @@ const PriceCard = styled(Card)(({ theme }) => ({
   },
 }));
 
+const StyledTablePagination = styled(TablePagination)(({ theme }) => ({
+  "& .MuiTablePagination-root": {
+    borderTop: `1px solid ${theme.palette.divider}`,
+    backgroundColor: theme.palette.background.paper,
+    padding: theme.spacing(1),
+  },
+  "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+    color: theme.palette.text.primary,
+    fontWeight: 500,
+  },
+  "& .MuiTablePagination-actions": {
+    "& .MuiIconButton-root": {
+      color: theme.palette.primary.main,
+      "&:hover": {
+        backgroundColor: theme.palette.action.hover,
+      },
+      "&.Mui-disabled": {
+        color: theme.palette.action.disabled,
+      },
+    },
+  },
+  "& .MuiTablePagination-select": {
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
+    backgroundColor: theme.palette.background.default,
+    padding: theme.spacing(0.5, 1),
+  },
+  [theme.breakpoints.down("sm")]: {
+    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+      fontSize: "0.875rem",
+    },
+    "& .MuiTablePagination-actions": {
+      marginLeft: theme.spacing(1),
+    },
+  },
+}));
+
 interface AbonnementFormData extends Partial<Abonnement> {
   registredDate: Date;
   leaveDate: Date;
@@ -229,6 +267,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
@@ -303,18 +343,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
     let filtered = enrichedData;
 
-    // Apply search first (if there's a search term)
+    // Apply search if there's a search term
     if (search && search.length >= 2) {
       const fuse = new Fuse(enrichedData, abonnementSearchOptions);
       const results = fuse.search(search);
       filtered = results.map((result) => result.item);
-    } else {
-      // If no search, filter by selected date
-      filtered = filtered.filter((abonnement) => {
-        if (!abonnement.registredDate) return false;
-        const abonnementDate = new Date(abonnement.registredDate);
-        return isSameDay(abonnementDate, selectedDate);
-      });
     }
 
     // Apply period filter based on duration between registredDate and leaveDate
@@ -328,9 +361,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
       switch (timeFilter) {
         case "week":
-          return diffDays >= 7 && diffDays <= 21; // 1 to 3 weeks
+          return diffDays >= 7 && diffDays <= 21;
         case "month":
-          return diffDays >= 28; // Approximately 1 month or more
+          return diffDays >= 28;
         case "all":
         default:
           return true;
@@ -362,8 +395,13 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     prices,
     search,
     members,
-    selectedDate,
   ]);
+
+  // Paginated data
+  const paginatedData = React.useMemo(() => {
+    const startIndex = page * rowsPerPage;
+    return filteredData.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredData, page, rowsPerPage]);
 
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -485,7 +523,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelected = filteredData.map((n) => n.id);
+      const newSelected = paginatedData.map((n) => n.id);
       setSelected(newSelected);
       return;
     }
@@ -514,6 +552,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
+    setPage(0); // Reset to first page on search
   };
 
   const validateForm = () => {
@@ -600,6 +639,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       try {
         await deleteAbonnement(abonnementToDelete).unwrap();
         refetch();
+        // Adjust page if necessary after deletion
+        if (paginatedData.length === 1 && page > 0) {
+          setPage(page - 1);
+        }
       } catch (error) {
         console.error("Error deleting subscription:", error);
       } finally {
@@ -624,10 +667,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   const handlePriceSelect = (price: Price) => {
-    const registredDate =
-      editAbonnement?.registredDate ||
-      newAbonnement.registredDate ||
-      selectedDate;
+    const registredDate = selectedDate;
     let leaveDate = new Date(registredDate);
 
     const start = parseInt(price.timePeriod.start, 10);
@@ -640,6 +680,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       priceId: price.id,
       payedAmount: price.price,
       leaveDate: leaveDate,
+      registredDate: selectedDate,
     };
 
     if (editAbonnement) {
@@ -677,20 +718,28 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       if (endDate < now) return "Expired";
 
       const diffMs = endDate.getTime() - now.getTime();
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(
         (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
       const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-      if (diffDays > 30) {
+      if (diffDays >= 30) {
         const months = Math.floor(diffDays / 30);
         const remainingDays = diffDays % 30;
-        return `${months} month(s) ${remainingDays} day(s)`;
-      } else if (diffDays > 7) {
+        if (remainingDays === 0) {
+          return `${months} month(s)`;
+        } else {
+          return `${months} month(s) ${remainingDays} day(s)`;
+        }
+      } else if (diffDays >= 7) {
         const weeks = Math.floor(diffDays / 7);
         const remainingDays = diffDays % 7;
-        return `${weeks} week(s) ${remainingDays} day(s)`;
+        if (remainingDays === 0) {
+          return `${weeks} week(s)`;
+        } else {
+          return `${weeks} week(s) ${remainingDays} day(s)`;
+        }
       } else if (diffDays > 0) {
         return `${diffDays} day(s) ${diffHours} hour(s)`;
       } else {
@@ -744,6 +793,17 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         leaveDate: newLeaveDate,
       });
     }
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
   };
 
   if (isLoading) return <CircularProgress />;
@@ -842,19 +902,19 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 orderBy={orderBy}
                 onSelectAllClick={handleSelectAllClick}
                 onRequestSort={handleRequestSort}
-                rowCount={filteredData.length}
+                rowCount={paginatedData.length}
                 headCells={headCells}
                 isMobile={isMobile}
               />
               <TableBody>
-                {filteredData.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={headCells.length} align="center">
                       No subscriptions found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredData.map((abonnement) => {
+                  paginatedData.map((abonnement) => {
                     const member = members.find(
                       (m) => m.id === abonnement.memberID
                     );
@@ -976,6 +1036,18 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               </TableBody>
             </Table>
           </StyledTableContainer>
+          <StyledTablePagination
+            rowsPerPageOptions={[5, 10, 25, 50]}
+            count={filteredData.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            labelRowsPerPage={isMobile ? "Rows:" : "Rows per page:"}
+            labelDisplayedRows={({ from, to, count }) =>
+              `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`
+            }
+          />
         </TableWrapper>
       </MainContainer>
 
@@ -1255,7 +1327,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           sx={{
             textAlign: "left",
             fontWeight: "bold",
-            color: "gris",
+            color: "grey",
           }}
         >
           Manage Member
