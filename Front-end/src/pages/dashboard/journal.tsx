@@ -50,6 +50,7 @@ import {
 import { useGetDailyProductsQuery } from "src/api/productApi";
 import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexpense";
 import Fuse from "fuse.js";
+import SeatingChart from "./map";
 
 const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
@@ -343,7 +344,8 @@ function JournalPage() {
       >
         <LinkTab label="Journal" {...a11yProps(0)} />
         <LinkTab label="Membership" {...a11yProps(1)} />
-        <LinkTab label="Overview" {...a11yProps(2)} />
+        <LinkTab label="Reservations" {...a11yProps(2)} />
+        <LinkTab label="Overview" {...a11yProps(3)} />
       </Tabs>
       <DailyExpenseModal
         open={dailyExpenseOpen}
@@ -509,7 +511,10 @@ function JournalPage() {
       <TabPanel value={value} index={1} title={"Membership"}>
         <Abonnement selectedDate={today} />
       </TabPanel>
-      <TabPanel value={value} index={2} title={"Overview"}>
+      <TabPanel value={value} index={2} title={"Reservations"}>
+        <SeatingChart />
+      </TabPanel>
+      <TabPanel value={value} index={3} title={"Overview"}>
         <JournalDetails
           journals={rows}
           isLoading={isLoading}

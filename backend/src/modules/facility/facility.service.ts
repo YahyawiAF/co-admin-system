@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 import { FacilityEntity } from './entities/facility.entitie';
-import { UpdateFacilityDto } from './dtos/updateFac.dto';
 import { CreateFacilityDto } from './dtos/createfac.dto';
+import { UpdateFacilityDto } from './dtos/updateFac.dto';
 
 @Injectable()
 export class FacilityService {
@@ -16,13 +16,32 @@ export class FacilityService {
     });
   }
 
-  async create(createFacilityDto: CreateFacilityDto): Promise<FacilityEntity> {
+  async create(): Promise<FacilityEntity> {
     try {
+      // Exemple de données générées automatiquement
+      const exampleData = {
+        name: "Example Facility",
+        numtel: "+1234567890",
+        email: "example@facility.com",
+        adresse: "123 Example Street, City",
+        logo: "https://example.com/logo.png",
+        nbrPlaces: 50,
+        socialNetworks: {
+          facebook: "https://facebook.com/examplefacility",
+          twitter: "https://twitter.com/examplefacility"
+        },
+        places: {
+          parking: 20,
+          conference: 10,
+          coworking: 20
+        }
+      };
+
       const facility = await this.prisma.facility.create({
         data: {
-          ...createFacilityDto,
-          socialNetworks: createFacilityDto.socialNetworks || {},
-          places: createFacilityDto.places || {},
+          ...exampleData,
+          socialNetworks: exampleData.socialNetworks,
+          places: exampleData.places,
         },
       });
 

@@ -12,27 +12,20 @@ export const facilityApi = createApi({
       query: () => `facilities`,
       providesTags: ["Facility"],
     }),
-    getFacilityById: builder.query<Facility, string>({
-      query: (id) => `facilities/${id}`,
+    getFirstFacility: builder.query<Facility, void>({
+      query: () => `facilities`,
+      transformResponse: (response: Facility[]) => {
+        if (response.length === 0) {
+          throw new Error("No facilities found");
+        }
+        return response[0];
+      },
       providesTags: ["Facility"],
     }),
-    createFacility: builder.mutation<
-      Facility,
-      Omit<Facility, "id" | "createdAt" | "updatedAt">
-    >({
-      query: (data) => ({
+    createFacility: builder.mutation<Facility, void>({
+      query: () => ({
         url: `facilities`,
         method: "POST",
-        body: {
-          name: data.name,
-          numtel: data.numtel,
-          email: data.email,
-          adresse: data.adresse,
-          logo: data.logo,
-          nbrPlaces: data.nbrPlaces,
-          socialNetworks: data.socialNetworks,
-          places: data.places,
-        },
       }),
       invalidatesTags: ["Facility"],
     }),
@@ -62,10 +55,8 @@ export const facilityApi = createApi({
 
 export const {
   useGetFacilitiesQuery,
-  useGetFacilityByIdQuery,
+  useGetFirstFacilityQuery,
   useCreateFacilityMutation,
   useUpdateFacilityMutation,
   useDeleteFacilityMutation,
 } = facilityApi;
-
-export type { Facility };

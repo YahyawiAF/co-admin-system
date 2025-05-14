@@ -1,7 +1,7 @@
 import React, { ReactElement, useState, useEffect } from "react";
 import {
-  Facility,
-  useGetFacilityByIdQuery,
+  useGetFirstFacilityQuery,
+  useCreateFacilityMutation,
   useUpdateFacilityMutation,
 } from "src/api/facility.repo";
 import {
@@ -11,7 +11,6 @@ import {
   Typography,
   TextField,
   Button,
-  Divider,
   IconButton,
   Grid,
   Paper,
@@ -27,6 +26,8 @@ import {
   DialogContent,
   DialogActions,
   CircularProgress,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import {
   Delete as DeleteIcon,
@@ -43,6 +44,7 @@ import {
 } from "@mui/icons-material";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import DashboardLayout from "../../layouts/Dashboard";
+import { Facility } from "src/types/shared";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -82,9 +84,15 @@ interface Space {
 }
 
 const FacilityProfile = () => {
-  const facilityId = "a69401f8-df5d-46cc-959d-026293d00114";
-  const { data: facility, isLoading } = useGetFacilityByIdQuery(facilityId);
+  const {
+    data: facility,
+    isLoading,
+    isError,
+    refetch,
+  } = useGetFirstFacilityQuery();
+  const [createFacility] = useCreateFacilityMutation();
   const [updateFacility] = useUpdateFacilityMutation();
+
   const [value, setValue] = useState(0);
   const [formData, setFormData] = useState<Partial<Facility>>({});
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
@@ -99,11 +107,40 @@ const FacilityProfile = () => {
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success" as "success" | "error" | "info" | "warning",
+  });
 
   // Refs for file inputs
   const logoInputRef = React.useRef<HTMLInputElement>(null);
   const newSpaceInputRef = React.useRef<HTMLInputElement>(null);
   const editSpaceInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Handle automatic facility creation if none exists
+  useEffect(() => {
+    if (isError) {
+      // No facility found, create one automatically
+      createFacility()
+        .unwrap()
+        .then(() => {
+          refetch();
+          setSnackbar({
+            open: true,
+            message: "New facility created automatically",
+            severity: "success",
+          });
+        })
+        .catch((error) => {
+          setSnackbar({
+            open: true,
+            message: "Failed to create facility: " + error.message,
+            severity: "error",
+          });
+        });
+    }
+  }, [isError, createFacility, refetch]);
 
   // Initialize formData when facility is loaded
   useEffect(() => {
@@ -183,12 +220,19 @@ const FacilityProfile = () => {
       }
     } catch (error) {
       console.error("Failed to upload image:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload image",
+        severity: "error",
+      });
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!facility) return;
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -204,7 +248,7 @@ const FacilityProfile = () => {
       });
 
       await updateFacility({
-        id: facilityId,
+        id: facility.id,
         data: {
           logo: uploadedLogoUrl,
         },
@@ -214,8 +258,18 @@ const FacilityProfile = () => {
         ...prev,
         logo: uploadedLogoUrl,
       }));
+
+      setSnackbar({
+        open: true,
+        message: "Logo updated successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Failed to upload logo:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to upload logo",
+        severity: "error",
+      });
     } finally {
       setIsUploading(false);
     }
@@ -223,53 +277,80 @@ const FacilityProfile = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!facility) return;
+
     try {
       await updateFacility({
-        id: facilityId,
+        id: facility.id,
         data: {
           ...formData,
           socialNetworks: socialLinks,
         },
       }).unwrap();
+
+      setSnackbar({
+        open: true,
+        message: "Facility updated successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Failed to update facility:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to update facility",
+        severity: "error",
+      });
     }
   };
 
   const handleSpaceSubmit = async () => {
-    if (!editingSpace) return;
+    if (!editingSpace || !facility) return;
+
     try {
       const updatedSpaces = {
-        ...facility?.places,
+        ...facility.places,
         [editingSpace.id]: editingSpace,
       };
+
       await updateFacility({
-        id: facilityId,
+        id: facility.id,
         data: {
           places: updatedSpaces,
         },
       }).unwrap();
+
       setEditingSpace(null);
       setOpenEditDialog(false);
+      setSnackbar({
+        open: true,
+        message: "Space updated successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Failed to update space:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to update space",
+        severity: "error",
+      });
     }
   };
 
   const handleAddSpace = async () => {
-    if (!newSpace.name) return;
+    if (!newSpace.name || !facility) return;
+
     try {
       const newSpaceId = crypto.randomUUID();
       const updatedSpaces = {
-        ...facility?.places,
+        ...facility.places,
         [newSpaceId]: { ...newSpace, id: newSpaceId },
       };
+
       await updateFacility({
-        id: facilityId,
+        id: facility.id,
         data: {
           places: updatedSpaces,
         },
       }).unwrap();
+
       setNewSpace({
         id: "",
         name: "",
@@ -278,28 +359,50 @@ const FacilityProfile = () => {
         image: "",
       });
       setOpenAddDialog(false);
+      setSnackbar({
+        open: true,
+        message: "Space added successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Failed to add space:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to add space",
+        severity: "error",
+      });
     }
   };
 
   const handleDeleteSpace = async (spaceId: string) => {
+    if (!facility) return;
+
     try {
-      const updatedSpaces = { ...facility?.places };
+      const updatedSpaces = { ...facility.places };
       delete updatedSpaces[spaceId];
+
       await updateFacility({
-        id: facilityId,
+        id: facility.id,
         data: {
           places: updatedSpaces,
         },
       }).unwrap();
+
+      setSnackbar({
+        open: true,
+        message: "Space deleted successfully",
+        severity: "success",
+      });
     } catch (error) {
-      console.error("Failed to delete space:", error);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete space",
+        severity: "error",
+      });
     }
   };
 
   if (isLoading) return <div>Loading...</div>;
-  if (!facility) return <div>Facility not found</div>;
+  if (!facility) return <div>Initializing facility...</div>;
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
@@ -476,29 +579,31 @@ const FacilityProfile = () => {
                   </Grid>
                 </Grid>
                 <Box mt={4} display="flex" justifyContent="flex-start">
-                  <Button
-                    startIcon={<DeleteIcon />}
-                    color="error"
-                    variant="outlined"
-                    sx={{
-                      borderRadius: "50px",
-                      textTransform: "none",
-                      fontWeight: 500,
-                      px: 3,
-                      py: 1,
-                      borderColor: (theme) => theme.palette.error.main,
-                      color: (theme) => theme.palette.error.main,
-                      "&:hover": {
-                        backgroundColor: (theme) => theme.palette.error.light,
-                        borderColor: (theme) => theme.palette.error.main,
-                        transform: "translateY(-1px)",
-                        boxShadow: "0 2px 6px rgba(244, 67, 54, 0.2)",
-                      },
-                      transition: "all 0.2s ease-in-out",
-                    }}
-                  >
-                    Delete Facility
-                  </Button>
+                  {/* <Box mt={4} display="flex" justifyContent="flex-start">
+  <Button
+    startIcon={<DeleteIcon />}
+    color="error"
+    variant="outlined"
+    sx={{
+      borderRadius: "50px",
+      textTransform: "none",
+      fontWeight: 500,
+      px: 3,
+      py: 1,
+      borderColor: (theme) => theme.palette.error.main,
+      color: (theme) => theme.palette.error.main,
+      "&:hover": {
+        backgroundColor: (theme) => theme.palette.error.light,
+        borderColor: (theme) => theme.palette.error.main,
+        transform: "translateY(-1px)",
+        boxShadow: "0 2px 6px rgba(244, 67, 54, 0.2)",
+      },
+      transition: "all 0.2s ease-in-out",
+    }}
+  >
+    Delete Facility
+  </Button>
+</Box> */}
                 </Box>
               </TabPanel>
 
@@ -661,7 +766,7 @@ const FacilityProfile = () => {
                   open={openAddDialog}
                   onClose={() => setOpenAddDialog(false)}
                 >
-                  <DialogTitle>Manage Space</DialogTitle>
+                  <DialogTitle>Add New Space</DialogTitle>
                   <DialogContent>
                     <Box
                       sx={{
@@ -759,7 +864,7 @@ const FacilityProfile = () => {
                       color="primary"
                       disabled={!newSpace.name}
                     >
-                      Confirm
+                      Add Space
                     </Button>
                   </DialogActions>
                 </Dialog>
@@ -768,7 +873,7 @@ const FacilityProfile = () => {
                   open={openEditDialog}
                   onClose={() => setOpenEditDialog(false)}
                 >
-                  <DialogTitle>Manage Space</DialogTitle>
+                  <DialogTitle>Edit Space</DialogTitle>
                   <DialogContent>
                     <Box
                       sx={{
@@ -866,7 +971,7 @@ const FacilityProfile = () => {
                       color="primary"
                       disabled={!editingSpace?.name}
                     >
-                      Confirm
+                      Save Changes
                     </Button>
                   </DialogActions>
                 </Dialog>
@@ -984,6 +1089,21 @@ const FacilityProfile = () => {
           </Box>
         </Stack>
       </Paper>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

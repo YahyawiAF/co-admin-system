@@ -61,11 +61,6 @@ const pagesSection = [
         icon: Home,
         title: "Facility",
       },
-      {
-        href: "/dashboard/map",
-        icon: Calendar,
-        title: "Reservation",
-      },
     ],
   },
 ] as SidebarItemsType[];
