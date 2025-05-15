@@ -48,4 +48,59 @@ export class ProductsService {
       }),
     );
   }
+
+  async createDailyProduct(data: {
+    productId: string;
+    quantite: number;
+    date?: string;
+  }) {
+    return this.prisma.dailyProduct.create({
+      data: {
+        productId: data.productId,
+        quantite: data.quantite,
+        date: data.date ? new Date(data.date) : new Date(), // Default to current date if not provided
+      },
+    });
+  }
+
+  async updateDailyProduct(
+    id: string,
+    data: {
+      productId?: string;
+      quantite?: number;
+      date?: string; // Add this field
+    },
+  ) {
+    return this.prisma.dailyProduct.update({
+      where: { id },
+      data: {
+        ...(data.productId && { productId: data.productId }),
+        ...(data.quantite && { quantite: data.quantite }),
+        ...(data.date && { date: new Date(data.date) }), // Process the date field
+      },
+    });
+  }
+
+  async removeDailyProduct(id: string) {
+    return this.prisma.dailyProduct.delete({
+      where: { id },
+    });
+  }
+
+  async findAllDailyProduct() {
+    return this.prisma.dailyProduct.findMany({
+      include: {
+        product: true,
+      },
+    });
+  }
+
+  async findOneDailyProduct(id: string) {
+    return this.prisma.dailyProduct.findUnique({
+      where: { id },
+      include: {
+        product: true,
+      },
+    });
+  }
 }

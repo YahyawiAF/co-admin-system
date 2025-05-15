@@ -204,10 +204,11 @@ export interface Expenses {
 export interface DailyExpense {
   id: string;
   expenseId: string;
-  date?: string; // Optionnel, format: "YYYY-MM-DD"
+  date?: string;
+  Summary?: string;
   createdAt: string;
   updatedAt: string;
-  expense: Expenses; // On inclut l'objet Expense complet
+  expense: Expenses;
 }
 export interface Product {
   id: string;
@@ -219,6 +220,56 @@ export interface Product {
   img?: string;
   createdAt: string;
   updatedAt: string;
+}
+export interface DailyProduct {
+  id: string;
+  productId: string;
+  quantite: number;
+  createdAt: string;
+  date?: string;
+  updatedAt: string;
+  product: Product;
+}
+export interface Facility {
+  id: string;
+  name: string;
+  numtel: string;
+  email: string;
+  adresse: string;
+  logo?: string | null;
+  nbrPlaces: number;
+  socialNetworks: Record<string, string>;
+  places: Record<string, unknown>;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+export interface SeatBooking {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  isBooked: boolean;
+  bookedAt?: string;
+  memberId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookSeatsPayload {
+  eventKey: string;
+  seats: string[];
+  memberId: string;
+}
+
+export interface BookingResponse {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  memberId: string | null;
+  isBooked: boolean;
+  bookedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  success: boolean;
 }
 
 export enum ExpenseType {

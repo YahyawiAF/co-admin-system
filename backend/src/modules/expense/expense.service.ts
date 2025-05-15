@@ -24,22 +24,39 @@ export class ExpensesService {
     return expenses.map((expense) => new ExpenseEntity(expense));
   }
 
-  async createDailyExpense(data: { expenseId: string; date?: Date }) {
+  async createDailyExpense(data: {
+    expenseId: string;
+    date?: Date;
+    Summary?: string;
+  }) {
     const date = data.date ?? new Date();
 
     return this.prisma.dailyExpense.create({
       data: {
         expenseId: data.expenseId,
         date,
+        Summary: data.Summary,
       },
     });
   }
-  async updateDailyExpense(id: string, data: { expenseId?: string; date?: Date }) {
+  async updateDailyExpense(
+    id: string,
+    data: { expenseId?: string; date?: Date; Summary?: string },
+  ) {
     return this.prisma.dailyExpense.update({
       where: { id },
       data: {
         expenseId: data.expenseId,
         date: data.date,
+        Summary: data.Summary,
+      },
+    });
+  }
+
+  async findAllDailyExpenses() {
+    return this.prisma.dailyExpense.findMany({
+      include: {
+        expense: true,
       },
     });
   }
@@ -47,14 +64,6 @@ export class ExpensesService {
   async removeDailyExpense(id: string) {
     return this.prisma.dailyExpense.delete({
       where: { id },
-    });
-  }
-
-  async findAllDailyExpenses() {
-    return this.prisma.dailyExpense.findMany({
-      include: {
-        expense: true, 
-      },
     });
   }
 
