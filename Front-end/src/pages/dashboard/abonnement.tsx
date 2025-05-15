@@ -282,6 +282,19 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     minMatchCharLength: 2,
   };
 
+  const abonnementSearchOptions = {
+    keys: [
+      "member.firstName",
+      "member.lastName",
+      "price.name",
+      "id",
+      "stayedPeriode",
+    ],
+    threshold: 0.4,
+    includeScore: true,
+    minMatchCharLength: 2,
+  };
+
   const {
     data: abonnementsData,
     isLoading,
