@@ -40,8 +40,12 @@ interface DailyExpenseModalProps {
     amount: number;
     type: ExpenseType;
   }>;
-  onSubmit: (data: { expenseId: string; date?: string }) => void;
-  initialData?: { expenseId: string; date?: string }; // Add initialData for updates
+  onSubmit: (data: {
+    expenseId: string;
+    date?: string;
+    Summary?: string;
+  }) => void;
+  initialData?: { expenseId: string; date?: string; Summary?: string };
 }
 
 export default function DailyExpenseModal({
@@ -57,6 +61,7 @@ export default function DailyExpenseModal({
   const [selectedDate, setSelectedDate] = useState<Date | null>(
     initialData?.date ? new Date(initialData.date) : null
   );
+  const [Summary, setSummary] = useState(initialData?.Summary || "");
   const [openNewExpenseDialog, setOpenNewExpenseDialog] = useState(false);
   const [newExpense, setNewExpense] = useState({
     name: "",
@@ -81,6 +86,7 @@ export default function DailyExpenseModal({
     if (initialData) {
       setSelectedExpenseId(initialData.expenseId || "");
       setSelectedDate(initialData.date ? new Date(initialData.date) : null);
+      setSummary(initialData.Summary || "");
     }
   }, [initialData]);
 
@@ -123,6 +129,7 @@ export default function DailyExpenseModal({
     onSubmit({
       expenseId: selectedExpenseId,
       date: selectedDate ? format(selectedDate, "yyyy-MM-dd") : undefined,
+      Summary: Summary || undefined,
     });
     onClose();
   };
@@ -169,6 +176,17 @@ export default function DailyExpenseModal({
               <AddIcon />
             </IconButton>
           </Box>
+
+          {/* Nouveau champ Summary ajouté ici */}
+          <TextField
+            fullWidth
+            label="Summary (Optional)"
+            value={Summary}
+            onChange={(e) => setSummary(e.target.value)}
+            margin="normal"
+            multiline
+            rows={2}
+          />
 
           <Stack direction="row" spacing={2} mt={3} justifyContent="flex-end">
             <Button variant="outlined" onClick={onClose}>

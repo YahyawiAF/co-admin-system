@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import DashboardLayout from "../../layouts/Dashboard";
-import { DailyExpense, Journal } from "../../types/shared";
+import { DailyExpense, Journal, DailyProduct } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -47,8 +47,10 @@ import {
   useCreateDailyExpenseMutation,
   useGetAllDailyExpensesQuery,
 } from "src/api/dailyexpenseApi";
+import { useGetDailyProductsQuery } from "src/api/productApi";
 import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexpense";
 import Fuse from "fuse.js";
+import SeatingChart from "./map";
 
 const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
@@ -131,6 +133,7 @@ function applyFilters(journals: Journal[], filters: Filters): Journal[] {
 
 function JournalPage() {
   const { data: dailyExpenses = [] } = useGetAllDailyExpensesQuery();
+  const { data: dailyProducts = [] } = useGetDailyProductsQuery();
   const [dailyExpenseOpen, setDailyExpenseOpen] = useState(false);
   const { data: expenses = [] } = useGetExpensesQuery();
   const [createDailyExpense] = useCreateDailyExpenseMutation();
@@ -146,7 +149,31 @@ function JournalPage() {
     query: "",
   });
 
-  // Configuration de Fuse.js pour la recherche des journaux
+  // Fonction pour comparer les dates
+  const isSameDay = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
+  // Filtrer les dailyExpenses par la date sélectionnée
+  const filteredDailyExpenses = useMemo(() => {
+    return dailyExpenses.filter((expense) => {
+      const expenseDate = new Date(expense.date || expense.createdAt);
+      return isSameDay(expenseDate, today);
+    });
+  }, [dailyExpenses, today]);
+
+  // Filtrer les dailyProducts par la date sélectionnée
+
+  const filteredDailyProducts = useMemo(() => {
+    return dailyProducts.filter((product) => {
+      const productDate = new Date(product.date || product.createdAt);
+      return isSameDay(productDate, today);
+    });
+  }, [dailyProducts, today]);
 
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
@@ -161,9 +188,11 @@ function JournalPage() {
     perPage: rowsPerPage,
     journalDate: today.toDateString(),
   });
+
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
+
   const [deleteJournal] = useDeleteJournalMutation();
 
   const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
@@ -196,7 +225,6 @@ function JournalPage() {
     setSelected(newSelected);
   };
 
-  // New handler for Checkbox onChange
   const handleCheckboxChange = (
     event: React.ChangeEvent<HTMLInputElement>,
     id: string
@@ -277,15 +305,22 @@ function JournalPage() {
   };
 
   const handleChangeDate = (date: Date | null) => {
-    if (date) setToday(date);
+    if (date) {
+      setToday(date);
+      refetch(); // Refetch journals pour la nouvelle date
+    }
   };
 
   const handleCreateDailyExpense = async (data: {
     expenseId: string;
     date?: string;
+    Summary?: string;
   }) => {
     try {
-      await createDailyExpense(data).unwrap();
+      await createDailyExpense({
+        ...data,
+        date: data.date || format(today, "yyyy-MM-dd"), // Utiliser la date sélectionnée
+      }).unwrap();
       setDailyExpenseOpen(false);
     } catch (error) {
       console.error("Failed to create daily expense:", error);
@@ -308,13 +343,15 @@ function JournalPage() {
       >
         <LinkTab label="Journal" {...a11yProps(0)} />
         <LinkTab label="Membership" {...a11yProps(1)} />
-        <LinkTab label="Overview" {...a11yProps(2)} />
+        <LinkTab label="Reservations" {...a11yProps(2)} />
+        <LinkTab label="Overview" {...a11yProps(3)} />
       </Tabs>
       <DailyExpenseModal
         open={dailyExpenseOpen}
         onClose={() => setDailyExpenseOpen(false)}
         expenses={expenses}
         onSubmit={handleCreateDailyExpense}
+        initialData={{ expenseId: "", date: format(today, "yyyy-MM-dd") }} // Pré-remplir avec la date sélectionnée
       />
       <Divider my={6} />
       <TabPanel value={value} index={0} title={"List"}>
@@ -471,14 +508,18 @@ function JournalPage() {
         </Grid>
       </TabPanel>
       <TabPanel value={value} index={1} title={"Membership"}>
-        <Abonnement />
+        <Abonnement selectedDate={today} />
       </TabPanel>
-      <TabPanel value={value} index={2} title={"Overview"}>
+      <TabPanel value={value} index={2} title={"Reservations"}>
+        <SeatingChart />
+      </TabPanel>
+      <TabPanel value={value} index={3} title={"Overview"}>
         <JournalDetails
           journals={rows}
           isLoading={isLoading}
           errorMemberReq={!!error}
-          dailyExpenses={dailyExpenses}
+          dailyExpenses={filteredDailyExpenses}
+          dailyProducts={filteredDailyProducts} // Passer les produits filtrés
           expenses={expenses}
           selectedDate={today}
         />

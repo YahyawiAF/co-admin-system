@@ -14,8 +14,9 @@ export const dailyExpenseApi = createApi({
           id: expense.id,
           expenseId: expense.expenseId,
           date: expense.date ? new Date(expense.date).toISOString() : undefined,
-          createdAt: expense.createdAt || new Date().toISOString(), // Valeur par défaut
-          updatedAt: expense.updatedAt || new Date().toISOString(), // Valeur par défaut
+          Summary: expense.Summary || undefined,
+          createdAt: expense.createdAt || new Date().toISOString(),
+          updatedAt: expense.updatedAt || new Date().toISOString(),
           expense: expense.expense || {
             id: expense.expenseId,
             name: "Inconnu",
@@ -44,6 +45,7 @@ export const dailyExpenseApi = createApi({
         id: response.id,
         expenseId: response.expenseId,
         date: response.date ? new Date(response.date).toISOString() : undefined,
+        Summary: response.Summary || undefined,
         createdAt: response.createdAt || new Date().toISOString(),
         updatedAt: response.updatedAt || new Date().toISOString(),
         expense: response.expense || {
@@ -61,7 +63,7 @@ export const dailyExpenseApi = createApi({
 
     createDailyExpense: builder.mutation<
       DailyExpense,
-      { expenseId: string; date?: string }
+      { expenseId: string; date?: string; Summary?: string }
     >({
       query: (data) => ({
         url: `expenses/daily`,
@@ -69,12 +71,14 @@ export const dailyExpenseApi = createApi({
         body: {
           expenseId: data.expenseId,
           date: data.date ? new Date(data.date).toISOString() : undefined,
+          Summary: data.Summary || undefined,
         },
       }),
       transformResponse: (response: any) => ({
         id: response.id,
         expenseId: response.expenseId,
         date: response.date ? new Date(response.date).toISOString() : undefined,
+        Summary: response.Summary || undefined,
         createdAt: response.createdAt || new Date().toISOString(),
         updatedAt: response.updatedAt || new Date().toISOString(),
         expense: response.expense || {
@@ -94,7 +98,7 @@ export const dailyExpenseApi = createApi({
       DailyExpense,
       {
         id: string;
-        data: { expenseId?: string; date?: string };
+        data: { expenseId?: string; date?: string; Summary?: string };
       }
     >({
       query: ({ id, data }) => ({
@@ -103,12 +107,14 @@ export const dailyExpenseApi = createApi({
         body: {
           expenseId: data.expenseId,
           date: data.date ? new Date(data.date).toISOString() : undefined,
+          Summary: data.Summary || undefined,
         },
       }),
       transformResponse: (response: any) => ({
         id: response.id,
         expenseId: response.expenseId,
         date: response.date ? new Date(response.date).toISOString() : undefined,
+        Summary: response.Summary || undefined,
         createdAt: response.createdAt || new Date().toISOString(),
         updatedAt: response.updatedAt || new Date().toISOString(),
         expense: response.expense || {

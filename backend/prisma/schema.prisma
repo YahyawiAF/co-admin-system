@@ -44,6 +44,7 @@ model Member {
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
+  seatBookings  SeatBooking[]
 
   @@map("members")
 }
@@ -123,8 +124,17 @@ model Product {
   img           String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
+  dailyProducts DailyProduct[]
   @@map("products")
+}
+model DailyProduct {
+  id        String    @id @default(uuid())
+  productId String
+  date      DateTime?
+  product   Product   @relation(fields: [productId], references: [id])
+  quantite  Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Expense {
@@ -143,11 +153,43 @@ model Expense {
 model DailyExpense {
   id        String    @id @default(uuid())
   expenseId String
+  Summary   String?
   expense   Expense   @relation(fields: [expenseId], references: [id])
   date      DateTime? // Just the day, like 2025-04-23
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
+
+model Facility {
+  id             String         @id @default(uuid())
+  name           String
+  numtel         String
+  email          String
+  adresse        String
+  logo           String?
+  nbrPlaces      Int            @map("nbr_places")
+  socialNetworks Json           @map("social_networks") 
+  places         Json           @map("places")         
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+@@map("facilities")
+}
+model SeatBooking {
+  id        String   @id @default(uuid())
+  eventKey  String
+  seatId    String
+  isBooked  Boolean  @default(false)
+  bookedAt  DateTime?
+  memberId  String?
+  member    Member?  @relation(fields: [memberId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventKey, seatId])
+  @@map("seat_bookings")
+}
+
 
 enum ExpenseType {
   MENSUEL

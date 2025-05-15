@@ -16,7 +16,7 @@ export class CreateProductDto {
   @ApiProperty({
     example: 'PC portable 15" 16Go RAM',
     required: false,
-  nullable: true,
+    nullable: true,
   })
   @IsOptional()
   @IsString()
@@ -37,7 +37,6 @@ export class CreateProductDto {
   @ApiProperty({ example: 10, required: true })
   @IsNotEmpty()
   @IsNumber()
-  @IsPositive()
   stock: number;
 
   @ApiProperty({
