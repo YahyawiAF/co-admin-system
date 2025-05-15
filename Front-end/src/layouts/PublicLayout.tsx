@@ -1,7 +1,7 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
 import styled from "@emotion/styled";
-import "../globals.css";
+import "../global.css";
 
 import { CssBaseline, Paper as MuiPaper } from "@mui/material";
 import { ThemeProvider as MuiThemeProvider } from "@mui/material/styles";
