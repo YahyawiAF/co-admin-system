@@ -53,14 +53,6 @@ export class ExpensesService {
     });
   }
 
-  async findAllDailyExpenses() {
-    return this.prisma.dailyExpense.findMany({
-      include: {
-        expense: true,
-      },
-    });
-  }
-
   async removeDailyExpense(id: string) {
     return this.prisma.dailyExpense.delete({
       where: { id },
@@ -70,6 +62,14 @@ export class ExpensesService {
   async findOneDailyExpense(id: string) {
     return this.prisma.dailyExpense.findUnique({
       where: { id },
+      include: {
+        expense: true,
+      },
+    });
+  }
+
+  async findAllDailyExpenses() {
+    return this.prisma.dailyExpense.findMany({
       include: {
         expense: true,
       },

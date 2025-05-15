@@ -127,6 +127,13 @@ function JournalDetails({
     isLoading: isLoadingAbonnements,
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
+  const [deleteDailyExpense] = useDeleteDailyExpenseMutation();
+  const [updateDailyExpense] = useUpdateDailyExpenseMutation();
+
+  const [openUpdateModal, setOpenUpdateModal] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
+    null
+  );
 
   const filteredDailyExpenses = useMemo(() => {
     return dailyExpenses.filter((expense) => {
@@ -136,8 +143,6 @@ function JournalDetails({
   }, [dailyExpenses, selectedDate]);
 
   // Expense mutations
-  const [deleteDailyExpense] = useDeleteDailyExpenseMutation();
-  const [updateDailyExpense] = useUpdateDailyExpenseMutation();
 
   // Product mutations
   const [updateProduct] = useUpdateProductMutation();
@@ -152,11 +157,6 @@ function JournalDetails({
     error: errorProducts,
     refetch: refetchProducts,
   } = useGetProductsQuery();
-
-  const [openUpdateModal, setOpenUpdateModal] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
-    null
-  );
 
   const handleQuantityChange = async (
     productId: string,

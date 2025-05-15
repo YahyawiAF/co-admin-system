@@ -284,15 +284,28 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
-
-  // Configuration de Fuse.js pour la recherche des abonnements
-
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
+    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    includeScore: true,
+    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+  };
+
+  // Configuration de Fuse.js pour la recherche des abonnements
+  const abonnementSearchOptions = {
+    keys: [
+      "member.firstName",
+      "member.lastName",
+      "price.name",
+      "id",
+      "stayedPeriode",
+    ],
     threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,
   };
+
+  // Configuration de Fuse.js pour la recherche des abonnements
 
   const {
     data: abonnementsData,
