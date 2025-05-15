@@ -256,6 +256,18 @@ interface AbonnementFormData extends Partial<Abonnement> {
 interface AbonnementProps {
   selectedDate: Date;
 }
+const abonnementSearchOptions = {
+  keys: [
+    "member.firstName",
+    "member.lastName",
+    "price.name",
+    "id",
+    "stayedPeriode",
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+};
 
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
@@ -277,19 +289,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
     threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,
