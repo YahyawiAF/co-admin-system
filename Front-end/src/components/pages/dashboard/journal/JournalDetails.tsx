@@ -128,6 +128,13 @@ function JournalDetails({
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
 
+  const filteredDailyExpenses = useMemo(() => {
+    return dailyExpenses.filter((expense) => {
+      const expenseDate = new Date(expense.date || expense.createdAt);
+      return isSameDay(expenseDate, selectedDate);
+    });
+  }, [dailyExpenses, selectedDate]);
+
   // Expense mutations
   const [deleteDailyExpense] = useDeleteDailyExpenseMutation();
   const [updateDailyExpense] = useUpdateDailyExpenseMutation();

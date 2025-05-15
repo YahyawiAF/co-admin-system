@@ -68,6 +68,38 @@ export class ExpensesService {
       },
     });
   }
+  async updateDailyExpense(id: string, data: { expenseId?: string; date?: Date }) {
+    return this.prisma.dailyExpense.update({
+      where: { id },
+      data: {
+        expenseId: data.expenseId,
+        date: data.date,
+      },
+    });
+  }
+
+  async removeDailyExpense(id: string) {
+    return this.prisma.dailyExpense.delete({
+      where: { id },
+    });
+  }
+
+  async findAllDailyExpenses() {
+    return this.prisma.dailyExpense.findMany({
+      include: {
+        expense: true, 
+      },
+    });
+  }
+
+  async findOneDailyExpense(id: string) {
+    return this.prisma.dailyExpense.findUnique({
+      where: { id },
+      include: {
+        expense: true,
+      },
+    });
+  }
 
   async findOne(id: string) {
     return new ExpenseEntity(

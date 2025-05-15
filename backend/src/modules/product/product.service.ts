@@ -49,9 +49,11 @@ export class ProductsService {
     );
   }
 
-
-
-  async createDailyProduct(data: { productId: string; quantite: number; date?: string }) {
+  async createDailyProduct(data: {
+    productId: string;
+    quantite: number;
+    date?: string;
+  }) {
     return this.prisma.dailyProduct.create({
       data: {
         productId: data.productId,
@@ -60,14 +62,14 @@ export class ProductsService {
       },
     });
   }
-  
+
   async updateDailyProduct(
     id: string,
     data: {
       productId?: string;
       quantite?: number;
       date?: string; // Add this field
-    }
+    },
   ) {
     return this.prisma.dailyProduct.update({
       where: { id },
@@ -88,7 +90,7 @@ export class ProductsService {
   async findAllDailyProduct() {
     return this.prisma.dailyProduct.findMany({
       include: {
-        product: true, 
+        product: true,
       },
     });
   }
@@ -101,5 +103,4 @@ export class ProductsService {
       },
     });
   }
-
 }

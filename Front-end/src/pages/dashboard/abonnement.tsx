@@ -273,21 +273,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     theme.breakpoints.down("sm")
   );
 
+  // Configuration de Fuse.js pour la recherche des abonnements
+
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
     threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,

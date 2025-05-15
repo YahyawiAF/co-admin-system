@@ -108,7 +108,6 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
     return value.toString().toLowerCase().includes(query.toLowerCase());
   });
 }
-
 const journalSearchOptions = {
   keys: [
     { name: "members.fullName", weight: 0.5 },
