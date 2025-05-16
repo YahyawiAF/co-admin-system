@@ -345,6 +345,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   // Configuration de Fuse.js pour la recherche des abonnements
 
+  // Configuration de Fuse.js pour la recherche des abonnements
+
   const {
     data: abonnementsData,
     isLoading,
