@@ -269,6 +269,58 @@ const abonnementSearchOptions = {
   minMatchCharLength: 2,
 };
 
+const headCells: Array<HeadCell> = [
+  {
+    id: "member",
+    numeric: false,
+    disablePadding: true,
+    label: "Member",
+  },
+  {
+    id: "registredDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Registered Date",
+  },
+  {
+    id: "leaveDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Leave Date",
+  },
+  {
+    id: "stayedPeriode",
+    numeric: false,
+    disablePadding: false,
+    label: "Stayed Period",
+  },
+  {
+    id: "remainingTime",
+    numeric: false,
+    disablePadding: false,
+    label: "Remaining Time",
+  },
+  {
+    id: "payedAmount",
+    numeric: false,
+    disablePadding: false,
+    label: "Paid Amount",
+  },
+  {
+    id: "status",
+    numeric: false,
+    disablePadding: false,
+    label: "Status",
+  },
+  {
+    id: "actions",
+    numeric: false,
+    disablePadding: false,
+    label: "Actions",
+    alignment: "center",
+  },
+];
+
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
@@ -280,7 +332,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
@@ -292,27 +344,17 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   // Configuration de Fuse.js pour la recherche des abonnements
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
-  // Configuration de Fuse.js pour la recherche des abonnements
 
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({});
+  } = useGetAbonnementsQuery({
+    page,
+    perPage: rowsPerPage,
+  });
+
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(
@@ -324,11 +366,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const {
-    data: membersList,
-    isLoading: isLoadingMember,
-    error: membersError,
-  } = useGetMembersQuery();
+
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
     leaveDate: selectedDate,
@@ -426,58 +464,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
 
-  const headCells: Array<HeadCell> = [
-    {
-      id: "member",
-      numeric: false,
-      disablePadding: true,
-      label: "Member",
-    },
-    {
-      id: "registredDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Registered Date",
-    },
-    {
-      id: "leaveDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Leave Date",
-    },
-    {
-      id: "stayedPeriode",
-      numeric: false,
-      disablePadding: false,
-      label: "Stayed Period",
-    },
-    {
-      id: "remainingTime",
-      numeric: false,
-      disablePadding: false,
-      label: "Remaining Time",
-    },
-    {
-      id: "payedAmount",
-      numeric: false,
-      disablePadding: false,
-      label: "Paid Amount",
-    },
-    {
-      id: "status",
-      numeric: false,
-      disablePadding: false,
-      label: "Status",
-    },
-    {
-      id: "actions",
-      numeric: false,
-      disablePadding: false,
-      label: "Actions",
-      alignment: "center",
-    },
-  ];
-
   const membersWithSubscriptionStatus = members.map((member) => {
     const memberAbonnements =
       abonnementsData?.data.filter(
@@ -508,21 +494,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       return new Date(date).toLocaleString();
     } catch (e) {
       return "Invalid date";
-    }
-  };
-
-  const handleSelect = (selectedMember: Member | null) => {
-    setMember(selectedMember);
-    if (editAbonnement) {
-      setEditAbonnement({
-        ...editAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    } else {
-      setNewAbonnement({
-        ...newAbonnement,
-        memberID: selectedMember?.id || "",
-      });
     }
   };
 
@@ -1050,17 +1021,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               </TableBody>
             </Table>
           </StyledTableContainer>
-          <StyledTablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
+          <TablePagination
+            rowsPerPageOptions={[50, 100, 200, 500]}
+            component="div"
             count={filteredData.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage={isMobile ? "Rows:" : "Rows per page:"}
-            labelDisplayedRows={({ from, to, count }) =>
-              `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`
-            }
           />
         </TableWrapper>
       </MainContainer>
