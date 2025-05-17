@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { SeatsioSeatingChart } from "@seatsio/seatsio-react";
-import type { SelectableObject } from "@seatsio/seatsio-types";
+import type { SelectableObject, SeatingChart } from "@seatsio/seatsio-types";
 import {
   Box,
   Paper,
@@ -24,8 +24,13 @@ import {
   Snackbar,
   IconButton,
   Avatar,
-  Divider,
   Portal,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Divider,
+  TextField,
 } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
@@ -41,6 +46,7 @@ import {
   Person as PersonIcon,
   EventSeat as SeatIcon,
   EventAvailable as DateIcon,
+  Search as SearchIcon,
 } from "@mui/icons-material";
 
 // Types
@@ -85,7 +91,11 @@ const RectangularModal = styled(Dialog)(({ theme }) => ({
     top: "50%",
     left: "50%",
     transform: "translate(-50%, -50%)",
-    zIndex: theme.zIndex.modal + 1000,
+    zIndex: 2147483647,
+  },
+  "& .MuiBackdrop-root": {
+    backgroundColor: "rgba(0,0,0,0.8)",
+    zIndex: 2147483646,
   },
 }));
 
@@ -100,6 +110,12 @@ const ModalHeader = styled(DialogTitle)(({ theme }) => ({
 
 const ModalContent = styled(DialogContent)(({ theme }) => ({
   padding: theme.spacing(3),
+  "& .MuiSelect-select": {
+    zIndex: 2147483648,
+  },
+  "& .MuiPopover-root": {
+    zIndex: 2147483649,
+  },
 }));
 
 const ModalFooter = styled(DialogActions)(({ theme }) => ({
@@ -150,7 +166,37 @@ const SecondaryButton = styled(Button)(({ theme }) => ({
   marginRight: theme.spacing(1),
 }));
 
-function SeatingChart() {
+const MembersList = styled(List)(({ theme }) => ({
+  width: "100%",
+  maxHeight: "300px",
+  overflowY: "auto",
+  marginTop: theme.spacing(2),
+  border: `1px solid ${theme.palette.divider}`,
+  borderRadius: theme.shape.borderRadius,
+}));
+
+const MemberListItem = styled(ListItem)(({ theme }) => ({
+  cursor: "pointer",
+  "&:hover": {
+    backgroundColor: theme.palette.action.hover,
+  },
+  "&.Mui-selected": {
+    backgroundColor: theme.palette.primary.light,
+  },
+}));
+
+const SearchContainer = styled(Box)(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
+  marginBottom: theme.spacing(2),
+  padding: theme.spacing(1),
+  backgroundColor: theme.palette.grey[50],
+  borderRadius: theme.shape.borderRadius,
+}));
+
+import type { NextPage } from "next";
+
+const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElement } = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isBooking, setIsBooking] = useState<boolean>(false);
@@ -160,17 +206,29 @@ function SeatingChart() {
   const [bookings, setBookings] = useState<BookingResponse[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentSeat, setCurrentSeat] = useState<SeatSelection | null>(null);
-  const [selectedBooking, setSelectedBooking] =
-    useState<BookingResponse | null>(null);
+  const [selectedBooking, setSelectedBooking] = useState<BookingResponse | null>(null);
   const [memberId, setMemberId] = useState<string>("");
   const [modalMode, setModalMode] = useState<"add" | "update" | "view">("add");
-  const chartRef = useRef<any>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const chartRef = useRef<SeatingChart | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const {
     data: members = [],
     isLoading: isMembersLoading,
     error: membersError,
   } = useGetMembersQuery();
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     fetchBookings();
@@ -187,9 +245,7 @@ function SeatingChart() {
 
   const handleObjectClicked = useCallback(
     async (object: SelectableObject) => {
-      // Zoom out if zoomed in
-      if (chartRef.current && chartRef.current.isZoomedIn) {
-        chartRef.current.zoomOut();
+      if (chartRef.current) {
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
@@ -205,9 +261,7 @@ function SeatingChart() {
       const booking = bookings.find((b) => b.seatId === seat.label);
       if (booking) {
         try {
-          const fetchedBooking = await bookingService.getBookingById(
-            booking.id
-          );
+          const fetchedBooking = await bookingService.getBookingById(booking.id);
           setSelectedBooking(fetchedBooking);
           setMemberId(fetchedBooking.memberId || "");
           setModalMode("view");
@@ -255,9 +309,8 @@ function SeatingChart() {
       await fetchBookings();
     } catch (error: any) {
       const errorMessage = error.message.includes("suggestion")
-        ? `${error.message.split("suggestion")[0]} - Suggestion: ${
-            error.message.split("suggestion")[1]
-          }`
+        ? `${error.message.split("suggestion")[0]} - Suggestion: ${error.message.split("suggestion")[1]
+        }`
         : error.message;
       setBookingError(errorMessage);
       await fetchBookings();
@@ -299,6 +352,9 @@ function SeatingChart() {
     setSelectedBooking(null);
     setMemberId("");
     setModalMode("add");
+    if (chartRef.current) {
+      chartRef.current.clearSelection();
+    }
   };
 
   const handleCloseSnackbar = () => {
@@ -310,6 +366,16 @@ function SeatingChart() {
     const member = members.find((m) => m.id === id);
     return member ? `${member.firstName} ${member.lastName}` : "Unknown";
   };
+
+  const filteredMembers = members.filter(member => {
+    const searchLower = searchTerm.toLowerCase();
+    return (
+      (member.firstName?.toLowerCase() || "").includes(searchLower) ||
+      (member.lastName?.toLowerCase() || "").includes(searchLower) ||
+      member.email?.toLowerCase().includes(searchLower) ||
+      member.id.toLowerCase().includes(searchLower)
+    );
+  });
 
   return (
     <PageContainer>
@@ -323,12 +389,14 @@ function SeatingChart() {
       <MainContainer>
         <ChartContainer>
           <SeatsioSeatingChart
-            ref={chartRef}
             workspaceKey="f1e63d51-d4b8-4993-ab7c-345a9904a899"
             event="180346ed-b27d-4677-8975-f4b168d98cc0"
             region="sa"
             onObjectClicked={handleObjectClicked}
-            onChartRendered={() => setChartError(null)}
+            onChartRendered={(chart) => {
+              chartRef.current = chart;
+              setChartError(null);
+            }}
             colors={{
               colorSelected: theme.palette.primary.main,
               availableObjectColor: theme.palette.grey[200],
@@ -350,28 +418,27 @@ function SeatingChart() {
           />
         </ChartContainer>
 
-        <Portal>
+        <Portal container={document.body}>
           <RectangularModal
             open={showModal}
             onClose={handleCloseModal}
             fullWidth
             maxWidth="sm"
-            sx={{
-              zIndex: theme.zIndex.modal + 1000,
+            disableEnforceFocus
+            disablePortal
+            style={{
+              zIndex: 2147483647,
+              position: isFullscreen ? 'fixed' : 'static'
             }}
           >
             <ModalHeader>
               <Box display="flex" alignItems="center">
                 {modalMode === "add" ? (
-                  <CheckCircleIcon
-                    sx={{ mr: 1, color: theme.palette.common.white }}
-                  />
+                  <CheckCircleIcon sx={{ mr: 1, color: theme.palette.common.white }} />
                 ) : modalMode === "update" ? (
                   <EditIcon sx={{ mr: 1, color: theme.palette.common.white }} />
                 ) : (
-                  <PersonIcon
-                    sx={{ mr: 1, color: theme.palette.common.white }}
-                  />
+                  <PersonIcon sx={{ mr: 1, color: theme.palette.common.white }} />
                 )}
                 <Typography
                   variant="h6"
@@ -381,8 +448,8 @@ function SeatingChart() {
                   {modalMode === "add"
                     ? "Book Seat"
                     : modalMode === "update"
-                    ? "Update Booking"
-                    : "Booking Details"}
+                      ? "Update Booking"
+                      : "Booking Details"}
                 </Typography>
               </Box>
               <IconButton
@@ -441,47 +508,59 @@ function SeatingChart() {
               )}
 
               {(modalMode === "add" || modalMode === "update") && (
-                <FormControl
-                  fullWidth
-                  sx={{ mt: 2 }}
-                  disabled={isBooking || isMembersLoading}
-                >
-                  <InputLabel id="member-select-label">
-                    Select Member
-                  </InputLabel>
-                  <Select
-                    labelId="member-select-label"
-                    value={memberId}
-                    label="Select Member"
-                    onChange={(e) => setMemberId(e.target.value as string)}
-                    MenuProps={{
-                      PaperProps: {
-                        style: {
-                          maxHeight: 300,
-                        },
-                      },
-                    }}
-                  >
-                    {members.map((member) => (
-                      <MenuItem key={member.id} value={member.id}>
-                        <Box display="flex" alignItems="center">
-                          <Avatar
-                            sx={{
-                              width: 24,
-                              height: 24,
-                              mr: 2,
-                              fontSize: "0.75rem",
-                            }}
+                <Box>
+                  <SearchContainer>
+                    <SearchIcon color="action" sx={{ mr: 1 }} />
+                    <TextField
+                      fullWidth
+                      variant="standard"
+                      placeholder="Search members..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      InputProps={{
+                        disableUnderline: true,
+                      }}
+                    />
+                  </SearchContainer>
+
+                  <MembersList>
+                    {isMembersLoading ? (
+                      <Box display="flex" justifyContent="center" p={2}>
+                        <CircularProgress size={24} />
+                      </Box>
+                    ) : filteredMembers.length === 0 ? (
+                      <ListItem>
+                        <ListItemText primary="No members found" />
+                      </ListItem>
+                    ) : (
+                      filteredMembers.map((member) => (
+                        <Box key={member.id}>
+                          <MemberListItem
+                            selected={memberId === member.id}
+                            onClick={() => setMemberId(member.id)}
                           >
-                            {member.firstName?.charAt(0)}
-                            {member.lastName?.charAt(0)}
-                          </Avatar>
-                          {member.firstName} {member.lastName}
+                            <ListItemAvatar>
+                              <Avatar
+                                sx={{
+                                  backgroundColor: theme.palette.primary.light,
+                                  color: theme.palette.primary.main,
+                                }}
+                              >
+                                {member.firstName?.charAt(0)}
+                                {member.lastName?.charAt(0)}
+                              </Avatar>
+                            </ListItemAvatar>
+                            <ListItemText
+                              primary={`${member.firstName} ${member.lastName}`}
+                              secondary={member.email}
+                            />
+                          </MemberListItem>
+                          <Divider variant="inset" component="li" />
                         </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                      ))
+                    )}
+                  </MembersList>
+                </Box>
               )}
             </ModalContent>
 
@@ -579,7 +658,7 @@ function SeatingChart() {
         <Snackbar
           open={!!membersError}
           autoHideDuration={6000}
-          onClose={() => {}}
+          onClose={() => { }}
           anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
           <Alert severity="error">Members loading error.</Alert>

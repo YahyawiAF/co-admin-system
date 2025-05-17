@@ -53,13 +53,53 @@ import { LoadingButton } from "@mui/lab";
 import { DateTimePicker } from "@mui/x-date-pickers";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ErrorIcon from "@mui/icons-material/Error";
+import WarningIcon from "@mui/icons-material/Warning";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
-// Styles responsives
+const StatsCard = styled(Card)(({ theme }) => ({
+  height: '100%',
+  borderRadius: theme.shape.borderRadius * 2,
+  boxShadow: theme.shadows[2],
+  transition: 'transform 0.3s, box-shadow 0.3s',
+  '&:hover': {
+    transform: 'translateY(-4px)',
+    boxShadow: theme.shadows[6]
+  }
+}));
+
+const StatsCardContent = styled(CardContent)(({ theme }) => ({
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  padding: theme.spacing(3),
+  '&:last-child': {
+    paddingBottom: theme.spacing(3)
+  }
+}));
+
+const StatsCount = styled(Typography)(({ theme }) => ({
+  fontWeight: 600,
+  marginTop: theme.spacing(1),
+  color: theme.palette.text.primary,
+  '& span': {
+    display: 'block',
+    lineHeight: 1.5
+  }
+}));
+
+const StatsIconWrapper = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginLeft: theme.spacing(2),
+}));
+
 const PageContainer = styled(Box)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -269,9 +309,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const isMobile = useMediaQuery((theme: Theme) =>
-    theme.breakpoints.down("sm")
-  );
+  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
 
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
@@ -310,11 +348,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const {
-    data: membersList,
-    isLoading: isLoadingMember,
-    error: membersError,
-  } = useGetMembersQuery();
+  const { data: membersList, isLoading: isLoadingMember, error: membersError } =
+    useGetMembersQuery();
+
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
     leaveDate: selectedDate,
@@ -332,9 +368,46 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     );
   };
 
+  // Calculate members for each status based on selectedDate
+  const { expiredMembers, soonToExpireMembers, activeMembers } = React.useMemo(() => {
+    const today = new Date(selectedDate);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const expired: string[] = [];
+    const soonToExpire: string[] = [];
+    const active: string[] = [];
+
+    abonnementsData?.data.forEach((abonnement) => {
+      const member = members.find((m) => m.id === abonnement.memberID);
+      if (!member || !abonnement.leaveDate) return;
+
+      const memberName = `${member.firstName} ${member.lastName}`;
+      const leaveDate = new Date(abonnement.leaveDate);
+
+      // Expired: leaveDate is today
+      if (isSameDay(leaveDate, today)) {
+        if (!expired.includes(memberName)) expired.push(memberName);
+      }
+      // Soon to expire: leaveDate is tomorrow
+      else if (isSameDay(leaveDate, tomorrow)) {
+        if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
+      }
+      // Active: registered today
+      else if (abonnement.registredDate && isSameDay(new Date(abonnement.registredDate), today)) {
+        if (!active.includes(memberName)) active.push(memberName);
+      }
+    });
+
+    return {
+      expiredMembers: expired,
+      soonToExpireMembers: soonToExpire,
+      activeMembers: active,
+    };
+  }, [abonnementsData, members, selectedDate]);
+
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
-
     const enrichedData = abonnementsData.data.map((abonnement) => ({
       ...abonnement,
       member: members.find((m) => m.id === abonnement.memberID),
@@ -343,22 +416,18 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
     let filtered = enrichedData;
 
-    // Apply search if there's a search term
     if (search && search.length >= 2) {
       const fuse = new Fuse(enrichedData, abonnementSearchOptions);
       const results = fuse.search(search);
       filtered = results.map((result) => result.item);
     }
 
-    // Apply period filter based on duration between registredDate and leaveDate
     filtered = filtered.filter((abonnement) => {
       if (!abonnement.registredDate || !abonnement.leaveDate) return false;
-
       const startDate = new Date(abonnement.registredDate);
       const endDate = new Date(abonnement.leaveDate);
       const diffMs = endDate.getTime() - startDate.getTime();
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
       switch (timeFilter) {
         case "week":
           return diffDays >= 7 && diffDays <= 21;
@@ -370,12 +439,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       }
     });
 
-    // Apply status filter
     filtered = filtered.filter((abonnement) => {
       if (!abonnement.leaveDate) return true;
       const leaveDate = new Date(abonnement.leaveDate);
       const now = new Date();
-
       switch (statusFilter) {
         case "active":
           return leaveDate >= now;
@@ -397,7 +464,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     members,
   ]);
 
-  // Paginated data
   const paginatedData = React.useMemo(() => {
     const startIndex = page * rowsPerPage;
     return filteredData.slice(startIndex, startIndex + rowsPerPage);
@@ -469,17 +535,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       abonnementsData?.data.filter(
         (abonnement) => abonnement.memberID === member.id
       ) || [];
-
     const hasActiveSubscription = memberAbonnements.some((abonnement) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) >= new Date();
     });
-
     const hasExpiredSubscription = memberAbonnements.some((abonnement) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) < new Date();
     });
-
     return {
       ...member,
       hasActiveSubscription,
@@ -552,12 +615,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
-    setPage(0); // Reset to first page on search
+    setPage(0);
   };
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
     if (
       !(editAbonnement
         ? editAbonnement.registredDate
@@ -565,7 +627,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     ) {
       newErrors.registredDate = "Registration date and time is required";
     }
-
     const leaveDate = editAbonnement
       ? editAbonnement.leaveDate
       : newAbonnement.leaveDate;
@@ -574,40 +635,34 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     } else if (
       new Date(leaveDate) <=
       new Date(
-        editAbonnement?.registredDate ||
-          newAbonnement.registredDate ||
-          new Date()
+        editAbonnement?.registredDate || newAbonnement.registredDate || new Date()
       )
     ) {
       newErrors.leaveDate =
         "Leave date and time must be after registration date and time";
     }
-
-    if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
+    if (
+      !(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)
+    ) {
       newErrors.memberID = "Member is required";
     }
-
     if (!(editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)) {
       newErrors.priceId = "Price is required";
     }
-
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     try {
       const selectedPrice = prices.find(
         (p) =>
-          p.id ===
-          (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
+          p.id === (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
       );
       const stayedPeriode = selectedPrice
         ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})`
         : "";
-
       if (editAbonnement) {
         await updateAbonnement({
           id: editAbonnement.id,
@@ -626,7 +681,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           leaveDate: new Date(newAbonnement.leaveDate),
         }).unwrap();
       }
-
       handleCloseDrawer();
       refetch();
     } catch (error) {
@@ -639,7 +693,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       try {
         await deleteAbonnement(abonnementToDelete).unwrap();
         refetch();
-        // Adjust page if necessary after deletion
         if (paginatedData.length === 1 && page > 0) {
           setPage(page - 1);
         }
@@ -669,20 +722,16 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const handlePriceSelect = (price: Price) => {
     const registredDate = selectedDate;
     let leaveDate = new Date(registredDate);
-
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
-
     leaveDate.setDate(leaveDate.getDate() + durationDays);
-
     const update = {
       priceId: price.id,
       payedAmount: price.price,
       leaveDate: leaveDate,
       registredDate: selectedDate,
     };
-
     if (editAbonnement) {
       setEditAbonnement({ ...editAbonnement, ...update });
     } else {
@@ -693,7 +742,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const getDurationDescription = (price: Price) => {
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
-
     return `${price.name}`;
   };
 
@@ -710,20 +758,16 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const calculateRemainingTime = (leaveDate: Date | string | null) => {
     if (!leaveDate) return "N/A";
-
     try {
       const endDate = new Date(leaveDate);
       const now = new Date();
-
       if (endDate < now) return "Expired";
-
       const diffMs = endDate.getTime() - now.getTime();
       const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(
         (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
       const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
       if (diffDays >= 30) {
         const months = Math.floor(diffDays / 30);
         const remainingDays = diffDays % 30;
@@ -755,14 +799,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     theme: any
   ) => {
     if (!leaveDate) return {};
-
     try {
       const endDate = new Date(leaveDate);
       const now = new Date();
       const diffDays = Math.floor(
         (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
       );
-
       if (diffDays <= 0) {
         return { color: theme.palette.error.main, fontWeight: "bold" };
       } else if (diffDays <= 3) {
@@ -807,9 +849,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError)
-    return <Alert severity="error">Error loading subscriptions</Alert>;
-
+  if (isError) return <Alert severity="error">Error loading subscriptions</Alert>;
   if (openUserForm)
     return (
       <UserForm
@@ -823,6 +863,92 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   return (
     <PageContainer>
+
+      <Grid container spacing={3}>
+
+        <Grid item xs={12} sm={6} md={4}>
+          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.error.main}` }}>
+            <StatsCardContent>
+              <Box>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Expired Today
+                </Typography>
+                <StatsCount variant="h5">
+                  {expiredMembers.length > 0 ? (
+                    expiredMembers.map((member, index) => (
+                      <span key={index}>{member}</span>
+                    ))
+                  ) : (
+                    "None"
+                  )}
+                </StatsCount>
+              </Box>
+              <ErrorIcon
+                fontSize="medium"
+                sx={{
+                  color: theme.palette.error.main,
+                  ml: 2,
+                }}
+              />
+            </StatsCardContent>
+          </StatsCard>
+        </Grid>
+
+
+        <Grid item xs={12} sm={6} md={4}>
+          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.warning.main}` }}>
+            <StatsCardContent>
+              <Box>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Expiring Tomorrow
+                </Typography>
+                <StatsCount variant="h5">
+                  {soonToExpireMembers.length > 0 ? (
+                    soonToExpireMembers.map((member, index) => (
+                      <span key={index}>{member}</span>
+                    ))
+                  ) : (
+                    "None"
+                  )}
+                </StatsCount>
+              </Box>
+              <StatsIconWrapper>
+                <WarningIcon fontSize="medium" sx={{ color: theme.palette.warning.main }} />
+              </StatsIconWrapper>
+            </StatsCardContent>
+          </StatsCard>
+        </Grid>
+
+
+        <Grid item xs={12} sm={6} md={4}>
+          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.success.main}` }}>
+            <StatsCardContent>
+              <Box>
+                <Typography variant="subtitle1" color="textSecondary">
+                  Subscribed Today
+                </Typography>
+                <StatsCount variant="h5">
+                  {activeMembers.length > 0 ? (
+                    activeMembers.map((member, index) => (
+                      <span key={index}>{member}</span>
+                    ))
+                  ) : (
+                    "None"
+                  )}
+                </StatsCount>
+              </Box>
+              <CheckCircleIcon
+                fontSize="medium"
+                sx={{
+                  color: theme.palette.success.main,
+                  ml: 2,
+                }}
+              />
+            </StatsCardContent>
+          </StatsCard>
+        </Grid>
+      </Grid>
+
       <MainContainer>
         <TableHeadAction
           handleClickOpen={() => setShowDrawer(true)}
@@ -892,7 +1018,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             </Select>
           </FormControl>
         </Box>
-
         <TableWrapper>
           <StyledTableContainer>
             <Table stickyHeader aria-label="subscriptions table">
@@ -925,13 +1050,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                       ? new Date(abonnement.leaveDate)
                       : null;
                     const today = new Date();
-                    const shouldBlink =
-                      leaveDate && isSameDay(leaveDate, today);
+                    const shouldBlink = leaveDate && isSameDay(leaveDate, today);
                     const TableRowComponent = shouldBlink
                       ? BlinkingTableRow
                       : TableRow;
                     const isItemSelected = isSelected(abonnement.id);
-
                     return (
                       <TableRowComponent
                         key={abonnement.id}
@@ -1050,7 +1173,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           />
         </TableWrapper>
       </MainContainer>
-
       <Dialog
         open={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
@@ -1059,8 +1181,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         <DialogTitle>Delete Subscription</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this subscription? This action
-            cannot be undone.
+            Are you sure you want to delete this subscription? This action cannot
+            be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -1070,7 +1192,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           </Button>
         </DialogActions>
       </Dialog>
-
       <Drawer
         anchor="right"
         open={showDrawer}
@@ -1088,8 +1209,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {editAbonnement ? "Manage Subscription" : "New Subscription"}
         </Typography>
-
-        <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+        <Box
+          sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}
+        >
           {!editAbonnement && (
             <ActionButton
               variant="outlined"
@@ -1104,7 +1226,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               New Member
             </ActionButton>
           )}
-
           <Autocomplete
             options={membersWithSubscriptionStatus}
             getOptionLabel={(option) =>
@@ -1113,7 +1234,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             value={
               membersWithSubscriptionStatus.find(
                 (m) =>
-                  m.id === (editAbonnement?.memberID || newAbonnement.memberID)
+                  m.id ===
+                  (editAbonnement?.memberID || newAbonnement.memberID)
               ) || null
             }
             onChange={(event, newValue) => {
@@ -1150,13 +1272,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             sx={{
               width: "100%",
               maxWidth: "400px",
-              "& .MuiInputBase-root": {
-                height: "50px",
-              },
+              "& .MuiInputBase-root": { height: "50px" },
             }}
           />
         </Box>
-
         <Typography variant="subtitle1" sx={{ mb: 0 }}>
           Select Rate *
         </Typography>
@@ -1167,12 +1286,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
@@ -1180,7 +1299,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               >
                 <CardContent>
                   <Typography variant="h6" sx={{ mt: 1 }}>
-                    <Box component="span" sx={{ fontWeight: "bold" }}>
+                    <Box component="span" sx={{ fontWeight: "blank" }}>
                       {getDurationDescription(price)}
                     </Box>
                   </Typography>
@@ -1197,7 +1316,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             {errors.priceId}
           </FormHelperText>
         )}
-
         <DateTimePicker
           label="Registration Date and Time *"
           value={
@@ -1213,7 +1331,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             {errors.registredDate}
           </FormHelperText>
         )}
-
         <DateTimePicker
           label="Leave Date and Time *"
           value={editAbonnement?.leaveDate || newAbonnement.leaveDate}
@@ -1232,7 +1349,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             {errors.leaveDate}
           </FormHelperText>
         )}
-
         <TextField
           label="Paid Amount (DT)"
           type="number"
@@ -1248,7 +1364,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           }}
           sx={{ mb: 0 }}
         />
-
         <FormControl fullWidth sx={{ mb: 0 }}>
           <InputLabel>Payment Status</InputLabel>
           <Select
@@ -1271,9 +1386,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             <MenuItem value="false">Unpaid</MenuItem>
           </Select>
         </FormControl>
-
         <Divider />
-
         <Box
           sx={{
             display: "flex",
@@ -1287,7 +1400,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             {editAbonnement?.payedAmount || newAbonnement.payedAmount || 0} DT
           </Typography>
         </Box>
-
         <Box
           sx={{
             display: "flex",
@@ -1299,12 +1411,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           <ActionButton variant="outlined" onClick={handleCloseDrawer}>
             Cancel
           </ActionButton>
-          <SubmitButton variant="contained" onClick={handleSubmit}>
+          <SubmitButton
+            variant="contained"
+            onClick={handleSubmit}
+          >
             {editAbonnement ? "Confirm" : "Confirm"}
           </SubmitButton>
         </Box>
       </Drawer>
-
       <Drawer
         anchor="right"
         open={openMemberModal}
@@ -1318,28 +1432,15 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             gap: "20px",
           },
         }}
-        ModalProps={{
-          hideBackdrop: true,
-        }}
+        ModalProps={{ hideBackdrop: true }}
       >
         <Typography
           variant="h6"
-          sx={{
-            textAlign: "left",
-            fontWeight: "bold",
-            color: "grey",
-          }}
+          sx={{ textAlign: "left", fontWeight: "bold", color: "grey" }}
         >
           Manage Member
         </Typography>
-
-        <Divider
-          sx={{
-            backgroundColor: theme.palette.grey[300],
-            my: 1,
-          }}
-        />
-
+        <Divider sx={{ backgroundColor: theme.palette.grey[300], my: 1 }} />
         <UserForm
           handleClose={() => setOpenMemberModal(false)}
           selectItem={null}
