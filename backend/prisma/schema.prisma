@@ -13,14 +13,15 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt @db.Timestamp(6)
   deletedAt          DateTime? @db.Timestamp(6)
-  email              String?    @unique @db.VarChar(256)
-  fullname           String?     @db.VarChar(256)
+  email              String?   @unique @db.VarChar(256)
+  fullname           String?   @db.VarChar(256)
   password           String?
   refreshToken       String?
   role               Role      @default(USER)
   resetPasswordToken String?
   accessToken        String?
-  phoneNumber        String?  @unique
+  phoneNumber        String?   @unique
+  Journals           Journal[]
 
   @@map("users")
 }
@@ -39,10 +40,11 @@ model Member {
   isActive      Boolean       @default(false)
   functionality String?
   phone         Int?          @unique
-  userId Int?
+  userId        Int?
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
+  seatBookings  SeatBooking[]
 
   @@map("members")
 }
@@ -62,18 +64,20 @@ model Price {
 }
 
 model Journal {
-  id            String    @id @default(uuid())
-  isPayed       Boolean
-  registredTime DateTime
-  leaveTime     DateTime?
-  payedAmount   Float
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt @db.Timestamp(6)
-  memberID      String?
-  isReservation Boolean   @default(false)
-  priceId       String?
-  members       Member?   @relation(fields: [memberID], references: [id])
-  prices        Price?    @relation(fields: [priceId], references: [id])
+  id              String    @id @default(uuid())
+  isPayed         Boolean
+  registredTime   DateTime
+  leaveTime       DateTime?
+  payedAmount     Float
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
+  memberID        String?
+  isReservation   Boolean   @default(false)
+  priceId         String?
+  createdbyUserID String?
+  createdBy       User?     @relation(fields: [createdbyUserID], references: [id])
+  members         Member?   @relation(fields: [memberID], references: [id])
+  prices          Price?    @relation(fields: [priceId], references: [id])
 
   @@map("journals")
 }
@@ -111,37 +115,86 @@ model Reservation {
 }
 
 model Product {
-  id            String    @id @default(uuid())
+  id            String   @id @default(uuid())
   name          String
   description   String?
-  purchasePrice Float     @map("prix_achat")
-  sellingPrice  Float     @map("prix_vente")
+  purchasePrice Float    @map("prix_achat")
+  sellingPrice  Float    @map("prix_vente")
   stock         Int
   img           String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  dailyProducts DailyProduct[]
   @@map("products")
+}
+model DailyProduct {
+  id        String    @id @default(uuid())
+  productId String
+  date      DateTime?
+  product   Product   @relation(fields: [productId], references: [id])
+  quantite  Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 model Expense {
-  id          String       @id @default(uuid())
+  id          String         @id @default(uuid())
   name        String
   description String?
-  amount      Float        @map("prix")
+  amount      Float          @map("prix")
   type        ExpenseType
-  date        DateTime
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  logs        DailyExpense[]
 
   @@map("expenses")
 }
+
+model DailyExpense {
+  id        String    @id @default(uuid())
+  expenseId String
+  Summary   String?
+  expense   Expense   @relation(fields: [expenseId], references: [id])
+  date      DateTime? // Just the day, like 2025-04-23
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Facility {
+  id             String         @id @default(uuid())
+  name           String
+  numtel         String
+  email          String
+  adresse        String
+  logo           String?
+  nbrPlaces      Int            @map("nbr_places")
+  socialNetworks Json           @map("social_networks") 
+  places         Json           @map("places")         
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+@@map("facilities")
+}
+model SeatBooking {
+  id        String   @id @default(uuid())
+  eventKey  String
+  seatId    String
+  isBooked  Boolean  @default(false)
+  bookedAt  DateTime?
+  memberId  String?
+  member    Member?  @relation(fields: [memberId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventKey, seatId])
+  @@map("seat_bookings")
+}
+
 
 enum ExpenseType {
   MENSUEL
   JOURNALIER
 }
-
 
 enum PriceType {
   journal

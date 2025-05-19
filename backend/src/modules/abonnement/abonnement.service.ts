@@ -43,9 +43,8 @@ export class AbonnementService {
         );
       }
 
-    // Update user plan 
-    //   const updatedUser = await this.prisma.member.update({
-     
+      // Update user plan
+      //   const updatedUser = await this.prisma.member.update({
 
       return await this.prisma.abonnement.create({
         data: {
@@ -56,7 +55,7 @@ export class AbonnementService {
           isReservation: createAbonnementDto.isReservation,
           payedAmount: createAbonnementDto.payedAmount,
           stayedPeriode: createAbonnementDto.stayedPeriode, // fornt end calculate leave time
-         
+
           priceId: priceId,
         },
         include: {
@@ -112,15 +111,17 @@ export class AbonnementService {
       },
       { page },
     );
-  
+
     return {
-      data: paginatedResult.data.map(abonnement => new AbonnementEntity(abonnement)),
+      data: paginatedResult.data.map(
+        (abonnement) => new AbonnementEntity(abonnement),
+      ),
       meta: paginatedResult.meta,
     };
   }
 
   findOne(id: string) {
-    return this.prisma.abonnement.findUnique({ 
+    return this.prisma.abonnement.findUnique({
       where: { id },
       include: {
         members: true,
@@ -181,7 +182,7 @@ export class AbonnementService {
   }
 
   remove(id: string) {
-    return this.prisma.abonnement.delete({ 
+    return this.prisma.abonnement.delete({
       where: { id },
       include: {
         members: true,

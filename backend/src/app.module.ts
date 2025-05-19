@@ -1,8 +1,8 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common'; // Importez MiddlewareConsumer et NestModule
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { EventEmitterModule } from '@nestjs/event-emitter';
 import { MailerModule } from '@nestjs-modules/mailer';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
 
 import { AppController } from './app.controller';
@@ -17,6 +17,12 @@ import { PrismaService } from 'database/prisma.service';
 import { AbonnementModule } from './modules/abonnement/abonnement.module';
 import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
 import { ExpensesModule } from './modules/expense/expense.module';
+import { ProductsModule } from './modules/product/product.module';
+import { FacilityModule } from './modules/facility/facility.module';
+import { BookingController } from './proxy/booking.controller';
+import { ProxyService } from './proxy/proxy.service';
+import { BookingModule } from './proxy/book.module';
+import { ProxyModule } from './proxy/proxy.module';
 
 @Module({
   imports: [
@@ -29,7 +35,7 @@ import { ExpensesModule } from './modules/expense/expense.module';
         transport: {
           host: configService.get<string>('MAILER_HOST'), // Exemple : 'smtp.gmail.com'
           port: configService.get<number>('MAILER_PORT'), // Exemple : 587
-          secure: false, // true pour le port 465, false pour les autres ports
+          secure: true, // true pour le port 465, false pour les autres ports
           auth: {
             user: configService.get<string>('MAILER_USER'), // Votre adresse e-mail
             pass: configService.get<string>('MAILER_PASSWORD'), // Votre mot de passe e-mail
@@ -56,13 +62,17 @@ import { ExpensesModule } from './modules/expense/expense.module';
     PriceModule,
     AbonnementModule,
     ExpensesModule,
+    ProductsModule,
+    FacilityModule,
+    BookingModule,
+    ProxyModule,
   ],
   controllers: [AppController],
-  providers: [AppService,PrismaService],
+  providers: [AppService, PrismaService],
 })
-export class AppModule implements NestModule { // Implémentez NestModule
+export class AppModule implements NestModule {
+  // Implémentez NestModule
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SecurityMiddleware).
-    forRoutes('auth'); // Appliquez le middleware à toutes les routes
+    consumer.apply(SecurityMiddleware).forRoutes('auth');
   }
 }

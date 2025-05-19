@@ -10,6 +10,13 @@ import {
   TrendingUp,
   Briefcase,
   Tag,
+  Box,
+  Package,
+  Home,
+  MapPin,
+  Compass,
+  Globe,
+  Calendar,
 } from "react-feather";
 
 const pagesSection = [
@@ -43,6 +50,16 @@ const pagesSection = [
         href: "/dashboard/expense",
         icon: DollarSign,
         title: "Expense",
+      },
+      {
+        href: "/dashboard/product",
+        icon: Package,
+        title: "Product",
+      },
+      {
+        href: "/dashboard/facility",
+        icon: Home,
+        title: "Facility",
       },
     ],
   },

@@ -160,7 +160,9 @@ export interface Journal {
   updatedAt: Date;
   isReservation: boolean;
   priceId?: string | null;
-  price?: Member | null;
+  price?: Price | null;
+  expenses?: Expenses[];
+  expenseIds?: string[];
 }
 
 export interface Abonnement {
@@ -196,10 +198,80 @@ export interface Expenses {
   description?: string;
   amount: number;
   type: ExpenseType;
-  date: string;
   createdAt: string;
   updatedAt: string;
 }
+export interface DailyExpense {
+  id: string;
+  expenseId: string;
+  date?: string;
+  Summary?: string;
+  createdAt: string;
+  updatedAt: string;
+  expense: Expenses;
+}
+export interface Product {
+  id: string;
+  name: string;
+  description?: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  stock: number;
+  img?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface DailyProduct {
+  id: string;
+  productId: string;
+  quantite: number;
+  createdAt: string;
+  date?: string;
+  updatedAt: string;
+  product: Product;
+}
+export interface Facility {
+  id: string;
+  name: string;
+  numtel: string;
+  email: string;
+  adresse: string;
+  logo?: string | null;
+  nbrPlaces: number;
+  socialNetworks: Record<string, string>;
+  places: Record<string, unknown>;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
+export interface SeatBooking {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  isBooked: boolean;
+  bookedAt?: string;
+  memberId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BookSeatsPayload {
+  eventKey: string;
+  seats: string[];
+  memberId: string;
+}
+
+export interface BookingResponse {
+  id: string;
+  eventKey: string;
+  seatId: string;
+  memberId: string | null;
+  isBooked: boolean;
+  bookedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  success: boolean;
+}
+
 export enum ExpenseType {
   MENSUEL = "MENSUEL",
   JOURNALIER = "JOURNALIER",

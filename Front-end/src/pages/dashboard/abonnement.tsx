@@ -2,7 +2,7 @@ import React, { ReactElement, useState } from "react";
 import { useTheme } from "@mui/material/styles";
 import { PersonAdd } from "@mui/icons-material";
 import DashboardLayout from "../../layouts/Dashboard";
-
+import Fuse from "fuse.js";
 import {
   useGetAbonnementsQuery,
   useCreateAbonnementMutation,
@@ -46,14 +46,15 @@ import {
   Checkbox,
   useMediaQuery,
   Theme,
+  Autocomplete,
+  TablePagination,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
-import { DatePicker } from "@mui/x-date-pickers";
+import { DateTimePicker } from "@mui/x-date-pickers";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EnhancedTableHead from "src/components/Table/EnhancedTableHead";
 import TableHeadAction from "../../components/Table/members/TableHeader";
-
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
@@ -131,7 +132,6 @@ const ResponsiveTableCell = styled(TableCell)(({ theme }) => ({
     "&:nth-of-type(6)": { display: "none" },
     "&:nth-of-type(7)": { width: "30%" },
   },
-  // Ajoutez cette partie pour forcer l'alignement à droite pour la colonne actions
   '&[data-align="right"]': {
     textAlign: "right",
     justifyContent: "flex-end",
@@ -210,30 +210,142 @@ const PriceCard = styled(Card)(({ theme }) => ({
   },
 }));
 
+const StyledTablePagination = styled(TablePagination)(({ theme }) => ({
+  "& .MuiTablePagination-root": {
+    borderTop: `1px solid ${theme.palette.divider}`,
+    backgroundColor: theme.palette.background.paper,
+    padding: theme.spacing(1),
+  },
+  "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+    color: theme.palette.text.primary,
+    fontWeight: 500,
+  },
+  "& .MuiTablePagination-actions": {
+    "& .MuiIconButton-root": {
+      color: theme.palette.primary.main,
+      "&:hover": {
+        backgroundColor: theme.palette.action.hover,
+      },
+      "&.Mui-disabled": {
+        color: theme.palette.action.disabled,
+      },
+    },
+  },
+  "& .MuiTablePagination-select": {
+    border: `1px solid ${theme.palette.divider}`,
+    borderRadius: theme.shape.borderRadius,
+    backgroundColor: theme.palette.background.default,
+    padding: theme.spacing(0.5, 1),
+  },
+  [theme.breakpoints.down("sm")]: {
+    "& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows": {
+      fontSize: "0.875rem",
+    },
+    "& .MuiTablePagination-actions": {
+      marginLeft: theme.spacing(1),
+    },
+  },
+}));
+
 interface AbonnementFormData extends Partial<Abonnement> {
   registredDate: Date;
   leaveDate: Date;
   payedAmount: number;
 }
 
-const isSameDay = (date1: Date, date2: Date) => {
-  return (
-    date1.getFullYear() === date2.getFullYear() &&
-    date1.getMonth() === date2.getMonth() &&
-    date1.getDate() === date2.getDate()
-  );
+interface AbonnementProps {
+  selectedDate: Date;
+}
+const abonnementSearchOptions = {
+  keys: [
+    "member.firstName",
+    "member.lastName",
+    "price.name",
+    "id",
+    "stayedPeriode",
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
 };
 
-const AbonnementComponent = () => {
+const headCells: Array<HeadCell> = [
+  {
+    id: "member",
+    numeric: false,
+    disablePadding: true,
+    label: "Member",
+  },
+  {
+    id: "registredDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Registered Date",
+  },
+  {
+    id: "leaveDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Leave Date",
+  },
+  {
+    id: "stayedPeriode",
+    numeric: false,
+    disablePadding: false,
+    label: "Stayed Period",
+  },
+  {
+    id: "remainingTime",
+    numeric: false,
+    disablePadding: false,
+    label: "Remaining Time",
+  },
+  {
+    id: "payedAmount",
+    numeric: false,
+    disablePadding: false,
+    label: "Paid Amount",
+  },
+  {
+    id: "status",
+    numeric: false,
+    disablePadding: false,
+    label: "Status",
+  },
+  {
+    id: "actions",
+    numeric: false,
+    disablePadding: false,
+    label: "Actions",
+    alignment: "center",
+  },
+];
+
+const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "expired" | "all"
+  >("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
+  const fuseOptions = {
+    keys: ["firstName", "lastName", "email"],
+    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    includeScore: true,
+    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+  };
+
+  // Configuration de Fuse.js pour la recherche des abonnements
+
+  // Configuration de Fuse.js pour la recherche des abonnements
 
   const {
     data: abonnementsData,
@@ -241,7 +353,8 @@ const AbonnementComponent = () => {
     isError,
     refetch,
   } = useGetAbonnementsQuery({
-    search: search,
+    page,
+    perPage: rowsPerPage,
   });
 
   const { data: members = [] } = useGetMembersQuery();
@@ -249,46 +362,101 @@ const AbonnementComponent = () => {
   const abonnementPrices = prices.filter(
     (price) => price.type === "abonnement"
   );
+
   const [openUserForm, setOpenUserForm] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
-
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const {
-    data: membersList,
-    isLoading: isLoadingMember,
-    error: membersError,
-  } = useGetMembersQuery();
+
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
-    registredDate: new Date(),
-    leaveDate: new Date(),
+    registredDate: selectedDate,
+    leaveDate: selectedDate,
     payedAmount: 0,
     isPayed: false,
     isReservation: false,
     stayedPeriode: "",
   });
-  // Remplacer la partie filteredData existante par ce code
+
+  const isSameDay = (date1: Date, date2: Date) => {
+    return (
+      date1.getFullYear() === date2.getFullYear() &&
+      date1.getMonth() === date2.getMonth() &&
+      date1.getDate() === date2.getDate()
+    );
+  };
+
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
 
-    return abonnementsData.data.filter((abonnement) => {
-      const price = prices.find((p) => p.id === abonnement.priceId);
-      if (!price) return false;
+    const enrichedData = abonnementsData.data.map((abonnement) => ({
+      ...abonnement,
+      member: members.find((m) => m.id === abonnement.memberID),
+      price: prices.find((p) => p.id === abonnement.priceId),
+    }));
 
-      const priceName = price.name.toLowerCase();
+    let filtered = enrichedData;
+
+    // Apply search if there's a search term
+    if (search && search.length >= 2) {
+      const fuse = new Fuse(enrichedData, abonnementSearchOptions);
+      const results = fuse.search(search);
+      filtered = results.map((result) => result.item);
+    }
+
+    // Apply period filter based on duration between registredDate and leaveDate
+    filtered = filtered.filter((abonnement) => {
+      if (!abonnement.registredDate || !abonnement.leaveDate) return false;
+
+      const startDate = new Date(abonnement.registredDate);
+      const endDate = new Date(abonnement.leaveDate);
+      const diffMs = endDate.getTime() - startDate.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
       switch (timeFilter) {
         case "week":
-          return priceName.includes("week");
+          return diffDays >= 7 && diffDays <= 21;
         case "month":
-          return priceName.includes("month");
+          return diffDays >= 28;
         case "all":
         default:
           return true;
       }
     });
-  }, [abonnementsData?.data, timeFilter, prices]);
+
+    // Apply status filter
+    filtered = filtered.filter((abonnement) => {
+      if (!abonnement.leaveDate) return true;
+      const leaveDate = new Date(abonnement.leaveDate);
+      const now = new Date();
+
+      switch (statusFilter) {
+        case "active":
+          return leaveDate >= now;
+        case "expired":
+          return leaveDate < now;
+        case "all":
+        default:
+          return true;
+      }
+    });
+
+    return filtered;
+  }, [
+    abonnementsData?.data,
+    timeFilter,
+    statusFilter,
+    prices,
+    search,
+    members,
+  ]);
+
+  // Paginated data
+  const paginatedData = React.useMemo(() => {
+    const startIndex = page * rowsPerPage;
+    return filteredData.slice(startIndex, startIndex + rowsPerPage);
+  }, [filteredData, page, rowsPerPage]);
+
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
@@ -297,90 +465,40 @@ const AbonnementComponent = () => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
-  const headCells: Array<HeadCell> = [
-    {
-      id: "member",
-      numeric: false,
-      disablePadding: true,
-      label: "Member",
-    },
-    {
-      id: "registredDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Registered Date",
-    },
-    {
-      id: "leaveDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Leave Date",
-    },
-    {
-      id: "Stayed Periode",
-      numeric: false,
-      disablePadding: false,
-      label: "Stayed Periode",
-    },
-    {
-      id: "remainingTime",
-      numeric: false,
-      disablePadding: false,
-      label: "Remaining Time",
-    },
-    {
-      id: "payedAmount",
-      numeric: false,
-      disablePadding: false,
-      label: "Paid Amount",
-    },
-    {
-      id: "status",
-      numeric: false,
-      disablePadding: false,
-      label: "Status",
-    },
 
-    {
-      id: "actions",
-      numeric: false,
-      disablePadding: false,
-      label: "Actions",
-      alignment: "center",
-    },
-  ];
-
-  const membersWithSubscriptionStatus = members
-    // .filter((member) => member.plan === Subscription.Membership) // Ajoutez ce filtre
-    .map((member) => ({
-      ...member,
-      hasSubscription: abonnementsData?.data.some(
+  const membersWithSubscriptionStatus = members.map((member) => {
+    const memberAbonnements =
+      abonnementsData?.data.filter(
         (abonnement) => abonnement.memberID === member.id
-      ),
-    }));
+      ) || [];
+
+    const hasActiveSubscription = memberAbonnements.some((abonnement) => {
+      if (!abonnement.leaveDate) return false;
+      return new Date(abonnement.leaveDate) >= new Date();
+    });
+
+    const hasExpiredSubscription = memberAbonnements.some((abonnement) => {
+      if (!abonnement.leaveDate) return false;
+      return new Date(abonnement.leaveDate) < new Date();
+    });
+
+    return {
+      ...member,
+      hasActiveSubscription,
+      hasExpiredSubscription,
+      hasAnySubscription: memberAbonnements.length > 0,
+    };
+  });
 
   const formatDate = (date: Date | string | null | undefined) => {
     if (!date) return "N/A";
     try {
-      return new Date(date).toLocaleDateString();
+      return new Date(date).toLocaleString();
     } catch (e) {
       return "Invalid date";
     }
   };
-  const handleSelect = (selectedMember: Member | null) => {
-    setMember(selectedMember);
-    if (editAbonnement) {
-      setEditAbonnement({
-        ...editAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    } else {
-      setNewAbonnement({
-        ...newAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    }
-  };
+
   const handleRequestSort = (
     event: React.MouseEvent<unknown>,
     property: string
@@ -392,7 +510,7 @@ const AbonnementComponent = () => {
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelected = abonnementsData?.data.map((n) => n.id) || [];
+      const newSelected = paginatedData.map((n) => n.id);
       setSelected(newSelected);
       return;
     }
@@ -421,6 +539,7 @@ const AbonnementComponent = () => {
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value);
+    setPage(0); // Reset to first page on search
   };
 
   const validateForm = () => {
@@ -431,14 +550,14 @@ const AbonnementComponent = () => {
         ? editAbonnement.registredDate
         : newAbonnement.registredDate)
     ) {
-      newErrors.registredDate = "Registration date is required";
+      newErrors.registredDate = "Registration date and time is required";
     }
 
     const leaveDate = editAbonnement
       ? editAbonnement.leaveDate
       : newAbonnement.leaveDate;
     if (!leaveDate) {
-      newErrors.leaveDate = "Leave date is required";
+      newErrors.leaveDate = "Leave date and time is required";
     } else if (
       new Date(leaveDate) <=
       new Date(
@@ -447,7 +566,8 @@ const AbonnementComponent = () => {
           new Date()
       )
     ) {
-      newErrors.leaveDate = "Leave date must be after registration date";
+      newErrors.leaveDate =
+        "Leave date and time must be after registration date and time";
     }
 
     if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
@@ -461,6 +581,7 @@ const AbonnementComponent = () => {
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
+
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
@@ -480,12 +601,16 @@ const AbonnementComponent = () => {
           data: {
             ...editAbonnement,
             stayedPeriode,
+            registredDate: new Date(editAbonnement.registredDate),
+            leaveDate: new Date(editAbonnement.leaveDate || new Date()),
           },
         }).unwrap();
       } else {
         await createAbonnement({
           ...newAbonnement,
           stayedPeriode,
+          registredDate: new Date(newAbonnement.registredDate),
+          leaveDate: new Date(newAbonnement.leaveDate),
         }).unwrap();
       }
 
@@ -495,11 +620,16 @@ const AbonnementComponent = () => {
       console.error("Error saving subscription:", error);
     }
   };
+
   const handleDelete = async () => {
     if (abonnementToDelete) {
       try {
         await deleteAbonnement(abonnementToDelete).unwrap();
         refetch();
+        // Adjust page if necessary after deletion
+        if (paginatedData.length === 1 && page > 0) {
+          setPage(page - 1);
+        }
       } catch (error) {
         console.error("Error deleting subscription:", error);
       } finally {
@@ -513,23 +643,20 @@ const AbonnementComponent = () => {
     setShowDrawer(false);
     setEditAbonnement(null);
     setNewAbonnement({
-      registredDate: new Date(),
-      leaveDate: new Date(),
+      registredDate: selectedDate,
+      leaveDate: selectedDate,
       payedAmount: 0,
       isPayed: false,
       isReservation: false,
+      stayedPeriode: "",
     });
     setErrors({});
   };
 
   const handlePriceSelect = (price: Price) => {
-    const registredDate =
-      editAbonnement?.registredDate ||
-      newAbonnement.registredDate ||
-      new Date();
+    const registredDate = selectedDate;
     let leaveDate = new Date(registredDate);
 
-    // Calcul basé sur les dates du prix
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
@@ -540,6 +667,7 @@ const AbonnementComponent = () => {
       priceId: price.id,
       payedAmount: price.price,
       leaveDate: leaveDate,
+      registredDate: selectedDate,
     };
 
     if (editAbonnement) {
@@ -549,19 +677,15 @@ const AbonnementComponent = () => {
     }
   };
 
-  // Garder l'affichage du nom original
   const getDurationDescription = (price: Price) => {
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
 
-    return `${price.name}`; // Affiche "1week (7 jours)"
+    return `${price.name}`;
   };
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
-  if (isLoading) return <CircularProgress />;
-  if (isError)
-    return <Alert severity="error">Error loading subscriptions</Alert>;
   const handleNewMember = (member: Member) => {
     setMember(member);
     if (editAbonnement) {
@@ -570,6 +694,7 @@ const AbonnementComponent = () => {
       setNewAbonnement({ ...newAbonnement, memberID: member.id });
     }
   };
+
   const calculateRemainingTime = (leaveDate: Date | string | null) => {
     if (!leaveDate) return "N/A";
 
@@ -577,28 +702,31 @@ const AbonnementComponent = () => {
       const endDate = new Date(leaveDate);
       const now = new Date();
 
-      // Si la date est déjà passée
       if (endDate < now) return "Expired";
 
-      // Calcul de la différence en millisecondes
       const diffMs = endDate.getTime() - now.getTime();
-
-      // Calcul des différentes unités de temps
-      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
       const diffHours = Math.floor(
         (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
       );
       const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-      // Formatage du résultat
-      if (diffDays > 30) {
+      if (diffDays >= 30) {
         const months = Math.floor(diffDays / 30);
         const remainingDays = diffDays % 30;
-        return `${months} month(s) ${remainingDays} day(s)`;
-      } else if (diffDays > 7) {
+        if (remainingDays === 0) {
+          return `${months} month(s)`;
+        } else {
+          return `${months} month(s) ${remainingDays} day(s)`;
+        }
+      } else if (diffDays >= 7) {
         const weeks = Math.floor(diffDays / 7);
         const remainingDays = diffDays % 7;
-        return `${weeks} week(s) ${remainingDays} day(s)`;
+        if (remainingDays === 0) {
+          return `${weeks} week(s)`;
+        } else {
+          return `${weeks} week(s) ${remainingDays} day(s)`;
+        }
       } else if (diffDays > 0) {
         return `${diffDays} day(s) ${diffHours} hour(s)`;
       } else {
@@ -633,6 +761,42 @@ const AbonnementComponent = () => {
     }
   };
 
+  const handleRegistrationDateChange = (date: Date | null) => {
+    const newDate = date || selectedDate;
+    if (editAbonnement) {
+      const newLeaveDate = new Date(editAbonnement.leaveDate || selectedDate);
+      newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
+      setEditAbonnement({
+        ...editAbonnement,
+        registredDate: newDate,
+        leaveDate: newLeaveDate,
+      });
+    } else {
+      const newLeaveDate = new Date(newAbonnement.leaveDate);
+      newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
+      setNewAbonnement({
+        ...newAbonnement,
+        registredDate: newDate,
+        leaveDate: newLeaveDate,
+      });
+    }
+  };
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  if (isLoading) return <CircularProgress />;
+  if (isError)
+    return <Alert severity="error">Error loading subscriptions</Alert>;
+
   if (openUserForm)
     return (
       <UserForm
@@ -643,6 +807,7 @@ const AbonnementComponent = () => {
         handleNewMember={handleNewMember}
       />
     );
+
   return (
     <PageContainer>
       <MainContainer>
@@ -652,6 +817,9 @@ const AbonnementComponent = () => {
           search={search}
           refetch={refetch}
           isMobile={isMobile}
+          handleDailyExpenseClick={function (): void {
+            throw new Error("Function not implemented.");
+          }}
         />
         <Box
           sx={{
@@ -661,6 +829,7 @@ const AbonnementComponent = () => {
             mb: 2,
             mt: -12,
             ml: 1,
+            gap: 2,
           }}
         >
           <FormControl
@@ -686,6 +855,29 @@ const AbonnementComponent = () => {
               <MenuItem value="month">Monthly</MenuItem>
             </Select>
           </FormControl>
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              minWidth: 100,
+              backgroundColor: "#f5f5f5",
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "active" | "expired" | "all")
+              }
+              label="Status"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="expired">Expired</MenuItem>
+            </Select>
+          </FormControl>
         </Box>
 
         <TableWrapper>
@@ -697,123 +889,149 @@ const AbonnementComponent = () => {
                 orderBy={orderBy}
                 onSelectAllClick={handleSelectAllClick}
                 onRequestSort={handleRequestSort}
-                rowCount={filteredData.length}
+                rowCount={paginatedData.length}
                 headCells={headCells}
                 isMobile={isMobile}
               />
               <TableBody>
-                {filteredData.map((abonnement) => {
-                  const member = members.find(
-                    (m) => m.id === abonnement.memberID
-                  );
-                  const price = prices.find((p) => p.id === abonnement.priceId);
-                  const leaveDate = abonnement.leaveDate
-                    ? new Date(abonnement.leaveDate)
-                    : null;
-                  const today = new Date();
-                  const shouldBlink = leaveDate && isSameDay(leaveDate, today);
-                  const TableRowComponent = shouldBlink
-                    ? BlinkingTableRow
-                    : TableRow;
-                  const isItemSelected = isSelected(abonnement.id);
+                {paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={headCells.length} align="center">
+                      No subscriptions found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedData.map((abonnement) => {
+                    const member = members.find(
+                      (m) => m.id === abonnement.memberID
+                    );
+                    const price = prices.find(
+                      (p) => p.id === abonnement.priceId
+                    );
+                    const leaveDate = abonnement.leaveDate
+                      ? new Date(abonnement.leaveDate)
+                      : null;
+                    const today = new Date();
+                    const shouldBlink =
+                      leaveDate && isSameDay(leaveDate, today);
+                    const TableRowComponent = shouldBlink
+                      ? BlinkingTableRow
+                      : TableRow;
+                    const isItemSelected = isSelected(abonnement.id);
 
-                  return (
-                    <TableRowComponent
-                      key={abonnement.id}
-                      hover
-                      onClick={(event) => handleClick(event, abonnement.id)}
-                      role="checkbox"
-                      aria-checked={isItemSelected}
-                      tabIndex={-1}
-                      selected={isItemSelected}
-                    >
-                      <ResponsiveTableCell padding="checkbox">
-                        <Checkbox
-                          color="primary"
-                          checked={isItemSelected}
-                          inputProps={{ "aria-labelledby": abonnement.id }}
-                        />
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell>
-                        {member
-                          ? `${member.firstName} ${member.lastName}`
-                          : "N/A"}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell>
-                        {formatDate(abonnement.registredDate)}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell>
-                        {formatDate(abonnement.leaveDate)}
-                      </ResponsiveTableCell>
-                      {!isMobile && (
-                        <>
-                          <ResponsiveTableCell>
-                            {price?.name}
-                          </ResponsiveTableCell>
-                          {abonnement.leaveDate && (
-                            <ResponsiveTableCell
-                              sx={getRemainingTimeStyle(
-                                abonnement.leaveDate,
-                                theme
-                              )}
-                            >
-                              {calculateRemainingTime(abonnement.leaveDate)}
-                            </ResponsiveTableCell>
-                          )}
-                          <ResponsiveTableCell>
-                            {abonnement.payedAmount} DT
-                          </ResponsiveTableCell>
-                          <ResponsiveTableCell>
-                            <Box
-                              sx={{
-                                color: abonnement.isPayed
-                                  ? "success.main"
-                                  : "error.main",
-                                fontWeight: "bold",
-                              }}
-                            >
-                              {abonnement.isPayed ? "Paid" : "Unpaid"}
-                            </Box>
-                          </ResponsiveTableCell>
-                        </>
-                      )}
-                      <ResponsiveTableCell
-                        align={isMobile ? "right" : "center"}
+                    return (
+                      <TableRowComponent
+                        key={abonnement.id}
+                        hover
+                        onClick={(event) => handleClick(event, abonnement.id)}
+                        role="checkbox"
+                        aria-checked={isItemSelected}
+                        tabIndex={-1}
+                        selected={isItemSelected}
                       >
-                        <ResponsiveActions>
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditAbonnement({
-                                ...abonnement,
-                                leaveDate: abonnement.leaveDate
-                                  ? new Date(abonnement.leaveDate)
-                                  : new Date(),
-                              });
-                              setShowDrawer(true);
-                            }}
-                            size={isMobile ? "small" : "medium"}
-                          >
-                            <EditIcon color="primary" />
-                          </IconButton>
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setAbonnementToDelete(abonnement.id);
-                              setShowDeleteModal(true);
-                            }}
-                            size={isMobile ? "small" : "medium"}
-                          >
-                            <DeleteIcon color="error" />
-                          </IconButton>
-                        </ResponsiveActions>
-                      </ResponsiveTableCell>
-                    </TableRowComponent>
-                  );
-                })}
+                        <ResponsiveTableCell padding="checkbox">
+                          <Checkbox
+                            color="primary"
+                            checked={isItemSelected}
+                            inputProps={{ "aria-labelledby": abonnement.id }}
+                          />
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell>
+                          {member
+                            ? `${member.firstName} ${member.lastName}`
+                            : "N/A"}
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell>
+                          {formatDate(abonnement.registredDate)}
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell>
+                          {formatDate(abonnement.leaveDate)}
+                        </ResponsiveTableCell>
+                        {!isMobile && (
+                          <>
+                            <ResponsiveTableCell>
+                              {price?.name}
+                            </ResponsiveTableCell>
+                            {abonnement.leaveDate && (
+                              <ResponsiveTableCell
+                                sx={getRemainingTimeStyle(
+                                  abonnement.leaveDate,
+                                  theme
+                                )}
+                              >
+                                {calculateRemainingTime(abonnement.leaveDate)}
+                              </ResponsiveTableCell>
+                            )}
+                            <ResponsiveTableCell>
+                              {abonnement.payedAmount} DT
+                            </ResponsiveTableCell>
+                            <ResponsiveTableCell>
+                              <Box
+                                sx={{
+                                  color: abonnement.isPayed
+                                    ? "success.main"
+                                    : "error.main",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                {abonnement.isPayed ? "Paid" : "Unpaid"}
+                              </Box>
+                            </ResponsiveTableCell>
+                          </>
+                        )}
+                        <ResponsiveTableCell
+                          align={isMobile ? "right" : "center"}
+                        >
+                          <ResponsiveActions>
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const abonnementToEdit = {
+                                  ...abonnement,
+                                  leaveDate: abonnement.leaveDate
+                                    ? new Date(abonnement.leaveDate)
+                                    : new Date(),
+                                  registredDate: abonnement.registredDate
+                                    ? new Date(abonnement.registredDate)
+                                    : new Date(),
+                                  member: undefined,
+                                  price: undefined,
+                                };
+                                setEditAbonnement(abonnementToEdit);
+                                setShowDrawer(true);
+                              }}
+                              size={isMobile ? "small" : "medium"}
+                            >
+                              <EditIcon color="primary" />
+                            </IconButton>
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setAbonnementToDelete(abonnement.id);
+                                setShowDeleteModal(true);
+                              }}
+                              size={isMobile ? "small" : "medium"}
+                            >
+                              <DeleteIcon color="error" />
+                            </IconButton>
+                          </ResponsiveActions>
+                        </ResponsiveTableCell>
+                      </TableRowComponent>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </StyledTableContainer>
+          <TablePagination
+            rowsPerPageOptions={[50, 100, 200, 500]}
+            component="div"
+            count={filteredData.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
         </TableWrapper>
       </MainContainer>
 
@@ -863,66 +1081,64 @@ const AbonnementComponent = () => {
               onClick={() => setOpenMemberModal(true)}
               sx={{
                 height: "56px",
-                width: "200px", // Largeur fixe pour le bouton
-                alignSelf: "flex-start", // Alignement à gauche
+                width: "200px",
+                alignSelf: "flex-start",
               }}
             >
               New Member
             </ActionButton>
           )}
 
-          {/* Sélecteur de membre avec largeur réduite */}
-          <FormControl
+          <Autocomplete
+            options={membersWithSubscriptionStatus}
+            getOptionLabel={(option) =>
+              `${option.firstName} ${option.lastName} (${option.plan})`
+            }
+            value={
+              membersWithSubscriptionStatus.find(
+                (m) =>
+                  m.id === (editAbonnement?.memberID || newAbonnement.memberID)
+              ) || null
+            }
+            onChange={(event, newValue) => {
+              const value = newValue ? newValue.id : "";
+              if (editAbonnement) {
+                setEditAbonnement({ ...editAbonnement, memberID: value });
+              } else {
+                setNewAbonnement({ ...newAbonnement, memberID: value });
+              }
+            }}
+            filterOptions={(options, { inputValue }) => {
+              if (!inputValue || inputValue.length < 2) {
+                return options;
+              }
+              const fuse = new Fuse(options, fuseOptions);
+              const results = fuse.search(inputValue);
+              return results.map((result) => result.item);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Member *"
+                error={!!errors.memberID}
+                helperText={
+                  errors.memberID || "Type at least 2 characters to search"
+                }
+              />
+            )}
+            disabled={!!editAbonnement}
+            getOptionDisabled={(option) => {
+              if (editAbonnement) return false;
+              return option.hasActiveSubscription;
+            }}
             sx={{
               width: "100%",
-              maxWidth: "400", // Largeur maximale réduite
+              maxWidth: "400px",
               "& .MuiInputBase-root": {
                 height: "50px",
               },
             }}
-            error={!!errors.memberID}
-          >
-            <InputLabel>Member *</InputLabel>
-            <Select
-              value={editAbonnement?.memberID || newAbonnement.memberID || ""}
-              onChange={(e) => {
-                const value = e.target.value as string;
-                if (editAbonnement) {
-                  setEditAbonnement({ ...editAbonnement, memberID: value });
-                } else {
-                  setNewAbonnement({ ...newAbonnement, memberID: value });
-                }
-              }}
-              label="Member *"
-              disabled={!!editAbonnement}
-            >
-              <MenuItem value="">Select a member</MenuItem>
-              {membersWithSubscriptionStatus.map((member) => (
-                <MenuItem
-                  key={member.id}
-                  value={member.id}
-                  disabled={member.hasSubscription && !editAbonnement}
-                  sx={{
-                    opacity:
-                      member.hasSubscription && !editAbonnement ? 0.7 : 1,
-                    fontStyle:
-                      member.hasSubscription && !editAbonnement
-                        ? "italic"
-                        : "normal",
-                    py: 2,
-                  }}
-                >
-                  {member.firstName} {member.lastName} ({member.plan})
-                  {member.hasSubscription &&
-                    !editAbonnement &&
-                    " (Already subscribed)"}
-                </MenuItem>
-              ))}
-            </Select>
-            {errors.memberID && (
-              <FormHelperText>{errors.memberID}</FormHelperText>
-            )}
-          </FormControl>
+          />
         </Box>
 
         <Typography variant="subtitle1" sx={{ mb: 0 }}>
@@ -931,7 +1147,6 @@ const AbonnementComponent = () => {
         <Grid container spacing={2} sx={{ mb: 2 }}>
           {abonnementPrices.map((price) => (
             <Grid item xs={12} sm={6} key={price.id}>
-              {/* Voici le PriceCard */}
               <PriceCard
                 sx={{
                   border:
@@ -967,21 +1182,14 @@ const AbonnementComponent = () => {
           </FormHelperText>
         )}
 
-        <DatePicker
-          label="Registration Date *"
+        <DateTimePicker
+          label="Registration Date and Time *"
           value={
             editAbonnement?.registredDate
               ? new Date(editAbonnement.registredDate)
               : newAbonnement.registredDate
           }
-          onChange={(date) => {
-            const newDate = date || new Date();
-            if (editAbonnement) {
-              setEditAbonnement({ ...editAbonnement, registredDate: newDate });
-            } else {
-              setNewAbonnement({ ...newAbonnement, registredDate: newDate });
-            }
-          }}
+          onChange={handleRegistrationDateChange}
           sx={{ width: "100%", mb: 0 }}
         />
         {errors.registredDate && (
@@ -990,11 +1198,11 @@ const AbonnementComponent = () => {
           </FormHelperText>
         )}
 
-        <DatePicker
-          label="Leave Date *"
+        <DateTimePicker
+          label="Leave Date and Time *"
           value={editAbonnement?.leaveDate || newAbonnement.leaveDate}
           onChange={(date) => {
-            const newDate = date || new Date();
+            const newDate = date || selectedDate;
             if (editAbonnement) {
               setEditAbonnement({ ...editAbonnement, leaveDate: newDate });
             } else {
@@ -1103,7 +1311,7 @@ const AbonnementComponent = () => {
           sx={{
             textAlign: "left",
             fontWeight: "bold",
-            color: "gris",
+            color: "grey",
           }}
         >
           Manage Member
@@ -1126,10 +1334,10 @@ const AbonnementComponent = () => {
     </PageContainer>
   );
 };
+
 AbonnementComponent.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      {" "}
       <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );

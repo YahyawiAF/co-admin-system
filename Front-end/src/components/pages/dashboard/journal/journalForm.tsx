@@ -43,6 +43,7 @@ import UserForm from "../members/UserForm";
 import { addHours, isSameDay } from "date-fns";
 import { useGetPricesQuery } from "src/api/price.repo";
 import { updateHoursAndMinutes } from "src/utils/shared";
+import Fuse from "fuse.js";
 
 // ----------------------------------------------------------------------
 
@@ -65,6 +66,18 @@ type ExtractedType = Pick<
 >;
 
 type ExtendedTypeOptional = ExtractedType & {};
+// Configuration de Fuse.js pour la recherche des membres
+const memberSearchOptions = {
+  keys: [
+    { name: "fullName", weight: 0.5 },
+    // { name: "email", weight: 0.3 },
+    // { name: "phone", weight: 0.2 },
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+  shouldSort: true,
+};
 
 const defaultValues: Partial<ExtendedTypeOptional> = {
   id: "",
@@ -125,7 +138,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   }>({ show: false, message: "" });
 
   const [isManualyUpdating, setIsManualyUpdating] = useState(false);
+  const fuzzySearchMembers = (members: Member[], searchTerm: string) => {
+    if (!searchTerm || searchTerm.length < 2) return members;
 
+    const fuse = new Fuse(members, memberSearchOptions);
+    const results = fuse.search(searchTerm);
+    return results.map((result) => result.item);
+  };
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
     registredTime: z.union([z.string().optional(), z.date()]),
     leaveTime: z.union([z.string().optional(), z.date().optional()]),
@@ -155,6 +174,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const registredTime = watch("registredTime") as Date;
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
+
+  const createdByID = sessionStorage.getItem("userID");
 
   // Filtrer les prix pour n'afficher que ceux de type "journal"
   const journalPrices = React.useMemo(() => {
@@ -234,11 +255,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           if (nextPrice) {
             setTarifAlert({
               show: true,
-              message: `Dépassement de tarif: ${
-                realDurationMinutes - priceMaxDuration
-              } min (tolérance). Prochain tarif: ${
-                nextPrice.timePeriod.start
-              }-${nextPrice.timePeriod.end}`,
+              message: `Dépassement de tarif: ${realDurationMinutes - priceMaxDuration
+                } min (tolérance). Prochain tarif: ${nextPrice.timePeriod.start
+                }-${nextPrice.timePeriod.end}`,
             });
           }
         } else {
@@ -317,12 +336,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     );
     setTarifAlert({ show: false, message: "" });
   };
-
   const defaultProps = React.useMemo(() => {
     return {
-      options: membersList || [], // Filtrage ici
-      getOptionLabel: (option: any) =>
+      options: membersList || [],
+      getOptionLabel: (option: Member) =>
         option.fullNameWithEmail + ` (${option.plan})`,
+      filterOptions: (
+        options: Member[],
+        { inputValue }: { inputValue: string }
+      ) => {
+        if (!inputValue || inputValue.length < 2) return options;
+        return fuzzySearchMembers(options, inputValue);
+      },
     };
   }, [membersList]);
 
@@ -332,7 +357,10 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
       handleClose();
     } else {
       try {
-        await createJournal(data as Journal).unwrap();
+        await createJournal({
+          ...data,
+          createdbyUserID: createdByID,
+        } as Journal).unwrap();
         setOpenSnak(true);
         handleClose();
       } catch (e) {
@@ -401,7 +429,18 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           <RHFAutoCompletDropDown
             label="Keywords Tags"
             placeholder="Search for Keywords"
-            defaultProps={defaultProps}
+            defaultProps={{
+              options: membersList || [],
+              getOptionLabel: (option: Member) =>
+                option.fullNameWithEmail + ` (${option.plan})`,
+              filterOptions: (
+                options: Member[],
+                { inputValue }: { inputValue: string }
+              ) => {
+                if (!inputValue || inputValue.length < 2) return options;
+                return fuzzySearchMembers(options, inputValue);
+              },
+            }}
             selectedItem={member}
             handleSelection={handleSelect}
             name={"member"}
@@ -409,6 +448,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             multiple={false}
             error={!!errors.memberID}
             errorMessage={errors.memberID?.message}
+            helperText="Tapez au moins 2 caractères pour rechercher un membre"
           />
         ) : (
           <div>Loading!!</div>

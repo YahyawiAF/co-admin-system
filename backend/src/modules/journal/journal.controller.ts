@@ -24,9 +24,6 @@ import {
 } from '@nestjs/swagger';
 import { JournalEntity } from './entities/journal.entity';
 import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
-import { Role } from '@prisma/client';
-import { RolesGuard } from '../../../common/guards/auth.guard';
-import { Roles } from '../../../common/decorator/roles.decorator';
 import { PaginatedResult } from 'prisma-pagination';
 import { startOfDay, endOfDay } from 'date-fns';
 
@@ -69,8 +66,8 @@ export class JournalController {
   }
 
   @Get('all')
-   //@Roles([Role.USER])
-   //@UseGuards(JwtAuthGuard, RolesGuard)
+  //@Roles([Role.USER])
+  //@UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity, isArray: true })
   async findAll(): Promise<Array<UpdateJournalDto>> {
@@ -98,7 +95,6 @@ export class JournalController {
       await this.JournalService.update(id, updateJournalDto),
     );
   }
-  
 
   @Delete(':id')
   // @UseGuards(JwtAuthGuard)

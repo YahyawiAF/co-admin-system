@@ -22,14 +22,13 @@ export class JournalService {
   constructor(private prisma: PrismaService) {}
   async create(createJournalDto: AddJournalDto) {
     try {
-        console.log("Received DTO:", createJournalDto);
       const { memberID, priceId } = createJournalDto;
-  
+
       // Vérifier si le prix existe
       const existingPrice = await this.prisma.price.findUnique({
         where: { id: priceId },
       });
-  
+
       if (!existingPrice) {
         throw new GeneralException(
           HttpStatus.NOT_FOUND,
@@ -37,11 +36,11 @@ export class JournalService {
           `The selected price does not exist.`,
         );
       }
-  
+
       const now = new Date(createJournalDto.registredTime);
       const startOfTheDay = startOfDay(now);
       const endOfTheDay = endOfDay(now);
-  
+
       const existingJournal = await this.prisma.journal.findFirst({
         where: {
           memberID,
@@ -51,7 +50,7 @@ export class JournalService {
           },
         },
       });
-  
+
       if (existingJournal) {
         throw new GeneralException(
           HttpStatus.CONFLICT,
@@ -59,7 +58,7 @@ export class JournalService {
           `A journal entry for this member already exists today.`,
         );
       }
-  
+
       return await this.prisma.journal.create({
         data: {
           memberID: createJournalDto.memberID,
@@ -68,10 +67,10 @@ export class JournalService {
           isPayed: createJournalDto.isPayed,
           isReservation: createJournalDto.isReservation,
           payedAmount: createJournalDto.payedAmount,
-          priceId: createJournalDto.priceId,  
+          priceId: createJournalDto.priceId,
+          createdbyUserID: createJournalDto.createdbyUserID,
         },
       });
-      
     } catch (error) {
       throw new GeneralException(
         HttpStatus.BAD_REQUEST,
@@ -80,7 +79,6 @@ export class JournalService {
       );
     }
   }
-  
 
   findAllJournal() {
     return this.prisma.journal.findMany();
@@ -110,7 +108,8 @@ export class JournalService {
         where,
         orderBy,
         include: {
-          members: true, // Include related members
+          members: true,
+          createdBy: true,
         },
       },
       {
@@ -134,13 +133,13 @@ export class JournalService {
   async update(id: string, updateJournalDto: UpdateJournalDto) {
     try {
       const { priceId } = updateJournalDto;
-  
+
       // Vérifier si le prix existe
       if (priceId) {
         const existingPrice = await this.prisma.price.findUnique({
           where: { id: priceId },
         });
-  
+
         if (!existingPrice) {
           throw new GeneralException(
             HttpStatus.NOT_FOUND,
@@ -149,7 +148,7 @@ export class JournalService {
           );
         }
       }
-  
+
       return await this.prisma.journal.update({
         where: { id },
         data: updateJournalDto,
@@ -162,7 +161,6 @@ export class JournalService {
       );
     }
   }
-  
 
   remove(id: string) {
     return this.prisma.journal.delete({ where: { id } });
