@@ -260,9 +260,9 @@ const abonnementSearchOptions = {
   keys: [
     "member.firstName",
     "member.lastName",
-    "price.name",
-    "id",
-    "stayedPeriode",
+    // "price.name",
+    // "id",
+    // "stayedPeriode",
   ],
   threshold: 0.4,
   includeScore: true,
@@ -337,7 +337,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     theme.breakpoints.down("sm")
   );
   const fuseOptions = {
-    keys: ["firstName", "lastName", "email"],
+    keys: ["firstName", "lastName"],
     threshold: 0.4, // Niveau de tolérance aux fautes de frappe
     includeScore: true,
     minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
@@ -562,8 +562,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       new Date(leaveDate) <=
       new Date(
         editAbonnement?.registredDate ||
-          newAbonnement.registredDate ||
-          new Date()
+        newAbonnement.registredDate ||
+        new Date()
       )
     ) {
       newErrors.leaveDate =
@@ -1151,12 +1151,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
+                      price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}

@@ -111,9 +111,9 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
 const journalSearchOptions = {
   keys: [
     { name: "members.fullName", weight: 0.5 },
-    { name: "registredTime", weight: 0.3 },
-    { name: "payedAmount", weight: 0.2 },
-    { name: "id", weight: 0.1 },
+    // { name: "registredTime", weight: 0.3 },
+    // { name: "payedAmount", weight: 0.2 },
+    // { name: "id", weight: 0.1 },
   ],
   threshold: 0.4,
   includeScore: true,
