@@ -63,40 +63,40 @@ import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const StatsCard = styled(Card)(({ theme }) => ({
-  height: '100%',
+  height: "100%",
   borderRadius: theme.shape.borderRadius * 2,
   boxShadow: theme.shadows[2],
-  transition: 'transform 0.3s, box-shadow 0.3s',
-  '&:hover': {
-    transform: 'translateY(-4px)',
-    boxShadow: theme.shadows[6]
-  }
+  transition: "transform 0.3s, box-shadow 0.3s",
+  "&:hover": {
+    transform: "translateY(-4px)",
+    boxShadow: theme.shadows[6],
+  },
 }));
 
 const StatsCardContent = styled(CardContent)(({ theme }) => ({
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
   padding: theme.spacing(3),
-  '&:last-child': {
-    paddingBottom: theme.spacing(3)
-  }
+  "&:last-child": {
+    paddingBottom: theme.spacing(3),
+  },
 }));
 
 const StatsCount = styled(Typography)(({ theme }) => ({
   fontWeight: 600,
   marginTop: theme.spacing(1),
   color: theme.palette.text.primary,
-  '& span': {
-    display: 'block',
-    lineHeight: 1.5
-  }
+  "& span": {
+    display: "block",
+    lineHeight: 1.5,
+  },
 }));
 
 const StatsIconWrapper = styled(Box)(({ theme }) => ({
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
   marginLeft: theme.spacing(2),
 }));
 
@@ -309,7 +309,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.down("sm")
+  );
 
   const fuseOptions = {
     keys: ["firstName", "lastName", "email"],
@@ -348,8 +350,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const { data: membersList, isLoading: isLoadingMember, error: membersError } =
-    useGetMembersQuery();
+  const {
+    data: membersList,
+    isLoading: isLoadingMember,
+    error: membersError,
+  } = useGetMembersQuery();
 
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
@@ -369,42 +374,46 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   // Calculate members for each status based on selectedDate
-  const { expiredMembers, soonToExpireMembers, activeMembers } = React.useMemo(() => {
-    const today = new Date(selectedDate);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+  const { expiredMembers, soonToExpireMembers, activeMembers } =
+    React.useMemo(() => {
+      const today = new Date(selectedDate);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
 
-    const expired: string[] = [];
-    const soonToExpire: string[] = [];
-    const active: string[] = [];
+      const expired: string[] = [];
+      const soonToExpire: string[] = [];
+      const active: string[] = [];
 
-    abonnementsData?.data.forEach((abonnement) => {
-      const member = members.find((m) => m.id === abonnement.memberID);
-      if (!member || !abonnement.leaveDate) return;
+      abonnementsData?.data.forEach((abonnement) => {
+        const member = members.find((m) => m.id === abonnement.memberID);
+        if (!member || !abonnement.leaveDate) return;
 
-      const memberName = `${member.firstName} ${member.lastName}`;
-      const leaveDate = new Date(abonnement.leaveDate);
+        const memberName = `${member.firstName} ${member.lastName}`;
+        const leaveDate = new Date(abonnement.leaveDate);
 
-      // Expired: leaveDate is today
-      if (isSameDay(leaveDate, today)) {
-        if (!expired.includes(memberName)) expired.push(memberName);
-      }
-      // Soon to expire: leaveDate is tomorrow
-      else if (isSameDay(leaveDate, tomorrow)) {
-        if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
-      }
-      // Active: registered today
-      else if (abonnement.registredDate && isSameDay(new Date(abonnement.registredDate), today)) {
-        if (!active.includes(memberName)) active.push(memberName);
-      }
-    });
+        // Expired: leaveDate is today
+        if (isSameDay(leaveDate, today)) {
+          if (!expired.includes(memberName)) expired.push(memberName);
+        }
+        // Soon to expire: leaveDate is tomorrow
+        else if (isSameDay(leaveDate, tomorrow)) {
+          if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
+        }
+        // Active: registered today
+        else if (
+          abonnement.registredDate &&
+          isSameDay(new Date(abonnement.registredDate), today)
+        ) {
+          if (!active.includes(memberName)) active.push(memberName);
+        }
+      });
 
-    return {
-      expiredMembers: expired,
-      soonToExpireMembers: soonToExpire,
-      activeMembers: active,
-    };
-  }, [abonnementsData, members, selectedDate]);
+      return {
+        expiredMembers: expired,
+        soonToExpireMembers: soonToExpire,
+        activeMembers: active,
+      };
+    }, [abonnementsData, members, selectedDate]);
 
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
@@ -635,15 +644,15 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     } else if (
       new Date(leaveDate) <=
       new Date(
-        editAbonnement?.registredDate || newAbonnement.registredDate || new Date()
+        editAbonnement?.registredDate ||
+          newAbonnement.registredDate ||
+          new Date()
       )
     ) {
       newErrors.leaveDate =
         "Leave date and time must be after registration date and time";
     }
-    if (
-      !(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)
-    ) {
+    if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
       newErrors.memberID = "Member is required";
     }
     if (!(editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)) {
@@ -658,7 +667,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     try {
       const selectedPrice = prices.find(
         (p) =>
-          p.id === (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
+          p.id ===
+          (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
       );
       const stayedPeriode = selectedPrice
         ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})`
@@ -849,7 +859,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError) return <Alert severity="error">Error loading subscriptions</Alert>;
+  if (isError)
+    return <Alert severity="error">Error loading subscriptions</Alert>;
   if (openUserForm)
     return (
       <UserForm
@@ -863,24 +874,22 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   return (
     <PageContainer>
-
       <Grid container spacing={3}>
-
         <Grid item xs={12} sm={6} md={4}>
-          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.error.main}` }}>
+          <StatsCard
+            sx={{ borderTop: `4px solid ${theme.palette.error.main}` }}
+          >
             <StatsCardContent>
               <Box>
                 <Typography variant="subtitle1" color="textSecondary">
                   Expired Today
                 </Typography>
                 <StatsCount variant="h5">
-                  {expiredMembers.length > 0 ? (
-                    expiredMembers.map((member, index) => (
-                      <span key={index}>{member}</span>
-                    ))
-                  ) : (
-                    "None"
-                  )}
+                  {expiredMembers.length > 0
+                    ? expiredMembers.map((member, index) => (
+                        <span key={index}>{member}</span>
+                      ))
+                    : "None"}
                 </StatsCount>
               </Box>
               <ErrorIcon
@@ -894,47 +903,48 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           </StatsCard>
         </Grid>
 
-
         <Grid item xs={12} sm={6} md={4}>
-          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.warning.main}` }}>
+          <StatsCard
+            sx={{ borderTop: `4px solid ${theme.palette.warning.main}` }}
+          >
             <StatsCardContent>
               <Box>
                 <Typography variant="subtitle1" color="textSecondary">
                   Expiring Tomorrow
                 </Typography>
                 <StatsCount variant="h5">
-                  {soonToExpireMembers.length > 0 ? (
-                    soonToExpireMembers.map((member, index) => (
-                      <span key={index}>{member}</span>
-                    ))
-                  ) : (
-                    "None"
-                  )}
+                  {soonToExpireMembers.length > 0
+                    ? soonToExpireMembers.map((member, index) => (
+                        <span key={index}>{member}</span>
+                      ))
+                    : "None"}
                 </StatsCount>
               </Box>
               <StatsIconWrapper>
-                <WarningIcon fontSize="medium" sx={{ color: theme.palette.warning.main }} />
+                <WarningIcon
+                  fontSize="medium"
+                  sx={{ color: theme.palette.warning.main }}
+                />
               </StatsIconWrapper>
             </StatsCardContent>
           </StatsCard>
         </Grid>
 
-
         <Grid item xs={12} sm={6} md={4}>
-          <StatsCard sx={{ borderTop: `4px solid ${theme.palette.success.main}` }}>
+          <StatsCard
+            sx={{ borderTop: `4px solid ${theme.palette.success.main}` }}
+          >
             <StatsCardContent>
               <Box>
                 <Typography variant="subtitle1" color="textSecondary">
                   Subscribed Today
                 </Typography>
                 <StatsCount variant="h5">
-                  {activeMembers.length > 0 ? (
-                    activeMembers.map((member, index) => (
-                      <span key={index}>{member}</span>
-                    ))
-                  ) : (
-                    "None"
-                  )}
+                  {activeMembers.length > 0
+                    ? activeMembers.map((member, index) => (
+                        <span key={index}>{member}</span>
+                      ))
+                    : "None"}
                 </StatsCount>
               </Box>
               <CheckCircleIcon
@@ -1050,7 +1060,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                       ? new Date(abonnement.leaveDate)
                       : null;
                     const today = new Date();
-                    const shouldBlink = leaveDate && isSameDay(leaveDate, today);
+                    const shouldBlink =
+                      leaveDate && isSameDay(leaveDate, today);
                     const TableRowComponent = shouldBlink
                       ? BlinkingTableRow
                       : TableRow;
@@ -1181,8 +1192,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         <DialogTitle>Delete Subscription</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Are you sure you want to delete this subscription? This action cannot
-            be undone.
+            Are you sure you want to delete this subscription? This action
+            cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
@@ -1209,9 +1220,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {editAbonnement ? "Manage Subscription" : "New Subscription"}
         </Typography>
-        <Box
-          sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}
-        >
+        <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}>
           {!editAbonnement && (
             <ActionButton
               variant="outlined"
@@ -1234,8 +1243,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             value={
               membersWithSubscriptionStatus.find(
                 (m) =>
-                  m.id ===
-                  (editAbonnement?.memberID || newAbonnement.memberID)
+                  m.id === (editAbonnement?.memberID || newAbonnement.memberID)
               ) || null
             }
             onChange={(event, newValue) => {
@@ -1286,12 +1294,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
@@ -1411,10 +1419,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           <ActionButton variant="outlined" onClick={handleCloseDrawer}>
             Cancel
           </ActionButton>
-          <SubmitButton
-            variant="contained"
-            onClick={handleSubmit}
-          >
+          <SubmitButton variant="contained" onClick={handleSubmit}>
             {editAbonnement ? "Confirm" : "Confirm"}
           </SubmitButton>
         </Box>
