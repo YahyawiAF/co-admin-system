@@ -38,6 +38,8 @@ import {
   TableHead,
   TableRow,
   Chip,
+  Grid,
+  CardContent,
 } from "@mui/material";
 import DashboardLayout from "../../layouts/Dashboard";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
@@ -55,6 +57,7 @@ import {
   EventAvailable as DateIcon,
   Search as SearchIcon,
   Update as RefreshIcon,
+  Chair as ChairIcon,
 } from "@mui/icons-material";
 import { Subscription } from "src/types/shared";
 import { NextPage } from "next/types";
@@ -98,6 +101,24 @@ const ChartContainer = styled(Card)(({ theme }) => ({
 const BookingsTableContainer = styled(Card)(({ theme }) => ({
   marginTop: theme.spacing(3),
   boxShadow: theme.shadows[2],
+}));
+
+const StatsCard = styled(Card)(({ theme }) => ({
+  boxShadow: theme.shadows[2],
+  borderRadius: theme.shape.borderRadius,
+  background: `linear-gradient(135deg, ${theme.palette.primary.light} 0%, ${theme.palette.primary.main} 100%)`,
+  color: theme.palette.common.white,
+  transition: "transform 0.2s ease-in-out",
+  "&:hover": {
+    transform: "translateY(-4px)",
+  },
+}));
+
+const StatsCardContent = styled(CardContent)(({ theme }) => ({
+  display: "flex",
+  alignItems: "center",
+  gap: theme.spacing(2),
+  padding: theme.spacing(2),
 }));
 
 const RectangularModal = styled(Dialog)(({ theme }) => ({
@@ -235,6 +256,8 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
   const [isLoading, setIsLoading] = useState(false);
   const chartRef = useRef<SeatingChart | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [availableSeats, setAvailableSeats] = useState<number>(0);
+  const [bookedSeats, setBookedSeats] = useState<number>(0);
 
   const {
     data: members = [],
@@ -264,6 +287,10 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       const bookingsData = await bookingService.getAllBookings();
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
       setBookings(enrichedBookings);
+      // Assuming total seats is 100 for this example, adjust based on your actual total seats
+      const totalSeats = 50;
+      setBookedSeats(bookingsData.length);
+      setAvailableSeats(totalSeats - bookingsData.length);
     } catch (error: any) {
       setBookingError(error.message);
     } finally {
@@ -429,6 +456,39 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       >
         Coworking Space Booking
       </Typography>
+
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} sm={6}>
+          <StatsCard>
+            <StatsCardContent>
+              <ChairIcon sx={{ fontSize: 40 }} />
+              <Box>
+                <Typography variant="h6" component="div">
+                  Booked Spaces
+                </Typography>
+                <Typography variant="h4" component="div">
+                  {bookedSeats}
+                </Typography>
+              </Box>
+            </StatsCardContent>
+          </StatsCard>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <StatsCard>
+            <StatsCardContent>
+              <ChairIcon sx={{ fontSize: 40 }} />
+              <Box>
+                <Typography variant="h6" component="div">
+                  Available Spaces
+                </Typography>
+                <Typography variant="h4" component="div">
+                  {availableSeats}
+                </Typography>
+              </Box>
+            </StatsCardContent>
+          </StatsCard>
+        </Grid>
+      </Grid>
 
       <MainContainer>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
