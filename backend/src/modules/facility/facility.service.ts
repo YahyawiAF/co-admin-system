@@ -20,20 +20,18 @@ export class FacilityService {
     try {
       // Exemple de données générées automatiquement
       const exampleData = {
-        name: "Example Facility",
-        numtel: "+1234567890",
-        email: "example@facility.com",
-        adresse: "123 Example Street, City",
-        logo: "https://example.com/logo.png",
-        nbrPlaces: 50,
+        name: "",
+        numtel: "",
+        email: "",
+        adresse: "",
+        logo: "",
+        nbrPlaces: 0,
         socialNetworks: {
-          facebook: "https://facebook.com/examplefacility",
-          twitter: "https://twitter.com/examplefacility"
+          facebook: "",
+          twitter: ""
         },
         places: {
-          parking: 20,
-          conference: 10,
-          coworking: 20
+         
         }
       };
 

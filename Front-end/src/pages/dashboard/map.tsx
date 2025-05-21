@@ -253,6 +253,7 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
   const [memberId, setMemberId] = useState<string>("");
   const [modalMode, setModalMode] = useState<"add" | "update" | "view">("add");
   const [searchTerm, setSearchTerm] = useState("");
+  const [tableSearchTerm, setTableSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const chartRef = useRef<SeatingChart | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -287,7 +288,6 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       const bookingsData = await bookingService.getAllBookings();
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
       setBookings(enrichedBookings);
-      // Assuming total seats is 100 for this example, adjust based on your actual total seats
       const totalSeats = 50;
       setBookedSeats(bookingsData.length);
       setAvailableSeats(totalSeats - bookingsData.length);
@@ -444,6 +444,18 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
     );
   });
 
+  const filteredBookings = bookings.filter(booking => {
+    const searchLower = tableSearchTerm.toLowerCase();
+    const memberName = booking.member
+      ? `${booking.member.firstName} ${booking.member.lastName}`.toLowerCase()
+      : "";
+    return (
+      booking.seatId.toLowerCase().includes(searchLower) ||
+      memberName.includes(searchLower) ||
+      (booking.member?.plan || "").toLowerCase().includes(searchLower)
+    );
+  });
+
   const handleRefresh = async () => {
     await Promise.all([fetchBookings(), refetchMembers()]);
   };
@@ -536,9 +548,24 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
 
         <BookingsTableContainer>
           <Box p={2}>
-            <Typography variant="h6" gutterBottom>
-              Current Reservations
-            </Typography>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+              <Typography variant="h6">
+                Current Reservations
+              </Typography>
+              <SearchContainer sx={{ width: '300px' }}>
+                <SearchIcon color="action" sx={{ mr: 1 }} />
+                <TextField
+                  fullWidth
+                  variant="standard"
+                  placeholder="Search bookings..."
+                  value={tableSearchTerm}
+                  onChange={(e) => setTableSearchTerm(e.target.value)}
+                  InputProps={{
+                    disableUnderline: true,
+                  }}
+                />
+              </SearchContainer>
+            </Box>
             <TableContainer>
               <Table>
                 <TableHead>
@@ -557,14 +584,14 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                         <CircularProgress />
                       </TableCell>
                     </TableRow>
-                  ) : bookings.length === 0 ? (
+                  ) : filteredBookings.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} align="center">
-                        No current reservations
+                        No matching reservations found
                       </TableCell>
                     </TableRow>
                   ) : (
-                    bookings.map((booking) => (
+                    filteredBookings.map((booking) => (
                       <TableRow key={booking.id}>
                         <TableCell>{booking.seatId}</TableCell>
                         <TableCell>

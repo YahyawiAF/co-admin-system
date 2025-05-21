@@ -960,73 +960,71 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       </Grid>
 
       <MainContainer>
-        <TableHeadAction
-          handleClickOpen={() => setShowDrawer(true)}
-          onHandleSearch={handleSearch}
-          search={search}
-          refetch={refetch}
-          isMobile={isMobile}
-          handleDailyExpenseClick={function (): void {
-            throw new Error("Function not implemented.");
-          }}
-        />
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "flex-start",
-            alignItems: "flex-start",
-            mb: 2,
-            mt: -12,
-            ml: 1,
-            gap: 2,
-          }}
-        >
-          <FormControl
-            size="small"
-            variant="outlined"
-            sx={{
-              minWidth: 100,
-              backgroundColor: "#f5f5f5",
-              borderRadius: 2,
-              boxShadow: 1,
-            }}
-          >
-            <InputLabel>Period</InputLabel>
-            <Select
-              value={timeFilter}
-              onChange={(e) =>
-                setTimeFilter(e.target.value as "week" | "month" | "all")
-              }
-              label="Period"
-            >
-              <MenuItem value="all">All</MenuItem>
-              <MenuItem value="week">Weekly</MenuItem>
-              <MenuItem value="month">Monthly</MenuItem>
-            </Select>
-          </FormControl>
-          <FormControl
-            size="small"
-            variant="outlined"
-            sx={{
-              minWidth: 100,
-              backgroundColor: "#f5f5f5",
-              borderRadius: 2,
-              boxShadow: 1,
-            }}
-          >
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(e.target.value as "active" | "expired" | "all")
-              }
-              label="Status"
-            >
-              <MenuItem value="all">All</MenuItem>
-              <MenuItem value="active">Active</MenuItem>
-              <MenuItem value="expired">Expired</MenuItem>
-            </Select>
-          </FormControl>
+         <TableHeadAction
+    handleClickOpen={() => setShowDrawer(true)}
+    onHandleSearch={handleSearch}
+    search={search}
+    refetch={refetch}
+    isMobile={isMobile}
+    handleDailyExpenseClick={function (): void {
+      throw new Error("Function not implemented.");
+    }}
+  />
+  
+  {/* Nouveau conteneur pour les filtres */}
+  <Box
+    sx={{
+      display: "flex",
+      flexDirection: isMobile ? "column" : "row",
+      gap: 2,
+      mb: 2,
+      mt: isMobile ? 0 : 2, // Ajustement de la marge supérieure
+      alignItems: isMobile ? "stretch" : "flex-start",
+    }}
+  >
+    <FormControl
+      size="small"
+      variant="outlined"
+      sx={{
+        width: isMobile ? "100%" : 150,
+        backgroundColor: "#f5f5f5",
+        borderRadius: 2,
+        boxShadow: 1,
+      }}
+    >
+      <InputLabel>Period</InputLabel>
+      <Select
+        value={timeFilter}
+        onChange={(e) => setTimeFilter(e.target.value as "week" | "month" | "all")}
+        label="Period"
+      >
+        <MenuItem value="all">All</MenuItem>
+        <MenuItem value="week">Weekly</MenuItem>
+        <MenuItem value="month">Monthly</MenuItem>
+      </Select>
+    </FormControl>
+
+    <FormControl
+      size="small"
+      variant="outlined"
+      sx={{
+        width: isMobile ? "100%" : 150,
+        backgroundColor: "#f5f5f5",
+        borderRadius: 2,
+        boxShadow: 1,
+      }}
+    >
+      <InputLabel>Status</InputLabel>
+      <Select
+        value={statusFilter}
+        onChange={(e) => setStatusFilter(e.target.value as "active" | "expired" | "all")}
+        label="Status"
+      >
+        <MenuItem value="all">All</MenuItem>
+        <MenuItem value="active">Active</MenuItem>
+        <MenuItem value="expired">Expired</MenuItem>
+      </Select>
+    </FormControl>
         </Box>
         <TableWrapper>
           <StyledTableContainer>
