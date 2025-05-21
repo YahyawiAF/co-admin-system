@@ -62,6 +62,58 @@ import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
+// Fonctions de tri
+function getComparator(
+  order: "asc" | "desc",
+  orderBy: string
+): (a: any, b: any) => number {
+  return order === "desc"
+    ? (a, b) => descendingComparator(a, b, orderBy)
+    : (a, b) => -descendingComparator(a, b, orderBy);
+}
+
+function descendingComparator(a: any, b: any, orderBy: string) {
+  const getNestedValue = (obj: any, path: string) => {
+    return path
+      .split(".")
+      .reduce((current, key) => current && current[key], obj);
+  };
+
+  const valueA = getNestedValue(a, orderBy) ?? "";
+  const valueB = getNestedValue(b, orderBy) ?? "";
+
+  if (orderBy === "member") {
+    const nameA = a.member ? `${a.member.firstName} ${a.member.lastName}` : "";
+    const nameB = b.member ? `${b.member.firstName} ${b.member.lastName}` : "";
+    return nameA.localeCompare(nameB);
+  }
+
+  if (orderBy === "registredDate" || orderBy === "leaveDate") {
+    const dateA = valueA ? new Date(valueA) : new Date(0);
+    const dateB = valueB ? new Date(valueB) : new Date(0);
+    return dateA.getTime() - dateB.getTime();
+  }
+
+  if (typeof valueA === "string" && typeof valueB === "string") {
+    return valueA.localeCompare(valueB);
+  }
+
+  if (valueA < valueB) return -1;
+  if (valueA > valueB) return 1;
+  return 0;
+}
+
+function stableSort<T>(array: T[], comparator: (a: T, b: T) => number) {
+  const stabilizedThis = array.map((el, index) => [el, index] as [T, number]);
+  stabilizedThis.sort((a, b) => {
+    const order = comparator(a[0], b[0]);
+    if (order !== 0) return order;
+    return a[1] - b[1];
+  });
+  return stabilizedThis.map((el) => el[0]);
+}
+
+// Styles (identiques à l'original)
 const StatsCard = styled(Card)(({ theme }) => ({
   height: "100%",
   borderRadius: theme.shape.borderRadius * 2,
@@ -373,7 +425,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     );
   };
 
-  // Calculate members for each status based on selectedDate
   const { expiredMembers, soonToExpireMembers, activeMembers } =
     React.useMemo(() => {
       const today = new Date(selectedDate);
@@ -391,16 +442,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         const memberName = `${member.firstName} ${member.lastName}`;
         const leaveDate = new Date(abonnement.leaveDate);
 
-        // Expired: leaveDate is today
         if (isSameDay(leaveDate, today)) {
           if (!expired.includes(memberName)) expired.push(memberName);
-        }
-        // Soon to expire: leaveDate is tomorrow
-        else if (isSameDay(leaveDate, tomorrow)) {
+        } else if (isSameDay(leaveDate, tomorrow)) {
           if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
-        }
-        // Active: registered today
-        else if (
+        } else if (
           abonnement.registredDate &&
           isSameDay(new Date(abonnement.registredDate), today)
         ) {
@@ -463,7 +509,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       }
     });
 
-    return filtered;
+    return stableSort(filtered, getComparator(order, orderBy));
   }, [
     abonnementsData?.data,
     timeFilter,
@@ -471,6 +517,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     prices,
     search,
     members,
+    order,
+    orderBy,
   ]);
 
   const paginatedData = React.useMemo(() => {
@@ -591,6 +639,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
+    setPage(0); // Réinitialiser la page lors du tri
   };
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -960,71 +1009,74 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       </Grid>
 
       <MainContainer>
-         <TableHeadAction
-    handleClickOpen={() => setShowDrawer(true)}
-    onHandleSearch={handleSearch}
-    search={search}
-    refetch={refetch}
-    isMobile={isMobile}
-    handleDailyExpenseClick={function (): void {
-      throw new Error("Function not implemented.");
-    }}
-  />
-  
-  {/* Nouveau conteneur pour les filtres */}
-  <Box
-    sx={{
-      display: "flex",
-      flexDirection: isMobile ? "column" : "row",
-      gap: 2,
-      mb: 2,
-      mt: isMobile ? 0 : 2, // Ajustement de la marge supérieure
-      alignItems: isMobile ? "stretch" : "flex-start",
-    }}
-  >
-    <FormControl
-      size="small"
-      variant="outlined"
-      sx={{
-        width: isMobile ? "100%" : 150,
-        backgroundColor: "#f5f5f5",
-        borderRadius: 2,
-        boxShadow: 1,
-      }}
-    >
-      <InputLabel>Period</InputLabel>
-      <Select
-        value={timeFilter}
-        onChange={(e) => setTimeFilter(e.target.value as "week" | "month" | "all")}
-        label="Period"
-      >
-        <MenuItem value="all">All</MenuItem>
-        <MenuItem value="week">Weekly</MenuItem>
-        <MenuItem value="month">Monthly</MenuItem>
-      </Select>
-    </FormControl>
+        <TableHeadAction
+          handleClickOpen={() => setShowDrawer(true)}
+          onHandleSearch={handleSearch}
+          search={search}
+          refetch={refetch}
+          isMobile={isMobile}
+          handleDailyExpenseClick={function (): void {
+            throw new Error("Function not implemented.");
+          }}
+        />
 
-    <FormControl
-      size="small"
-      variant="outlined"
-      sx={{
-        width: isMobile ? "100%" : 150,
-        backgroundColor: "#f5f5f5",
-        borderRadius: 2,
-        boxShadow: 1,
-      }}
-    >
-      <InputLabel>Status</InputLabel>
-      <Select
-        value={statusFilter}
-        onChange={(e) => setStatusFilter(e.target.value as "active" | "expired" | "all")}
-        label="Status"
-      >
-        <MenuItem value="all">All</MenuItem>
-        <MenuItem value="active">Active</MenuItem>
-        <MenuItem value="expired">Expired</MenuItem>
-      </Select>
-    </FormControl>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: isMobile ? "column" : "row",
+            gap: 2,
+            mb: 2,
+            mt: isMobile ? 0 : 2,
+            alignItems: isMobile ? "stretch" : "flex-start",
+          }}
+        >
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              width: isMobile ? "100%" : 150,
+              backgroundColor: "#f5f5f5",
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Period</InputLabel>
+            <Select
+              value={timeFilter}
+              onChange={(e) =>
+                setTimeFilter(e.target.value as "week" | "month" | "all")
+              }
+              label="Period"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="week">Weekly</MenuItem>
+              <MenuItem value="month">Monthly</MenuItem>
+            </Select>
+          </FormControl>
+
+          <FormControl
+            size="small"
+            variant="outlined"
+            sx={{
+              width: isMobile ? "100%" : 150,
+              backgroundColor: "#f5f5f5",
+              borderRadius: 2,
+              boxShadow: 1,
+            }}
+          >
+            <InputLabel>Status</InputLabel>
+            <Select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "active" | "expired" | "all")
+              }
+              label="Status"
+            >
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="active">Active</MenuItem>
+              <MenuItem value="expired">Expired</MenuItem>
+            </Select>
+          </FormControl>
         </Box>
         <TableWrapper>
           <StyledTableContainer>

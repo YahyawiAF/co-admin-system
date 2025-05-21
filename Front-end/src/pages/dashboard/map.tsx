@@ -17,10 +17,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Snackbar,
   IconButton,
   Avatar,
@@ -46,7 +42,15 @@ import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import type { ReactElement } from "react";
 import { bookingService } from "src/api/bookingservice";
 import { useGetMembersQuery } from "src/api/members.repo";
-import { BookingResponse, Member } from "src/types/shared";
+import { useGetJournalQuery } from "src/api/journal.repo";
+import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
+import {
+  BookingResponse,
+  Member,
+  Subscription,
+  Journal,
+  Abonnement,
+} from "src/types/shared";
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -59,7 +63,6 @@ import {
   Update as RefreshIcon,
   Chair as ChairIcon,
 } from "@mui/icons-material";
-import { Subscription } from "src/types/shared";
 import { NextPage } from "next/types";
 
 // Types
@@ -70,9 +73,11 @@ interface SeatSelection {
 
 interface BookingWithMember extends BookingResponse {
   member?: Member;
+  journal?: Journal;
+  abonnement?: Abonnement;
 }
 
-// Styled Components
+// Styled Components (inchangés)
 const PageContainer = styled(Box)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -239,7 +244,9 @@ const RefreshButton = styled(IconButton)(({ theme }) => ({
   marginLeft: theme.spacing(2),
 }));
 
-const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElement } = () => {
+const SeatingChart: NextPage & {
+  getLayout?: (page: ReactElement) => ReactElement;
+} = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isBooking, setIsBooking] = useState<boolean>(false);
@@ -249,7 +256,8 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
   const [bookings, setBookings] = useState<BookingWithMember[]>([]);
   const [showModal, setShowModal] = useState<boolean>(false);
   const [currentSeat, setCurrentSeat] = useState<SeatSelection | null>(null);
-  const [selectedBooking, setSelectedBooking] = useState<BookingWithMember | null>(null);
+  const [selectedBooking, setSelectedBooking] =
+    useState<BookingWithMember | null>(null);
   const [memberId, setMemberId] = useState<string>("");
   const [modalMode, setModalMode] = useState<"add" | "update" | "view">("add");
   const [searchTerm, setSearchTerm] = useState("");
@@ -267,19 +275,32 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
     refetch: refetchMembers,
   } = useGetMembersQuery();
 
+  const today = new Date();
+  const { data: journals = { data: [] }, refetch: refetchJournals } =
+    useGetJournalQuery({
+      page: 0,
+      perPage: 1000,
+      journalDate: today.toDateString(),
+    });
+
+  const { data: abonnements = { data: [] }, refetch: refetchAbonnements } =
+    useGetAbonnementsQuery({});
+
   useEffect(() => {
-    const handleFullscreenChange = () => {
+    const handleFuller = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener("fullscreenchange", handleFuller);
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener("fullscreenchange", handleFuller);
     };
   }, []);
 
   useEffect(() => {
     fetchBookings();
+    const interval = setInterval(checkExpiredBookings, 60000); // Vérifier toutes les minutes
+    return () => clearInterval(interval);
   }, []);
 
   const fetchBookings = async () => {
@@ -298,14 +319,88 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
     }
   };
 
-  const enrichBookingsWithMemberData = async (bookingsData: BookingResponse[]): Promise<BookingWithMember[]> => {
-    return bookingsData.map(booking => {
-      const member = members.find(m => m.id === booking.memberId);
-      return {
-        ...booking,
-        member,
-      };
-    });
+  const enrichBookingsWithMemberData = async (
+    bookingsData: BookingResponse[]
+  ): Promise<BookingWithMember[]> => {
+    return Promise.all(
+      bookingsData.map(async (booking) => {
+        const member = members.find((m) => m.id === booking.memberId);
+        const journal = journals.data.find(
+          (j) =>
+            j.memberID === booking.memberId &&
+            j.registredTime &&
+            (!j.leaveTime || new Date(j.leaveTime) > new Date())
+        );
+        const abonnement = abonnements.data.find(
+          (a) =>
+            a.memberID === booking.memberId &&
+            a.registredDate &&
+            (!a.leaveDate || new Date(a.leaveDate) > new Date())
+        );
+        return {
+          ...booking,
+          member,
+          journal,
+          abonnement,
+        };
+      })
+    );
+  };
+
+  const checkExpiredBookings = async () => {
+    const now = new Date();
+    for (const booking of bookings) {
+      if (
+        booking.journal &&
+        booking.journal.leaveTime &&
+        new Date(booking.journal.leaveTime) <= now
+      ) {
+        await bookingService.deleteBooking(booking.id);
+      }
+      if (
+        booking.abonnement &&
+        booking.abonnement.leaveDate &&
+        new Date(booking.abonnement.leaveDate) <= now
+      ) {
+        await bookingService.deleteBooking(booking.id);
+      }
+    }
+    await fetchBookings();
+  };
+
+  const calculateRemainingTime = (booking: BookingWithMember): string => {
+    const now = new Date();
+    let endDate: Date | null = null;
+
+    if (booking.journal && booking.journal.leaveTime) {
+      endDate = new Date(booking.journal.leaveTime);
+    } else if (booking.abonnement && booking.abonnement.leaveDate) {
+      endDate = new Date(booking.abonnement.leaveDate);
+    }
+
+    if (!endDate) return "N/A";
+    if (endDate < now) return "Expired";
+
+    const diffMs = endDate.getTime() - now.getTime();
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(
+      (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+    );
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    if (diffDays >= 30) {
+      const months = Math.floor(diffDays / 30);
+      const remainingDays = diffDays % 30;
+      return `${months} month(s) ${remainingDays} day(s)`;
+    } else if (diffDays >= 7) {
+      const weeks = Math.floor(diffDays / 7);
+      const remainingDays = diffDays % 7;
+      return `${weeks} week(s) ${remainingDays} day(s)`;
+    } else if (diffDays > 0) {
+      return `${diffDays} day(s) ${diffHours} hour(s)`;
+    } else {
+      return `${diffHours} hour(s) ${diffMinutes} minute(s)`;
+    }
   };
 
   const handleObjectClicked = useCallback(
@@ -326,11 +421,13 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       const booking = bookings.find((b) => b.seatId === seat.label);
       if (booking) {
         try {
-          const fetchedBooking = await bookingService.getBookingById(booking.id);
-          setSelectedBooking({
-            ...fetchedBooking,
-            member: members.find(m => m.id === fetchedBooking.memberId),
-          });
+          const fetchedBooking = await bookingService.getBookingById(
+            booking.id
+          );
+          const enrichedBooking = (
+            await enrichBookingsWithMemberData([fetchedBooking])
+          )[0];
+          setSelectedBooking(enrichedBooking);
           setMemberId(fetchedBooking.memberId || "");
           setModalMode("view");
         } catch (error: any) {
@@ -344,7 +441,7 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       }
       setShowModal(true);
     },
-    [bookings, members]
+    [bookings]
   );
 
   const handleBookSeat = async () => {
@@ -377,7 +474,9 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       await fetchBookings();
     } catch (error: any) {
       const errorMessage = error.message.includes("suggestion")
-        ? `${error.message.split("suggestion")[0]} - Suggestion: ${error.message.split("suggestion")[1]}`
+        ? `${error.message.split("suggestion")[0]} - Suggestion: ${
+            error.message.split("suggestion")[1]
+          }`
         : error.message;
       setBookingError(errorMessage);
       await fetchBookings();
@@ -434,17 +533,46 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
     return member ? `${member.firstName} ${member.lastName}` : "Unknown";
   };
 
-  const filteredMembers = members.filter(member => {
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      (member.firstName?.toLowerCase() || "").includes(searchLower) ||
-      (member.lastName?.toLowerCase() || "").includes(searchLower) ||
-      member.email?.toLowerCase().includes(searchLower) ||
-      member.id.toLowerCase().includes(searchLower)
-    );
-  });
+  const filteredMembers = members
+    .filter((member) => {
+      const searchLower = searchTerm.toLowerCase();
+      const hasJournal = journals.data.some(
+        (j) =>
+          j.memberID === member.id &&
+          j.registredTime &&
+          (!j.leaveTime || new Date(j.leaveTime) > new Date())
+      );
+      const hasAbonnement = abonnements.data.some(
+        (a) =>
+          a.memberID === member.id &&
+          a.registredDate &&
+          (!a.leaveDate || new Date(a.leaveDate) > new Date())
+      );
+      return (
+        (hasJournal || hasAbonnement) &&
+        ((member.firstName?.toLowerCase() || "").includes(searchLower) ||
+          (member.lastName?.toLowerCase() || "").includes(searchLower) ||
+          member.email?.toLowerCase().includes(searchLower) ||
+          member.id.toLowerCase().includes(searchLower))
+      );
+    })
+    .map((member) => ({
+      ...member,
+      hasJournal: journals.data.some(
+        (j) =>
+          j.memberID === member.id &&
+          j.registredTime &&
+          (!j.leaveTime || new Date(j.leaveTime) > new Date())
+      ),
+      hasAbonnement: abonnements.data.some(
+        (a) =>
+          a.memberID === member.id &&
+          a.registredDate &&
+          (!a.leaveDate || new Date(a.leaveDate) > new Date())
+      ),
+    }));
 
-  const filteredBookings = bookings.filter(booking => {
+  const filteredBookings = bookings.filter((booking) => {
     const searchLower = tableSearchTerm.toLowerCase();
     const memberName = booking.member
       ? `${booking.member.firstName} ${booking.member.lastName}`.toLowerCase()
@@ -457,7 +585,21 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
   });
 
   const handleRefresh = async () => {
-    await Promise.all([fetchBookings(), refetchMembers()]);
+    await Promise.all([
+      fetchBookings(),
+      refetchMembers(),
+      refetchJournals(),
+      refetchAbonnements(),
+    ]);
+  };
+
+  const formatDate = (date: Date | string | null | undefined) => {
+    if (!date) return "N/A";
+    try {
+      return new Date(date).toLocaleString();
+    } catch (e) {
+      return "Invalid date";
+    }
   };
 
   return (
@@ -503,10 +645,15 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       </Grid>
 
       <MainContainer>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          mb={2}
+        >
           <Typography variant="h6">Seating Map</Typography>
-          <Button 
-            variant="outlined" 
+          <Button
+            variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={handleRefresh}
             disabled={isLoading}
@@ -548,11 +695,14 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
 
         <BookingsTableContainer>
           <Box p={2}>
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-              <Typography variant="h6">
-                Current Reservations
-              </Typography>
-              <SearchContainer sx={{ width: '300px' }}>
+            <Box
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between"
+              mb={2}
+            >
+              <Typography variant="h6">Current Reservations</Typography>
+              <SearchContainer sx={{ width: "300px" }}>
                 <SearchIcon color="action" sx={{ mr: 1 }} />
                 <TextField
                   fullWidth
@@ -573,20 +723,22 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                     <TableCell>Seat</TableCell>
                     <TableCell>Member</TableCell>
                     <TableCell>Type</TableCell>
-                    <TableCell>Booked At</TableCell>
+                    <TableCell>Registered</TableCell>
+                    <TableCell>Leave</TableCell>
+                    <TableCell>Remaining Time</TableCell>
                     <TableCell>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {isLoading ? (
                     <TableRow>
-                      <TableCell colSpan={5} align="center">
+                      <TableCell colSpan={7} align="center">
                         <CircularProgress />
                       </TableCell>
                     </TableRow>
                   ) : filteredBookings.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} align="center">
+                      <TableCell colSpan={7} align="center">
                         No matching reservations found
                       </TableCell>
                     </TableRow>
@@ -595,32 +747,51 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                       <TableRow key={booking.id}>
                         <TableCell>{booking.seatId}</TableCell>
                         <TableCell>
-                          {booking.member ? (
-                            `${booking.member.firstName} ${booking.member.lastName}`
-                          ) : (
-                            "Unknown"
-                          )}
+                          {booking.member
+                            ? `${booking.member.firstName} ${booking.member.lastName}`
+                            : "Unknown"}
                         </TableCell>
                         <TableCell>
                           <Chip
-                            label={booking.member?.plan || "Unknown"}
-                            color={booking.member?.plan === Subscription.Journal ? "primary" : "secondary"}
+                            label={
+                              booking.journal
+                                ? "Journal"
+                                : booking.abonnement
+                                ? "Membership"
+                                : "Unknown"
+                            }
+                            color={booking.journal ? "primary" : "secondary"}
                             size="small"
                           />
                         </TableCell>
                         <TableCell>
-                          {booking.bookedAt ? new Date(booking.bookedAt).toLocaleString() : "N/A"}
+                          {formatDate(
+                            booking.journal?.registredTime ||
+                              booking.abonnement?.registredDate
+                          )}
                         </TableCell>
+                        <TableCell>
+                          {formatDate(
+                            booking.journal?.leaveTime ||
+                              booking.abonnement?.leaveDate
+                          )}
+                        </TableCell>
+                        <TableCell>{calculateRemainingTime(booking)}</TableCell>
                         <TableCell>
                           <IconButton
                             size="small"
                             onClick={async () => {
                               try {
-                                const fetchedBooking = await bookingService.getBookingById(booking.id);
-                                setSelectedBooking({
-                                  ...fetchedBooking,
-                                  member: members.find(m => m.id === fetchedBooking.memberId),
-                                });
+                                const fetchedBooking =
+                                  await bookingService.getBookingById(
+                                    booking.id
+                                  );
+                                const enrichedBooking = (
+                                  await enrichBookingsWithMemberData([
+                                    fetchedBooking,
+                                  ])
+                                )[0];
+                                setSelectedBooking(enrichedBooking);
                                 setCurrentSeat({ label: booking.seatId });
                                 setMemberId(fetchedBooking.memberId || "");
                                 setModalMode("view");
@@ -637,7 +808,9 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                             onClick={async () => {
                               try {
                                 await bookingService.deleteBooking(booking.id);
-                                setBookingSuccess("Booking deleted successfully!");
+                                setBookingSuccess(
+                                  "Booking deleted successfully!"
+                                );
                                 await fetchBookings();
                               } catch (error: any) {
                                 setBookingError(error.message);
@@ -666,17 +839,21 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
             disablePortal
             style={{
               zIndex: 2147483647,
-              position: isFullscreen ? 'fixed' : 'static'
+              position: isFullscreen ? "fixed" : "static",
             }}
           >
             <ModalHeader>
               <Box display="flex" alignItems="center">
                 {modalMode === "add" ? (
-                  <CheckCircleIcon sx={{ mr: 1, color: theme.palette.common.white }} />
+                  <CheckCircleIcon
+                    sx={{ mr: 1, color: theme.palette.common.white }}
+                  />
                 ) : modalMode === "update" ? (
                   <EditIcon sx={{ mr: 1, color: theme.palette.common.white }} />
                 ) : (
-                  <PersonIcon sx={{ mr: 1, color: theme.palette.common.white }} />
+                  <PersonIcon
+                    sx={{ mr: 1, color: theme.palette.common.white }}
+                  />
                 )}
                 <Typography
                   variant="h6"
@@ -686,8 +863,8 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                   {modalMode === "add"
                     ? "Book Seat"
                     : modalMode === "update"
-                      ? "Update Booking"
-                      : "Booking Details"}
+                    ? "Update Booking"
+                    : "Booking Details"}
                 </Typography>
               </Box>
               <IconButton
@@ -723,10 +900,24 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                         Member
                       </Typography>
                       <Typography variant="body1">
-                        {selectedBooking.member ? (
-                          `${selectedBooking.member.firstName} ${selectedBooking.member.lastName}`
-                        ) : (
-                          "Unknown"
+                        {selectedBooking.member
+                          ? `${selectedBooking.member.firstName} ${selectedBooking.member.lastName}`
+                          : "Unknown"}
+                      </Typography>
+                    </Box>
+                  </InfoRow>
+                  <InfoRow>
+                    <InfoIconWrapper>
+                      <DateIcon />
+                    </InfoIconWrapper>
+                    <Box>
+                      <Typography variant="subtitle2" color="textSecondary">
+                        Registered
+                      </Typography>
+                      <Typography variant="body1">
+                        {formatDate(
+                          selectedBooking.journal?.registredTime ||
+                            selectedBooking.abonnement?.registredDate
                         )}
                       </Typography>
                     </Box>
@@ -737,29 +928,43 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                     </InfoIconWrapper>
                     <Box>
                       <Typography variant="subtitle2" color="textSecondary">
-                        Booking Date
+                        Leave
                       </Typography>
                       <Typography variant="body1">
-                        {selectedBooking.bookedAt
-                          ? new Date(selectedBooking.bookedAt).toLocaleString()
-                          : "N/A"}
+                        {formatDate(
+                          selectedBooking.journal?.leaveTime ||
+                            selectedBooking.abonnement?.leaveDate
+                        )}
                       </Typography>
                     </Box>
                   </InfoRow>
                   <InfoRow>
                     <InfoIconWrapper>
-                      {selectedBooking.member?.plan === Subscription.Journal ? (
-                        <PersonIcon />
-                      ) : (
-                        <DateIcon />
-                      )}
+                      <DateIcon />
+                    </InfoIconWrapper>
+                    <Box>
+                      <Typography variant="subtitle2" color="textSecondary">
+                        Remaining Time
+                      </Typography>
+                      <Typography variant="body1">
+                        {calculateRemainingTime(selectedBooking)}
+                      </Typography>
+                    </Box>
+                  </InfoRow>
+                  <InfoRow>
+                    <InfoIconWrapper>
+                      {selectedBooking.journal ? <PersonIcon /> : <DateIcon />}
                     </InfoIconWrapper>
                     <Box>
                       <Typography variant="subtitle2" color="textSecondary">
                         Subscription Type
                       </Typography>
                       <Typography variant="body1">
-                        {selectedBooking.member?.plan || "Unknown"}
+                        {selectedBooking.journal
+                          ? "Journal"
+                          : selectedBooking.abonnement
+                          ? "Membership"
+                          : "Unknown"}
                       </Typography>
                     </Box>
                   </InfoRow>
@@ -789,7 +994,7 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                       </Box>
                     ) : filteredMembers.length === 0 ? (
                       <ListItem>
-                        <ListItemText primary="No members found" />
+                        <ListItemText primary="No members with active subscriptions found" />
                       </ListItem>
                     ) : (
                       filteredMembers.map((member) => (
@@ -812,14 +1017,33 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
                             <ListItemText
                               primary={`${member.firstName} ${member.lastName}`}
                               secondary={
-                                <Box component="span">
+                                <Box
+                                  component="span"
+                                  sx={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: 0.5,
+                                  }}
+                                >
                                   {member.email}
-                                  <Chip
-                                    label={member.plan}
-                                    color={member.plan === Subscription.Journal ? "primary" : "secondary"}
-                                    size="small"
-                                    sx={{ ml: 1 }}
-                                  />
+                                  <Box
+                                    sx={{ display: "flex", gap: 1, mt: 0.5 }}
+                                  >
+                                    {member.hasJournal && (
+                                      <Chip
+                                        label="Journal"
+                                        color="primary"
+                                        size="small"
+                                      />
+                                    )}
+                                    {member.hasAbonnement && (
+                                      <Chip
+                                        label="Membership"
+                                        color="secondary"
+                                        size="small"
+                                      />
+                                    )}
+                                  </Box>
                                 </Box>
                               }
                             />
@@ -927,7 +1151,7 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
         <Snackbar
           open={!!membersError}
           autoHideDuration={6000}
-          onClose={() => { }}
+          onClose={() => {}}
           anchorOrigin={{ vertical: "top", horizontal: "center" }}
         >
           <Alert severity="error">Members loading error.</Alert>
@@ -935,7 +1159,7 @@ const SeatingChart: NextPage & { getLayout?: (page: ReactElement) => ReactElemen
       </MainContainer>
     </PageContainer>
   );
-}
+};
 
 SeatingChart.getLayout = function getLayout(page: ReactElement) {
   return (
