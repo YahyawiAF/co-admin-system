@@ -630,9 +630,9 @@ function JournalPage() {
       <TabPanel value={value} index={1} title={"Membership"}>
         <Abonnement selectedDate={today} />
       </TabPanel>
-      <TabPanel value={value} index={2} title={"Reservations"}>
-        <SeatingChart />
-      </TabPanel>
+     <TabPanel value={value} index={2} title={"Reservations"}>
+  <SeatingChart selectedDate={today} />
+</TabPanel>
       <TabPanel value={value} index={3} title={"Overview"}>
         <JournalDetails
           journals={rows}

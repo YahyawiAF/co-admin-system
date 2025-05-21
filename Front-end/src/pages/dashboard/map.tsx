@@ -70,7 +70,11 @@ interface BookingWithMember extends BookingResponse {
   member?: Member;
   journal?: Journal;
   abonnement?: Abonnement;
-  fullName?: string; // Ajouté pour la recherche floue
+  fullName?: string;
+}
+
+interface SeatingChartProps {
+  selectedDate?: Date;
 }
 
 // Styled Components (inchangés)
@@ -240,7 +244,7 @@ const RefreshButton = styled(IconButton)(({ theme }) => ({
   marginLeft: theme.spacing(2),
 }));
 
-// Options de recherche Fuse.js pour les membres (identiques à JournalPage)
+// Options de recherche Fuse.js pour les membres
 const memberSearchOptions = {
   keys: [
     { name: "firstName", weight: 0.4 },
@@ -272,16 +276,21 @@ const applyMemberFilters = (
   members: Member[],
   searchTerm: string,
   journals: Journal[],
-  abonnements: Abonnement[]
+  abonnements: Abonnement[],
+  selectedDate: Date
 ): Member[] => {
-  // Pré-filtrer les membres ayant un journal ou abonnement actif
+  // Filtrer les membres ayant un journal actif pour la date sélectionnée ou un abonnement actif
   const activeMembers = members.filter((member) => {
-    const hasJournal = journals.some(
-      (j) =>
-        j.memberID === member.id &&
-        j.registredTime &&
+    const hasJournal = journals.some((j) => {
+      if (j.memberID !== member.id || !j.registredTime) return false;
+      const journalDate = new Date(j.registredTime);
+      return (
+        journalDate.getFullYear() === selectedDate.getFullYear() &&
+        journalDate.getMonth() === selectedDate.getMonth() &&
+        journalDate.getDate() === selectedDate.getDate() &&
         (!j.leaveTime || new Date(j.leaveTime) > new Date())
-    );
+      );
+    });
     const hasAbonnement = abonnements.some(
       (a) =>
         a.memberID === member.id &&
@@ -291,60 +300,75 @@ const applyMemberFilters = (
     return hasJournal || hasAbonnement;
   });
 
-  if (!searchTerm || searchTerm.length < 2) {
-    return activeMembers.map((member) => ({
-      ...member,
-      hasJournal: journals.some(
-        (j) =>
-          j.memberID === member.id &&
-          j.registredTime &&
-          (!j.leaveTime || new Date(j.leaveTime) > new Date())
-      ),
-      hasAbonnement: abonnements.some(
-        (a) =>
-          a.memberID === member.id &&
-          a.registredDate &&
-          (!a.leaveDate || new Date(a.leaveDate) > new Date())
-      ),
-    }));
-  }
-
-  const fuse = new Fuse(activeMembers, memberSearchOptions);
-  const results = fuse.search(searchTerm);
-  return results.map((result) => ({
-    ...result.item,
-    hasJournal: journals.some(
-      (j) =>
-        j.memberID === result.item.id &&
-        j.registredTime &&
+  // Ajouter les indicateurs hasJournal et hasAbonnement
+  const enrichedMembers = activeMembers.map((member) => ({
+    ...member,
+    hasJournal: journals.some((j) => {
+      if (j.memberID !== member.id || !j.registredTime) return false;
+      const journalDate = new Date(j.registredTime);
+      return (
+        journalDate.getFullYear() === selectedDate.getFullYear() &&
+        journalDate.getMonth() === selectedDate.getMonth() &&
+        journalDate.getDate() === selectedDate.getDate() &&
         (!j.leaveTime || new Date(j.leaveTime) > new Date())
-    ),
+      );
+    }),
     hasAbonnement: abonnements.some(
       (a) =>
-        a.memberID === result.item.id &&
+        a.memberID === member.id &&
         a.registredDate &&
         (!a.leaveDate || new Date(a.leaveDate) > new Date())
     ),
   }));
+
+  if (!searchTerm || searchTerm.length < 2) {
+    return enrichedMembers;
+  }
+
+  const fuse = new Fuse(enrichedMembers, memberSearchOptions);
+  const results = fuse.search(searchTerm);
+  return results.map((result) => result.item);
 };
 
 // Fonction pour appliquer le filtre avec Fuse.js pour les réservations
 const applyBookingFilters = (
   bookings: BookingWithMember[],
-  searchTerm: string
+  searchTerm: string,
+  selectedDate: Date
 ): BookingWithMember[] => {
+  // Filtrer les réservations : inclure les journaux pour la date sélectionnée et tous les abonnements actifs
+  const filteredBookings = bookings.filter((booking) => {
+    if (booking.journal && booking.journal.registredTime) {
+      const journalDate = new Date(booking.journal.registredTime);
+      return (
+        journalDate.getFullYear() === selectedDate.getFullYear() &&
+        journalDate.getMonth() === selectedDate.getMonth() &&
+        journalDate.getDate() === selectedDate.getDate() &&
+        (!booking.journal.leaveTime ||
+          new Date(booking.journal.leaveTime) > new Date())
+      );
+    }
+    if (booking.abonnement && booking.abonnement.registredDate) {
+      return (
+        !booking.abonnement.leaveDate ||
+        new Date(booking.abonnement.leaveDate) > new Date()
+      );
+    }
+    return false;
+  });
+
   if (!searchTerm || searchTerm.length < 2) {
-    return bookings;
+    return filteredBookings;
   }
 
-  const fuse = new Fuse(bookings, bookingSearchOptions);
+  const fuse = new Fuse(filteredBookings, bookingSearchOptions);
   const results = fuse.search(searchTerm);
   return results.map((result) => result.item);
 };
 
-const SeatingChart: NextPage & {
+const SeatingChart: NextPage<SeatingChartProps> & {
   getLayout?: (page: ReactElement) => ReactElement;
-} = () => {
+} = ({ selectedDate = new Date() }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isBooking, setIsBooking] = useState<boolean>(false);
@@ -373,12 +397,11 @@ const SeatingChart: NextPage & {
     refetch: refetchMembers,
   } = useGetMembersQuery();
 
-  const today = new Date();
   const { data: journals = { data: [] }, refetch: refetchJournals } =
     useGetJournalQuery({
       page: 0,
       perPage: 1000,
-      journalDate: today.toDateString(),
+      journalDate: selectedDate.toDateString(),
     });
 
   const { data: abonnements = { data: [] }, refetch: refetchAbonnements } =
@@ -397,19 +420,44 @@ const SeatingChart: NextPage & {
 
   useEffect(() => {
     fetchBookings();
-    const interval = setInterval(checkExpiredBookings, 60000); // Vérifier toutes les minutes
+    const interval = setInterval(checkExpiredBookings, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    fetchBookings();
+    refetchJournals();
+  }, [selectedDate]);
 
   const fetchBookings = async () => {
     try {
       setIsLoading(true);
       const bookingsData = await bookingService.getAllBookings();
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
+      // Filtrer les réservations pour les statistiques
+      const filteredBookings = enrichedBookings.filter((booking) => {
+        if (booking.journal && booking.journal.registredTime) {
+          const journalDate = new Date(booking.journal.registredTime);
+          return (
+            journalDate.getFullYear() === selectedDate.getFullYear() &&
+            journalDate.getMonth() === selectedDate.getMonth() &&
+            journalDate.getDate() === selectedDate.getDate() &&
+            (!booking.journal.leaveTime ||
+              new Date(booking.journal.leaveTime) > new Date())
+          );
+        }
+        if (booking.abonnement && booking.abonnement.registredDate) {
+          return (
+            !booking.abonnement.leaveDate ||
+            new Date(booking.abonnement.leaveDate) > new Date()
+          );
+        }
+        return false;
+      });
       setBookings(enrichedBookings);
       const totalSeats = 46;
-      setBookedSeats(bookingsData.length);
-      setAvailableSeats(totalSeats - bookingsData.length);
+      setBookedSeats(filteredBookings.length);
+      setAvailableSeats(totalSeats - filteredBookings.length);
     } catch (error: any) {
       setBookingError(error.message);
     } finally {
@@ -644,11 +692,16 @@ const SeatingChart: NextPage & {
     members,
     searchTerm,
     journals.data,
-    abonnements.data
+    abonnements.data,
+    selectedDate
   );
 
   // Filtrage des réservations avec Fuse.js
-  const filteredBookings = applyBookingFilters(bookings, tableSearchTerm);
+  const filteredBookings = applyBookingFilters(
+    bookings,
+    tableSearchTerm,
+    selectedDate
+  );
 
   const handleRefresh = async () => {
     await Promise.all([
@@ -1060,7 +1113,7 @@ const SeatingChart: NextPage & {
                       </Box>
                     ) : filteredMembers.length === 0 ? (
                       <ListItem>
-                        <ListItemText primary="No members with active subscriptions found" />
+                        <ListItemText primary="No members with active journal entries for this date or active memberships" />
                       </ListItem>
                     ) : (
                       filteredMembers.map((member) => (
