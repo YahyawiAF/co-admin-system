@@ -44,13 +44,7 @@ import { bookingService } from "src/api/bookingservice";
 import { useGetMembersQuery } from "src/api/members.repo";
 import { useGetJournalQuery } from "src/api/journal.repo";
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
-import {
-  BookingResponse,
-  Member,
-  Subscription,
-  Journal,
-  Abonnement,
-} from "src/types/shared";
+import { BookingResponse, Member, Journal, Abonnement } from "src/types/shared";
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -64,6 +58,7 @@ import {
   Chair as ChairIcon,
 } from "@mui/icons-material";
 import { NextPage } from "next/types";
+import Fuse from "fuse.js";
 
 // Types
 interface SeatSelection {
@@ -75,6 +70,7 @@ interface BookingWithMember extends BookingResponse {
   member?: Member;
   journal?: Journal;
   abonnement?: Abonnement;
+  fullName?: string; // Ajouté pour la recherche floue
 }
 
 // Styled Components (inchangés)
@@ -244,6 +240,108 @@ const RefreshButton = styled(IconButton)(({ theme }) => ({
   marginLeft: theme.spacing(2),
 }));
 
+// Options de recherche Fuse.js pour les membres (identiques à JournalPage)
+const memberSearchOptions = {
+  keys: [
+    { name: "firstName", weight: 0.4 },
+    { name: "lastName", weight: 0.4 },
+    { name: "email", weight: 0.15 },
+    { name: "id", weight: 0.05 },
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+  shouldSort: true,
+};
+
+// Options de recherche Fuse.js pour les réservations
+const bookingSearchOptions = {
+  keys: [
+    { name: "seatId", weight: 0.4 },
+    { name: "fullName", weight: 0.4 },
+    { name: "subscriptionType", weight: 0.2 },
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+  shouldSort: true,
+};
+
+// Fonction pour appliquer le filtre avec Fuse.js pour les membres
+const applyMemberFilters = (
+  members: Member[],
+  searchTerm: string,
+  journals: Journal[],
+  abonnements: Abonnement[]
+): Member[] => {
+  // Pré-filtrer les membres ayant un journal ou abonnement actif
+  const activeMembers = members.filter((member) => {
+    const hasJournal = journals.some(
+      (j) =>
+        j.memberID === member.id &&
+        j.registredTime &&
+        (!j.leaveTime || new Date(j.leaveTime) > new Date())
+    );
+    const hasAbonnement = abonnements.some(
+      (a) =>
+        a.memberID === member.id &&
+        a.registredDate &&
+        (!a.leaveDate || new Date(a.leaveDate) > new Date())
+    );
+    return hasJournal || hasAbonnement;
+  });
+
+  if (!searchTerm || searchTerm.length < 2) {
+    return activeMembers.map((member) => ({
+      ...member,
+      hasJournal: journals.some(
+        (j) =>
+          j.memberID === member.id &&
+          j.registredTime &&
+          (!j.leaveTime || new Date(j.leaveTime) > new Date())
+      ),
+      hasAbonnement: abonnements.some(
+        (a) =>
+          a.memberID === member.id &&
+          a.registredDate &&
+          (!a.leaveDate || new Date(a.leaveDate) > new Date())
+      ),
+    }));
+  }
+
+  const fuse = new Fuse(activeMembers, memberSearchOptions);
+  const results = fuse.search(searchTerm);
+  return results.map((result) => ({
+    ...result.item,
+    hasJournal: journals.some(
+      (j) =>
+        j.memberID === result.item.id &&
+        j.registredTime &&
+        (!j.leaveTime || new Date(j.leaveTime) > new Date())
+    ),
+    hasAbonnement: abonnements.some(
+      (a) =>
+        a.memberID === result.item.id &&
+        a.registredDate &&
+        (!a.leaveDate || new Date(a.leaveDate) > new Date())
+    ),
+  }));
+};
+
+// Fonction pour appliquer le filtre avec Fuse.js pour les réservations
+const applyBookingFilters = (
+  bookings: BookingWithMember[],
+  searchTerm: string
+): BookingWithMember[] => {
+  if (!searchTerm || searchTerm.length < 2) {
+    return bookings;
+  }
+
+  const fuse = new Fuse(bookings, bookingSearchOptions);
+  const results = fuse.search(searchTerm);
+  return results.map((result) => result.item);
+};
+
 const SeatingChart: NextPage & {
   getLayout?: (page: ReactElement) => ReactElement;
 } = () => {
@@ -309,7 +407,7 @@ const SeatingChart: NextPage & {
       const bookingsData = await bookingService.getAllBookings();
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
       setBookings(enrichedBookings);
-      const totalSeats = 50;
+      const totalSeats = 46;
       setBookedSeats(bookingsData.length);
       setAvailableSeats(totalSeats - bookingsData.length);
     } catch (error: any) {
@@ -342,6 +440,14 @@ const SeatingChart: NextPage & {
           member,
           journal,
           abonnement,
+          fullName: member
+            ? `${member.firstName} ${member.lastName}`
+            : "Unknown",
+          subscriptionType: journal
+            ? "Journal"
+            : abonnement
+            ? "Membership"
+            : "Unknown",
         };
       })
     );
@@ -533,56 +639,16 @@ const SeatingChart: NextPage & {
     return member ? `${member.firstName} ${member.lastName}` : "Unknown";
   };
 
-  const filteredMembers = members
-    .filter((member) => {
-      const searchLower = searchTerm.toLowerCase();
-      const hasJournal = journals.data.some(
-        (j) =>
-          j.memberID === member.id &&
-          j.registredTime &&
-          (!j.leaveTime || new Date(j.leaveTime) > new Date())
-      );
-      const hasAbonnement = abonnements.data.some(
-        (a) =>
-          a.memberID === member.id &&
-          a.registredDate &&
-          (!a.leaveDate || new Date(a.leaveDate) > new Date())
-      );
-      return (
-        (hasJournal || hasAbonnement) &&
-        ((member.firstName?.toLowerCase() || "").includes(searchLower) ||
-          (member.lastName?.toLowerCase() || "").includes(searchLower) ||
-          member.email?.toLowerCase().includes(searchLower) ||
-          member.id.toLowerCase().includes(searchLower))
-      );
-    })
-    .map((member) => ({
-      ...member,
-      hasJournal: journals.data.some(
-        (j) =>
-          j.memberID === member.id &&
-          j.registredTime &&
-          (!j.leaveTime || new Date(j.leaveTime) > new Date())
-      ),
-      hasAbonnement: abonnements.data.some(
-        (a) =>
-          a.memberID === member.id &&
-          a.registredDate &&
-          (!a.leaveDate || new Date(a.leaveDate) > new Date())
-      ),
-    }));
+  // Filtrage des membres avec Fuse.js
+  const filteredMembers = applyMemberFilters(
+    members,
+    searchTerm,
+    journals.data,
+    abonnements.data
+  );
 
-  const filteredBookings = bookings.filter((booking) => {
-    const searchLower = tableSearchTerm.toLowerCase();
-    const memberName = booking.member
-      ? `${booking.member.firstName} ${booking.member.lastName}`.toLowerCase()
-      : "";
-    return (
-      booking.seatId.toLowerCase().includes(searchLower) ||
-      memberName.includes(searchLower) ||
-      (booking.member?.plan || "").toLowerCase().includes(searchLower)
-    );
-  });
+  // Filtrage des réservations avec Fuse.js
+  const filteredBookings = applyBookingFilters(bookings, tableSearchTerm);
 
   const handleRefresh = async () => {
     await Promise.all([
