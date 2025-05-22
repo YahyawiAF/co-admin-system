@@ -130,10 +130,22 @@ function JournalDetails({
     isLoading: isLoadingAbonnements,
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
-
-  // Expense mutations
   const [deleteDailyExpense] = useDeleteDailyExpenseMutation();
   const [updateDailyExpense] = useUpdateDailyExpenseMutation();
+
+  const [openUpdateModal, setOpenUpdateModal] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
+    null
+  );
+
+  const filteredDailyExpenses = useMemo(() => {
+    return dailyExpenses.filter((expense) => {
+      const expenseDate = new Date(expense.date || expense.createdAt);
+      return isSameDay(expenseDate, selectedDate);
+    });
+  }, [dailyExpenses, selectedDate]);
+
+  // Expense mutations
 
   // Product mutations
   const [updateProduct] = useUpdateProductMutation();
@@ -148,11 +160,6 @@ function JournalDetails({
     error: errorProducts,
     refetch: refetchProducts,
   } = useGetProductsQuery();
-
-  const [openUpdateModal, setOpenUpdateModal] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<DailyExpense | null>(
-    null
-  );
 
   const handleQuantityChange = async (
     productId: string,

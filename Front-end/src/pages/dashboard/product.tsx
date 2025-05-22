@@ -494,7 +494,7 @@ const ProductComponent = () => {
             position: "relative",
           }}
         >
-          {(editProduct?.img || newProduct.img) ? (
+          {editProduct?.img || newProduct.img ? (
             <Avatar
               src={editProduct?.img || newProduct.img}
               sx={{

@@ -24,9 +24,13 @@ export class ExpensesService {
     return expenses.map((expense) => new ExpenseEntity(expense));
   }
 
-  async createDailyExpense(data: { expenseId: string; date?: Date ;Summary?: string}) {
+  async createDailyExpense(data: {
+    expenseId: string;
+    date?: Date;
+    Summary?: string;
+  }) {
     const date = data.date ?? new Date();
- 
+
     return this.prisma.dailyExpense.create({
       data: {
         expenseId: data.expenseId,
@@ -35,7 +39,10 @@ export class ExpensesService {
       },
     });
   }
-  async updateDailyExpense(id: string, data: { expenseId?: string; date?: Date;Summary?: string }) {
+  async updateDailyExpense(
+    id: string,
+    data: { expenseId?: string; date?: Date; Summary?: string },
+  ) {
     return this.prisma.dailyExpense.update({
       where: { id },
       data: {
@@ -52,17 +59,17 @@ export class ExpensesService {
     });
   }
 
-  async findAllDailyExpenses() {
-    return this.prisma.dailyExpense.findMany({
+  async findOneDailyExpense(id: string) {
+    return this.prisma.dailyExpense.findUnique({
+      where: { id },
       include: {
-        expense: true, 
+        expense: true,
       },
     });
   }
 
-  async findOneDailyExpense(id: string) {
-    return this.prisma.dailyExpense.findUnique({
-      where: { id },
+  async findAllDailyExpenses() {
+    return this.prisma.dailyExpense.findMany({
       include: {
         expense: true,
       },

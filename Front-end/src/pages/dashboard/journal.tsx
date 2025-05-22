@@ -24,7 +24,14 @@ import { DailyExpense, Journal, DailyProduct } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
-import { Edit as ArchiveIcon, Delete, Edit, Done, KeyboardArrowLeft, KeyboardArrowRight } from "@mui/icons-material";
+import {
+  Edit as ArchiveIcon,
+  Delete,
+  Edit,
+  Done,
+  KeyboardArrowLeft,
+  KeyboardArrowRight,
+} from "@mui/icons-material";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
@@ -110,7 +117,6 @@ function doesObjectContainQuery(obj: Record<any, any>, query: string) {
     return value.toString().toLowerCase().includes(query.toLowerCase());
   });
 }
-
 const journalSearchOptions = {
   keys: [
     { name: "members.fullName", weight: 0.5 },
@@ -630,9 +636,9 @@ function JournalPage() {
       <TabPanel value={value} index={1} title={"Membership"}>
         <Abonnement selectedDate={today} />
       </TabPanel>
-     <TabPanel value={value} index={2} title={"Reservations"}>
-  <SeatingChart selectedDate={today} />
-</TabPanel>
+      <TabPanel value={value} index={2} title={"Reservations"}>
+        <SeatingChart selectedDate={today} />
+      </TabPanel>
       <TabPanel value={value} index={3} title={"Overview"}>
         <JournalDetails
           journals={rows}

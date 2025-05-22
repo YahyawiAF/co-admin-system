@@ -65,7 +65,7 @@ import { ProxyModule } from './proxy/proxy.module';
     ProductsModule,
     FacilityModule,
     BookingModule,
-    ProxyModule
+    ProxyModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
@@ -73,6 +73,6 @@ import { ProxyModule } from './proxy/proxy.module';
 export class AppModule implements NestModule {
   // Implémentez NestModule
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(SecurityMiddleware).forRoutes('auth'); 
+    consumer.apply(SecurityMiddleware).forRoutes('auth');
   }
 }
