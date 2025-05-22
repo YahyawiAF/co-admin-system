@@ -9,7 +9,6 @@ import {
   IconButton,
   Card,
   CardContent,
-  CardMedia,
   CardActions,
   Chip,
   Paper,
@@ -19,6 +18,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Avatar,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import {
@@ -34,6 +34,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import InventoryIcon from "@mui/icons-material/Inventory"; // Added for default product icon
 import Stats from "../landing/stats";
 import {
   Journal,
@@ -69,11 +70,13 @@ const ProductCard = styled(Card)(({ theme }) => ({
   },
 }));
 
-const ProductMedia = styled(CardMedia)(({ theme }) => ({
+const ProductMedia = styled(Box)(({ theme }) => ({
   height: 140,
-  backgroundSize: "contain",
   backgroundColor: theme.palette.grey[100],
   position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 }));
 
 const StockChip = styled(Chip)(({ theme }) => ({
@@ -412,10 +415,28 @@ function JournalDetails({
               return (
                 <Grid item key={product.id} xs={12} sm={6} md={4} lg={3}>
                   <ProductCard>
-                    <ProductMedia
-                      image={product.img || "/default-product.png"}
-                      title={product.name}
-                    >
+                    <ProductMedia>
+                      {product.img ? (
+                        <img
+                          src={product.img}
+                          alt={product.name}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      ) : (
+                        <Avatar
+                          sx={{
+                            width: 80,
+                            height: 80,
+                            bgcolor: "primary.main",
+                          }}
+                        >
+                          <InventoryIcon sx={{ fontSize: 40 }} />
+                        </Avatar>
+                      )}
                       <StockChip
                         label={`Stock: ${product.stock}`}
                         color={
@@ -441,16 +462,6 @@ function JournalDetails({
                     </ProductContent>
                     <CardActions sx={{ justifyContent: "space-between", p: 2 }}>
                       <IconButton
-                        color="primary"
-                        onClick={() => handleQuantityChange(product.id, true)}
-                        disabled={isOutOfStock}
-                        title={
-                          isOutOfStock ? "Stock épuisé" : "Ajouter un produit"
-                        }
-                      >
-                        <AddIcon />
-                      </IconButton>
-                      <IconButton
                         color="secondary"
                         onClick={() => handleQuantityChange(product.id, false)}
                         disabled={quantity <= 0}
@@ -461,6 +472,16 @@ function JournalDetails({
                         }
                       >
                         <RemoveIcon />
+                      </IconButton>
+                      <IconButton
+                        color="primary"
+                        onClick={() => handleQuantityChange(product.id, true)}
+                        disabled={isOutOfStock}
+                        title={
+                          isOutOfStock ? "Stock épuisé" : "Ajouter un produit"
+                        }
+                      >
+                        <AddIcon />
                       </IconButton>
                     </CardActions>
                   </ProductCard>

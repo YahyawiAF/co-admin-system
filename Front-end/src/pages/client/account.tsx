@@ -31,6 +31,7 @@ import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import { useUpdateUserMutation } from "src/api/user.repo";
 import { useChangePasswordMutation } from "src/api/user.repo";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: `Account Settings | Dashboard | Collabora`,

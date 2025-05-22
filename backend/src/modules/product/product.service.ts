@@ -62,7 +62,6 @@ export class ProductsService {
       },
     });
   }
-
   async updateDailyProduct(
     id: string,
     data: {
