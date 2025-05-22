@@ -348,6 +348,71 @@ interface AbonnementFormData extends Partial<Abonnement> {
 interface AbonnementProps {
   selectedDate: Date;
 }
+const abonnementSearchOptions = {
+  keys: [
+    "member.firstName",
+    "member.lastName",
+    "price.name",
+    "id",
+    "stayedPeriode",
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+};
+
+const headCells: Array<HeadCell> = [
+  {
+    id: "member",
+    numeric: false,
+    disablePadding: true,
+    label: "Member",
+  },
+  {
+    id: "registredDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Registered Date",
+  },
+  {
+    id: "leaveDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Leave Date",
+  },
+  {
+    id: "stayedPeriode",
+    numeric: false,
+    disablePadding: false,
+    label: "Stayed Period",
+  },
+  {
+    id: "remainingTime",
+    numeric: false,
+    disablePadding: false,
+    label: "Remaining Time",
+  },
+  {
+    id: "payedAmount",
+    numeric: false,
+    disablePadding: false,
+    label: "Paid Amount",
+  },
+  {
+    id: "status",
+    numeric: false,
+    disablePadding: false,
+    label: "Status",
+  },
+  {
+    id: "actions",
+    numeric: false,
+    disablePadding: false,
+    label: "Actions",
+    alignment: "center",
+  },
+];
+
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
@@ -372,21 +437,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   // Configuration de Fuse.js pour la recherche des abonnements
 
-  // Configuration de Fuse.js pour la recherche des abonnements
-
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
   const {
     data: abonnementsData,
     isLoading,
@@ -408,11 +458,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const {
-    data: membersList,
-    isLoading: isLoadingMember,
-    error: membersError,
-  } = useGetMembersQuery();
 
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
@@ -541,58 +586,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
 
-  const headCells: Array<HeadCell> = [
-    {
-      id: "member",
-      numeric: false,
-      disablePadding: true,
-      label: "Member",
-    },
-    {
-      id: "registredDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Registered Date",
-    },
-    {
-      id: "leaveDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Leave Date",
-    },
-    {
-      id: "stayedPeriode",
-      numeric: false,
-      disablePadding: false,
-      label: "Stayed Period",
-    },
-    {
-      id: "remainingTime",
-      numeric: false,
-      disablePadding: false,
-      label: "Remaining Time",
-    },
-    {
-      id: "payedAmount",
-      numeric: false,
-      disablePadding: false,
-      label: "Paid Amount",
-    },
-    {
-      id: "status",
-      numeric: false,
-      disablePadding: false,
-      label: "Status",
-    },
-    {
-      id: "actions",
-      numeric: false,
-      disablePadding: false,
-      label: "Actions",
-      alignment: "center",
-    },
-  ];
-
   const membersWithSubscriptionStatus = members.map((member) => {
     const memberAbonnements =
       abonnementsData?.data.filter(
@@ -620,21 +613,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       return new Date(date).toLocaleString();
     } catch (e) {
       return "Invalid date";
-    }
-  };
-
-  const handleSelect = (selectedMember: Member | null) => {
-    setMember(selectedMember);
-    if (editAbonnement) {
-      setEditAbonnement({
-        ...editAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    } else {
-      setNewAbonnement({
-        ...newAbonnement,
-        memberID: selectedMember?.id || "",
-      });
     }
   };
 
