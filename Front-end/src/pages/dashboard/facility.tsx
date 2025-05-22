@@ -41,6 +41,8 @@ import {
   Edit as EditIcon,
   Add as AddIcon,
   People as PeopleIcon,
+  Business as BusinessIcon,
+  MeetingRoom as MeetingRoomIcon, // Added for default space icon
 } from "@mui/icons-material";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import DashboardLayout from "../../layouts/Dashboard";
@@ -121,7 +123,6 @@ const FacilityProfile = () => {
   // Handle automatic facility creation if none exists
   useEffect(() => {
     if (isError) {
-      // No facility found, create one automatically
       createFacility()
         .unwrap()
         .then(() => {
@@ -423,24 +424,47 @@ const FacilityProfile = () => {
               padding: 7,
             }}
           >
-            <Avatar
-              src={formData.logo || "/default-logo.png"}
-              sx={{
-                width: 150,
-                height: 150,
-                border: "3px solid",
-                borderColor: "primary.main",
-                boxShadow: 3,
-                mb: 2,
-                cursor: isUploading ? "default" : "pointer",
-                opacity: isUploading ? 0.6 : 1,
-                transition: "opacity 0.2s ease-in-out",
-                "&:hover": {
-                  opacity: isUploading ? 0.6 : 0.8,
-                },
-              }}
-              onClick={() => !isUploading && logoInputRef.current?.click()}
-            />
+            {formData.logo ? (
+              <Avatar
+                src={formData.logo}
+                sx={{
+                  width: 150,
+                  height: 150,
+                  border: "3px solid",
+                  borderColor: "primary.main",
+                  boxShadow: 3,
+                  mb: 2,
+                  cursor: isUploading ? "default" : "pointer",
+                  opacity: isUploading ? 0.6 : 1,
+                  transition: "opacity 0.2s ease-in-out",
+                  "&:hover": {
+                    opacity: isUploading ? 0.6 : 0.8,
+                  },
+                }}
+                onClick={() => !isUploading && logoInputRef.current?.click()}
+              />
+            ) : (
+              <Avatar
+                sx={{
+                  width: 150,
+                  height: 150,
+                  border: "3px solid",
+                  borderColor: "primary.main",
+                  boxShadow: 3,
+                  mb: 2,
+                  cursor: isUploading ? "default" : "pointer",
+                  opacity: isUploading ? 0.6 : 1,
+                  transition: "opacity 0.2s ease-in-out",
+                  "&:hover": {
+                    opacity: isUploading ? 0.6 : 0.8,
+                  },
+                  bgcolor: "primary.main",
+                }}
+                onClick={() => !isUploading && logoInputRef.current?.click()}
+              >
+                <BusinessIcon sx={{ fontSize: 60 }} />
+              </Avatar>
+            )}
             <input
               accept="image/*"
               style={{ display: "none" }}
@@ -663,21 +687,34 @@ const FacilityProfile = () => {
                               height: 180,
                               position: "relative",
                               overflow: "hidden",
-                              "& img": {
-                                width: "100%",
-                                height: "100%",
-                                objectFit: "cover",
-                                transition: "transform 0.3s",
-                              },
-                              "&:hover img": {
-                                transform: "scale(1.05)",
-                              },
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              bgcolor: space.image ? "transparent" : "grey.200",
                             }}
                           >
-                            <img
-                              src={space.image || "/default-space.png"}
-                              alt={space.name}
-                            />
+                            {space.image ? (
+                              <img
+                                src={space.image}
+                                alt={space.name}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                  transition: "transform 0.3s",
+                                }}
+                              />
+                            ) : (
+                              <Avatar
+                                sx={{
+                                  width: 80,
+                                  height: 80,
+                                  bgcolor: "primary.main",
+                                }}
+                              >
+                                <MeetingRoomIcon sx={{ fontSize: 40 }} />
+                              </Avatar>
+                            )}
                           </Box>
                           <CardContent sx={{ flexGrow: 1, p: 3 }}>
                             <Typography
@@ -776,22 +813,43 @@ const FacilityProfile = () => {
                         position: "relative",
                       }}
                     >
-                      <Avatar
-                        src={newSpace.image || "/default-space.png"}
-                        sx={{
-                          width: 100,
-                          height: 100,
-                          cursor: isUploading ? "default" : "pointer",
-                          opacity: isUploading ? 0.6 : 1,
-                          transition: "opacity 0.2s ease-in-out",
-                          "&:hover": {
-                            opacity: isUploading ? 0.6 : 0.8,
-                          },
-                        }}
-                        onClick={() =>
-                          !isUploading && newSpaceInputRef.current?.click()
-                        }
-                      />
+                      {newSpace.image ? (
+                        <Avatar
+                          src={newSpace.image}
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            cursor: isUploading ? "default" : "pointer",
+                            opacity: isUploading ? 0.6 : 1,
+                            transition: "opacity 0.2s ease-in-out",
+                            "&:hover": {
+                              opacity: isUploading ? 0.6 : 0.8,
+                            },
+                          }}
+                          onClick={() =>
+                            !isUploading && newSpaceInputRef.current?.click()
+                          }
+                        />
+                      ) : (
+                        <Avatar
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            cursor: isUploading ? "default" : "pointer",
+                            opacity: isUploading ? 0.6 : 1,
+                            transition: "opacity 0.2s ease-in-out",
+                            "&:hover": {
+                              opacity: isUploading ? 0.6 : 0.8,
+                            },
+                            bgcolor: "primary.main",
+                          }}
+                          onClick={() =>
+                            !isUploading && newSpaceInputRef.current?.click()
+                          }
+                        >
+                          <MeetingRoomIcon sx={{ fontSize: 40 }} />
+                        </Avatar>
+                      )}
                       {isUploading && (
                         <CircularProgress
                           size={30}
@@ -883,22 +941,43 @@ const FacilityProfile = () => {
                         position: "relative",
                       }}
                     >
-                      <Avatar
-                        src={editingSpace?.image || "/default-space.png"}
-                        sx={{
-                          width: 100,
-                          height: 100,
-                          cursor: isUploading ? "default" : "pointer",
-                          opacity: isUploading ? 0.6 : 1,
-                          transition: "opacity 0.2s ease-in-out",
-                          "&:hover": {
-                            opacity: isUploading ? 0.6 : 0.8,
-                          },
-                        }}
-                        onClick={() =>
-                          !isUploading && editSpaceInputRef.current?.click()
-                        }
-                      />
+                      {editingSpace?.image ? (
+                        <Avatar
+                          src={editingSpace.image}
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            cursor: isUploading ? "default" : "pointer",
+                            opacity: isUploading ? 0.6 : 1,
+                            transition: "opacity 0.2s ease-in-out",
+                            "&:hover": {
+                              opacity: isUploading ? 0.6 : 0.8,
+                            },
+                          }}
+                          onClick={() =>
+                            !isUploading && editSpaceInputRef.current?.click()
+                          }
+                        />
+                      ) : (
+                        <Avatar
+                          sx={{
+                            width: 100,
+                            height: 100,
+                            cursor: isUploading ? "default" : "pointer",
+                            opacity: isUploading ? 0.6 : 1,
+                            transition: "opacity 0.2s ease-in-out",
+                            "&:hover": {
+                              opacity: isUploading ? 0.6 : 0.8,
+                            },
+                            bgcolor: "primary.main",
+                          }}
+                          onClick={() =>
+                            !isUploading && editSpaceInputRef.current?.click()
+                          }
+                        >
+                          <MeetingRoomIcon sx={{ fontSize: 40 }} />
+                        </Avatar>
+                      )}
                       {isUploading && (
                         <CircularProgress
                           size={30}
