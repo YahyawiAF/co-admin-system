@@ -37,6 +37,7 @@ import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "../../layouts/Dashboard";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import InventoryIcon from "@mui/icons-material/Inventory"; // Added for default product icon
 import BulkActions from "src/components/Table/members/TableHeader";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
@@ -81,11 +82,13 @@ const ProductCard = styled(Card)(({ theme }) => ({
   },
 }));
 
-const ProductMedia = styled(CardMedia)(({ theme }) => ({
+const ProductMedia = styled(Box)(({ theme }) => ({
   height: 180,
-  backgroundSize: "contain",
   backgroundColor: theme.palette.grey[100],
   position: "relative",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
 }));
 
 const StockChip = styled(Chip)(({ theme }) => ({
@@ -341,7 +344,6 @@ const ProductComponent = () => {
               onHandleSearch={handleSearch}
               search={searchTerm}
               refetch={refetch}
-              isMobile={isMobile}
             />
           </Grid>
         </Grid>
@@ -350,10 +352,28 @@ const ProductComponent = () => {
           {filteredProducts?.map((product) => (
             <Grid item key={product.id} xs={12} sm={6} md={4} lg={3}>
               <ProductCard>
-                <ProductMedia
-                  image={product.img || "/default-product.png"}
-                  title={product.name}
-                >
+                <ProductMedia>
+                  {product.img ? (
+                    <img
+                      src={product.img}
+                      alt={product.name}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : (
+                    <Avatar
+                      sx={{
+                        width: 80,
+                        height: 80,
+                        bgcolor: "primary.main",
+                      }}
+                    >
+                      <InventoryIcon sx={{ fontSize: 40 }} />
+                    </Avatar>
+                  )}
                   <StockChip
                     label={`Stock: ${product.stock}`}
                     color={
@@ -462,7 +482,7 @@ const ProductComponent = () => {
         }}
       >
         <Typography variant="h6" sx={{ mb: 3 }}>
-          {editProduct ? "Manage Product" : "Manage Product"}
+          {editProduct ? "Manage Product" : "Add Product"}
         </Typography>
 
         {/* Image Upload Section */}
@@ -474,26 +494,51 @@ const ProductComponent = () => {
             position: "relative",
           }}
         >
-          <Avatar
-            src={editProduct?.img || newProduct.img || "/default-product.png"}
-            sx={{
-              width: 150,
-              height: 150,
-              border: "2px solid",
-              borderColor: "primary.main",
-              mb: 2,
-              cursor: isUploading ? "default" : "pointer",
-              opacity: isUploading ? 0.6 : 1,
-              transition: "opacity 0.2s ease-in-out",
-              "&:hover": {
-                opacity: isUploading ? 0.6 : 0.8,
-              },
-            }}
-            variant="rounded"
-            onClick={() =>
-              !isUploading && productImageInputRef.current?.click()
-            }
-          />
+          {editProduct?.img || newProduct.img ? (
+            <Avatar
+              src={editProduct?.img || newProduct.img}
+              sx={{
+                width: 150,
+                height: 150,
+                border: "2px solid",
+                borderColor: "primary.main",
+                mb: 2,
+                cursor: isUploading ? "default" : "pointer",
+                opacity: isUploading ? 0.6 : 1,
+                transition: "opacity 0.2s ease-in-out",
+                "&:hover": {
+                  opacity: isUploading ? 0.6 : 0.8,
+                },
+              }}
+              variant="rounded"
+              onClick={() =>
+                !isUploading && productImageInputRef.current?.click()
+              }
+            />
+          ) : (
+            <Avatar
+              sx={{
+                width: 150,
+                height: 150,
+                border: "2px solid",
+                borderColor: "primary.main",
+                mb: 2,
+                cursor: isUploading ? "default" : "pointer",
+                opacity: isUploading ? 0.6 : 1,
+                transition: "opacity 0.2s ease-in-out",
+                "&:hover": {
+                  opacity: isUploading ? 0.6 : 0.8,
+                },
+                bgcolor: "primary.main",
+              }}
+              variant="rounded"
+              onClick={() =>
+                !isUploading && productImageInputRef.current?.click()
+              }
+            >
+              <InventoryIcon sx={{ fontSize: 60 }} />
+            </Avatar>
+          )}
           <input
             accept="image/*"
             style={{ display: "none" }}
@@ -620,7 +665,7 @@ const ProductComponent = () => {
             onClick={editProduct ? handleUpdateProduct : handleAddProduct}
             loading={isLoading}
           >
-            {editProduct ? "Confirm" : "Confirm"}
+            {editProduct ? "Confirm" : "Add"}
           </SubmitButton>
         </Box>
       </Drawer>

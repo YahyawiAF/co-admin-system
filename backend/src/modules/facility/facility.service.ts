@@ -12,7 +12,7 @@ export class FacilityService {
     return new FacilityEntity({
       ...facility,
       socialNetworks: facility.socialNetworks as Record<string, string>,
-      places: facility.places as Record<string, number>
+      places: facility.places as Record<string, number>,
     });
   }
 
@@ -20,21 +20,17 @@ export class FacilityService {
     try {
       // Exemple de données générées automatiquement
       const exampleData = {
-        name: "Example Facility",
-        numtel: "+1234567890",
-        email: "example@facility.com",
-        adresse: "123 Example Street, City",
-        logo: "https://example.com/logo.png",
-        nbrPlaces: 50,
+        name: '',
+        numtel: '',
+        email: '',
+        adresse: '',
+        logo: '',
+        nbrPlaces: 0,
         socialNetworks: {
-          facebook: "https://facebook.com/examplefacility",
-          twitter: "https://twitter.com/examplefacility"
+          facebook: '',
+          twitter: '',
         },
-        places: {
-          parking: 20,
-          conference: 10,
-          coworking: 20
-        }
+        places: {},
       };
 
       const facility = await this.prisma.facility.create({
@@ -54,7 +50,7 @@ export class FacilityService {
 
   async findAll(): Promise<FacilityEntity[]> {
     const facilities = await this.prisma.facility.findMany();
-    return facilities.map(facility => this.toFacilityEntity(facility));
+    return facilities.map((facility) => this.toFacilityEntity(facility));
   }
 
   async findOne(id: string): Promise<FacilityEntity> {
@@ -69,7 +65,10 @@ export class FacilityService {
     return this.toFacilityEntity(facility);
   }
 
-  async update(id: string, updateFacilityDto: UpdateFacilityDto): Promise<FacilityEntity> {
+  async update(
+    id: string,
+    updateFacilityDto: UpdateFacilityDto,
+  ): Promise<FacilityEntity> {
     const existingFacility = await this.prisma.facility.findUnique({
       where: { id },
     });
@@ -82,12 +81,14 @@ export class FacilityService {
       where: { id },
       data: {
         ...updateFacilityDto,
-        socialNetworks: updateFacilityDto.socialNetworks !== undefined 
-          ? updateFacilityDto.socialNetworks 
-          : existingFacility.socialNetworks,
-        places: updateFacilityDto.places !== undefined 
-          ? updateFacilityDto.places 
-          : existingFacility.places,
+        socialNetworks:
+          updateFacilityDto.socialNetworks !== undefined
+            ? updateFacilityDto.socialNetworks
+            : existingFacility.socialNetworks,
+        places:
+          updateFacilityDto.places !== undefined
+            ? updateFacilityDto.places
+            : existingFacility.places,
       },
     });
 

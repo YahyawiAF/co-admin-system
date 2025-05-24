@@ -16,6 +16,7 @@ import {
   IconButton,
   Tabs,
   Box,
+  Button,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import DashboardLayout from "../../layouts/Dashboard";
@@ -23,7 +24,14 @@ import { DailyExpense, Journal, DailyProduct } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
-import { Edit as ArchiveIcon, Delete, Edit, Done } from "@mui/icons-material";
+import {
+  Edit as ArchiveIcon,
+  Delete,
+  Edit,
+  Done,
+  KeyboardArrowLeft,
+  KeyboardArrowRight,
+} from "@mui/icons-material";
 import { LinkTab, a11yProps, TabPanel } from "src/components/Tabs";
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
@@ -51,6 +59,7 @@ import { useGetDailyProductsQuery } from "src/api/productApi";
 import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexpense";
 import Fuse from "fuse.js";
 import SeatingChart from "./map";
+import { MobileDatePicker } from "@mui/x-date-pickers";
 
 const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
@@ -167,7 +176,6 @@ function JournalPage() {
   }, [dailyExpenses, today]);
 
   // Filtrer les dailyProducts par la date sélectionnée
-
   const filteredDailyProducts = useMemo(() => {
     return dailyProducts.filter((product) => {
       const productDate = new Date(product.date || product.createdAt);
@@ -311,6 +319,35 @@ function JournalPage() {
     }
   };
 
+  const goToNextDay = () => {
+    const nextDay = new Date(today);
+    nextDay.setDate(nextDay.getDate() + 1);
+    handleChangeDate(nextDay);
+  };
+
+  const goToPreviousDay = () => {
+    const prevDay = new Date(today);
+    prevDay.setDate(prevDay.getDate() - 1);
+    handleChangeDate(prevDay);
+  };
+
+  const setCurrentDay = () => {
+    handleChangeDate(new Date());
+  };
+
+  const handleDailyExpenseClick = () => {
+    setDailyExpenseOpen(true);
+  };
+
+  const isCurrentDay = () => {
+    const todayDate = new Date();
+    return (
+      today.getDate() === todayDate.getDate() &&
+      today.getMonth() === todayDate.getMonth() &&
+      today.getFullYear() === todayDate.getFullYear()
+    );
+  };
+
   const handleCreateDailyExpense = async (data: {
     expenseId: string;
     date?: string;
@@ -336,6 +373,99 @@ function JournalPage() {
   return (
     <React.Fragment>
       <Helmet title="Transactions" />
+      <Box display="flex" alignItems="center" gap="10px" mb={2}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            position: "relative",
+            border: "1px solid #ccc",
+            borderRadius: "4px",
+          }}
+        >
+          <Button
+            onClick={goToPreviousDay}
+            variant="outlined"
+            startIcon={<KeyboardArrowLeft />}
+            style={{
+              minWidth: "0px",
+              padding: "0px",
+              margin: "0",
+              color: "blue",
+              borderWidth: "0px",
+              position: "absolute",
+              left: "5px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              zIndex: 1,
+            }}
+          />
+          <MobileDatePicker
+            value={today}
+            onChange={(value) => handleChangeDate(value)}
+            slotProps={{
+              textField: {
+                InputProps: {
+                  disableUnderline: true,
+                  style: {
+                    border: "none",
+                    outline: "none",
+                    boxShadow: "none",
+                    padding: "0px 35px",
+                    textAlign: "center",
+                    color: "#333",
+                    fontWeight: "bold",
+                    backgroundColor: "transparent",
+                    width: "180px",
+                  },
+                },
+                size: "small",
+                fullWidth: false,
+              },
+            }}
+          />
+          <Button
+            onClick={goToNextDay}
+            variant="outlined"
+            endIcon={<KeyboardArrowRight />}
+            style={{
+              minWidth: "0px",
+              padding: "0px",
+              margin: "0",
+              color: "blue",
+              borderWidth: "0px",
+              position: "absolute",
+              right: "5px",
+              top: "50%",
+              transform: "translateY(-50%)",
+              zIndex: 1,
+            }}
+          />
+        </div>
+        <Button
+          variant="outlined"
+          color={isCurrentDay() ? "success" : "primary"}
+          onClick={setCurrentDay}
+          sx={{
+            width: "120px",
+            minWidth: "120px",
+            padding: "6px 9px",
+            marginLeft: "0px",
+            backgroundColor: isCurrentDay()
+              ? "rgba(46, 125, 50, 0.08)"
+              : "inherit",
+          }}
+        >
+          Current Day
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleDailyExpenseClick}
+          sx={{ ml: 2 }}
+        >
+          Daily Expense
+        </Button>
+      </Box>
       <Tabs
         value={value}
         onChange={handleChange}
@@ -351,7 +481,7 @@ function JournalPage() {
         onClose={() => setDailyExpenseOpen(false)}
         expenses={expenses}
         onSubmit={handleCreateDailyExpense}
-        initialData={{ expenseId: "", date: format(today, "yyyy-MM-dd") }} // Pré-remplir avec la date sélectionnée
+        initialData={{ expenseId: "", date: format(today, "yyyy-MM-dd") }}
       />
       <Divider my={6} />
       <TabPanel value={value} index={0} title={"List"}>
@@ -384,14 +514,10 @@ function JournalPage() {
               </Drawer>
               <Paper>
                 <TableHeadAction
-                  handleChangeDate={handleChangeDate}
-                  toDay={today}
-                  search={filters.query}
                   handleClickOpen={handleClickOpen}
                   onHandleSearch={onHandleSearch}
+                  search={filters.query}
                   refetch={refetch}
-                  showDailyExpenseButton={true}
-                  handleDailyExpenseClick={() => setDailyExpenseOpen(true)}
                 />
                 <TableContainer>
                   <Table
@@ -511,7 +637,7 @@ function JournalPage() {
         <Abonnement selectedDate={today} />
       </TabPanel>
       <TabPanel value={value} index={2} title={"Reservations"}>
-        <SeatingChart />
+        <SeatingChart selectedDate={today} />
       </TabPanel>
       <TabPanel value={value} index={3} title={"Overview"}>
         <JournalDetails
@@ -519,7 +645,7 @@ function JournalPage() {
           isLoading={isLoading}
           errorMemberReq={!!error}
           dailyExpenses={filteredDailyExpenses}
-          dailyProducts={filteredDailyProducts} // Passer les produits filtrés
+          dailyProducts={filteredDailyProducts}
           expenses={expenses}
           selectedDate={today}
         />
