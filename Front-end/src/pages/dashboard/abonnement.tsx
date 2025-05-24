@@ -348,70 +348,6 @@ interface AbonnementFormData extends Partial<Abonnement> {
 interface AbonnementProps {
   selectedDate: Date;
 }
-const abonnementSearchOptions = {
-  keys: [
-    "member.firstName",
-    "member.lastName",
-    // "price.name",
-    // "id",
-    // "stayedPeriode",
-  ],
-  threshold: 0.4,
-  includeScore: true,
-  minMatchCharLength: 2,
-};
-
-const headCells: Array<HeadCell> = [
-  {
-    id: "member",
-    numeric: false,
-    disablePadding: true,
-    label: "Member",
-  },
-  {
-    id: "registredDate",
-    numeric: false,
-    disablePadding: false,
-    label: "Registered Date",
-  },
-  {
-    id: "leaveDate",
-    numeric: false,
-    disablePadding: false,
-    label: "Leave Date",
-  },
-  {
-    id: "stayedPeriode",
-    numeric: false,
-    disablePadding: false,
-    label: "Stayed Period",
-  },
-  {
-    id: "remainingTime",
-    numeric: false,
-    disablePadding: false,
-    label: "Remaining Time",
-  },
-  {
-    id: "payedAmount",
-    numeric: false,
-    disablePadding: false,
-    label: "Paid Amount",
-  },
-  {
-    id: "status",
-    numeric: false,
-    disablePadding: false,
-    label: "Status",
-  },
-  {
-    id: "actions",
-    numeric: false,
-    disablePadding: false,
-    label: "Actions",
-    alignment: "center",
-  },
-];
 
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
@@ -424,29 +360,37 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
+
   const fuseOptions = {
-    keys: ["firstName", "lastName"],
-    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    keys: ["firstName", "lastName", "email"],
+    threshold: 0.4,
     includeScore: true,
-    minMatchCharLength: 2, // Nombre minimum de caractères pour lancer la recherche
+    minMatchCharLength: 2,
   };
 
-  // Configuration de Fuse.js pour la recherche des abonnements
+  const abonnementSearchOptions = {
+    keys: [
+      "member.firstName",
+      "member.lastName",
+      "price.name",
+      "id",
+      "stayedPeriode",
+    ],
+    threshold: 0.4,
+    includeScore: true,
+    minMatchCharLength: 2,
+  };
 
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({
-    page,
-    perPage: rowsPerPage,
-  });
-
+  } = useGetAbonnementsQuery({});
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(
@@ -458,6 +402,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
+  const {
+    data: membersList,
+    isLoading: isLoadingMember,
+    error: membersError,
+  } = useGetMembersQuery();
 
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
@@ -586,6 +535,58 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
 
+  const headCells: Array<HeadCell> = [
+    {
+      id: "member",
+      numeric: false,
+      disablePadding: true,
+      label: "Member",
+    },
+    {
+      id: "registredDate",
+      numeric: false,
+      disablePadding: false,
+      label: "Registered Date",
+    },
+    {
+      id: "leaveDate",
+      numeric: false,
+      disablePadding: false,
+      label: "Leave Date",
+    },
+    {
+      id: "stayedPeriode",
+      numeric: false,
+      disablePadding: false,
+      label: "Stayed Period",
+    },
+    {
+      id: "remainingTime",
+      numeric: false,
+      disablePadding: false,
+      label: "Remaining Time",
+    },
+    {
+      id: "payedAmount",
+      numeric: false,
+      disablePadding: false,
+      label: "Paid Amount",
+    },
+    {
+      id: "status",
+      numeric: false,
+      disablePadding: false,
+      label: "Status",
+    },
+    {
+      id: "actions",
+      numeric: false,
+      disablePadding: false,
+      label: "Actions",
+      alignment: "center",
+    },
+  ];
+
   const membersWithSubscriptionStatus = members.map((member) => {
     const memberAbonnements =
       abonnementsData?.data.filter(
@@ -613,6 +614,21 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       return new Date(date).toLocaleString();
     } catch (e) {
       return "Invalid date";
+    }
+  };
+
+  const handleSelect = (selectedMember: Member | null) => {
+    setMember(selectedMember);
+    if (editAbonnement) {
+      setEditAbonnement({
+        ...editAbonnement,
+        memberID: selectedMember?.id || "",
+      });
+    } else {
+      setNewAbonnement({
+        ...newAbonnement,
+        memberID: selectedMember?.id || "",
+      });
     }
   };
 
@@ -678,8 +694,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       new Date(leaveDate) <=
       new Date(
         editAbonnement?.registredDate ||
-        newAbonnement.registredDate ||
-        new Date()
+          newAbonnement.registredDate ||
+          new Date()
       )
     ) {
       newErrors.leaveDate =
@@ -763,17 +779,25 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   const handlePriceSelect = (price: Price) => {
-    const registredDate = selectedDate;
+    const registredDate = editAbonnement?.registredDate || newAbonnement.registredDate || selectedDate;
     let leaveDate = new Date(registredDate);
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
     leaveDate.setDate(leaveDate.getDate() + durationDays);
+    
+    // Preserve existing time from leaveDate if available
+    const currentLeaveDate = editAbonnement?.leaveDate || newAbonnement.leaveDate;
+    if (currentLeaveDate) {
+      const existingTime = new Date(currentLeaveDate);
+      leaveDate.setHours(existingTime.getHours(), existingTime.getMinutes());
+    }
+
     const update = {
       priceId: price.id,
       payedAmount: price.price,
       leaveDate: leaveDate,
-      registredDate: selectedDate,
+      registredDate: registredDate,
     };
     if (editAbonnement) {
       setEditAbonnement({ ...editAbonnement, ...update });
@@ -861,17 +885,41 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleRegistrationDateChange = (date: Date | null) => {
     const newDate = date || selectedDate;
-    if (editAbonnement) {
-      const newLeaveDate = new Date(editAbonnement.leaveDate || selectedDate);
+    let newLeaveDate: Date;
+
+    // Get the selected price
+    const currentPriceId = editAbonnement?.priceId || newAbonnement.priceId;
+    const selectedPrice = prices.find((p) => p.id === currentPriceId);
+
+    if (selectedPrice) {
+      // Calculate duration from price
+      const start = parseInt(selectedPrice.timePeriod.start, 10);
+      const end = parseInt(selectedPrice.timePeriod.end, 10);
+      const durationDays = end - start;
+
+      // Calculate new leave date
+      newLeaveDate = new Date(newDate);
+      newLeaveDate.setDate(newDate.getDate() + durationDays);
+
+      // Preserve existing time from leaveDate if available
+      const currentLeaveDate = editAbonnement?.leaveDate || newAbonnement.leaveDate;
+      if (currentLeaveDate) {
+        const existingTime = new Date(currentLeaveDate);
+        newLeaveDate.setHours(existingTime.getHours(), existingTime.getMinutes());
+      }
+    } else {
+      // If no price is selected, use the existing leaveDate or fallback to newDate
+      newLeaveDate = new Date(editAbonnement?.leaveDate || newAbonnement.leaveDate || newDate);
       newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
+    }
+
+    if (editAbonnement) {
       setEditAbonnement({
         ...editAbonnement,
         registredDate: newDate,
         leaveDate: newLeaveDate,
       });
     } else {
-      const newLeaveDate = new Date(newAbonnement.leaveDate);
-      newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
       setNewAbonnement({
         ...newAbonnement,
         registredDate: newDate,
@@ -1204,14 +1252,17 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               </TableBody>
             </Table>
           </StyledTableContainer>
-          <TablePagination
-            rowsPerPageOptions={[50, 100, 200, 500]}
-            component="div"
+          <StyledTablePagination
+            rowsPerPageOptions={[5, 10, 25, 50]}
             count={filteredData.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
+            labelRowsPerPage={isMobile ? "Rows:" : "Rows per page:"}
+            labelDisplayedRows={({ from, to, count }) =>
+              `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`
+            }
           />
         </TableWrapper>
       </MainContainer>
@@ -1325,12 +1376,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
