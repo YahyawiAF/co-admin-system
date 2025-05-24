@@ -255,9 +255,11 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
           if (nextPrice) {
             setTarifAlert({
               show: true,
-              message: `Dépassement de tarif: ${realDurationMinutes - priceMaxDuration
-                } min (tolérance). Prochain tarif: ${nextPrice.timePeriod.start
-                }-${nextPrice.timePeriod.end}`,
+              message: `Dépassement de tarif: ${
+                realDurationMinutes - priceMaxDuration
+              } min (tolérance). Prochain tarif: ${
+                nextPrice.timePeriod.start
+              }-${nextPrice.timePeriod.end}`,
             });
           }
         } else {

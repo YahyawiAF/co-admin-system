@@ -779,15 +779,19 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   const handlePriceSelect = (price: Price) => {
-    const registredDate = editAbonnement?.registredDate || newAbonnement.registredDate || selectedDate;
+    const registredDate =
+      editAbonnement?.registredDate ||
+      newAbonnement.registredDate ||
+      selectedDate;
     let leaveDate = new Date(registredDate);
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
     leaveDate.setDate(leaveDate.getDate() + durationDays);
-    
+
     // Preserve existing time from leaveDate if available
-    const currentLeaveDate = editAbonnement?.leaveDate || newAbonnement.leaveDate;
+    const currentLeaveDate =
+      editAbonnement?.leaveDate || newAbonnement.leaveDate;
     if (currentLeaveDate) {
       const existingTime = new Date(currentLeaveDate);
       leaveDate.setHours(existingTime.getHours(), existingTime.getMinutes());
@@ -902,14 +906,20 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       newLeaveDate.setDate(newDate.getDate() + durationDays);
 
       // Preserve existing time from leaveDate if available
-      const currentLeaveDate = editAbonnement?.leaveDate || newAbonnement.leaveDate;
+      const currentLeaveDate =
+        editAbonnement?.leaveDate || newAbonnement.leaveDate;
       if (currentLeaveDate) {
         const existingTime = new Date(currentLeaveDate);
-        newLeaveDate.setHours(existingTime.getHours(), existingTime.getMinutes());
+        newLeaveDate.setHours(
+          existingTime.getHours(),
+          existingTime.getMinutes()
+        );
       }
     } else {
       // If no price is selected, use the existing leaveDate or fallback to newDate
-      newLeaveDate = new Date(editAbonnement?.leaveDate || newAbonnement.leaveDate || newDate);
+      newLeaveDate = new Date(
+        editAbonnement?.leaveDate || newAbonnement.leaveDate || newDate
+      );
       newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
     }
 
