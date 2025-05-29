@@ -70,8 +70,8 @@ type ExtendedTypeOptional = ExtractedType & {};
 const memberSearchOptions = {
   keys: [
     { name: "fullName", weight: 0.5 },
-    { name: "email", weight: 0.3 },
-    { name: "phone", weight: 0.2 },
+    // { name: "email", weight: 0.3 },
+    // { name: "phone", weight: 0.2 },
   ],
   threshold: 0.4,
   includeScore: true,
