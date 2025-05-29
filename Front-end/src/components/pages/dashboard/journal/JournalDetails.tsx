@@ -253,7 +253,7 @@ function JournalDetails({
   const dailySubscribedMembersCount = useMemo(() => {
     if (!abonnementsData?.data) return 0;
     return abonnementsData.data.filter((abonnement) => {
-      const abonnementDate = new Date(abonnement.createdAt);
+      const abonnementDate = new Date(abonnement.registredDate);
       return isSameDay(abonnementDate, selectedDate);
     }).length;
   }, [abonnementsData, selectedDate]);
