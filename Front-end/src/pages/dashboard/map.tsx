@@ -277,7 +277,8 @@ const applyMemberFilters = (
   searchTerm: string,
   journals: Journal[],
   abonnements: Abonnement[],
-  selectedDate: Date
+  selectedDate: Date,
+  bookings: BookingWithMember[] // Ajouter les réservations comme paramètre
 ): Member[] => {
   // Filtrer les membres ayant un journal actif pour la date sélectionnée ou un abonnement actif
   const activeMembers = members.filter((member) => {
@@ -300,8 +301,32 @@ const applyMemberFilters = (
     return hasJournal || hasAbonnement;
   });
 
+  // Exclure les membres qui ont déjà une réservation active pour la date sélectionnée
+  const availableMembers = activeMembers.filter((member) => {
+    return !bookings.some((booking) => {
+      if (booking.memberId !== member.id) return false;
+      if (booking.journal && booking.journal.registredTime) {
+        const journalDate = new Date(booking.journal.registredTime);
+        return (
+          journalDate.getFullYear() === selectedDate.getFullYear() &&
+          journalDate.getMonth() === selectedDate.getMonth() &&
+          journalDate.getDate() === selectedDate.getDate() &&
+          (!booking.journal.leaveTime ||
+            new Date(booking.journal.leaveTime) > new Date())
+        );
+      }
+      if (booking.abonnement && booking.abonnement.registredDate) {
+        return (
+          !booking.abonnement.leaveDate ||
+          new Date(booking.abonnement.leaveDate) > new Date()
+        );
+      }
+      return false;
+    });
+  });
+
   // Ajouter les indicateurs hasJournal et hasAbonnement
-  const enrichedMembers = activeMembers.map((member) => ({
+  const enrichedMembers = availableMembers.map((member) => ({
     ...member,
     hasJournal: journals.some((j) => {
       if (j.memberID !== member.id || !j.registredTime) return false;
@@ -598,46 +623,46 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     [bookings]
   );
 
-  const handleBookSeat = async () => {
-    if (!currentSeat || !memberId) return;
+ const handleBookSeat = async () => {
+  if (!currentSeat || !memberId) return;
 
-    setIsBooking(true);
-    setBookingError(null);
+  setIsBooking(true);
+  setBookingError(null);
 
-    const payload = {
-      eventKey: "180346ed-b27d-4677-8975-f4b168d98cc0",
-      seats: [currentSeat.label],
-      memberId,
-    };
-
-    try {
-      if (modalMode === "update" && selectedBooking) {
-        if (!selectedBooking.id) throw new Error("Invalid booking ID");
-        await bookingService.deleteBooking(selectedBooking.id);
-        await bookingService.createBooking(payload);
-        setBookingSuccess("Booking updated successfully!");
-      } else {
-        await bookingService.createBooking(payload);
-        setBookingSuccess("Booking created successfully!");
-      }
-
-      setShowModal(false);
-      setCurrentSeat(null);
-      setMemberId("");
-      setSelectedBooking(null);
-      await fetchBookings();
-    } catch (error: any) {
-      const errorMessage = error.message.includes("suggestion")
-        ? `${error.message.split("suggestion")[0]} - Suggestion: ${
-            error.message.split("suggestion")[1]
-          }`
-        : error.message;
-      setBookingError(errorMessage);
-      await fetchBookings();
-    } finally {
-      setIsBooking(false);
-    }
+  const payload = {
+    eventKey: "180346ed-b27d-4677-8975-f4b168d98cc0",
+    seats: [currentSeat.label],
+    memberId,
   };
+
+  try {
+    if (modalMode === "update" && selectedBooking) {
+      if (!selectedBooking.id) throw new Error("Invalid booking ID");
+      await bookingService.deleteBooking(selectedBooking.id);
+      await bookingService.createBooking(payload);
+      setBookingSuccess("Booking updated successfully!");
+    } else {
+      await bookingService.createBooking(payload);
+      setBookingSuccess("Booking created successfully!");
+    }
+
+    setShowModal(false);
+    setCurrentSeat(null);
+    setMemberId("");
+    setSelectedBooking(null);
+    await fetchBookings(); // Cela met à jour les réservations et réapplique le filtre
+  } catch (error: any) {
+    const errorMessage = error.message.includes("suggestion")
+      ? `${error.message.split("suggestion")[0]} - Suggestion: ${
+          error.message.split("suggestion")[1]
+        }`
+      : error.message;
+    setBookingError(errorMessage);
+    await fetchBookings();
+  } finally {
+    setIsBooking(false);
+  }
+};
 
   const handleDeleteBooking = async () => {
     if (!selectedBooking?.id) {
@@ -693,7 +718,8 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     searchTerm,
     journals.data,
     abonnements.data,
-    selectedDate
+    selectedDate,
+    bookings
   );
 
   // Filtrage des réservations avec Fuse.js
