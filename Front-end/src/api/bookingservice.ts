@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import { BookSeatsPayload, BookingResponse } from "src/types/shared";
-
+import { API_URL } from "../config/axios";
 export class BookingService {
   private api: AxiosInstance;
 
@@ -77,4 +77,4 @@ export class BookingService {
   }
 }
 
-export const bookingService = new BookingService("http://localhost:4000");
+export const bookingService = new BookingService(API_URL as string);

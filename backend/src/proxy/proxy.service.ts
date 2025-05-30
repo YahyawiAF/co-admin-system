@@ -15,7 +15,9 @@ export class ProxyService {
       baseURL: 'https://api-sa.seatsio.net',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Basic ' + Buffer.from(`${process.env.SEATSIO_SECRET_KEY}:`).toString('base64')
+        Authorization:
+          'Basic ' +
+          Buffer.from(`${process.env.SEATSIO_SECRET_KEY}:`).toString('base64'),
       },
       timeout: 5000,
     });
@@ -26,7 +28,7 @@ export class ProxyService {
       // 1. Vérifier que le membre existe
       const memberExists = await this.prisma.member.findUnique({
         where: { id: data.memberId },
-        select: { id: true }
+        select: { id: true },
       });
 
       if (!memberExists) {
@@ -40,24 +42,26 @@ export class ProxyService {
       return await this.prisma.$transaction(async (prisma) => {
         // 3a. Réserver dans Seatsio
         const seatsioResponse = await this.bookSeatsInSeatsio(data);
-        
+
         // 3b. Enregistrer en base de données
         await this.saveBookingToDatabase(data, prisma);
-        
+
         // Map Seatsio response to BookingResponse
         return data.seats.map((seatId, index) => ({
           ...seatsioResponse[index],
           success: true,
         }));
       });
-
     } catch (error) {
       this.logger.error('Booking error', error.stack);
       throw error;
     }
   }
 
-  async updateBooking(bookingId: string, data: Partial<BookSeatsDto>): Promise<BookingResponse> {
+  async updateBooking(
+    bookingId: string,
+    data: Partial<BookSeatsDto>,
+  ): Promise<BookingResponse> {
     try {
       return await this.prisma.$transaction(async (prisma) => {
         // 1. Vérifier que la réservation existe
@@ -73,7 +77,7 @@ export class ProxyService {
         if (data.memberId) {
           const memberExists = await prisma.member.findUnique({
             where: { id: data.memberId },
-            select: { id: true }
+            select: { id: true },
           });
           if (!memberExists) {
             throw new Error('Member not found');
@@ -92,7 +96,7 @@ export class ProxyService {
             ...data,
             seats: data.seats || existingBooking.seatId.split(','),
             eventKey: data.eventKey || existingBooking.eventKey,
-            memberId: data.memberId || existingBooking.memberId
+            memberId: data.memberId || existingBooking.memberId,
           } as BookSeatsDto);
         }
 
@@ -103,8 +107,8 @@ export class ProxyService {
             eventKey: data.eventKey,
             seatId: data.seats?.join(','),
             memberId: data.memberId,
-            updatedAt: new Date()
-          }
+            updatedAt: new Date(),
+          },
         });
 
         return {
@@ -131,13 +135,16 @@ export class ProxyService {
         }
 
         // 2. Libérer les sièges dans Seatsio
-        await this.axiosInstance.post(`/events/${booking.eventKey}/actions/release`, {
-          objects: booking.seatId.split(',')
-        });
+        await this.axiosInstance.post(
+          `/events/${booking.eventKey}/actions/release`,
+          {
+            objects: booking.seatId.split(','),
+          },
+        );
 
         // 3. Supprimer la réservation en base
         await prisma.seatBooking.delete({
-          where: { id: bookingId }
+          where: { id: bookingId },
         });
 
         this.logger.log(`Booking ${bookingId} deleted successfully`);
@@ -151,10 +158,10 @@ export class ProxyService {
   async getAllBookings(): Promise<BookingResponse[]> {
     try {
       const bookings = await this.prisma.seatBooking.findMany({
-        where: { isBooked: true }
+        where: { isBooked: true },
       });
 
-      return bookings.map(booking => ({
+      return bookings.map((booking) => ({
         ...booking,
         success: true,
       }));
@@ -167,7 +174,7 @@ export class ProxyService {
   async getBookingById(bookingId: string): Promise<BookingResponse> {
     try {
       const booking = await this.prisma.seatBooking.findUnique({
-        where: { id: bookingId }
+        where: { id: bookingId },
       });
 
       if (!booking) {
@@ -184,7 +191,9 @@ export class ProxyService {
     }
   }
 
-  private async bookSeatsInSeatsio(data: BookSeatsDto): Promise<BookingResponse[]> {
+  private async bookSeatsInSeatsio(
+    data: BookSeatsDto,
+  ): Promise<BookingResponse[]> {
     const url = `/events/${data.eventKey}/actions/book`;
     const payload = {
       objects: data.seats,
@@ -192,10 +201,10 @@ export class ProxyService {
     };
 
     this.logger.debug(`Calling Seatsio: ${url}`, payload);
-    
+
     await this.axiosInstance.post(url, payload);
-    
-    return data.seats.map(seatId => ({
+
+    return data.seats.map((seatId) => ({
       id: '', // Will be set in saveBookingToDatabase
       eventKey: data.eventKey,
       seatId,
@@ -208,39 +217,42 @@ export class ProxyService {
     }));
   }
 
-  private async checkSeatsAvailability(eventKey: string, seats: string[]): Promise<void> {
+  private async checkSeatsAvailability(
+    eventKey: string,
+    seats: string[],
+  ): Promise<void> {
     const existingBookings = await this.prisma.seatBooking.findMany({
       where: {
         eventKey,
         seatId: { in: seats },
-        isBooked: true
+        isBooked: true,
       },
-      select: { seatId: true }
+      select: { seatId: true },
     });
 
     if (existingBookings.length > 0) {
-      const bookedSeats = existingBookings.map(b => b.seatId);
+      const bookedSeats = existingBookings.map((b) => b.seatId);
       throw new Error(`Seats already booked: ${bookedSeats.join(', ')}`);
     }
   }
 
   private async saveBookingToDatabase(
     data: BookSeatsDto,
-    prisma: Prisma.TransactionClient
+    prisma: Prisma.TransactionClient,
   ): Promise<void> {
     try {
       await Promise.all(
-        data.seats.map(seatId =>
+        data.seats.map((seatId) =>
           prisma.seatBooking.create({
             data: {
               eventKey: data.eventKey,
               seatId,
               isBooked: true,
               bookedAt: new Date(),
-              memberId: data.memberId
-            }
-          })
-        )
+              memberId: data.memberId,
+            },
+          }),
+        ),
       );
       this.logger.log(`Booking saved for member ${data.memberId}`);
     } catch (dbError) {
