@@ -349,6 +349,85 @@ interface AbonnementProps {
   selectedDate: Date;
 }
 
+const abonnementSearchOptions = {
+  keys: [
+    "member.firstName",
+    "member.lastName",
+    "price.name",
+    "id",
+    "stayedPeriode",
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+};
+
+const fuseOptions = {
+  keys: ["firstName", "lastName"],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+};
+
+const headCells: Array<HeadCell> = [
+  {
+    id: "member",
+    numeric: false,
+    disablePadding: true,
+    label: "Member",
+  },
+  {
+    id: "registredDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Registered Date",
+  },
+  {
+    id: "leaveDate",
+    numeric: false,
+    disablePadding: false,
+    label: "Leave Date",
+  },
+  {
+    id: "stayedPeriode",
+    numeric: false,
+    disablePadding: false,
+    label: "Stayed Period",
+  },
+  {
+    id: "remainingTime",
+    numeric: false,
+    disablePadding: false,
+    label: "Remaining Time",
+  },
+  {
+    id: "payedAmount",
+    numeric: false,
+    disablePadding: false,
+    label: "Paid Amount",
+  },
+  {
+    id: "status",
+    numeric: false,
+    disablePadding: false,
+    label: "Status",
+  },
+  {
+    id: "actions",
+    numeric: false,
+    disablePadding: false,
+    label: "Actions",
+    alignment: "center",
+  },
+];
+
+const isSameDay = (date1: Date, date2: Date) => {
+  return (
+    date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate()
+  );
+};
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
@@ -360,37 +439,20 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
-
-  const fuseOptions = {
-    keys: ["firstName", "lastName", "email"],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
 
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({});
+  } = useGetAbonnementsQuery({
+    page,
+    perPage: rowsPerPage,
+  });
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(
@@ -402,11 +464,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [createAbonnement] = useCreateAbonnementMutation();
   const [updateAbonnement] = useUpdateAbonnementMutation();
   const [deleteAbonnement] = useDeleteAbonnementMutation();
-  const {
-    data: membersList,
-    isLoading: isLoadingMember,
-    error: membersError,
-  } = useGetMembersQuery();
 
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
@@ -416,14 +473,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     isReservation: false,
     stayedPeriode: "",
   });
-
-  const isSameDay = (date1: Date, date2: Date) => {
-    return (
-      date1.getFullYear() === date2.getFullYear() &&
-      date1.getMonth() === date2.getMonth() &&
-      date1.getDate() === date2.getDate()
-    );
-  };
 
   const { expiredMembers, soonToExpireMembers, activeMembers } =
     React.useMemo(() => {
@@ -534,58 +583,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
-
-  const headCells: Array<HeadCell> = [
-    {
-      id: "member",
-      numeric: false,
-      disablePadding: true,
-      label: "Member",
-    },
-    {
-      id: "registredDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Registered Date",
-    },
-    {
-      id: "leaveDate",
-      numeric: false,
-      disablePadding: false,
-      label: "Leave Date",
-    },
-    {
-      id: "stayedPeriode",
-      numeric: false,
-      disablePadding: false,
-      label: "Stayed Period",
-    },
-    {
-      id: "remainingTime",
-      numeric: false,
-      disablePadding: false,
-      label: "Remaining Time",
-    },
-    {
-      id: "payedAmount",
-      numeric: false,
-      disablePadding: false,
-      label: "Paid Amount",
-    },
-    {
-      id: "status",
-      numeric: false,
-      disablePadding: false,
-      label: "Status",
-    },
-    {
-      id: "actions",
-      numeric: false,
-      disablePadding: false,
-      label: "Actions",
-      alignment: "center",
-    },
-  ];
 
   const membersWithSubscriptionStatus = members.map((member) => {
     const memberAbonnements =
