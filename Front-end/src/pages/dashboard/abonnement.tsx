@@ -360,7 +360,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [rowsPerPage, setRowsPerPage] = useState(50);
   const isMobile = useMediaQuery((theme: Theme) =>
     theme.breakpoints.down("sm")
   );
@@ -390,7 +390,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({});
+  } = useGetAbonnementsQuery({
+    page,
+    perPage: rowsPerPage,
+  });
   const { data: members = [] } = useGetMembersQuery();
   const { data: prices = [] } = useGetPricesQuery();
   const abonnementPrices = prices.filter(
@@ -1262,17 +1265,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               </TableBody>
             </Table>
           </StyledTableContainer>
-          <StyledTablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
+          <TablePagination
+            rowsPerPageOptions={[50, 100, 200, 500]}
+            component="div"
             count={filteredData.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage={isMobile ? "Rows:" : "Rows per page:"}
-            labelDisplayedRows={({ from, to, count }) =>
-              `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`
-            }
           />
         </TableWrapper>
       </MainContainer>
