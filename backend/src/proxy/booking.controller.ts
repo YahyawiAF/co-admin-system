@@ -1,4 +1,14 @@
-import { Body, Controller, Post, Put, Delete, Get, Param, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Post,
+  Put,
+  Delete,
+  Get,
+  Param,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { ProxyService } from '../proxy/proxy.service';
 import { BookingResponse } from './dtos/BookingResponseDto';
 import { BookSeatsDto } from './dtos/books.dtos';
@@ -16,9 +26,9 @@ export class BookingController {
         {
           status: 'error',
           error: error.message,
-          suggestion: this.getSuggestion(error.message)
+          suggestion: this.getSuggestion(error.message),
         },
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -26,7 +36,7 @@ export class BookingController {
   @Put(':id')
   async updateBooking(
     @Param('id') id: string,
-    @Body() body: Partial<BookSeatsDto>
+    @Body() body: Partial<BookSeatsDto>,
   ): Promise<BookingResponse> {
     try {
       return await this.proxyService.updateBooking(id, body);
@@ -35,9 +45,11 @@ export class BookingController {
         {
           status: 'error',
           error: error.message,
-          suggestion: this.getSuggestion(error.message)
+          suggestion: this.getSuggestion(error.message),
         },
-        error.message.includes('not found') ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST
+        error.message.includes('not found')
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -51,9 +63,11 @@ export class BookingController {
         {
           status: 'error',
           error: error.message,
-          suggestion: this.getSuggestion(error.message)
+          suggestion: this.getSuggestion(error.message),
         },
-        error.message.includes('not found') ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST
+        error.message.includes('not found')
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -67,9 +81,9 @@ export class BookingController {
         {
           status: 'error',
           error: error.message,
-          suggestion: this.getSuggestion(error.message)
+          suggestion: this.getSuggestion(error.message),
         },
-        HttpStatus.BAD_REQUEST
+        HttpStatus.BAD_REQUEST,
       );
     }
   }
@@ -83,9 +97,11 @@ export class BookingController {
         {
           status: 'error',
           error: error.message,
-          suggestion: this.getSuggestion(error.message)
+          suggestion: this.getSuggestion(error.message),
         },
-        error.message.includes('not found') ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST
+        error.message.includes('not found')
+          ? HttpStatus.NOT_FOUND
+          : HttpStatus.BAD_REQUEST,
       );
     }
   }
