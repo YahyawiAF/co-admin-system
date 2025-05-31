@@ -455,7 +455,7 @@ const SeatingChart: NextPage<SeatingChartProps> & {
         return false;
       });
       setBookings(enrichedBookings);
-      const totalSeats = 46;
+      const totalSeats = 48;
       setBookedSeats(filteredBookings.length);
       setAvailableSeats(totalSeats - filteredBookings.length);
     } catch (error: any) {

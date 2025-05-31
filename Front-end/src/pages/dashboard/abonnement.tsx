@@ -1,4 +1,4 @@
-import React, { ReactElement, useState } from "react";
+import React, { ReactElement, useState, useEffect } from "react";
 import { useTheme } from "@mui/material/styles";
 import { PersonAdd } from "@mui/icons-material";
 import DashboardLayout from "../../layouts/Dashboard";
@@ -48,6 +48,7 @@ import {
   Theme,
   Autocomplete,
   TablePagination,
+  Snackbar,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import { DateTimePicker } from "@mui/x-date-pickers";
@@ -61,6 +62,52 @@ import TableHeadAction from "../../components/Table/members/TableHeader";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
+import { bookingService } from "src/api/bookingservice"; // Supposons que ceci est utilisé pour le ping
+
+// Cache utilities
+const setCache = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error("Error setting cache:", error);
+  }
+};
+
+const getCache = (key: string) => {
+  try {
+    const data = localStorage.getItem(key);
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    console.error("Error getting cache:", error);
+    return null;
+  }
+};
+
+// Queue utilities
+interface OfflineAction {
+  type: "create" | "update" | "delete";
+  payload: any;
+  id?: string;
+  timestamp: number;
+}
+
+const addToQueue = (action: OfflineAction) => {
+  try {
+    const queue: OfflineAction[] = getCache("offlineQueue") || [];
+    queue.push(action);
+    setCache("offlineQueue", queue);
+  } catch (error) {
+    console.error("Error adding to queue:", error);
+  }
+};
+
+const getQueue = (): OfflineAction[] => {
+  return getCache("offlineQueue") || [];
+};
+
+const clearQueue = () => {
+  setCache("offlineQueue", []);
+};
 
 // Fonctions de tri
 function getComparator(
@@ -113,7 +160,7 @@ function stableSort<T>(array: T[], comparator: (a: T, b: T) => number) {
   return stabilizedThis.map((el) => el[0]);
 }
 
-// Styles (identiques à l'original)
+// Styles
 const StatsCard = styled(Card)(({ theme }) => ({
   height: "100%",
   borderRadius: theme.shape.borderRadius * 2,
@@ -349,37 +396,70 @@ interface AbonnementProps {
   selectedDate: Date;
 }
 
+// Hooks personnalisés
+const useCachedAbonnementsQuery = (params: any) => {
+  const result = useGetAbonnementsQuery(params);
+  useEffect(() => {
+    if (result.data) {
+      setCache("abonnements", result.data);
+    }
+  }, [result.data]);
+  return {
+    ...result,
+    data: result.data || getCache("abonnements") || { data: [] },
+  };
+};
+
+const useCachedMembersQuery = () => {
+  const result = useGetMembersQuery();
+  useEffect(() => {
+    if (result.data) {
+      setCache("members", result.data);
+    }
+  }, [result.data]);
+  return {
+    ...result,
+    data: result.data || getCache("members") || [],
+  };
+};
+
+const useCachedPricesQuery = () => {
+  const result = useGetPricesQuery();
+  useEffect(() => {
+    if (result.data) {
+      setCache("prices", result.data);
+    }
+  }, [result.data]);
+  return {
+    ...result,
+    data: result.data || getCache("prices") || [],
+  };
+};
+
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<
-    "active" | "expired" | "all"
-  >("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "expired" | "all">("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const isMobile = useMediaQuery((theme: Theme) =>
-    theme.breakpoints.down("sm")
-  );
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
 
   const fuseOptions = {
     keys: ["firstName", "lastName"],
-    threshold: 0.4, // Niveau de tolérance aux fautes de frappe
+    threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,
   };
 
   const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
+    keys: ["member.firstName", "member.lastName", "price.name", "id", "stayedPeriode"],
     threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,
@@ -390,12 +470,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     isLoading,
     isError,
     refetch,
-  } = useGetAbonnementsQuery({});
-  const { data: members = [] } = useGetMembersQuery();
-  const { data: prices = [] } = useGetPricesQuery();
-  const abonnementPrices = prices.filter(
-    (price) => price.type === "abonnement"
-  );
+  } = useCachedAbonnementsQuery({});
+  const { data: members = [] } = useCachedMembersQuery();
+  const { data: prices = [] } = useCachedPricesQuery();
+  const abonnementPrices = prices.filter((price: Price) => price.type === "abonnement");
 
   const [openUserForm, setOpenUserForm] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
@@ -406,7 +484,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     data: membersList,
     isLoading: isLoadingMember,
     error: membersError,
-  } = useGetMembersQuery();
+  } = useCachedMembersQuery();
 
   const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
     registredDate: selectedDate,
@@ -417,6 +495,98 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     stayedPeriode: "",
   });
 
+  const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
+  const [showDrawer, setShowDrawer] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [openMemberModal, setOpenMemberModal] = useState(false);
+
+  // Vérification périodique de la connectivité
+  useEffect(() => {
+    const checkConnection = async () => {
+      try {
+        // Effectuer une requête de test vers le backend
+        await bookingService.getAllBookings(); // Remplacez par une API légère de votre backend
+        if (!isOnline) {
+          setIsOnline(true);
+          setSuccessMessage("Connection restored!");
+        }
+      } catch (error) {
+        if (isOnline) {
+          setIsOnline(false);
+          setErrorMessage("Connection lost. Working offline.");
+        }
+      }
+    };
+
+    // Vérifier immédiatement et ensuite toutes les 30 secondes
+    checkConnection();
+    const interval = setInterval(checkConnection, 30000);
+
+    return () => clearInterval(interval);
+  }, [isOnline]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOnline) {
+      const syncQueue = async () => {
+        const queue = getQueue();
+        if (queue.length === 0) return;
+
+        let syncedActions = 0;
+        let failedActions = 0;
+
+        try {
+          for (const action of queue) {
+            try {
+              if (action.type === "create") {
+                await createAbonnement(action.payload).unwrap();
+                syncedActions++;
+              } else if (action.type === "update" && action.id) {
+                await updateAbonnement({ id: action.id, data: action.payload }).unwrap();
+                syncedActions++;
+              } else if (action.type === "delete" && action.id) {
+                await deleteAbonnement(action.id).unwrap();
+                syncedActions++;
+              }
+            } catch (error) {
+              failedActions++;
+              console.error(`Failed to sync ${action.type} action:`, error);
+            }
+          }
+          clearQueue();
+          if (syncedActions > 0) {
+            setSuccessMessage(
+              `${syncedActions} offline action${syncedActions > 1 ? 's' : ''} synced successfully!`
+            );
+          }
+          if (failedActions > 0) {
+            setErrorMessage(
+              `${failedActions} action${failedActions > 1 ? 's' : ''} failed to sync.`
+            );
+          }
+          refetch();
+        } catch (error: any) {
+          setErrorMessage("Error syncing offline actions: " + error.message);
+        }
+      };
+      syncQueue();
+    }
+  }, [isOnline, refetch, createAbonnement, updateAbonnement, deleteAbonnement]);
+
   const isSameDay = (date1: Date, date2: Date) => {
     return (
       date1.getFullYear() === date2.getFullYear() &&
@@ -425,48 +595,47 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     );
   };
 
-  const { expiredMembers, soonToExpireMembers, activeMembers } =
-    React.useMemo(() => {
-      const today = new Date(selectedDate);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
+  const { expiredMembers, soonToExpireMembers, activeMembers } = React.useMemo(() => {
+    const today = new Date(selectedDate);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
 
-      const expired: string[] = [];
-      const soonToExpire: string[] = [];
-      const active: string[] = [];
+    const expired: string[] = [];
+    const soonToExpire: string[] = [];
+    const active: string[] = [];
 
-      abonnementsData?.data.forEach((abonnement) => {
-        const member = members.find((m) => m.id === abonnement.memberID);
-        if (!member || !abonnement.leaveDate) return;
+    abonnementsData?.data.forEach((abonnement: Abonnement) => {
+      const member = members.find((m: any) => m.id === abonnement.memberID);
+      if (!member || !abonnement.leaveDate) return;
 
-        const memberName = `${member.firstName} ${member.lastName}`;
-        const leaveDate = new Date(abonnement.leaveDate);
+      const memberName = `${member.firstName} ${member.lastName}`;
+      const leaveDate = new Date(abonnement.leaveDate);
 
-        if (isSameDay(leaveDate, today)) {
-          if (!expired.includes(memberName)) expired.push(memberName);
-        } else if (isSameDay(leaveDate, tomorrow)) {
-          if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
-        } else if (
-          abonnement.registredDate &&
-          isSameDay(new Date(abonnement.registredDate), today)
-        ) {
-          if (!active.includes(memberName)) active.push(memberName);
-        }
-      });
+      if (isSameDay(leaveDate, today)) {
+        if (!expired.includes(memberName)) expired.push(memberName);
+      } else if (isSameDay(leaveDate, tomorrow)) {
+        if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
+      } else if (
+        abonnement.registredDate &&
+        isSameDay(new Date(abonnement.registredDate), today)
+      ) {
+        if (!active.includes(memberName)) active.push(memberName);
+      }
+    });
 
-      return {
-        expiredMembers: expired,
-        soonToExpireMembers: soonToExpire,
-        activeMembers: active,
-      };
-    }, [abonnementsData, members, selectedDate]);
+    return {
+      expiredMembers: expired,
+      soonToExpireMembers: soonToExpire,
+      activeMembers: active,
+    };
+  }, [abonnementsData, members, selectedDate]);
 
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
-    const enrichedData = abonnementsData.data.map((abonnement) => ({
+    const enrichedData = abonnementsData.data.map((abonnement: any) => ({
       ...abonnement,
-      member: members.find((m) => m.id === abonnement.memberID),
-      price: prices.find((p) => p.id === abonnement.priceId),
+      member: members.find((m: any) => m.id === abonnement.memberID),
+      price: prices.find((p: any) => p.id === abonnement.priceId),
     }));
 
     let filtered = enrichedData;
@@ -474,10 +643,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     if (search && search.length >= 2) {
       const fuse = new Fuse(enrichedData, abonnementSearchOptions);
       const results = fuse.search(search);
-      filtered = results.map((result) => result.item);
+      filtered = results.map((result: any) => result.item);
     }
 
-    filtered = filtered.filter((abonnement) => {
+    filtered = filtered.filter((abonnement: any) => {
       if (!abonnement.registredDate || !abonnement.leaveDate) return false;
       const startDate = new Date(abonnement.registredDate);
       const endDate = new Date(abonnement.leaveDate);
@@ -494,7 +663,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       }
     });
 
-    filtered = filtered.filter((abonnement) => {
+    filtered = filtered.filter((abonnement: any) => {
       if (!abonnement.leaveDate) return true;
       const leaveDate = new Date(abonnement.leaveDate);
       const now = new Date();
@@ -510,30 +679,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     });
 
     return stableSort(filtered, getComparator(order, orderBy));
-  }, [
-    abonnementsData?.data,
-    timeFilter,
-    statusFilter,
-    prices,
-    search,
-    members,
-    order,
-    orderBy,
-  ]);
+  }, [abonnementsData?.data, timeFilter, statusFilter, prices, search, members, order, orderBy]);
 
   const paginatedData = React.useMemo(() => {
     const startIndex = page * rowsPerPage;
     return filteredData.slice(startIndex, startIndex + rowsPerPage);
   }, [filteredData, page, rowsPerPage]);
-
-  const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
-    null
-  );
-  const [showDrawer, setShowDrawer] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [openMemberModal, setOpenMemberModal] = useState(false);
 
   const headCells: Array<HeadCell> = [
     {
@@ -587,16 +738,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     },
   ];
 
-  const membersWithSubscriptionStatus = members.map((member) => {
+  const membersWithSubscriptionStatus = members.map((member: any) => {
     const memberAbonnements =
-      abonnementsData?.data.filter(
-        (abonnement) => abonnement.memberID === member.id
-      ) || [];
-    const hasActiveSubscription = memberAbonnements.some((abonnement) => {
+      abonnementsData?.data.filter((abonnement: any) => abonnement.memberID === member.id) || [];
+    const hasActiveSubscription = memberAbonnements.some((abonnement: any) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) >= new Date();
     });
-    const hasExpiredSubscription = memberAbonnements.some((abonnement) => {
+    const hasExpiredSubscription = memberAbonnements.some((abonnement: any) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) < new Date();
     });
@@ -639,12 +788,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
-    setPage(0); // Réinitialiser la page lors du tri
+    setPage(0);
   };
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelected = paginatedData.map((n) => n.id);
+      const newSelected = paginatedData.map((n: any) => n.id);
       setSelected(newSelected);
       return;
     }
@@ -713,54 +862,110 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
+
+    const selectedPrice = prices.find(
+      (p: Price) => p.id === (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
+    );
+    const stayedPeriode = selectedPrice
+      ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})`
+      : "";
+
+    const abonnementData = {
+      ...(editAbonnement || newAbonnement),
+      stayedPeriode,
+      registredDate: new Date(editAbonnement?.registredDate || newAbonnement.registredDate),
+      leaveDate: new Date(editAbonnement?.leaveDate || newAbonnement.leaveDate),
+    };
+
+    if (!isOnline) {
+      const action: OfflineAction = {
+        type: editAbonnement ? "update" : "create",
+        payload: abonnementData,
+        id: editAbonnement?.id,
+        timestamp: Date.now(),
+      };
+      addToQueue(action);
+
+      const currentAbonnements = getCache("abonnements") || { data: [] };
+      let updatedAbonnements;
+      if (editAbonnement) {
+        updatedAbonnements = {
+          data: currentAbonnements.data.map((a: Abonnement) =>
+            a.id === editAbonnement.id ? abonnementData : a
+          ),
+        };
+      } else {
+        abonnementData.id = `offline-${Date.now()}`;
+        updatedAbonnements = {
+          data: [...currentAbonnements.data, abonnementData],
+        };
+      }
+      setCache("abonnements", updatedAbonnements);
+
+      handleCloseDrawer();
+      setSuccessMessage("Action queued for sync!");
+      return;
+    }
+
     try {
-      const selectedPrice = prices.find(
-        (p) =>
-          p.id ===
-          (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
-      );
-      const stayedPeriode = selectedPrice
-        ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})`
-        : "";
       if (editAbonnement) {
         await updateAbonnement({
           id: editAbonnement.id,
-          data: {
-            ...editAbonnement,
-            stayedPeriode,
-            registredDate: new Date(editAbonnement.registredDate),
-            leaveDate: new Date(editAbonnement.leaveDate || new Date()),
-          },
+          data: abonnementData,
         }).unwrap();
+        setSuccessMessage("Subscription updated successfully!");
       } else {
-        await createAbonnement({
-          ...newAbonnement,
-          stayedPeriode,
-          registredDate: new Date(newAbonnement.registredDate),
-          leaveDate: new Date(newAbonnement.leaveDate),
-        }).unwrap();
+        await createAbonnement(abonnementData).unwrap();
+        setSuccessMessage("Subscription created successfully!");
       }
       handleCloseDrawer();
       refetch();
     } catch (error) {
       console.error("Error saving subscription:", error);
+      setErrorMessage("Failed to save subscription.");
     }
   };
 
   const handleDelete = async () => {
-    if (abonnementToDelete) {
-      try {
-        await deleteAbonnement(abonnementToDelete).unwrap();
-        refetch();
-        if (paginatedData.length === 1 && page > 0) {
-          setPage(page - 1);
-        }
-      } catch (error) {
-        console.error("Error deleting subscription:", error);
-      } finally {
-        setShowDeleteModal(false);
-        setAbonnementToDelete(null);
+    if (!abonnementToDelete) return;
+
+    if (!isOnline) {
+      const action: OfflineAction = {
+        type: "delete",
+        id: abonnementToDelete,
+        payload: null,
+        timestamp: Date.now(),
+      };
+      addToQueue(action);
+
+      const currentAbonnements = getCache("abonnements") || { data: [] };
+      const updatedAbonnements = {
+        data: currentAbonnements.data.filter((a: Abonnement) => a.id !== abonnementToDelete),
+      };
+      setCache("abonnements", updatedAbonnements);
+
+      setSuccessMessage("Deletion queued for sync!");
+      setShowDeleteModal(false);
+      setAbonnementToDelete(null);
+      if (paginatedData.length === 1 && page > 0) {
+        setPage(page - 1);
       }
+      return;
+    }
+
+    try {
+      await deleteAbonnement(abonnementToDelete).unwrap();
+      refetch();
+      setSuccessMessage("Subscription deleted successfully!");
+      if (paginatedData.length === 1 && page > 0) {
+        setPage(page - 1);
+      }
+    } catch (error) {
+      console.error("Error deleting subscription:", error);
+      setErrorMessage("Failed to delete subscription.");
+    } finally {
+      setShowDeleteModal(false);
+      setAbonnementToDelete(null);
     }
   };
 
@@ -789,7 +994,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     const durationDays = end - start;
     leaveDate.setDate(leaveDate.getDate() + durationDays);
 
-    // Preserve existing time from leaveDate if available
     const currentLeaveDate =
       editAbonnement?.leaveDate || newAbonnement.leaveDate;
     if (currentLeaveDate) {
@@ -891,21 +1095,17 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     const newDate = date || selectedDate;
     let newLeaveDate: Date;
 
-    // Get the selected price
     const currentPriceId = editAbonnement?.priceId || newAbonnement.priceId;
-    const selectedPrice = prices.find((p) => p.id === currentPriceId);
+    const selectedPrice = prices.find((p: Price) => p.id === currentPriceId);
 
     if (selectedPrice) {
-      // Calculate duration from price
       const start = parseInt(selectedPrice.timePeriod.start, 10);
       const end = parseInt(selectedPrice.timePeriod.end, 10);
       const durationDays = end - start;
 
-      // Calculate new leave date
       newLeaveDate = new Date(newDate);
       newLeaveDate.setDate(newDate.getDate() + durationDays);
 
-      // Preserve existing time from leaveDate if available
       const currentLeaveDate =
         editAbonnement?.leaveDate || newAbonnement.leaveDate;
       if (currentLeaveDate) {
@@ -916,7 +1116,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         );
       }
     } else {
-      // If no price is selected, use the existing leaveDate or fallback to newDate
       newLeaveDate = new Date(
         editAbonnement?.leaveDate || newAbonnement.leaveDate || newDate
       );
@@ -950,7 +1149,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError)
+  if (isError && !abonnementsData?.data)
     return <Alert severity="error">Error loading subscriptions</Alert>;
   if (openUserForm)
     return (
@@ -1141,12 +1340,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedData.map((abonnement) => {
+                  paginatedData.map((abonnement: any) => {
                     const member = members.find(
-                      (m) => m.id === abonnement.memberID
+                      (m: any) => m.id === abonnement.memberID
                     );
                     const price = prices.find(
-                      (p) => p.id === abonnement.priceId
+                      (p: any) => p.id === abonnement.priceId
                     );
                     const leaveDate = abonnement.leaveDate
                       ? new Date(abonnement.leaveDate)
@@ -1334,7 +1533,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
             }
             value={
               membersWithSubscriptionStatus.find(
-                (m) =>
+                (m: any) =>
                   m.id === (editAbonnement?.memberID || newAbonnement.memberID)
               ) || null
             }
@@ -1352,7 +1551,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               }
               const fuse = new Fuse(options, fuseOptions);
               const results = fuse.search(inputValue);
-              return results.map((result) => result.item);
+              return results.map((result: any) => result.item);
             }}
             renderInput={(params) => (
               <TextField
@@ -1380,18 +1579,18 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           Select Rate *
         </Typography>
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          {abonnementPrices.map((price) => (
+          {abonnementPrices.map((price: any) => (
             <Grid item xs={12} sm={6} key={price.id}>
               <PriceCard
                 sx={{
                   border:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "2px solid #054547"
                       : "1px solid #ddd",
                   backgroundColor:
                     (editAbonnement?.priceId || newAbonnement.priceId) ===
-                      price.id
+                    price.id
                       ? "#f5f9f9"
                       : "#fff",
                 }}
@@ -1545,6 +1744,34 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           defaultPlan={Subscription.Membership}
         />
       </Drawer>
+      <Snackbar
+        open={!!successMessage}
+        autoHideDuration={3000}
+        onClose={() => setSuccessMessage(null)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity="success" onClose={() => setSuccessMessage(null)}>
+          {successMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={!!errorMessage}
+        autoHideDuration={6000}
+        onClose={() => setErrorMessage(null)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity="error" onClose={() => setErrorMessage(null)}>
+          {errorMessage}
+        </Alert>
+      </Snackbar>
+      <Snackbar
+        open={!isOnline}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity="warning">
+          You are offline. Actions will be synced when connection is restored.
+        </Alert>
+      </Snackbar>
     </PageContainer>
   );
 };
