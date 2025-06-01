@@ -1259,17 +1259,14 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
               </TableBody>
             </Table>
           </StyledTableContainer>
-          <StyledTablePagination
-            rowsPerPageOptions={[5, 10, 25, 50]}
+          <TablePagination
+            rowsPerPageOptions={[50, 100, 200, 500]}
+            component="div"
             count={filteredData.length}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
             onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage={isMobile ? "Rows:" : "Rows per page:"}
-            labelDisplayedRows={({ from, to, count }) =>
-              `${from}–${to} of ${count !== -1 ? count : `more than ${to}`}`
-            }
           />
         </TableWrapper>
       </MainContainer>
@@ -1508,7 +1505,11 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           <ActionButton variant="outlined" onClick={handleCloseDrawer}>
             Cancel
           </ActionButton>
-          <SubmitButton variant="contained" onClick={handleSubmit}>
+          <SubmitButton
+            disabled={isLoading}
+            variant="contained"
+            onClick={handleSubmit}
+          >
             {editAbonnement ? "Confirm" : "Confirm"}
           </SubmitButton>
         </Box>
