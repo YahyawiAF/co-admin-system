@@ -202,3 +202,5 @@ export const {
   useUpdateDailyProductMutation,
   useDeleteDailyProductMutation,
 } = productApi;
+export type { Product };
+
