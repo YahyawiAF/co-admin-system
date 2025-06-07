@@ -1,5 +1,12 @@
 import { PrismaService } from '../../../database/prisma.service';
-import { BadRequestException, ConflictException, HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { AddUserDto, CreateUserDto } from './dtos/create-user.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { TypedEventEmitter } from 'src/modules/event-emitter/typed-event-emitter.class';
@@ -97,17 +104,17 @@ export class UsersService {
         roundsOfHashing,
       );
     }
-  
+
     // Vérification fullname
     if (updateUserDto.fullname) {
       const existingUserByUsername = await this.prisma.user.findFirst({
         where: { fullname: updateUserDto.fullname },
       });
       if (existingUserByUsername && existingUserByUsername.id !== id) {
-        throw new ConflictException('Ce nom d\'utilisateur est déjà pris.');
+        throw new ConflictException("Ce nom d'utilisateur est déjà pris.");
       }
     }
-  
+
     // Vérification phoneNumber
     if (updateUserDto.phoneNumber) {
       const existingUserByPhone = await this.prisma.user.findFirst({
@@ -117,57 +124,63 @@ export class UsersService {
         throw new ConflictException('Ce numéro de téléphone est déjà utilisé.');
       }
     }
-  
+
+    // Vérification email
+    if (updateUserDto.email) {
+      const existingUserByEmail = await this.prisma.user.findFirst({
+        where: { email: updateUserDto.email },
+      });
+      if (existingUserByEmail && existingUserByEmail.id !== id) {
+        throw new ConflictException('Cet email est déjà utilisé.');
+      }
+    }
+
     // Mise à jour avec sélection explicite des champs retournés
     return this.prisma.user.update({
       where: { id },
       data: updateUserDto,
-      select: { // Ajout crucial
+      select: {
         id: true,
         fullname: true,
         email: true,
         phoneNumber: true,
         role: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+        img: true,
+      },
     });
   }
-  
-  
 
   remove(id: string) {
     return this.prisma.user.delete({ where: { id } });
   }
 
-
- async changePassword(userId: string, oldPassword: string, newPassword: string) {
+  async changePassword(
+    userId: string,
+    oldPassword: string,
+    newPassword: string,
+  ) {
     console.log('User ID:', userId);
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { password: true } 
+      select: { password: true },
     });
-  
+
     if (!user) {
       throw new NotFoundException('Utilisateur non trouvé');
     }
-  
+
     // Vérifier l'ancien mot de passe
-    const isPasswordValid = await bcrypt.compare(
-      oldPassword,
-      user.password
-    );
-  
+    const isPasswordValid = await bcrypt.compare(oldPassword, user.password);
+
     if (!isPasswordValid) {
       throw new UnauthorizedException('Ancien mot de passe incorrect');
     }
-  
+
     // Hasher le nouveau mot de passe
-    const hashedPassword = await bcrypt.hash(
-      newPassword,
-      roundsOfHashing
-    );
-  
+    const hashedPassword = await bcrypt.hash(newPassword, roundsOfHashing);
+
     // Mettre à jour le mot de passe
     return this.prisma.user.update({
       where: { id: userId },
@@ -179,10 +192,8 @@ export class UsersService {
         phoneNumber: true,
         role: true,
         createdAt: true,
-        updatedAt: true
-      }
+        updatedAt: true,
+      },
     });
   }
-  
-  
 }

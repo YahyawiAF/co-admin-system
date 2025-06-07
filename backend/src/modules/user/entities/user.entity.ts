@@ -36,11 +36,14 @@ export class UserEntity implements User {
   @ApiProperty({ enum: Role, enumName: 'Role' })
   role: Role;
 
-  @Exclude()
+  @Exclude()z
   password: string;
   @ApiProperty()
   resetPasswordToken :string;
   @ApiProperty()
   phoneNumber: string;
+
+  @ApiProperty({ required: false }) 
+  img: string;
 
 }

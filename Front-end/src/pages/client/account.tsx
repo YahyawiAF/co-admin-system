@@ -23,13 +23,13 @@ import {
   Divider,
   CardContent,
   CardActions,
+  CircularProgress,
 } from "@mui/material";
 import PublicLayout from "src/layouts/PublicLayout";
 import { AccountDetailsForm } from "src/components/pages/dashboard/account/AccountDetailsForm";
 import { AccountInfo } from "src/components/pages/dashboard/account/AccountInfo";
-import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
-import { useUpdateUserMutation } from "src/api/user.repo";
+import { useUpdateUserMutation, useGetUserByIdQuery } from "src/api/user.repo";
 import { useChangePasswordMutation } from "src/api/user.repo";
 
 export const metadata: Metadata = {
@@ -47,31 +47,113 @@ function Account(): React.JSX.Element {
     role: string;
     email?: string;
     phone?: string;
-  }>({ username: "", role: "" });
+    img?: string;
+  }>({ username: "", role: "", img: "" });
   const [notification, setNotification] = React.useState<{
     open: boolean;
     message: string;
     severity: "success" | "error";
   }>({ open: false, message: "", severity: "success" });
+  const [isUploading, setIsUploading] = React.useState(false);
+
+  const userId =
+    typeof window !== "undefined" ? sessionStorage.getItem("userID") : null;
+  const {
+    data: user,
+    isLoading,
+    error,
+  } = useGetUserByIdQuery(userId || "", {
+    skip: !userId,
+  });
 
   React.useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (user) {
+      sessionStorage.setItem("username", user.fullname || "");
+      sessionStorage.setItem("email", user.email || "");
+      sessionStorage.setItem("phone", user.phoneNumber || "");
+      sessionStorage.setItem("img", user.img || "");
+      sessionStorage.setItem("Role", user.role || "USER");
+
+      setUserData({
+        username: user.fullname || "",
+        role: user.role || "USER",
+        email: user.email || undefined,
+        phone: user.phoneNumber || undefined,
+        img: user.img || undefined,
+      });
+    } else if (typeof window !== "undefined") {
       const storedData = {
         username: sessionStorage.getItem("username") || "",
         role: sessionStorage.getItem("Role") || "USER",
         email: sessionStorage.getItem("email") || undefined,
         phone: sessionStorage.getItem("phone") || undefined,
+        img: sessionStorage.getItem("img") || undefined,
       };
       setUserData(storedData);
     }
-  }, []);
-  const [confirmPassword, setConfirmPassword] = React.useState("");
+  }, [user]);
 
+  React.useEffect(() => {
+    if (error) {
+      setNotification({
+        open: true,
+        message: "Error retrieving user data.",
+        severity: "error",
+      });
+    }
+  }, [error]);
+
+  const [confirmPassword, setConfirmPassword] = React.useState("");
   const [changePassword] = useChangePasswordMutation();
   const [passwords, setPasswords] = React.useState({
     oldPassword: "",
     newPassword: "",
   });
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+
+      const uploadedImageUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          resolve(event.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      setUserData((prev) => ({ ...prev, img: uploadedImageUrl }));
+
+      sessionStorage.setItem("img", uploadedImageUrl);
+
+      const userId = sessionStorage.getItem("userID");
+      if (userId) {
+        await updateUser({
+          id: userId,
+          data: { img: uploadedImageUrl },
+        }).unwrap();
+      }
+
+      setNotification({
+        open: true,
+        message: "Profile picture updated successfully!",
+        severity: "success",
+      });
+    } catch (error) {
+      console.error("Failed to upload image:", error);
+      setNotification({
+        open: true,
+        message: "Failed to upload image.",
+        severity: "error",
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleChangePassword = async () => {
     try {
       await changePassword({
@@ -81,17 +163,17 @@ function Account(): React.JSX.Element {
 
       setNotification({
         open: true,
-        message: "Mot de passe changé avec succès !",
+        message: "Password changed successfully!",
         severity: "success",
       });
 
       setPasswords({ oldPassword: "", newPassword: "" });
+      setConfirmPassword("");
     } catch (error: any) {
-      console.error("Erreur lors du changement de mot de passe:", error);
+      console.error("Error changing password:", error);
       setNotification({
         open: true,
-        message:
-          error?.data?.message || "Erreur lors du changement de mot de passe.",
+        message: error?.data?.message || "Error changing password.",
         severity: "error",
       });
     }
@@ -101,36 +183,34 @@ function Account(): React.JSX.Element {
     username: string;
     email?: string;
     phone?: string;
+    img?: string;
   }) => {
     const userId = sessionStorage.getItem("userID");
     if (!userId) {
       setNotification({
         open: true,
-        message: "Utilisateur non authentifié.",
+        message: "User not authenticated.",
         severity: "error",
       });
       return;
     }
 
     try {
-      // 1. Conversion des noms de champs frontend -> backend
       const backendData: any = {
         fullname: updateData.username,
         phoneNumber: updateData.phone,
+        img: updateData.img || userData.img,
       };
 
-      // Si l'email est défini, on l'ajoute aux données envoyées, sinon on ne l'ajoute pas
       if (updateData.email) {
         backendData.email = updateData.email;
       }
 
-      // 2. Appel API avec vérification de type explicite
       const updatedUser = await updateUser({
         id: userId,
         data: backendData,
       }).unwrap();
 
-      // 3. Mise à jour sessionStorage avec vérification de type
       sessionStorage.setItem("username", updatedUser.fullname || "");
       if (updatedUser.email) {
         sessionStorage.setItem("email", updatedUser.email);
@@ -138,44 +218,44 @@ function Account(): React.JSX.Element {
       if (updatedUser.phoneNumber) {
         sessionStorage.setItem("phone", updatedUser.phoneNumber);
       }
+      if (updatedUser.img) {
+        sessionStorage.setItem("img", updatedUser.img);
+      }
 
-      // 4. Mise à jour du state avec typage strict
       setUserData((prev) => ({
         ...prev,
         username: updatedUser.fullname || prev.username,
         email: updatedUser.email || prev.email,
         phone: updatedUser.phoneNumber || prev.phone,
+        img: updatedUser.img || prev.img,
       }));
 
-      // 5. Notification de succès
       setNotification({
         open: true,
-        message: "Profil mis à jour avec succès !",
+        message: "Profile updated successfully!",
         severity: "success",
       });
     } catch (error: any) {
-      console.error("Erreur de mise à jour :", error);
+      console.error("Update error:", error);
 
-      // 6. Gestion d'erreur améliorée
       const errorMessage = error?.data?.message?.toLowerCase() || "";
       const statusCode = error?.status;
 
-      let notificationMessage =
-        "Échec de la mise à jour du profil. Veuillez réessayer.";
+      let notificationMessage = "Failed to update profile. Please try again.";
 
       if (statusCode === 400 || statusCode === 409) {
         if (
-          errorMessage.includes("nom d'utilisateur") ||
+          errorMessage.includes("username") ||
           errorMessage.includes("fullname")
         ) {
-          notificationMessage = "Ce nom d'utilisateur est déjà pris.";
+          notificationMessage = "This username is already taken.";
         } else if (errorMessage.includes("email")) {
-          notificationMessage = "Cet email est déjà utilisé.";
+          notificationMessage = "This email is already in use.";
         } else if (
-          errorMessage.includes("téléphone") ||
-          errorMessage.includes("numéro")
+          errorMessage.includes("phone") ||
+          errorMessage.includes("number")
         ) {
-          notificationMessage = "Ce numéro de téléphone est déjà utilisé.";
+          notificationMessage = "This phone number is already in use.";
         }
       }
 
@@ -189,9 +269,6 @@ function Account(): React.JSX.Element {
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem("accessToken");
-    const Role = sessionStorage.getItem("Role");
-    const username = sessionStorage.getItem("username");
-
     if (!accessToken) {
       router.replace("/client/login");
       return;
@@ -199,25 +276,12 @@ function Account(): React.JSX.Element {
 
     try {
       await logout().unwrap();
-      sessionStorage.removeItem("accessToken");
-      sessionStorage.removeItem("userID");
-      sessionStorage.removeItem("email");
-      sessionStorage.removeItem("username");
-      sessionStorage.removeItem("Role");
-      sessionStorage.removeItem("phone");
-      sessionStorage.removeItem("role");
-
+      sessionStorage.clear();
       dispatch(signOut());
       router.replace("/client/login");
     } catch (error) {
-      console.error("Déconnexion échouée:", error);
-      sessionStorage.removeItem("accessToken");
-      sessionStorage.removeItem("userID");
-      sessionStorage.removeItem("role");
-      sessionStorage.removeItem("email");
-      sessionStorage.removeItem("username");
-      sessionStorage.removeItem("Role");
-      sessionStorage.removeItem("phone");
+      console.error("Sign-out failed:", error);
+      sessionStorage.clear();
       dispatch(signOut());
       router.replace("/client/login");
     }
@@ -227,12 +291,20 @@ function Account(): React.JSX.Element {
     setNotification((prev) => ({ ...prev, open: false }));
   };
 
+  if (isLoading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box
       sx={{
         p: 3,
-        minHeight: "100vh", // ✅ pour prendre toute la hauteur visible
-        overflowY: "auto", // ✅ scroll si contenu trop long
+        minHeight: "100vh",
+        overflowY: "auto",
       }}
     >
       <Snackbar
@@ -259,7 +331,7 @@ function Account(): React.JSX.Element {
           <Typography variant="h4" component="h1" fontWeight="medium">
             Account Settings
           </Typography>
-          <Tooltip title="Déconnexion">
+          <Tooltip title="Sign Out">
             <IconButton
               onClick={handleSignOut}
               color="inherit"
@@ -278,6 +350,9 @@ function Account(): React.JSX.Element {
                 name={userData.username}
                 email={userData.email}
                 phone={userData.phone}
+                img={userData.img}
+                isUploading={isUploading}
+                onImageUpload={handleImageUpload}
               />
             </Grid>
 
@@ -286,33 +361,29 @@ function Account(): React.JSX.Element {
                 <Typography variant="h6" component="h2">
                   Profile Details
                 </Typography>
+
                 <AccountDetailsForm
                   username={userData.username}
                   email={userData.email}
                   phone={userData.phone}
+                  img={userData.img}
                   onUpdate={handleUpdateUser}
                   phoneDisabled={true}
                 />
+
                 <Box sx={{ mt: 4 }}>
-                  <Card
-                    sx={{
-                      width: "100%",
-                      boxSizing: "border-box",
-                    }}
-                  >
+                  <Card sx={{ width: "100%", boxSizing: "border-box" }}>
                     <CardHeader
                       title="Change Password"
                       subheader="Update your password securely"
                     />
                     <Divider />
-
                     <CardContent>
                       <Grid container spacing={3}>
-                        {/* Old Password */}
                         <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
                           <TextField
                             type="password"
-                            label="Old password"
+                            label="Old Password"
                             variant="outlined"
                             value={passwords.oldPassword}
                             onChange={(e) =>
@@ -324,8 +395,6 @@ function Account(): React.JSX.Element {
                             fullWidth
                           />
                         </Grid>
-
-                        {/* Espacement vertical sur mobile */}
                         <Grid
                           item
                           xs={12}
@@ -334,12 +403,10 @@ function Account(): React.JSX.Element {
                             height: 16,
                           }}
                         />
-
-                        {/* New Password */}
                         <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
                           <TextField
                             type="password"
-                            label="New password"
+                            label="New Password"
                             variant="outlined"
                             value={passwords.newPassword}
                             onChange={(e) =>
@@ -351,20 +418,16 @@ function Account(): React.JSX.Element {
                             fullWidth
                           />
                         </Grid>
-
-                        {/* Confirm Password */}
                         <Grid item xs={12} sm={6} sx={{ mb: 2 }}>
                           <TextField
                             type="password"
-                            label="Confirm new password"
+                            label="Confirm New Password"
                             variant="outlined"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             fullWidth
                           />
                         </Grid>
-
-                        {/* Message d'erreur intégré */}
                         {passwords.newPassword &&
                           confirmPassword &&
                           passwords.newPassword !== confirmPassword && (
@@ -374,21 +437,16 @@ function Account(): React.JSX.Element {
                                 variant="body2"
                                 sx={{ mt: 1 }}
                               >
-                                Les mots de passe ne correspondent pas
+                                Passwords do not match
                               </Typography>
                             </Grid>
                           )}
                       </Grid>
                     </CardContent>
-
-                    {/* Divider ajouté après CardContent */}
                     <Divider />
-
-                    {/* CardActions pour le bouton */}
                     <CardActions
                       sx={{ justifyContent: "flex-end", px: 2, pb: 2 }}
                     >
-                      {" "}
                       <Button
                         variant="contained"
                         type="button"
@@ -402,8 +460,7 @@ function Account(): React.JSX.Element {
                           if (passwords.newPassword !== confirmPassword) {
                             setNotification({
                               open: true,
-                              message:
-                                "Les mots de passe ne correspondent pas.",
+                              message: "Passwords do not match.",
                               severity: "error",
                             });
                             return;
@@ -411,7 +468,7 @@ function Account(): React.JSX.Element {
                           handleChangePassword();
                         }}
                       >
-                        Save changes
+                        Save Changes
                       </Button>
                     </CardActions>
                   </Card>
@@ -428,8 +485,7 @@ function Account(): React.JSX.Element {
 Account.getLayout = function getLayout(page: ReactElement) {
   return (
     <PublicLayout>
-      {" "}
-      <RoleProtectedRoute allowedRoles={["USER"]}>{page} </RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["USER"]}>{page}</RoleProtectedRoute>
     </PublicLayout>
   );
 };

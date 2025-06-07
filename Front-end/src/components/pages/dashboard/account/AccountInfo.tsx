@@ -1,45 +1,77 @@
 import * as React from "react";
 import Avatar from "@mui/material/Avatar";
-import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
 import CardContent from "@mui/material/CardContent";
-import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import { User } from "react-feather";
+import CircularProgress from "@mui/material/CircularProgress";
 
 interface AccountInfoProps {
   name: string;
   email?: string;
   phone?: string;
-  city?: string;
-  country?: string;
+  img?: string;
+  isUploading: boolean;
+  onImageUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export function AccountInfo({
   name,
   email,
   phone,
-  city,
-  country,
+  img,
+  isUploading,
+  onImageUpload,
 }: AccountInfoProps): React.JSX.Element {
+  const profileImageInputRef = React.useRef<HTMLInputElement>(null);
+
   return (
     <Card>
       <CardContent>
         <Stack spacing={2} sx={{ alignItems: "center" }}>
-          <div>
+          <Box sx={{ position: "relative" }}>
             <Avatar
-              src="/assets/avatar.png"
-              sx={{ height: "80px", width: "80px" }}
+              src={img}
+              sx={{
+                height: "120px",
+                width: "120px",
+                bgcolor: img ? "transparent" : "primary.main",
+                cursor: isUploading ? "default" : "pointer",
+                opacity: isUploading ? 0.6 : 1,
+                transition: "opacity 0.2s ease-in-out",
+                "&:hover": {
+                  opacity: isUploading ? 0.6 : 0.8,
+                },
+              }}
+              onClick={() => !isUploading && profileImageInputRef.current?.click()}
+            >
+              {!img && <User size={60} />}
+            </Avatar>
+            <input
+              accept="image/*"
+              style={{ display: "none" }}
+              id="profile-image-upload"
+              type="file"
+              ref={profileImageInputRef}
+              onChange={onImageUpload}
+              disabled={isUploading}
             />
-          </div>
-          <Stack spacing={1} sx={{ textAlign: "center" }}>
-            <Typography variant="h5">{name}</Typography>
-            {city && country && (
-              <Typography color="text.secondary" variant="body2">
-                {city} {country}
-              </Typography>
+            {isUploading && (
+              <CircularProgress
+                size={30}
+                sx={{
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                }}
+              />
             )}
+          </Box>
+          <Stack spacing={1} sx={{ textAlign: "center" }}>
+            <Typography variant="h5">{name || "Utilisateur"}</Typography>
             {email && (
               <Typography color="text.secondary" variant="body2">
                 {email}
@@ -53,12 +85,6 @@ export function AccountInfo({
           </Stack>
         </Stack>
       </CardContent>
-      <Divider />
-      <CardActions>
-        <Button fullWidth variant="text">
-          Upload picture
-        </Button>
-      </CardActions>
     </Card>
   );
 }

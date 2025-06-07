@@ -1,4 +1,3 @@
-// src/api/user.repo.ts
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import { API_URL } from "../config/axios";
 import { User } from "src/types/shared";
@@ -21,6 +20,10 @@ export const userServices = createApi({
       query: () => `users`,
       providesTags: ["users"],
     }),
+    getUserById: builder.query<User, string>({ // New endpoint
+      query: (id) => `users/${id}`,
+      providesTags: ["users"],
+    }),
     updateUser: builder.mutation<User, { id: string; data: Partial<User> }>({
       query: ({ id, data }) => ({
         url: `users/${id}`,
@@ -34,13 +37,12 @@ export const userServices = createApi({
       { oldPassword: string; newPassword: string }
     >({
       query: (data) => ({
-        url: `users/change-password`, // Chemin de ta route backend
+        url: `users/change-password`,
         method: "PATCH",
         body: data,
       }),
       invalidatesTags: ["users"],
     }),
-
     createUser: builder.mutation<User, User>({
       query: (data: User) => ({
         url: `users`,
@@ -56,4 +58,5 @@ export const {
   useCreateUserMutation,
   useUpdateUserMutation,
   useChangePasswordMutation,
+  useGetUserByIdQuery, 
 } = userServices;

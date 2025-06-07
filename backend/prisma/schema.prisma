@@ -21,6 +21,7 @@ model User {
   resetPasswordToken String?
   accessToken        String?
   phoneNumber        String?   @unique
+  img                String?   @db.Text
   Journals           Journal[]
 
   @@map("users")

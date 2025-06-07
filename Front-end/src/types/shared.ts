@@ -106,6 +106,7 @@ export interface User {
   updatedAt: Date;
   deletedAt?: Date | null;
   email: string;
+  img?: string;
   fullname?: string | null;
   password?: string | null;
   refreshToken?: string | null;

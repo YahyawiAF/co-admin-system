@@ -42,6 +42,11 @@ export class CreateUserDto {
   @IsPhoneNumber() 
 
   phoneNumber?: string;
+
+  @ApiProperty({ required: false }) 
+  @IsOptional()
+  @IsString()
+  img?: string;
 }
 
 export class updateUserDto {
@@ -76,6 +81,11 @@ export class updateUserDto {
     })
     @ApiProperty({ required: false })
     phoneNumber?: string;
+
+    @IsOptional() 
+  @IsString()
+  @ApiProperty({ required: false })
+  img?: string;
   }
   
 
@@ -94,4 +104,9 @@ export class AddUserDto {
   @IsOptional()
   @ApiProperty()
   public fullname: string;
+
+  @IsOptional() 
+  @IsString()
+  @ApiProperty({ required: false })
+  img?: string;
 }
