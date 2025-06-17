@@ -51,7 +51,8 @@ import {
   Snackbar,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
-import { DateTimePicker } from "@mui/x-date-pickers";
+import { FormProvider, useForm } from "react-hook-form";
+import { RHFDatePeakerField } from "src/components/hook-form/RHTextFieldDate";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ErrorIcon from "@mui/icons-material/Error";
@@ -62,7 +63,7 @@ import TableHeadAction from "../../components/Table/members/TableHeader";
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { HeadCell } from "src/types/table";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
-import { bookingService } from "src/api/bookingservice"; // Supposons que ceci est utilisé pour le ping
+import { bookingService } from "src/api/bookingservice";
 
 // Cache utilities
 const setCache = (key: string, data: any) => {
@@ -390,6 +391,9 @@ interface AbonnementFormData extends Partial<Abonnement> {
   registredDate: Date;
   leaveDate: Date;
   payedAmount: number;
+  priceId: string;
+  memberID: string;
+  isPayed: boolean;
 }
 
 interface AbonnementProps {
@@ -439,7 +443,9 @@ const useCachedPricesQuery = () => {
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
-  const [statusFilter, setStatusFilter] = useState<"active" | "expired" | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "active" | "expired" | "all"
+  >("all");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
@@ -449,7 +455,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const isMobile = useMediaQuery((theme: Theme) => theme.breakpoints.down("sm"));
+  const isMobile = useMediaQuery((theme: Theme) =>
+    theme.breakpoints.down("sm")
+  );
 
   const fuseOptions = {
     keys: ["firstName", "lastName"],
@@ -459,7 +467,13 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   };
 
   const abonnementSearchOptions = {
-    keys: ["member.firstName", "member.lastName", "price.name", "id", "stayedPeriode"],
+    keys: [
+      "member.firstName",
+      "member.lastName",
+      "price.name",
+      "id",
+      "stayedPeriode",
+    ],
     threshold: 0.4,
     includeScore: true,
     minMatchCharLength: 2,
@@ -473,7 +487,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   } = useCachedAbonnementsQuery({});
   const { data: members = [] } = useCachedMembersQuery();
   const { data: prices = [] } = useCachedPricesQuery();
-  const abonnementPrices = prices.filter((price: Price) => price.type === "abonnement");
+  const abonnementPrices = prices.filter(
+    (price: Price) => price.type === "abonnement"
+  );
 
   const [openUserForm, setOpenUserForm] = useState(false);
   const [member, setMember] = useState<Member | null>(null);
@@ -486,28 +502,60 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     error: membersError,
   } = useCachedMembersQuery();
 
-  const [newAbonnement, setNewAbonnement] = useState<AbonnementFormData>({
-    registredDate: selectedDate,
-    leaveDate: selectedDate,
-    payedAmount: 0,
-    isPayed: false,
-    isReservation: false,
-    stayedPeriode: "",
-  });
-
   const [editAbonnement, setEditAbonnement] = useState<Abonnement | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(null);
+  const [abonnementToDelete, setAbonnementToDelete] = useState<string | null>(
+    null
+  );
   const [showDrawer, setShowDrawer] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openMemberModal, setOpenMemberModal] = useState(false);
+
+  // Initialize react-hook-form
+  const methods = useForm<AbonnementFormData>({
+    defaultValues: {
+      registredDate: selectedDate,
+      leaveDate: selectedDate,
+      payedAmount: 0,
+      isPayed: false,
+      isReservation: false,
+      stayedPeriode: "",
+      memberID: "",
+      priceId: "",
+    },
+  });
+
+  // Sync form with editAbonnement when it changes
+  useEffect(() => {
+    if (editAbonnement) {
+      methods.reset({
+        ...editAbonnement,
+        registredDate: new Date(editAbonnement.registredDate || selectedDate),
+        leaveDate: new Date(editAbonnement.leaveDate || selectedDate),
+        payedAmount: editAbonnement.payedAmount || 0,
+        memberID: editAbonnement.memberID || "",
+        priceId: editAbonnement.priceId || "",
+        isPayed: editAbonnement.isPayed || false,
+      });
+    } else {
+      methods.reset({
+        registredDate: selectedDate,
+        leaveDate: selectedDate,
+        payedAmount: 0,
+        isPayed: false,
+        isReservation: false,
+        stayedPeriode: "",
+        memberID: "",
+        priceId: "",
+      });
+    }
+  }, [editAbonnement, methods, selectedDate]);
 
   // Vérification périodique de la connectivité
   useEffect(() => {
     const checkConnection = async () => {
       try {
-        // Effectuer une requête de test vers le backend
-        await bookingService.getAllBookings(); // Remplacez par une API légère de votre backend
+        await bookingService.getAllBookings();
         if (!isOnline) {
           setIsOnline(true);
           setSuccessMessage("Connection restored!");
@@ -520,7 +568,6 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       }
     };
 
-    // Vérifier immédiatement et ensuite toutes les 30 secondes
     checkConnection();
     const interval = setInterval(checkConnection, 30000);
 
@@ -556,7 +603,10 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                 await createAbonnement(action.payload).unwrap();
                 syncedActions++;
               } else if (action.type === "update" && action.id) {
-                await updateAbonnement({ id: action.id, data: action.payload }).unwrap();
+                await updateAbonnement({
+                  id: action.id,
+                  data: action.payload,
+                }).unwrap();
                 syncedActions++;
               } else if (action.type === "delete" && action.id) {
                 await deleteAbonnement(action.id).unwrap();
@@ -570,12 +620,16 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           clearQueue();
           if (syncedActions > 0) {
             setSuccessMessage(
-              `${syncedActions} offline action${syncedActions > 1 ? 's' : ''} synced successfully!`
+              `${syncedActions} offline action${
+                syncedActions > 1 ? "s" : ""
+              } synced successfully!`
             );
           }
           if (failedActions > 0) {
             setErrorMessage(
-              `${failedActions} action${failedActions > 1 ? 's' : ''} failed to sync.`
+              `${failedActions} action${
+                failedActions > 1 ? "s" : ""
+              } failed to sync.`
             );
           }
           refetch();
@@ -595,40 +649,41 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     );
   };
 
-  const { expiredMembers, soonToExpireMembers, activeMembers } = React.useMemo(() => {
-    const today = new Date(selectedDate);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+  const { expiredMembers, soonToExpireMembers, activeMembers } =
+    React.useMemo(() => {
+      const today = new Date(selectedDate);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
 
-    const expired: string[] = [];
-    const soonToExpire: string[] = [];
-    const active: string[] = [];
+      const expired: string[] = [];
+      const soonToExpire: string[] = [];
+      const active: string[] = [];
 
-    abonnementsData?.data.forEach((abonnement: Abonnement) => {
-      const member = members.find((m: any) => m.id === abonnement.memberID);
-      if (!member || !abonnement.leaveDate) return;
+      abonnementsData?.data.forEach((abonnement: Abonnement) => {
+        const member = members.find((m: any) => m.id === abonnement.memberID);
+        if (!member || !abonnement.leaveDate) return;
 
-      const memberName = `${member.firstName} ${member.lastName}`;
-      const leaveDate = new Date(abonnement.leaveDate);
+        const memberName = `${member.firstName} ${member.lastName}`;
+        const leaveDate = new Date(abonnement.leaveDate);
 
-      if (isSameDay(leaveDate, today)) {
-        if (!expired.includes(memberName)) expired.push(memberName);
-      } else if (isSameDay(leaveDate, tomorrow)) {
-        if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
-      } else if (
-        abonnement.registredDate &&
-        isSameDay(new Date(abonnement.registredDate), today)
-      ) {
-        if (!active.includes(memberName)) active.push(memberName);
-      }
-    });
+        if (isSameDay(leaveDate, today)) {
+          if (!expired.includes(memberName)) expired.push(memberName);
+        } else if (isSameDay(leaveDate, tomorrow)) {
+          if (!soonToExpire.includes(memberName)) soonToExpire.push(memberName);
+        } else if (
+          abonnement.registredDate &&
+          isSameDay(new Date(abonnement.registredDate), today)
+        ) {
+          if (!active.includes(memberName)) active.push(memberName);
+        }
+      });
 
-    return {
-      expiredMembers: expired,
-      soonToExpireMembers: soonToExpire,
-      activeMembers: active,
-    };
-  }, [abonnementsData, members, selectedDate]);
+      return {
+        expiredMembers: expired,
+        soonToExpireMembers: soonToExpire,
+        activeMembers: active,
+      };
+    }, [abonnementsData, members, selectedDate]);
 
   const filteredData = React.useMemo(() => {
     if (!abonnementsData?.data) return [];
@@ -679,7 +734,16 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     });
 
     return stableSort(filtered, getComparator(order, orderBy));
-  }, [abonnementsData?.data, timeFilter, statusFilter, prices, search, members, order, orderBy]);
+  }, [
+    abonnementsData?.data,
+    timeFilter,
+    statusFilter,
+    prices,
+    search,
+    members,
+    order,
+    orderBy,
+  ]);
 
   const paginatedData = React.useMemo(() => {
     const startIndex = page * rowsPerPage;
@@ -740,7 +804,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const membersWithSubscriptionStatus = members.map((member: any) => {
     const memberAbonnements =
-      abonnementsData?.data.filter((abonnement: any) => abonnement.memberID === member.id) || [];
+      abonnementsData?.data.filter(
+        (abonnement: any) => abonnement.memberID === member.id
+      ) || [];
     const hasActiveSubscription = memberAbonnements.some((abonnement: any) => {
       if (!abonnement.leaveDate) return false;
       return new Date(abonnement.leaveDate) >= new Date();
@@ -768,17 +834,8 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleSelect = (selectedMember: Member | null) => {
     setMember(selectedMember);
-    if (editAbonnement) {
-      setEditAbonnement({
-        ...editAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    } else {
-      setNewAbonnement({
-        ...newAbonnement,
-        memberID: selectedMember?.id || "",
-      });
-    }
+    const memberID = selectedMember?.id || "";
+    methods.setValue("memberID", memberID);
   };
 
   const handleRequestSort = (
@@ -827,33 +884,22 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (
-      !(editAbonnement
-        ? editAbonnement.registredDate
-        : newAbonnement.registredDate)
-    ) {
+    const formValues = methods.getValues();
+    if (!formValues.registredDate) {
       newErrors.registredDate = "Registration date and time is required";
     }
-    const leaveDate = editAbonnement
-      ? editAbonnement.leaveDate
-      : newAbonnement.leaveDate;
-    if (!leaveDate) {
+    if (!formValues.leaveDate) {
       newErrors.leaveDate = "Leave date and time is required";
     } else if (
-      new Date(leaveDate) <=
-      new Date(
-        editAbonnement?.registredDate ||
-        newAbonnement.registredDate ||
-        new Date()
-      )
+      new Date(formValues.leaveDate) <= new Date(formValues.registredDate)
     ) {
       newErrors.leaveDate =
         "Leave date and time must be after registration date and time";
     }
-    if (!(editAbonnement ? editAbonnement.memberID : newAbonnement.memberID)) {
+    if (!formValues.memberID) {
       newErrors.memberID = "Member is required";
     }
-    if (!(editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)) {
+    if (!formValues.priceId) {
       newErrors.priceId = "Price is required";
     }
     setErrors(newErrors);
@@ -863,18 +909,20 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const handleSubmit = async () => {
     if (!validateForm()) return;
 
+    const formValues = methods.getValues();
     const selectedPrice = prices.find(
-      (p: Price) => p.id === (editAbonnement ? editAbonnement.priceId : newAbonnement.priceId)
+      (p: Price) => p.id === formValues.priceId
     );
     const stayedPeriode = selectedPrice
       ? `${selectedPrice.name} (${selectedPrice.timePeriod.start} ${selectedPrice.timePeriod.end})`
       : "";
 
     const abonnementData = {
-      ...(editAbonnement || newAbonnement),
+      ...formValues,
       stayedPeriode,
-      registredDate: new Date(editAbonnement?.registredDate || newAbonnement.registredDate),
-      leaveDate: new Date(editAbonnement?.leaveDate || newAbonnement.leaveDate),
+      registredDate: new Date(formValues.registredDate),
+      leaveDate: new Date(formValues.leaveDate),
+      id: editAbonnement?.id,
     };
 
     if (!isOnline) {
@@ -940,7 +988,9 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
       const currentAbonnements = getCache("abonnements") || { data: [] };
       const updatedAbonnements = {
-        data: currentAbonnements.data.filter((a: Abonnement) => a.id !== abonnementToDelete),
+        data: currentAbonnements.data.filter(
+          (a: Abonnement) => a.id !== abonnementToDelete
+        ),
       };
       setCache("abonnements", updatedAbonnements);
 
@@ -972,46 +1022,34 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const handleCloseDrawer = () => {
     setShowDrawer(false);
     setEditAbonnement(null);
-    setNewAbonnement({
+    methods.reset({
       registredDate: selectedDate,
       leaveDate: selectedDate,
       payedAmount: 0,
       isPayed: false,
       isReservation: false,
       stayedPeriode: "",
+      memberID: "",
+      priceId: "",
     });
     setErrors({});
   };
 
   const handlePriceSelect = (price: Price) => {
-    const registredDate =
-      editAbonnement?.registredDate ||
-      newAbonnement.registredDate ||
-      selectedDate;
+    const formValues = methods.getValues();
+    const registredDate = formValues.registredDate || selectedDate;
     let leaveDate = new Date(registredDate);
     const start = parseInt(price.timePeriod.start, 10);
     const end = parseInt(price.timePeriod.end, 10);
     const durationDays = end - start;
     leaveDate.setDate(leaveDate.getDate() + durationDays);
 
-    const currentLeaveDate =
-      editAbonnement?.leaveDate || newAbonnement.leaveDate;
-    if (currentLeaveDate) {
-      const existingTime = new Date(currentLeaveDate);
-      leaveDate.setHours(existingTime.getHours(), existingTime.getMinutes());
-    }
+    // Set the leaveDate time to match registredDate time
+    leaveDate.setHours(registredDate.getHours(), registredDate.getMinutes());
 
-    const update = {
-      priceId: price.id,
-      payedAmount: price.price,
-      leaveDate: leaveDate,
-      registredDate: registredDate,
-    };
-    if (editAbonnement) {
-      setEditAbonnement({ ...editAbonnement, ...update });
-    } else {
-      setNewAbonnement({ ...newAbonnement, ...update });
-    }
+    methods.setValue("priceId", price.id);
+    methods.setValue("payedAmount", price.price);
+    methods.setValue("leaveDate", leaveDate);
   };
 
   const getDurationDescription = (price: Price) => {
@@ -1024,11 +1062,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
 
   const handleNewMember = (member: Member) => {
     setMember(member);
-    if (editAbonnement) {
-      setEditAbonnement({ ...editAbonnement, memberID: member.id });
-    } else {
-      setNewAbonnement({ ...newAbonnement, memberID: member.id });
-    }
+    methods.setValue("memberID", member.id);
   };
 
   const calculateRemainingTime = (leaveDate: Date | string | null) => {
@@ -1095,7 +1129,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     const newDate = date || selectedDate;
     let newLeaveDate: Date;
 
-    const currentPriceId = editAbonnement?.priceId || newAbonnement.priceId;
+    const currentPriceId = methods.getValues("priceId");
     const selectedPrice = prices.find((p: Price) => p.id === currentPriceId);
 
     if (selectedPrice) {
@@ -1106,8 +1140,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
       newLeaveDate = new Date(newDate);
       newLeaveDate.setDate(newDate.getDate() + durationDays);
 
-      const currentLeaveDate =
-        editAbonnement?.leaveDate || newAbonnement.leaveDate;
+      const currentLeaveDate = methods.getValues("leaveDate");
       if (currentLeaveDate) {
         const existingTime = new Date(currentLeaveDate);
         newLeaveDate.setHours(
@@ -1116,25 +1149,12 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
         );
       }
     } else {
-      newLeaveDate = new Date(
-        editAbonnement?.leaveDate || newAbonnement.leaveDate || newDate
-      );
+      newLeaveDate = new Date(methods.getValues("leaveDate") || newDate);
       newLeaveDate.setHours(newDate.getHours(), newDate.getMinutes());
     }
 
-    if (editAbonnement) {
-      setEditAbonnement({
-        ...editAbonnement,
-        registredDate: newDate,
-        leaveDate: newLeaveDate,
-      });
-    } else {
-      setNewAbonnement({
-        ...newAbonnement,
-        registredDate: newDate,
-        leaveDate: newLeaveDate,
-      });
-    }
+    methods.setValue("registredDate", newDate);
+    methods.setValue("leaveDate", newLeaveDate);
   };
 
   const handleChangePage = (event: unknown, newPage: number) => {
@@ -1436,7 +1456,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                                   price: undefined,
                                 };
                                 setEditAbonnement(abonnementToEdit);
-                                setShowDrawer(true);
+                                setShowDrawer(true); 
                               }}
                               size={isMobile ? "small" : "medium"}
                             >
@@ -1508,212 +1528,188 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
           },
         }}
       >
-        <Typography variant="h6" sx={{ mb: 3 }}>
-          {editAbonnement ? "Manage Subscription" : "New Subscription"}
-        </Typography>
-        <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}>
-          {!editAbonnement && (
-            <ActionButton
-              variant="outlined"
-              startIcon={<PersonAdd />}
-              onClick={() => setOpenMemberModal(true)}
-              sx={{
-                height: "56px",
-                width: "200px",
-                alignSelf: "flex-start",
-              }}
-            >
-              New Member
-            </ActionButton>
-          )}
-          <Autocomplete
-            options={membersWithSubscriptionStatus}
-            getOptionLabel={(option) =>
-              `${option.firstName} ${option.lastName} (${option.plan})`
-            }
-            value={
-              membersWithSubscriptionStatus.find(
-                (m: any) =>
-                  m.id === (editAbonnement?.memberID || newAbonnement.memberID)
-              ) || null
-            }
-            onChange={(event, newValue) => {
-              const value = newValue ? newValue.id : "";
-              if (editAbonnement) {
-                setEditAbonnement({ ...editAbonnement, memberID: value });
-              } else {
-                setNewAbonnement({ ...newAbonnement, memberID: value });
-              }
-            }}
-            filterOptions={(options, { inputValue }) => {
-              if (!inputValue || inputValue.length < 2) {
-                return options;
-              }
-              const fuse = new Fuse(options, fuseOptions);
-              const results = fuse.search(inputValue);
-              return results.map((result: any) => result.item);
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Member *"
-                error={!!errors.memberID}
-                helperText={
-                  errors.memberID || "Type at least 2 characters to search"
-                }
-              />
-            )}
-            disabled={!!editAbonnement}
-            getOptionDisabled={(option) => {
-              if (editAbonnement) return false;
-              return option.hasActiveSubscription;
-            }}
-            sx={{
-              width: "100%",
-              maxWidth: "400px",
-              "& .MuiInputBase-root": { height: "50px" },
-            }}
-          />
-        </Box>
-        <Typography variant="subtitle1" sx={{ mb: 0 }}>
-          Select Rate *
-        </Typography>
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          {abonnementPrices.map((price: any) => (
-            <Grid item xs={12} sm={6} key={price.id}>
-              <PriceCard
-                sx={{
-                  border:
-                    (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
-                      ? "2px solid #054547"
-                      : "1px solid #ddd",
-                  backgroundColor:
-                    (editAbonnement?.priceId || newAbonnement.priceId) ===
-                    price.id
-                      ? "#f5f9f9"
-                      : "#fff",
-                }}
-                onClick={() => handlePriceSelect(price)}
-              >
-                <CardContent>
-                  <Typography variant="h6" sx={{ mt: 1 }}>
-                    <Box component="span" sx={{ fontWeight: "blank" }}>
-                      {getDurationDescription(price)}
-                    </Box>
-                  </Typography>
-                  <Typography variant="h6" sx={{ mt: 1 }}>
-                    {price.price} DT
-                  </Typography>
-                </CardContent>
-              </PriceCard>
-            </Grid>
-          ))}
-        </Grid>
-        {errors.priceId && (
-          <FormHelperText error sx={{ mb: 0 }}>
-            {errors.priceId}
-          </FormHelperText>
-        )}
-        <DateTimePicker
-          label="Registration Date and Time *"
-          value={
-            editAbonnement?.registredDate
-              ? new Date(editAbonnement.registredDate)
-              : newAbonnement.registredDate
-          }
-          onChange={handleRegistrationDateChange}
-          sx={{ width: "100%", mb: 0 }}
-        />
-        {errors.registredDate && (
-          <FormHelperText error sx={{ mb: 0 }}>
-            {errors.registredDate}
-          </FormHelperText>
-        )}
-        <DateTimePicker
-          label="Leave Date and Time *"
-          value={editAbonnement?.leaveDate || newAbonnement.leaveDate}
-          onChange={(date) => {
-            const newDate = date || selectedDate;
-            if (editAbonnement) {
-              setEditAbonnement({ ...editAbonnement, leaveDate: newDate });
-            } else {
-              setNewAbonnement({ ...newAbonnement, leaveDate: newDate });
-            }
-          }}
-          sx={{ width: "100%", mb: 0 }}
-        />
-        {errors.leaveDate && (
-          <FormHelperText error sx={{ mb: 0 }}>
-            {errors.leaveDate}
-          </FormHelperText>
-        )}
-        <TextField
-          label="Paid Amount (DT)"
-          type="number"
-          fullWidth
-          value={editAbonnement?.payedAmount || newAbonnement.payedAmount || 0}
-          onChange={(e) => {
-            const value = Math.max(0, Number(e.target.value));
-            if (editAbonnement) {
-              setEditAbonnement({ ...editAbonnement, payedAmount: value });
-            } else {
-              setNewAbonnement({ ...newAbonnement, payedAmount: value });
-            }
-          }}
-          sx={{ mb: 0 }}
-        />
-        <FormControl fullWidth sx={{ mb: 0 }}>
-          <InputLabel>Payment Status</InputLabel>
-          <Select
-            value={
-              editAbonnement?.isPayed ?? newAbonnement.isPayed
-                ? "true"
-                : "false"
-            }
-            onChange={(e) => {
-              const value = e.target.value === "true";
-              if (editAbonnement) {
-                setEditAbonnement({ ...editAbonnement, isPayed: value });
-              } else {
-                setNewAbonnement({ ...newAbonnement, isPayed: value });
-              }
-            }}
-            label="Payment Status"
-          >
-            <MenuItem value="true">Paid</MenuItem>
-            <MenuItem value="false">Unpaid</MenuItem>
-          </Select>
-        </FormControl>
-        <Divider />
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mt: 2,
-          }}
-        >
-          <Typography variant="h6">Total</Typography>
-          <Typography variant="h6" fontWeight="bold">
-            {editAbonnement?.payedAmount || newAbonnement.payedAmount || 0} DT
+        <FormProvider {...methods}>
+          <Typography variant="h6" sx={{ mb: 3 }}>
+            {editAbonnement ? "Manage Subscription" : "New Subscription"}
           </Typography>
-        </Box>
-        <Box
-          sx={{
-            display: "flex",
-            gap: "10px",
-            mt: "auto",
-            flexDirection: isMobile ? "column" : "row",
-          }}
-        >
-          <ActionButton variant="outlined" onClick={handleCloseDrawer}>
-            Cancel
-          </ActionButton>
-          <SubmitButton variant="contained" onClick={handleSubmit}>
-            {editAbonnement ? "Confirm" : "Confirm"}
-          </SubmitButton>
-        </Box>
+          <Box sx={{ mb: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            {!editAbonnement && (
+              <ActionButton
+                variant="outlined"
+                startIcon={<PersonAdd />}
+                onClick={() => setOpenMemberModal(true)}
+                sx={{
+                  height: "56px",
+                  width: "200px",
+                  alignSelf: "flex-start",
+                }}
+              >
+                New Member
+              </ActionButton>
+            )}
+            <Autocomplete
+              options={membersWithSubscriptionStatus}
+              getOptionLabel={(option) =>
+                `${option.firstName} ${option.lastName} (${option.plan})`
+              }
+              value={
+                membersWithSubscriptionStatus.find(
+                  (m: any) => m.id === methods.getValues("memberID")
+                ) || null
+              }
+              onChange={(event, newValue) => {
+                handleSelect(newValue);
+              }}
+              filterOptions={(options, { inputValue }) => {
+                if (!inputValue || inputValue.length < 2) {
+                  return options;
+                }
+                const fuse = new Fuse(options, fuseOptions);
+                const results = fuse.search(inputValue);
+                return results.map((result: any) => result.item);
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Member *"
+                  error={!!errors.memberID}
+                  helperText={
+                    errors.memberID || "Type at least 2 characters to search"
+                  }
+                />
+              )}
+              disabled={!!editAbonnement}
+              getOptionDisabled={(option) => {
+                if (editAbonnement) return false;
+                return option.hasActiveSubscription;
+              }}
+              sx={{
+                width: "100%",
+                maxWidth: "400px",
+                "& .MuiInputBase-root": { height: "50px" },
+              }}
+            />
+          </Box>
+          <Typography variant="subtitle1" sx={{ mb: 0 }}>
+            Select Rate *
+          </Typography>
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            {abonnementPrices.map((price: any) => (
+              <Grid item xs={12} sm={6} key={price.id}>
+                <PriceCard
+                  sx={{
+                    border:
+                      methods.getValues("priceId") === price.id
+                        ? "2px solid #054547"
+                        : "1px solid #ddd",
+                    backgroundColor:
+                      methods.getValues("priceId") === price.id
+                        ? "#f5f9f9"
+                        : "#fff",
+                  }}
+                  onClick={() => handlePriceSelect(price)}
+                >
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mt: 1 }}>
+                      <Box component="span" sx={{ fontWeight: "blank" }}>
+                        {getDurationDescription(price)}
+                      </Box>
+                    </Typography>
+                    <Typography variant="h6" sx={{ mt: 1 }}>
+                      {price.price} DT
+                    </Typography>
+                  </CardContent>
+                </PriceCard>
+              </Grid>
+            ))}
+          </Grid>
+          {errors.priceId && (
+            <FormHelperText error sx={{ mb: 0 }}>
+              {errors.priceId}
+            </FormHelperText>
+          )}
+          <RHFDatePeakerField
+            name="registredDate"
+            label="Registration Date and Time *"
+            minDate={new Date()}
+            onChange={(value) => {
+              if (value instanceof Date || value === null) {
+                handleRegistrationDateChange(value);
+              }
+            }}
+            sx={{ width: "100%", mb: 0 }}
+          />
+          {errors.registredDate && (
+            <FormHelperText error sx={{ mb: 0 }}>
+              {errors.registredDate}
+            </FormHelperText>
+          )}
+          <RHFDatePeakerField
+            name="leaveDate"
+            label="Leave Date and Time *"
+            minDate={methods.getValues("registredDate") || new Date()}
+            sx={{ width: "100%", mb: 0 }}
+          />
+          {errors.leaveDate && (
+            <FormHelperText error sx={{ mb: 0 }}>
+              {errors.leaveDate}
+            </FormHelperText>
+          )}
+          <TextField
+            label="Paid Amount (DT)"
+            type="number"
+            fullWidth
+            value={methods.getValues("payedAmount") || 0}
+            onChange={(e) => {
+              const value = Math.max(0, Number(e.target.value));
+              methods.setValue("payedAmount", value);
+            }}
+            sx={{ mb: 0 }}
+          />
+          <FormControl fullWidth sx={{ mb: 0 }}>
+            <InputLabel>Payment Status</InputLabel>
+            <Select
+              value={methods.getValues("isPayed") ? "true" : "false"}
+              onChange={(e) => {
+                const value = e.target.value === "true";
+                methods.setValue("isPayed", value);
+              }}
+              label="Payment Status"
+            >
+              <MenuItem value="true">Paid</MenuItem>
+              <MenuItem value="false">Unpaid</MenuItem>
+            </Select>
+          </FormControl>
+          <Divider />
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mt: 2,
+            }}
+          >
+            <Typography variant="h6">Total</Typography>
+            <Typography variant="h6" fontWeight="bold">
+              {methods.getValues("payedAmount") || 0} DT
+            </Typography>
+          </Box>
+          <Box
+            sx={{
+              display: "flex",
+              gap: "10px",
+              mt: "auto",
+              flexDirection: isMobile ? "column" : "row",
+            }}
+          >
+            <ActionButton variant="outlined" onClick={handleCloseDrawer}>
+              Cancel
+            </ActionButton>
+            <SubmitButton variant="contained" onClick={handleSubmit}>
+              {editAbonnement ? "Confirm" : "Confirm"}
+            </SubmitButton>
+          </Box>
+        </FormProvider>
       </Drawer>
       <Drawer
         anchor="right"

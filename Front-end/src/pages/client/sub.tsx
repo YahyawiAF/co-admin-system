@@ -25,9 +25,9 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
   Stack,
   Chip,
+  InputLabel,
 } from "@mui/material";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
@@ -39,11 +39,9 @@ import { Abonnement, Journal } from "src/types/shared";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import PublicLayout from "src/layouts/PublicLayout";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import {
-  LocalizationProvider,
-  DateCalendar,
-  TimePicker,
-} from "@mui/x-date-pickers";
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { FormProvider, useForm } from "react-hook-form";
+import { RHFDatePeakerField } from "src/components/hook-form/RHTextFieldDate";
 
 // Extend the Abonnement and Journal types to include space and selectedChairs
 interface ExtendedAbonnement extends Abonnement {
@@ -54,6 +52,11 @@ interface ExtendedAbonnement extends Abonnement {
 interface ExtendedJournal extends Journal {
   space: string;
   selectedChairs: { tableId: number; chairId: number }[];
+}
+
+// Form data interface for react-hook-form
+interface FormData {
+  selectedDateTime: Date | null;
 }
 
 // Styled components for professional design
@@ -358,8 +361,6 @@ const SubscriptionSelection = () => {
   ] = useCreateJournalMutation();
 
   const [activeStep, setActiveStep] = useState(0);
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState<Date | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<Price | null>(null);
   const [selectedJournalPrice, setSelectedJournalPrice] =
     useState<Price | null>(null);
@@ -381,6 +382,13 @@ const SubscriptionSelection = () => {
     (price) => price.type === "abonnement"
   );
   const journalPrices = prices.filter((price) => price.type === "journal");
+
+  // Initialize react-hook-form
+  const methods = useForm<FormData>({
+    defaultValues: {
+      selectedDateTime: new Date(),
+    },
+  });
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem("accessToken");
@@ -442,9 +450,12 @@ const SubscriptionSelection = () => {
   };
 
   const handleNext = () => {
-    if (activeStep === 0 && (!selectedDate || !selectedTime)) {
-      setErrorMessage("Please select both a date and a time.");
-      return;
+    if (activeStep === 0) {
+      const selectedDateTime = methods.getValues("selectedDateTime");
+      if (!selectedDateTime) {
+        setErrorMessage("Please select a date and time.");
+        return;
+      }
     }
     if (activeStep === 1 && !selectedPrice && !selectedJournalPrice) {
       setErrorMessage("Please select a subscription type.");
@@ -478,19 +489,16 @@ const SubscriptionSelection = () => {
       return;
     }
 
-    // Combine selectedDate and selectedTime
-    const combinedDateTime = selectedDate ? new Date(selectedDate) : new Date();
-    if (selectedTime) {
-      combinedDateTime.setHours(selectedTime.getHours());
-      combinedDateTime.setMinutes(selectedTime.getMinutes());
-    }
+    // Get selectedDateTime from form
+    const selectedDateTime =
+      methods.getValues("selectedDateTime") || new Date();
 
     if (selectedSubscriptionType === "abonnement" && selectedPrice) {
       try {
-        const leaveDate = calculateLeaveDate(selectedPrice, combinedDateTime);
+        const leaveDate = calculateLeaveDate(selectedPrice, selectedDateTime);
         const abonnementData: Partial<ExtendedAbonnement> = {
           isPayed: false,
-          registredDate: combinedDateTime,
+          registredDate: selectedDateTime,
           leaveDate,
           payedAmount: selectedPrice.price,
           memberID: user.id,
@@ -511,14 +519,14 @@ const SubscriptionSelection = () => {
         const journalData: ExtendedJournal = {
           id: "unique-journal-id",
           isPayed: false,
-          registredTime: combinedDateTime,
-          leaveTime: combinedDateTime,
+          registredTime: selectedDateTime,
+          leaveTime: selectedDateTime,
           payedAmount: selectedJournalPrice.price,
           memberID: user.id,
           priceId: selectedJournalPrice.id,
           isReservation: true,
-          createdAt: combinedDateTime,
-          updatedAt: combinedDateTime,
+          createdAt: selectedDateTime,
+          updatedAt: selectedDateTime,
           space: selectedSpace!,
           selectedChairs,
         };
@@ -633,51 +641,26 @@ const SubscriptionSelection = () => {
                     Select Date and Time
                   </Typography>
                   <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <Box
-                      sx={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: 2,
-                      }}
-                    >
-                      <DateCalendar
-                        value={selectedDate}
-                        onChange={(newValue) => setSelectedDate(newValue)}
-                        minDate={new Date()}
+                    <FormProvider {...methods}>
+                      <Box
                         sx={{
-                          width: "100%",
-                          maxWidth: 500,
-                          mx: "auto",
-                          border: `1px solid ${theme.palette.divider}`,
-                          borderRadius: 2,
-                          backgroundColor: theme.palette.background.paper,
-                          "& .MuiPickersDay-root": {
-                            fontSize: "1rem",
-                          },
-                          "& .MuiPickersDay-root.Mui-selected": {
-                            backgroundColor: theme.palette.primary.main,
-                            color: theme.palette.primary.contrastText,
-                          },
-                          "& .MuiPickersDay-root:hover": {
-                            backgroundColor: theme.palette.action.hover,
-                          },
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 2,
                         }}
-                      />
-                      <TimePicker
-                        label="Select Time"
-                        value={selectedTime}
-                        onChange={(newValue) => setSelectedTime(newValue)}
-                        sx={{
-                          width: "100%",
-                          maxWidth: 300,
-                          "& .MuiInputBase-root": {
-                            borderRadius: 2,
-                            backgroundColor: theme.palette.background.paper,
-                          },
-                        }}
-                      />
-                    </Box>
+                      >
+                        <RHFDatePeakerField
+                          name="selectedDateTime"
+                          label="Select Date and Time"
+                          minDate={new Date()}
+                          sx={{
+                            width: "100%",
+                            maxWidth: 300,
+                          }}
+                        />
+                      </Box>
+                    </FormProvider>
                   </LocalizationProvider>
                   <NavigationContainer>
                     <Box sx={{ flex: 1 }} />
