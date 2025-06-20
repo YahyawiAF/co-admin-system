@@ -55,7 +55,7 @@ interface ReclamationFormData {
   memberId: string;
 }
 
-// Styled components for professional design
+// Styled components remain unchanged
 const ReclamationCard = styled(Box)(({ theme }) => ({
   position: "relative",
   transition: "all 0.3s ease",
@@ -114,6 +114,9 @@ const ReclamationManagement = () => {
 
   const steps = ["Enter Details", "Confirm"];
 
+  // Fetch memberId from sessionStorage
+  const memberId = sessionStorage.getItem("member") || "";
+
   // API hooks
   const {
     data: reclamationsData,
@@ -137,20 +140,21 @@ const ReclamationManagement = () => {
     { isLoading: isDeleting, isSuccess: isDeleteSuccess, error: deleteError },
   ] = useDeleteReclamationMutation();
 
-  // Form setup
+  // Form setup for create reclamation
   const createMethods = useForm<ReclamationFormData>({
     defaultValues: {
       title: "",
       description: "",
-      memberId: user?.id || "",
+      memberId: memberId, // Use memberId from sessionStorage
     },
   });
 
+  // Form setup for edit reclamation
   const editMethods = useForm<ReclamationFormData>({
     defaultValues: {
       title: "",
       description: "",
-      memberId: "",
+      memberId: memberId, // Initialize with sessionStorage memberId as fallback
     },
   });
 
@@ -189,9 +193,18 @@ const ReclamationManagement = () => {
 
   // Handle create dialog
   const handleOpenCreateDialog = () => {
+    if (!memberId) {
+      setErrorMessage("Member ID is missing. Please log in again.");
+      router.replace("/client/login");
+      return;
+    }
     setOpenCreateDialog(true);
     setActiveStep(0);
-    createMethods.reset();
+    createMethods.reset({
+      title: "",
+      description: "",
+      memberId: memberId,
+    });
     setErrorMessage("");
     setSuccessMessage("");
   };
@@ -212,7 +225,7 @@ const ReclamationManagement = () => {
     editMethods.reset({
       title: reclamation.title,
       description: reclamation.description,
-      memberId: reclamation.memberId,
+      memberId: reclamation.memberId || memberId, // Use reclamation's memberId, fallback to sessionStorage
     });
     setSelectedReclamationId(reclamation.id);
     setOpenEditDialog(true);
@@ -246,6 +259,10 @@ const ReclamationManagement = () => {
       setActiveStep(1);
     } else {
       const formData = createMethods.getValues();
+      if (!formData.memberId) {
+        setErrorMessage("Member ID is required.");
+        return;
+      }
       try {
         await createReclamation(formData).unwrap();
         setSuccessMessage("Reclamation created successfully!");
@@ -262,6 +279,10 @@ const ReclamationManagement = () => {
   const handleUpdate = async () => {
     if (!selectedReclamationId) return;
     const formData = editMethods.getValues();
+    if (!formData.memberId) {
+      setErrorMessage("Member ID is required.");
+      return;
+    }
     try {
       await updateReclamation({
         id: selectedReclamationId,
@@ -408,8 +429,7 @@ const ReclamationManagement = () => {
                   <TableCell>Member</TableCell>
                   <TableCell>Title</TableCell>
                   <TableCell>Description</TableCell>
-                  
-                  <TableCell>Date </TableCell>
+                  <TableCell>Date</TableCell>
                   <TableCell align="center">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -430,7 +450,6 @@ const ReclamationManagement = () => {
                         ? `${reclamation.description.substring(0, 100)}...`
                         : reclamation.description}
                     </TableCell>
-                    
                     <TableCell>
                       {new Date(reclamation.createdAt).toLocaleString("fr-FR", {
                         year: "numeric",
@@ -502,6 +521,12 @@ const ReclamationManagement = () => {
                   rows={4}
                   required
                 />
+                {/* Optionally, you can hide memberId field since it's not user-editable */}
+                <input
+                  type="hidden"
+                  {...createMethods.register("memberId")}
+                  value={memberId}
+                />
               </Box>
             ) : (
               <Box>
@@ -514,6 +539,10 @@ const ReclamationManagement = () => {
                 <Typography>
                   <strong>Description:</strong>{" "}
                   {createMethods.getValues("description")}
+                </Typography>
+                <Typography>
+                  <strong>Member ID:</strong>{" "}
+                  {createMethods.getValues("memberId")}
                 </Typography>
               </Box>
             )}
@@ -572,6 +601,8 @@ const ReclamationManagement = () => {
                 rows={4}
                 required
               />
+              {/* Optionally, you can hide memberId field since it's not user-editable */}
+              <input type="hidden" {...editMethods.register("memberId")} />
             </Box>
           </FormProvider>
         </DialogContent>
@@ -620,9 +651,7 @@ const ReclamationManagement = () => {
 ReclamationManagement.getLayout = function getLayout(page: ReactElement) {
   return (
     <PublicLayout>
-      <RoleProtectedRoute allowedRoles={["USER"]}>
-        {page}
-      </RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={["USER"]}>{page}</RoleProtectedRoute>
     </PublicLayout>
   );
 };
