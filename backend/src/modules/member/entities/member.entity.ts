@@ -29,7 +29,7 @@ export class MemberEntity implements Member {
   credits: number;
 
   @ApiProperty({ description: 'Phone of the member' })
-  phone: number;
+  phone: string;
 
   @ApiProperty({
     description: 'Subscription plan of the member',
@@ -59,7 +59,7 @@ export class MemberEntity implements Member {
     description: 'userId connect member to user',
     required: false,
   })
-  userId: number | null;
+  userId: string | null;
 
   @ApiProperty({ description: 'Indicates whether the member is active' })
   isActive: boolean;

@@ -330,7 +330,7 @@ const spaces = {
         left: 240,
         chairs: Array(8)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 4 !== 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
     ],
   },
@@ -341,7 +341,7 @@ const SubscriptionSelection = () => {
   const { user } = useAuth();
   const router = useRouter();
   const dispatch = useDispatch();
-  const [logout] = useLogoutMutation();
+  const [logoutQuery] = useLogoutMutation();
   const { data: prices = [], isLoading, isError } = useGetPricesQuery();
   const [
     createAbonnement,
@@ -398,7 +398,7 @@ const SubscriptionSelection = () => {
     }
 
     try {
-      await logout().unwrap();
+      await logoutQuery().unwrap();
       sessionStorage.clear();
       dispatch(signOut());
       router.replace("/client/login");
@@ -484,8 +484,9 @@ const SubscriptionSelection = () => {
   };
 
   const handleFinalSubmit = async () => {
-    if (!user || !user.id) {
-      setErrorMessage("The selected member does not exist.");
+    const memberId = sessionStorage.getItem("member");
+    if (!memberId || memberId === "") {
+      setErrorMessage("No member ID found. Please log in again.");
       return;
     }
 
@@ -501,7 +502,7 @@ const SubscriptionSelection = () => {
           registredDate: selectedDateTime,
           leaveDate,
           payedAmount: selectedPrice.price,
-          memberID: user.id,
+          memberID: memberId,
           priceId: selectedPrice.id,
           stayedPeriode: `${selectedPrice.name} (${selectedPrice.timePeriod.start}-${selectedPrice.timePeriod.end})`,
           isReservation: true,
@@ -522,7 +523,7 @@ const SubscriptionSelection = () => {
           registredTime: selectedDateTime,
           leaveTime: selectedDateTime,
           payedAmount: selectedJournalPrice.price,
-          memberID: user.id,
+          memberID: memberId,
           priceId: selectedJournalPrice.id,
           isReservation: true,
           createdAt: selectedDateTime,

@@ -20,7 +20,10 @@ export class MemberService {
   async create(addMemberDto: AddMemberDto): Promise<MemberEntity> {
     try {
       const member = await this.prisma.member.create({
-        data: addMemberDto,
+        data: {
+          ...addMemberDto,
+          phone: addMemberDto.phone?.toString(),
+        },
       });
       return new MemberEntity(member);
     } catch (error) {
@@ -117,7 +120,10 @@ export class MemberService {
     try {
       const member = await this.prisma.member.update({
         where: { id },
-        data: updateMemberDto,
+        data: {
+          ...updateMemberDto,
+          phone: updateMemberDto.phone !== undefined ? updateMemberDto.phone?.toString() : undefined,
+        },
       });
       return new MemberEntity(member);
     } catch (error) {

@@ -165,7 +165,7 @@ const Snacks = () => {
       dispatch(signOut());
       router.replace("/client/login");
     } catch (error) {
-      console.error("Déconnexion échouée:", error);
+      console.error("Sign out failed:", error);
       sessionStorage.clear();
       dispatch(signOut());
       router.replace("/client/login");
@@ -180,17 +180,17 @@ const Snacks = () => {
 
   const handleConfirmSelection = () => {
     if (!user || !user.id) {
-      setErrorMessage("Vous devez être connecté pour sélectionner un produit.");
+      setErrorMessage("You must be logged in to select a product.");
       return;
     }
 
     if (!selectedProduct) {
-      setErrorMessage("Veuillez sélectionner un produit.");
+      setErrorMessage("Please select a product.");
       return;
     }
 
     setSuccessMessage(
-      `Produit "${selectedProduct.name}" sélectionné avec succès ! Redirection...`
+      `Product "${selectedProduct.name}" selected successfully! Redirecting...`
     );
     setTimeout(() => {
       router.push("/client/account");
@@ -216,7 +216,7 @@ const Snacks = () => {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Alert severity="error" sx={{ borderRadius: 2, boxShadow: 1 }}>
-          Erreur lors du chargement des produits
+          Error loading products
         </Alert>
       </Container>
     );
@@ -246,9 +246,9 @@ const Snacks = () => {
                 color: theme.palette.text.primary,
               }}
             >
-              Menu Snacks
+              Snacks Menu
             </Typography>
-            <Tooltip title="Déconnexion">
+            <Tooltip title="Sign Out">
               <IconButton
                 onClick={handleSignOut}
                 sx={{
@@ -284,7 +284,7 @@ const Snacks = () => {
               component="h2"
               sx={{ mb: 3, textAlign: "center" }}
             >
-              Choisissez Votre Snack
+              Choose Your Snack
             </Typography>
             <Divider sx={{ mb: 4 }} />
 
@@ -424,7 +424,7 @@ const Snacks = () => {
                 onClick={handleConfirmSelection}
                 sx={{ px: 4, py: 1.5 }}
               >
-                Confirmer la Sélection
+                Confirm
               </Button>
             </Box>
           </Paper>

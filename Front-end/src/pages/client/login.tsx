@@ -34,8 +34,9 @@ const SignInPage: React.FC = () => {
         sessionStorage.setItem("accessToken", user.accessToken);
         sessionStorage.setItem("username", user.fullname ?? "");
         sessionStorage.setItem("Role", user.role);
-        sessionStorage.setItem("email", user.email ?? ""); // Ajouter cette ligne
-        sessionStorage.setItem("phone", user.phoneNumber ?? ""); // Ajouter cette ligne
+        sessionStorage.setItem("member", user.memberId ?? "");
+        sessionStorage.setItem("email", user.email ?? ""); 
+        sessionStorage.setItem("phone", user.phoneNumber ?? ""); 
 
         // Notification de connexion réussie
         await Swal.fire({

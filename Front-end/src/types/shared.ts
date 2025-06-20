@@ -114,6 +114,7 @@ export interface User {
   role: Role;
   resetPasswordToken: string;
   phoneNumber: string;
+   memberId?: string | null;
 }
 
 export interface Member {
@@ -135,6 +136,7 @@ export interface Member {
   isActive: boolean;
   fullName: string | null;
   fullNameWithEmail: string | null;
+  userId?: string | null;
 }
 
 export interface Price {
@@ -164,6 +166,7 @@ export interface Journal {
   price?: Price | null;
   expenses?: Expenses[];
   expenseIds?: string[];
+  createdbyUserID?: string | null;
 }
 
 export interface Abonnement {
@@ -271,6 +274,34 @@ export interface BookingResponse {
   createdAt: Date;
   updatedAt: Date;
   success: boolean;
+}
+export enum ReclamationStatus {
+  PENDING = "PENDING",
+  IN_PROGRESS = "IN_PROGRESS",
+  RESOLVED = "RESOLVED",
+  REJECTED = "REJECTED",
+}
+
+export interface Reclamation {
+  id: string;
+  title: string;
+  description: string;
+  status: ReclamationStatus;
+  createdAt: string; 
+  updatedAt: string; 
+  memberId: string;
+  member?: Partial<Member>; 
+  memberFullName?: string; 
+}
+export interface ResponseEntity {
+  id: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  reclamationId: string;
+  adminId: string;
+  admin?: { fullname: string };
+  adminFullName?: string;
 }
 
 export enum ExpenseType {

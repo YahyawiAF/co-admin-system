@@ -10,6 +10,8 @@ import { productApi } from "src/api/productApi";
 import { dailyProductApi } from "src/api/dailyproductApi";
 import { facilityApi } from "src/api/facility.repo";
 import { bookingService } from "src/api/bookingservice";
+import { reclamationApi } from "src/api/reclamationApi";
+import { responseApi } from "src/api/reponseApi";
 
 // Configuration du store
 export const store = configureStore({
@@ -25,6 +27,8 @@ export const store = configureStore({
     [productApi.reducerPath]: productApi.reducer,
     [dailyProductApi.reducerPath]: dailyProductApi.reducer,
     [facilityApi.reducerPath]: facilityApi.reducer,
+    [reclamationApi.reducerPath]: reclamationApi.reducer,
+    [responseApi.reducerPath]: responseApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -38,7 +42,9 @@ export const store = configureStore({
       dailyExpenseApi.middleware,
       productApi.middleware,
       dailyProductApi.middleware,
-      facilityApi.middleware
+      facilityApi.middleware,
+      reclamationApi.middleware,
+      responseApi.middleware,
     ),
 });
 

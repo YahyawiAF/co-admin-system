@@ -17,6 +17,7 @@ import {
   Compass,
   Globe,
   Calendar,
+  FileText,
 } from "react-feather";
 
 const pagesSection = [
@@ -60,6 +61,11 @@ const pagesSection = [
         href: "/dashboard/facility",
         icon: Home,
         title: "Facility",
+      },
+      {
+        href: "/dashboard/response",
+        icon: FileText,
+        title: "Claims",
       },
     ],
   },

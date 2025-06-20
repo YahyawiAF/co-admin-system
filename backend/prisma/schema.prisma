@@ -23,8 +23,8 @@ model User {
   phoneNumber        String?   @unique
   img                String?   @db.Text
   Journals           Journal[]
-  Responses          Response[]   @relation("AdminResponses")
-
+  Responses          Response[] @relation("AdminResponses")
+  member             Member?   @relation("UserToMember")
 
   @@map("users")
 }
@@ -42,8 +42,9 @@ model Member {
   deletedAt     DateTime?     @db.Timestamp(6)
   isActive      Boolean       @default(false)
   functionality String?
-  phone         Int?          @unique
-  userId        Int?
+  phone         String?       @unique
+  userId        String?       @unique
+  user          User?         @relation("UserToMember", fields: [userId], references: [id])
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
@@ -52,7 +53,6 @@ model Member {
 
   @@map("members")
 }
-
 model Price {
   id          String       @id @default(uuid())
   name        String
