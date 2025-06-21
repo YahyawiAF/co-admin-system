@@ -9,7 +9,6 @@ import {
   AppBar,
   Toolbar,
   Container,
-  Divider,
   Stepper,
   Step,
   StepLabel,
@@ -31,6 +30,7 @@ import {
 import { Power } from "react-feather";
 import { CiEdit } from "react-icons/ci";
 import { MdOutlineDeleteOutline, MdAddAlert } from "react-icons/md";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
 import { signOut } from "src/redux/authSlice";
@@ -40,13 +40,14 @@ import { FormProvider, useForm } from "react-hook-form";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import PublicLayout from "src/layouts/PublicLayout";
 import {
-  useGetReclamationsQuery,
+  useGetReclamationsByMemberIdQuery,
   useCreateReclamationMutation,
   useUpdateReclamationMutation,
   useDeleteReclamationMutation,
 } from "src/api/reclamationApi";
+import { useGetResponsesByClaimsIdQuery } from "src/api/reponseApi";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation } from "src/types/shared";
+import { Reclamation, ResponseEntity } from "src/types/shared";
 
 // Form data interface for react-hook-form
 interface ReclamationFormData {
@@ -55,7 +56,7 @@ interface ReclamationFormData {
   memberId: string;
 }
 
-// Styled components remain unchanged
+// Styled components
 const ReclamationCard = styled(Box)(({ theme }) => ({
   position: "relative",
   transition: "all 0.3s ease",
@@ -109,10 +110,16 @@ const ReclamationManagement = () => {
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
+  const [openResponsesDialog, setOpenResponsesDialog] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
   const steps = ["Enter Details", "Confirm"];
+
+  // State for selected reclamation ID (for editing, deleting, and viewing responses)
+  const [selectedReclamationId, setSelectedReclamationId] = useState<
+    string | null
+  >(null);
 
   // Fetch memberId from sessionStorage
   const memberId = sessionStorage.getItem("member") || "";
@@ -122,9 +129,22 @@ const ReclamationManagement = () => {
     data: reclamationsData,
     isLoading,
     isError,
-  } = useGetReclamationsQuery({
-    page: page + 1,
-    perPage: rowsPerPage,
+    error,
+  } = useGetReclamationsByMemberIdQuery(
+    {
+      memberId,
+      page: page + 1,
+      perPage: rowsPerPage,
+    },
+    { skip: !memberId }
+  );
+
+  const {
+    data: responsesData,
+    isLoading: isResponsesLoading,
+    isError: isResponsesError,
+  } = useGetResponsesByClaimsIdQuery(selectedReclamationId || "", {
+    skip: !selectedReclamationId,
   });
 
   const [
@@ -145,7 +165,7 @@ const ReclamationManagement = () => {
     defaultValues: {
       title: "",
       description: "",
-      memberId: memberId, // Use memberId from sessionStorage
+      memberId: memberId,
     },
   });
 
@@ -154,7 +174,7 @@ const ReclamationManagement = () => {
     defaultValues: {
       title: "",
       description: "",
-      memberId: memberId, // Initialize with sessionStorage memberId as fallback
+      memberId: memberId,
     },
   });
 
@@ -215,17 +235,12 @@ const ReclamationManagement = () => {
     createMethods.reset();
   };
 
-  // State for selected reclamation ID (for editing and deleting)
-  const [selectedReclamationId, setSelectedReclamationId] = useState<
-    string | null
-  >(null);
-
   // Handle edit dialog
   const handleOpenEditDialog = (reclamation: Reclamation) => {
     editMethods.reset({
       title: reclamation.title,
       description: reclamation.description,
-      memberId: reclamation.memberId || memberId, // Use reclamation's memberId, fallback to sessionStorage
+      memberId: reclamation.memberId || memberId,
     });
     setSelectedReclamationId(reclamation.id);
     setOpenEditDialog(true);
@@ -245,6 +260,17 @@ const ReclamationManagement = () => {
 
   const handleCloseDeleteDialog = () => {
     setOpenDeleteDialog(false);
+    setSelectedReclamationId(null);
+  };
+
+  // Handle responses dialog
+  const handleOpenResponsesDialog = (id: string) => {
+    setSelectedReclamationId(id);
+    setOpenResponsesDialog(true);
+  };
+
+  const handleCloseResponsesDialog = () => {
+    setOpenResponsesDialog(false);
     setSelectedReclamationId(null);
   };
 
@@ -286,7 +312,10 @@ const ReclamationManagement = () => {
     try {
       await updateReclamation({
         id: selectedReclamationId,
-        data: formData,
+        data: {
+          title: formData.title,
+          description: formData.description,
+        },
       }).unwrap();
       setSuccessMessage("Reclamation updated successfully!");
       setTimeout(() => {
@@ -318,14 +347,31 @@ const ReclamationManagement = () => {
     }
   }, [isCreateSuccess, isUpdateSuccess, isDeleteSuccess]);
 
-  if (isLoading)
+  // Redirect to login if no memberId
+  useEffect(() => {
+    if (!memberId) {
+      setErrorMessage("Member ID is missing. Please log in again.");
+      router.replace("/client/login");
+    }
+  }, [memberId, router]);
+
+  if (!memberId) {
+    return null; // Render nothing while redirecting
+  }
+
+  if (isLoading) {
     return <CircularProgress sx={{ display: "block", mx: "auto", my: 4 }} />;
-  if (isError)
+  }
+
+  if (isError) {
     return (
       <Alert severity="error" sx={{ m: 4 }}>
-        Error loading reclamations
+        {error && "data" in error
+          ? (error.data as any)?.message || "Error loading reclamations"
+          : "Error loading reclamations"}
       </Alert>
     );
+  }
 
   return (
     <Box
@@ -426,7 +472,6 @@ const ReclamationManagement = () => {
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Member</TableCell>
                   <TableCell>Title</TableCell>
                   <TableCell>Description</TableCell>
                   <TableCell>Date</TableCell>
@@ -434,53 +479,77 @@ const ReclamationManagement = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {reclamationsData?.data.map((reclamation) => (
-                  <TableRow key={reclamation.id}>
-                    <TableCell>{reclamation.memberFullName}</TableCell>
-                    <TableCell>{reclamation.title}</TableCell>
-                    <TableCell
-                      sx={{
-                        maxWidth: 300,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {reclamation.description.length > 100
-                        ? `${reclamation.description.substring(0, 100)}...`
-                        : reclamation.description}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(reclamation.createdAt).toLocaleString("fr-FR", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        second: "2-digit",
-                      })}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Edit">
-                        <IconButton
-                          onClick={() => handleOpenEditDialog(reclamation)}
-                        >
-                          <CiEdit size={24} />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete">
-                        <IconButton
-                          onClick={() => handleOpenDeleteDialog(reclamation.id)}
-                        >
-                          <MdOutlineDeleteOutline size={24} />
-                        </IconButton>
-                      </Tooltip>
+                {reclamationsData?.data.length ? (
+                  reclamationsData.data.map((reclamation) => (
+                    <TableRow key={reclamation.id}>
+                      <TableCell>{reclamation.title}</TableCell>
+                      <TableCell
+                        sx={{
+                          maxWidth: 300,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {reclamation.description.length > 100
+                          ? `${reclamation.description.substring(0, 100)}...`
+                          : reclamation.description}
+                      </TableCell>
+                      <TableCell>
+                        {new Date(reclamation.createdAt).toLocaleString(
+                          "fr-FR",
+                          {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          }
+                        )}
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="View Responses">
+                          <IconButton
+                            onClick={() =>
+                              handleOpenResponsesDialog(reclamation.id)
+                            }
+                          >
+                            <VisibilityIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Edit">
+                          <IconButton
+                            onClick={() => handleOpenEditDialog(reclamation)}
+                          >
+                            <CiEdit size={24} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete">
+                          <IconButton
+                            onClick={() =>
+                              handleOpenDeleteDialog(reclamation.id)
+                            }
+                          >
+                            <MdOutlineDeleteOutline size={24} />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center">
+                      No reclamations found.
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           </TableContainer>
+
+          {/* Pagination */}
+          
         </Paper>
       </Container>
 
@@ -521,7 +590,6 @@ const ReclamationManagement = () => {
                   rows={4}
                   required
                 />
-                {/* Optionally, you can hide memberId field since it's not user-editable */}
                 <input
                   type="hidden"
                   {...createMethods.register("memberId")}
@@ -601,7 +669,6 @@ const ReclamationManagement = () => {
                 rows={4}
                 required
               />
-              {/* Optionally, you can hide memberId field since it's not user-editable */}
               <input type="hidden" {...editMethods.register("memberId")} />
             </Box>
           </FormProvider>
@@ -642,6 +709,66 @@ const ReclamationManagement = () => {
           >
             {isDeleting ? <CircularProgress size={24} /> : "Delete"}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+    
+      <Dialog
+        open={openResponsesDialog}
+        onClose={handleCloseResponsesDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Responses for Reclamation</DialogTitle>
+        <DialogContent>
+          {isResponsesLoading ? (
+            <Box display="flex" justifyContent="center" p={2}>
+              <CircularProgress />
+            </Box>
+          ) : isResponsesError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Error loading responses
+            </Alert>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Content</TableCell>
+                    <TableCell>Created At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {responsesData?.length ? (
+                    responsesData.map((response) => (
+                      <TableRow key={response.id}>
+                        <TableCell>{response.content}</TableCell>
+                        <TableCell>
+                          {new Date(response.createdAt).toLocaleString("fr-FR", {
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={2} align="center">
+                        No responses found.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseResponsesDialog}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>

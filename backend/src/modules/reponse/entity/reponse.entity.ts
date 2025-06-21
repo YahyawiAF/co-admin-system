@@ -6,6 +6,7 @@ export class ResponseEntity implements Response {
   constructor(partial: Partial<ResponseEntity>) {
     Object.assign(this, partial);
   }
+    adminId: string;
 
   @ApiProperty({ description: 'Unique identifier for the response' })
   id: string;
@@ -22,15 +23,5 @@ export class ResponseEntity implements Response {
   @ApiProperty({ description: 'ID of the reclamation this response belongs to' })
   reclamationId: string;
 
-  @ApiProperty({ description: 'ID of the admin who created the response' })
-  adminId: string;
-
   
-  admin?: { fullname: string };
-
-  @ApiProperty({ description: 'Computed admin full name', required: false })
-  @Expose()
-  get adminFullName(): string {
-    return this.admin?.fullname || 'Unknown';
-  }
 }

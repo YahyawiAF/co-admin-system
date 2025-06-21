@@ -1,4 +1,5 @@
-import React, { useState, useEffect, ChangeEvent, ReactElement } from "react";
+import React, { useState, useEffect, ReactElement } from "react";
+import { useRouter } from "next/router";
 import { useTheme, styled } from "@mui/material/styles";
 import {
   Box,
@@ -18,9 +19,12 @@ import {
   CircularProgress,
   TableSortLabel,
   Drawer,
-  TextField,
-  FormHelperText,
-  // Removed TablePagination
+  TablePagination,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "src/layouts/Dashboard";
@@ -28,14 +32,13 @@ import AddCommentIcon from "@mui/icons-material/AddComment";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useGetReclamationsQuery } from "src/api/reclamationApi";
 import {
-  useGetPaginatedResponsesQuery,
+  useGetResponsesByClaimsIdQuery,
   useCreateResponseMutation,
 } from "src/api/reponseApi";
 import { FormProvider, useForm } from "react-hook-form";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation, ReclamationStatus } from "src/types/shared";
-import useAuth from "src/hooks/useAuth";
+import { Reclamation, ResponseEntity } from "src/types/shared";
 import { EnhancedTableHeadProps } from "src/types/table";
 
 // Form data interface
@@ -43,7 +46,7 @@ interface ResponseFormData {
   content: string;
 }
 
-// Styled components (aligned with PriceComponent)
+// Styled components
 const PageContainer = styled(Box)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -241,8 +244,7 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
             key={headCell.id}
             align={headCell.numeric ? "right" : "left"}
             padding={headCell.disablePadding ? "none" : "normal"}
-            sortDirection={orderBy === headCell.id ? order : false}
-            sx={{ display: isMobile && !headCell ? "none" : "table-cell" }} // Fixed typo: added .alwaysVisible
+            sx={{ display: isMobile ? "none" : "table-cell" }}
           >
             <TableSortLabel
               active={orderBy === headCell.id}
@@ -266,33 +268,42 @@ const EnhancedTableHead: React.FC<EnhancedTableHeadProps> = ({
 const ResponseManagement = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { user } = useAuth();
+  const router = useRouter();
 
-  // State for drawer and selection
+  // State for drawer, dialog, selection, and pagination
   const [showDrawer, setShowDrawer] = useState(false);
+  const [showResponsesDialog, setShowResponsesDialog] = useState(false);
   const [selectedReclamationId, setSelectedReclamationId] = useState<
     string | null
   >(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("createdAt");
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Fetch admin ID from sessionStorage
+  const adminId = sessionStorage.getItem("userID") || "";
 
   // API hooks
   const {
     data: reclamationsData,
     isLoading: isReclamationsLoading,
     isError: isReclamationsError,
-  } = useGetReclamationsQuery({}); // Removed page and perPage
+  } = useGetReclamationsQuery({
+    page: page + 1,
+    perPage: rowsPerPage,
+  });
 
   const {
     data: responsesData,
     isLoading: isResponsesLoading,
     isError: isResponsesError,
-  } = useGetPaginatedResponsesQuery({
-    reclamationId: selectedReclamationId || undefined,
-  }); // Removed page and perPage
+  } = useGetResponsesByClaimsIdQuery(selectedReclamationId || "", {
+    skip: !selectedReclamationId,
+  });
 
   const [
     createResponse,
@@ -350,8 +361,25 @@ const ResponseManagement = () => {
     setOrderBy(property);
   };
 
+  // Handle pagination
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
   // Handle drawer
   const handleOpenDrawer = (reclamationId: string) => {
+    if (!adminId) {
+      setErrorMessage("Admin ID is missing. Please log in again.");
+      router.push("/admin/login");
+      return;
+    }
     setSelectedReclamationId(reclamationId);
     setShowDrawer(true);
     responseMethods.reset();
@@ -367,14 +395,22 @@ const ResponseManagement = () => {
     setSuccessMessage("");
   };
 
+  // Handle responses dialog
+  const handleOpenResponsesDialog = (reclamationId: string) => {
+    setSelectedReclamationId(reclamationId);
+    setShowResponsesDialog(true);
+  };
+
+  const handleCloseResponsesDialog = () => {
+    setShowResponsesDialog(false);
+    setSelectedReclamationId(null);
+  };
+
   // Handle create response
   const handleCreateResponse = async () => {
-    if (!selectedReclamationId || !user?.id) {
-      setErrorMessage("User or reclamation ID is missing.");
-      console.error("Missing user.id or selectedReclamationId:", {
-        userId: user?.id,
-        reclamationId: selectedReclamationId,
-      });
+    if (!selectedReclamationId) {
+      setErrorMessage("Reclamation ID is missing.");
+      console.error("Missing selectedReclamationId:", selectedReclamationId);
       return;
     }
 
@@ -389,12 +425,10 @@ const ResponseManagement = () => {
       console.log("Creating response with data:", {
         content: formData.content,
         reclamationId: selectedReclamationId,
-        adminId: user.id,
       });
       await createResponse({
         content: formData.content,
         reclamationId: selectedReclamationId,
-        adminId: user.id,
       }).unwrap();
       setSuccessMessage("Response created successfully!");
       setTimeout(() => {
@@ -415,15 +449,25 @@ const ResponseManagement = () => {
     }
   }, [isCreateSuccess]);
 
+  // Redirect to login if no adminId
+  useEffect(() => {
+    if (!adminId) {
+      setErrorMessage("Admin ID is missing. Please log in again.");
+      router.push("/admin/login");
+    }
+  }, [adminId, router]);
+
   // Loading and error states
-  if (isReclamationsLoading)
+  if (isReclamationsLoading) {
     return (
       <Box display="flex" justifyContent="center" p={4}>
         <CircularProgress />
       </Box>
     );
-  if (isReclamationsError)
+  }
+  if (isReclamationsError) {
     return <Alert severity="error">Error loading reclamations</Alert>;
+  }
 
   return (
     <PageContainer>
@@ -458,133 +502,53 @@ const ResponseManagement = () => {
                 isMobile={isMobile}
               />
               <TableBody>
-                {reclamationsData?.data.map((reclamation) => {
-                  const isItemSelected = isSelected(reclamation.id);
-                  return (
-                    <TableRow
-                      key={reclamation.id}
-                      hover
-                      onClick={(event) => handleClick(event, reclamation.id)}
-                      role="checkbox"
-                      aria-checked={isItemSelected}
-                      tabIndex={-1}
-                      selected={isItemSelected}
-                    >
-                      <ResponsiveTableCell padding="checkbox">
-                        <Checkbox
-                          color="primary"
-                          checked={isItemSelected}
-                          inputProps={{ "aria-labelledby": reclamation.id }}
-                        />
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell>
-                        {reclamation.memberFullName}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell>
-                        {reclamation.title}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell
-                        sx={{
-                          maxWidth: 300,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
+                {reclamationsData?.data.length ? (
+                  reclamationsData.data.map((reclamation) => {
+                    const isItemSelected = isSelected(reclamation.id);
+                    return (
+                      <TableRow
+                        key={reclamation.id}
+                        hover
+                        onClick={(event) => handleClick(event, reclamation.id)}
+                        role="checkbox"
+                        aria-checked={isItemSelected}
+                        tabIndex={-1}
+                        selected={isItemSelected}
                       >
-                        {reclamation.description.length > 100
-                          ? `${reclamation.description.substring(0, 100)}...`
-                          : reclamation.description}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell
-                        sx={{ display: isMobile ? "none" : "table-cell" }}
-                      >
-                        {reclamation.status}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell
-                        sx={{ display: isMobile ? "none" : "table-cell" }}
-                      >
-                        {new Date(reclamation.createdAt).toLocaleString(
-                          "fr-FR",
-                          {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }
-                        )}
-                      </ResponsiveTableCell>
-                      <ResponsiveTableCell align="center">
-                        <Box display="flex" justifyContent="center" gap={1}>
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenDrawer(reclamation.id);
-                            }}
-                            size="small"
+                        <ResponsiveTableCell padding="checkbox">
+                          <Checkbox
                             color="primary"
-                          >
-                            <AddCommentIcon
-                              fontSize={isMobile ? "small" : "medium"}
-                            />
-                          </IconButton>
-                          <IconButton
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedReclamationId(reclamation.id);
-                            }}
-                            size="small"
-                            color="primary"
-                          >
-                            <VisibilityIcon
-                              fontSize={isMobile ? "small" : "medium"}
-                            />
-                          </IconButton>
-                        </Box>
-                      </ResponsiveTableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </StyledTableContainer>
-        </TableWrapper>
-
-        {/* Responses Table */}
-        {selectedReclamationId && (
-          <>
-            <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
-              Responses for Reclamation
-            </Typography>
-            {isResponsesLoading ? (
-              <Box display="flex" justifyContent="center" p={2}>
-                <CircularProgress />
-              </Box>
-            ) : isResponsesError ? (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                Error loading responses
-              </Alert>
-            ) : (
-              <StyledTableContainer>
-                <Table stickyHeader aria-label="responses table">
-                  <TableHead>
-                    <TableRow>
-                      <ResponsiveTableCell>Content</ResponsiveTableCell>
-                      <ResponsiveTableCell>Admin</ResponsiveTableCell>
-                      <ResponsiveTableCell>Created At</ResponsiveTableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {responsesData?.data.map((response) => (
-                      <TableRow key={response.id}>
-                        <ResponsiveTableCell>
-                          {response.content}
+                            checked={isItemSelected}
+                            inputProps={{ "aria-labelledby": reclamation.id }}
+                          />
                         </ResponsiveTableCell>
                         <ResponsiveTableCell>
-                          {response.adminFullName}
+                          {reclamation.memberFullName}
                         </ResponsiveTableCell>
                         <ResponsiveTableCell>
-                          {new Date(response.createdAt).toLocaleString(
+                          {reclamation.title}
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell
+                          sx={{
+                            maxWidth: 300,
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {reclamation.description.length > 100
+                            ? `${reclamation.description.substring(0, 100)}...`
+                            : reclamation.description}
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell
+                          sx={{ display: isMobile ? "none" : "table-cell" }}
+                        >
+                          {reclamation.status}
+                        </ResponsiveTableCell>
+                        <ResponsiveTableCell
+                          sx={{ display: isMobile ? "none" : "table-cell" }}
+                        >
+                          {new Date(reclamation.createdAt).toLocaleString(
                             "fr-FR",
                             {
                               year: "numeric",
@@ -595,14 +559,57 @@ const ResponseManagement = () => {
                             }
                           )}
                         </ResponsiveTableCell>
+                        <ResponsiveTableCell align="center">
+                          <Box display="flex" justifyContent="center" gap={1}>
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenDrawer(reclamation.id);
+                              }}
+                              size="small"
+                              color="primary"
+                            >
+                              <AddCommentIcon
+                                fontSize={isMobile ? "small" : "medium"}
+                              />
+                            </IconButton>
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenResponsesDialog(reclamation.id);
+                              }}
+                              size="small"
+                              color="primary"
+                            >
+                              <VisibilityIcon
+                                fontSize={isMobile ? "small" : "medium"}
+                              />
+                            </IconButton>
+                          </Box>
+                        </ResponsiveTableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </StyledTableContainer>
-            )}
-          </>
-        )}
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <ResponsiveTableCell colSpan={6} align="center">
+                      No reclamations found.
+                    </ResponsiveTableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </StyledTableContainer>
+          <TablePagination
+            rowsPerPageOptions={[5, 10, 25]}
+            component="div"
+            count={reclamationsData?.total || 0}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableWrapper>
       </MainContainer>
 
       {/* Create Response Drawer */}
@@ -666,6 +673,61 @@ const ResponseManagement = () => {
           </SubmitButton>
         </Box>
       </Drawer>
+
+      {/* Responses Dialog */}
+      <Dialog
+        open={showResponsesDialog}
+        onClose={handleCloseResponsesDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Responses for Reclamation</DialogTitle>
+        <DialogContent>
+          {isResponsesLoading ? (
+            <Box display="flex" justifyContent="center" p={2}>
+              <CircularProgress />
+            </Box>
+          ) : isResponsesError ? (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              Error loading responses
+            </Alert>
+          ) : (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {responsesData?.length ? (
+                responsesData.map((response) => (
+                  <Paper
+                    key={response.id}
+                    sx={{
+                      p: 2,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography variant="body1">
+                      <strong>Content:</strong> {response.content}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      <strong>Created At:</strong>{" "}
+                      {new Date(response.createdAt).toLocaleString("fr-FR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Typography>
+                  </Paper>
+                ))
+              ) : (
+                <Typography align="center">No responses found.</Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseResponsesDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </PageContainer>
   );
 };

@@ -12,8 +12,4 @@ export class CreateResponseDto {
   @ApiProperty({ description: 'ID of the reclamation this response belongs to' })
   reclamationId: string;
 
-  @IsNotEmpty()
-  @IsString()
-  @ApiProperty({ description: 'ID of the admin creating the response' })
-  adminId: string;
 }

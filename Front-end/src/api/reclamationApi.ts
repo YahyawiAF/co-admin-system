@@ -73,6 +73,14 @@ export const reclamationApi = createApi({
       }),
       invalidatesTags: ["Reclamations"],
     }),
+    getReclamationsByMemberId: builder.query<
+      PaginatedResult<Reclamation>,
+      { memberId: string; page?: number; perPage?: number }
+    >({
+      query: ({ memberId, page = 1, perPage = 20 }) =>
+        `reclamations/member/${memberId}?page=${page}&perPage=${perPage}`,
+      providesTags: ["Reclamations"],
+    }),
 
     // Delete a reclamation
     deleteReclamation: builder.mutation<Reclamation, string>({
@@ -91,5 +99,6 @@ export const {
   useGetReclamationByIdQuery,
   useCreateReclamationMutation,
   useUpdateReclamationMutation,
+  useGetReclamationsByMemberIdQuery,
   useDeleteReclamationMutation,
 } = reclamationApi;

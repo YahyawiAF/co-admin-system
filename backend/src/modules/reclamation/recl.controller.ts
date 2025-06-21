@@ -7,19 +7,16 @@ import {
   Param,
   Delete,
   Query,
-  UseGuards,
+ 
   ParseUUIDPipe,
 } from '@nestjs/common';
 import {
-  ApiBearerAuth,
+ 
   ApiTags,
   ApiCreatedResponse,
   ApiOkResponse,
 } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
-import { Role } from '@prisma/client';
-import { Roles } from '../../../common/decorator/roles.decorator';
-import { RolesGuard } from '../../../common/guards/auth.guard';
+
 import { PaginatedResult } from 'prisma-pagination';
 import { CreateReclamationDto } from './dtos/createreclamation.dtos';
 import { UpdateReclamationDto } from './dtos/updatereclamation.dtos';
@@ -70,6 +67,16 @@ export class ReclamationController {
     @Body() updateReclamationDto: UpdateReclamationDto,
   ): Promise<ReclamationEntity> {
     return await this.reclamationService.update(id, updateReclamationDto);
+  }
+  @Get('member/:memberId')
+  
+  @ApiOkResponse({ type: ReclamationEntity, isArray: true })
+  async findByMemberId(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Query('page') page: number,
+    @Query('perPage') perPage: number,
+  ): Promise<PaginatedResult<ReclamationEntity>> {
+    return await this.reclamationService.findByMemberId(memberId, page, perPage);
   }
 
   @Delete(':id')

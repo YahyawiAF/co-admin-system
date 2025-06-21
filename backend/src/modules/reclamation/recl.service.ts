@@ -91,7 +91,7 @@ export class ReclamationService {
     try {
       const reclamation = await this.prisma.reclamation.findUnique({
         where: { id },
-        include: { member: true, responses: { include: { admin: true } } },
+        include: { member: true, responses: true },
       });
       if (!reclamation) {
         throw new GeneralException(
@@ -132,6 +132,34 @@ export class ReclamationService {
         HttpStatus.BAD_REQUEST,
         ErrorCode.UPDATE_FAILED,
         `Failed to update reclamation: ${(error as Error).message}`,
+      );
+    }
+  }
+  async findByMemberId(
+    memberId: string,
+    page: number = 1,
+    perPage: number = 20,
+  ): Promise<PaginatedResult<ReclamationEntity>> {
+    try {
+      const paginate = createPaginator({ perPage });
+      const paginatedResult = await paginate(
+        this.prisma.reclamation,
+        {
+          where: { memberId },
+          orderBy: { createdAt: 'desc' },
+          include: { member: true },
+        },
+        { page },
+      );
+      return {
+        data: paginatedResult.data.map((reclamation) => new ReclamationEntity(reclamation)),
+        meta: paginatedResult.meta,
+      };
+    } catch (error) {
+      throw new GeneralException(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+        ErrorCode.UNKNOWN_ERROR,
+        `Failed to fetch reclamations for member ${memberId}: ${(error as Error).message}`,
       );
     }
   }

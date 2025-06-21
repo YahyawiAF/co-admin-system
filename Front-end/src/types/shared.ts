@@ -299,9 +299,7 @@ export interface ResponseEntity {
   createdAt: string;
   updatedAt: string;
   reclamationId: string;
-  adminId: string;
-  admin?: { fullname: string };
-  adminFullName?: string;
+
 }
 
 export enum ExpenseType {

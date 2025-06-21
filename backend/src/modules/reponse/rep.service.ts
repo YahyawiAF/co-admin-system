@@ -21,7 +21,7 @@ export class ResponseService {
     try {
       const response = await this.prisma.response.create({
         data: createResponseDto,
-        include: { admin: true, reclamation: true },
+        include: {  reclamation: true },
       });
       return new ResponseEntity(response);
     } catch (error) {
@@ -39,7 +39,7 @@ export class ResponseService {
    */
   async findAll(): Promise<ResponseEntity[]> {
     const responses = await this.prisma.response.findMany({
-      include: { admin: true, reclamation: true },
+      include: {  reclamation: true },
     });
     return responses.map((response) => new ResponseEntity(response));
   }
@@ -69,7 +69,7 @@ export class ResponseService {
       {
         where,
         orderBy,
-        include: { admin: true, reclamation: true },
+        include: { reclamation: true },
       },
       { page },
     );
@@ -88,7 +88,7 @@ export class ResponseService {
     try {
       const response = await this.prisma.response.findUnique({
         where: { id },
-        include: { admin: true, reclamation: true },
+        include: { reclamation: true },
       });
       if (!response) {
         throw new GeneralException(
@@ -118,7 +118,7 @@ export class ResponseService {
       const response = await this.prisma.response.update({
         where: { id },
         data: updateResponseDto,
-        include: { admin: true, reclamation: true },
+        include: { reclamation: true },
       });
       return new ResponseEntity(response);
     } catch (error) {
@@ -130,6 +130,30 @@ export class ResponseService {
     }
   }
 
+  async findByClaimsId(reclamationId: string): Promise<ResponseEntity[]> {
+    try {
+      const responses = await this.prisma.response.findMany({
+        where: { reclamationId },
+        include: { reclamation: true },
+      });
+      if (!responses.length) {
+        throw new GeneralException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.NOT_FOUND,
+          `No responses found for reclamation ID ${reclamationId}.`,
+        );
+      }
+      return responses.map((response) => new ResponseEntity(response));
+    } catch (error) {
+      throw new GeneralException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        `Failed to fetch responses for reclamation ID ${reclamationId}: ${(error as Error).message}`,
+      );
+    }
+  }
+
+
   /**
    * Delete a response by ID.
    * @param id - Response ID.
@@ -139,7 +163,7 @@ export class ResponseService {
     try {
       const response = await this.prisma.response.delete({
         where: { id },
-        include: { admin: true, reclamation: true },
+        include: {  reclamation: true },
       });
       return new ResponseEntity(response);
     } catch (error) {

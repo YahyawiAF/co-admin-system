@@ -23,7 +23,6 @@ model User {
   phoneNumber        String?   @unique
   img                String?   @db.Text
   Journals           Journal[]
-  Responses          Response[] @relation("AdminResponses")
   member             Member?   @relation("UserToMember")
 
   @@map("users")
@@ -213,9 +212,7 @@ model Response {
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt @db.Timestamp(6)
   reclamationId String
-  adminId       String
   reclamation   Reclamation @relation(fields: [reclamationId], references: [id])
-  admin         User       @relation("AdminResponses", fields: [adminId], references: [id])
 
   @@map("responses")
 }

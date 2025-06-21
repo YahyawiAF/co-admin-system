@@ -69,6 +69,12 @@ export class ResponseController {
     return await this.responseService.update(id, updateResponseDto);
   }
 
+   @Get('reclamation/:reclamationId')
+  @ApiOkResponse({ type: ResponseEntity, isArray: true })
+  async findByClaimsId(@Param('reclamationId', ParseUUIDPipe) reclamationId: string): Promise<ResponseEntity[]> {
+    return await this.responseService.findByClaimsId(reclamationId);
+  }
+
   @Delete(':id')
   
   @ApiOkResponse({ type: ResponseEntity })
