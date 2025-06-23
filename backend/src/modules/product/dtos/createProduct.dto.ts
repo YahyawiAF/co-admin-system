@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsPositive,
+  IsUUID,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -47,4 +48,6 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   img?: string;
+
+ 
 }

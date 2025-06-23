@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 import { CreateProductDto } from './dtos/createProduct.dto';
+import { CreateDailyProductDto } from './dtos/createdailyproduct.dtos';
 import { ProductEntity } from './entities/product.entitie';
 import { UpdateProductDto } from './dtos/updateProduct';
 
@@ -49,33 +50,51 @@ export class ProductsService {
     );
   }
 
-  async createDailyProduct(data: {
-    productId: string;
-    quantite: number;
-    date?: string;
-  }) {
+  async createDailyProduct(data: CreateDailyProductDto) {
+    console.log('Backend received data for createDailyProduct:', data);
+    if (data.memberId) {
+      const memberExists = await this.prisma.member.findUnique({
+        where: { id: data.memberId },
+      });
+      if (!memberExists) {
+        throw new Error('Member not found');
+      }
+    }
     return this.prisma.dailyProduct.create({
       data: {
         productId: data.productId,
         quantite: data.quantite,
-        date: data.date ? new Date(data.date) : new Date(), // Default to current date if not provided
+        date: data.date ? new Date(data.date) : new Date(),
+        memberId: data.memberId, // Include memberId
       },
     });
   }
+
   async updateDailyProduct(
     id: string,
-    data: {
-      productId?: string;
-      quantite?: number;
-      date?: string; // Add this field
-    },
+    data: Partial<{
+      productId: string;
+      quantite: number;
+      date: string;
+      memberId: string | null;
+    }>,
   ) {
+    console.log('Backend received data for updateDailyProduct:', data);
+    if (data.memberId) {
+      const memberExists = await this.prisma.member.findUnique({
+        where: { id: data.memberId },
+      });
+      if (!memberExists) {
+        throw new Error('Member not found');
+      }
+    }
     return this.prisma.dailyProduct.update({
       where: { id },
       data: {
         ...(data.productId && { productId: data.productId }),
         ...(data.quantite && { quantite: data.quantite }),
-        ...(data.date && { date: new Date(data.date) }), // Process the date field
+        ...(data.date && { date: new Date(data.date) }),
+        ...(data.memberId !== undefined && { memberId: data.memberId }),
       },
     });
   }
@@ -90,6 +109,7 @@ export class ProductsService {
     return this.prisma.dailyProduct.findMany({
       include: {
         product: true,
+        member: true,
       },
     });
   }
@@ -99,6 +119,7 @@ export class ProductsService {
       where: { id },
       include: {
         product: true,
+        member: true,
       },
     });
   }

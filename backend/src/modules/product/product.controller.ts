@@ -20,6 +20,7 @@ import {
 import { ProductsService } from './product.service';
 import { ProductEntity } from './entities/product.entitie';
 import { CreateProductDto } from './dtos/createProduct.dto';
+import { CreateDailyProductDto } from './dtos/createdailyproduct.dtos';
 import { UpdateProductDto } from './dtos/updateProduct';
 
 @Controller('products')
@@ -98,37 +99,36 @@ export class ProductsController {
 
   @Post('daily')
   @ApiOperation({ summary: 'Create new daily product' })
-  @ApiResponse({
+  @ApiCreatedResponse({
     status: 201,
     description: 'Daily product successfully created',
+    type: CreateDailyProductDto,
   })
-  async createDailyProduct(
-    @Body() body: { productId?: string; quantite?: number; date?: string },
-  ) {
-    return this.productsService.createDailyProduct({
-      productId: body.productId,
-      quantite: body.quantite,
-      date: body.date, // Pass the date field
-    });
+  async createDailyProduct(@Body() body: CreateDailyProductDto) {
+    console.log("Controller received body:", body);
+    return this.productsService.createDailyProduct(body);
   }
 
   @Patch('daily/:id')
   @ApiOperation({ summary: 'Update daily product' })
   @ApiParam({ name: 'id', description: 'Daily product ID' })
-  @ApiResponse({
+  @ApiOkResponse({
     status: 200,
     description: 'Daily product updated',
   })
   async updateDailyProduct(
     @Param('id') id: string,
-    @Body() body: { productId?: string; quantite?: number; date?: string },
+    @Body() body: Partial<{
+      productId: string;
+      quantite: number;
+      date: string;
+      memberId: string | null;
+    }>,
   ) {
-    return this.productsService.updateDailyProduct(id, {
-      productId: body.productId,
-      quantite: body.quantite,
-      date: body.date, // Pass the date field
-    });
+    console.log("Controller received body for update:", body);
+    return this.productsService.updateDailyProduct(id, body);
   }
+
   @Delete('daily/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete daily product' })
@@ -142,10 +142,10 @@ export class ProductsController {
   }
 
   @Get('daily/all')
-  @ApiOperation({ summary: 'Get all daily product' })
-  @ApiResponse({
+  @ApiOperation({ summary: 'Get all daily products' })
+  @ApiOkResponse({
     status: 200,
-    description: 'List of all daily product',
+    description: 'List of all daily products',
   })
   async findAllDailyProduct() {
     return this.productsService.findAllDailyProduct();
@@ -154,7 +154,7 @@ export class ProductsController {
   @Get('daily/:id')
   @ApiOperation({ summary: 'Get daily product by ID' })
   @ApiParam({ name: 'id', description: 'Daily product ID' })
-  @ApiResponse({
+  @ApiOkResponse({
     status: 200,
     description: 'Daily product details',
   })

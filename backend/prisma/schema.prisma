@@ -49,6 +49,7 @@ model Member {
   reservations  Reservation[]
   seatBookings  SeatBooking[]
   Reclamations  Reclamation[] @relation("MemberReclamations")
+  dailyProducts DailyProduct[] @relation("MemberToDailyProduct")
 
   @@map("members")
 }
@@ -138,6 +139,8 @@ model DailyProduct {
   quantite  Int
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+  memberId  String?   
+  member    Member?   @relation("MemberToDailyProduct", fields: [memberId], references: [id]) 
 }
 
 model Expense {

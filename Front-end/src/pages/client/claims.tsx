@@ -47,13 +47,14 @@ import {
 } from "src/api/reclamationApi";
 import { useGetResponsesByClaimsIdQuery } from "src/api/reponseApi";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation, ResponseEntity } from "src/types/shared";
+import { Reclamation, ResponseEntity, ReclamationStatus } from "src/types/shared";
 
 // Form data interface for react-hook-form
 interface ReclamationFormData {
   title: string;
   description: string;
   memberId: string;
+  status: ReclamationStatus;
 }
 
 // Styled components
@@ -166,6 +167,7 @@ const ReclamationManagement = () => {
       title: "",
       description: "",
       memberId: memberId,
+      status: ReclamationStatus.PENDING,
     },
   });
 
@@ -175,6 +177,7 @@ const ReclamationManagement = () => {
       title: "",
       description: "",
       memberId: memberId,
+      status: ReclamationStatus.PENDING,
     },
   });
 
@@ -224,6 +227,7 @@ const ReclamationManagement = () => {
       title: "",
       description: "",
       memberId: memberId,
+      status: ReclamationStatus.PENDING,
     });
     setErrorMessage("");
     setSuccessMessage("");
@@ -241,6 +245,7 @@ const ReclamationManagement = () => {
       title: reclamation.title,
       description: reclamation.description,
       memberId: reclamation.memberId || memberId,
+      status: reclamation.status,
     });
     setSelectedReclamationId(reclamation.id);
     setOpenEditDialog(true);
@@ -290,7 +295,12 @@ const ReclamationManagement = () => {
         return;
       }
       try {
-        await createReclamation(formData).unwrap();
+        await createReclamation({
+          title: formData.title,
+          description: formData.description,
+          memberId: memberId,
+          status: ReclamationStatus.PENDING,
+        }).unwrap();
         setSuccessMessage("Reclamation created successfully!");
         setTimeout(() => {
           handleCloseCreateDialog();
@@ -315,6 +325,7 @@ const ReclamationManagement = () => {
         data: {
           title: formData.title,
           description: formData.description,
+          status: formData.status,
         },
       }).unwrap();
       setSuccessMessage("Reclamation updated successfully!");
@@ -474,6 +485,7 @@ const ReclamationManagement = () => {
                 <TableRow>
                   <TableCell>Title</TableCell>
                   <TableCell>Description</TableCell>
+                  <TableCell>Status</TableCell>
                   <TableCell>Date</TableCell>
                   <TableCell align="center">Actions</TableCell>
                 </TableRow>
@@ -496,6 +508,19 @@ const ReclamationManagement = () => {
                           : reclamation.description}
                       </TableCell>
                       <TableCell>
+                        <Typography
+                          sx={{
+                            color:
+                              reclamation.status === ReclamationStatus.PENDING
+                                ? "#f28c38" // Orange
+                                : "#4caf50", // Green
+                            fontWeight: "medium",
+                          }}
+                        >
+                          {reclamation.status}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
                         {new Date(reclamation.createdAt).toLocaleString(
                           "fr-FR",
                           {
@@ -509,37 +534,42 @@ const ReclamationManagement = () => {
                         )}
                       </TableCell>
                       <TableCell align="center">
-                        <Tooltip title="View Responses">
-                          <IconButton
-                            onClick={() =>
-                              handleOpenResponsesDialog(reclamation.id)
-                            }
-                          >
-                            <VisibilityIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Edit">
-                          <IconButton
-                            onClick={() => handleOpenEditDialog(reclamation)}
-                          >
-                            <CiEdit size={24} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Delete">
-                          <IconButton
-                            onClick={() =>
-                              handleOpenDeleteDialog(reclamation.id)
-                            }
-                          >
-                            <MdOutlineDeleteOutline size={24} />
-                          </IconButton>
-                        </Tooltip>
+                        {reclamation.status === ReclamationStatus.RESOLVED ? (
+                          <Tooltip title="View Responses">
+                            <IconButton
+                              onClick={() =>
+                                handleOpenResponsesDialog(reclamation.id)
+                              }
+                            >
+                              <VisibilityIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            <Tooltip title="Edit">
+                              <IconButton
+                                onClick={() => handleOpenEditDialog(reclamation)}
+                              >
+                                <CiEdit size={24} />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Delete">
+                              <IconButton
+                                onClick={() =>
+                                  handleOpenDeleteDialog(reclamation.id)
+                                }
+                              >
+                                <MdOutlineDeleteOutline size={24} />
+                              </IconButton>
+                            </Tooltip>
+                          </>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} align="center">
+                    <TableCell colSpan={5} align="center">
                       No reclamations found.
                     </TableCell>
                   </TableRow>
@@ -548,7 +578,7 @@ const ReclamationManagement = () => {
             </Table>
           </TableContainer>
 
-          {/* Pagination */}
+        
           
         </Paper>
       </Container>
@@ -595,6 +625,11 @@ const ReclamationManagement = () => {
                   {...createMethods.register("memberId")}
                   value={memberId}
                 />
+                <input
+                  type="hidden"
+                  {...createMethods.register("status")}
+                  value={ReclamationStatus.PENDING}
+                />
               </Box>
             ) : (
               <Box>
@@ -608,10 +643,8 @@ const ReclamationManagement = () => {
                   <strong>Description:</strong>{" "}
                   {createMethods.getValues("description")}
                 </Typography>
-                <Typography>
-                  <strong>Member ID:</strong>{" "}
-                  {createMethods.getValues("memberId")}
-                </Typography>
+                
+                
               </Box>
             )}
           </FormProvider>
@@ -670,6 +703,7 @@ const ReclamationManagement = () => {
                 required
               />
               <input type="hidden" {...editMethods.register("memberId")} />
+              <input type="hidden" {...editMethods.register("status")} />
             </Box>
           </FormProvider>
         </DialogContent>
@@ -712,7 +746,7 @@ const ReclamationManagement = () => {
         </DialogActions>
       </Dialog>
 
-    
+      {/* Responses Dialog */}
       <Dialog
         open={openResponsesDialog}
         onClose={handleCloseResponsesDialog}

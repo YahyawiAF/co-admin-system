@@ -25,12 +25,13 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Tooltip,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "src/layouts/Dashboard";
 import AddCommentIcon from "@mui/icons-material/AddComment";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { useGetReclamationsQuery } from "src/api/reclamationApi";
+import { useGetReclamationsQuery, useUpdateReclamationMutation } from "src/api/reclamationApi";
 import {
   useGetResponsesByClaimsIdQuery,
   useCreateResponseMutation,
@@ -38,7 +39,7 @@ import {
 import { FormProvider, useForm } from "react-hook-form";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation, ResponseEntity } from "src/types/shared";
+import { Reclamation, ResponseEntity, ReclamationStatus } from "src/types/shared";
 import { EnhancedTableHeadProps } from "src/types/table";
 
 // Form data interface
@@ -199,7 +200,7 @@ const headCells = [
     id: "createdAt",
     numeric: false,
     disablePadding: false,
-    label: "Created At",
+    label: "Date",
     alwaysVisible: true,
   },
   {
@@ -309,6 +310,11 @@ const ResponseManagement = () => {
     createResponse,
     { isLoading: isCreating, isSuccess: isCreateSuccess, error: createError },
   ] = useCreateResponseMutation();
+
+  const [
+    updateReclamation,
+    { isLoading: isUpdating, isSuccess: isUpdateSuccess, error: updateError },
+  ] = useUpdateReclamationMutation();
 
   // Form setup
   const responseMethods = useForm<ResponseFormData>({
@@ -430,26 +436,35 @@ const ResponseManagement = () => {
         content: formData.content,
         reclamationId: selectedReclamationId,
       }).unwrap();
-      setSuccessMessage("Response created successfully!");
+
+      // Update reclamation status to RESOLVED
+      await updateReclamation({
+        id: selectedReclamationId,
+        data: {
+          status: ReclamationStatus.RESOLVED,
+        },
+      }).unwrap();
+
+      setSuccessMessage("Response created and reclamation resolved successfully!");
       setTimeout(() => {
         handleCloseDrawer();
       }, 2000);
     } catch (err: any) {
-      console.error("Error creating response:", err);
-      setErrorMessage(err.data?.message || "Failed to create response.");
+      console.error("Error creating response or updating reclamation:", err);
+      setErrorMessage(err.data?.message || "Failed to create response or update reclamation.");
     }
   };
 
   // Effect for success messages
   useEffect(() => {
-    if (isCreateSuccess) {
+    if (isCreateSuccess || isUpdateSuccess) {
       setTimeout(() => {
         setSuccessMessage("");
-      }, 3000);
+      }, 2000);
     }
-  }, [isCreateSuccess]);
+  }, [isCreateSuccess, isUpdateSuccess]);
 
-  // Redirect to login if no adminId
+  
   useEffect(() => {
     if (!adminId) {
       setErrorMessage("Admin ID is missing. Please log in again.");
@@ -543,7 +558,17 @@ const ResponseManagement = () => {
                         <ResponsiveTableCell
                           sx={{ display: isMobile ? "none" : "table-cell" }}
                         >
-                          {reclamation.status}
+                          <Typography
+                            sx={{
+                              color:
+                                reclamation.status === ReclamationStatus.PENDING
+                                  ? "#f28c38" 
+                                  : "#4caf50", 
+                              fontWeight: "medium",
+                            }}
+                          >
+                            {reclamation.status}
+                          </Typography>
                         </ResponsiveTableCell>
                         <ResponsiveTableCell
                           sx={{ display: isMobile ? "none" : "table-cell" }}
@@ -561,30 +586,37 @@ const ResponseManagement = () => {
                         </ResponsiveTableCell>
                         <ResponsiveTableCell align="center">
                           <Box display="flex" justifyContent="center" gap={1}>
-                            <IconButton
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenDrawer(reclamation.id);
-                              }}
-                              size="small"
-                              color="primary"
-                            >
-                              <AddCommentIcon
-                                fontSize={isMobile ? "small" : "medium"}
-                              />
-                            </IconButton>
-                            <IconButton
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenResponsesDialog(reclamation.id);
-                              }}
-                              size="small"
-                              color="primary"
-                            >
-                              <VisibilityIcon
-                                fontSize={isMobile ? "small" : "medium"}
-                              />
-                            </IconButton>
+                            {reclamation.status === ReclamationStatus.PENDING ? (
+                              <Tooltip title="Add Response">
+                                <IconButton
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenDrawer(reclamation.id);
+                                  }}
+                                  size="small"
+                                  color="primary"
+                                >
+                                  <AddCommentIcon
+                                    fontSize={isMobile ? "small" : "medium"}
+                                  />
+                                </IconButton>
+                              </Tooltip>
+                            ) : (
+                              <Tooltip title="View Response">
+                                <IconButton
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenResponsesDialog(reclamation.id);
+                                  }}
+                                  size="small"
+                                  color="primary"
+                                >
+                                  <VisibilityIcon
+                                    fontSize={isMobile ? "small" : "medium"}
+                                  />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                           </Box>
                         </ResponsiveTableCell>
                       </TableRow>
@@ -628,7 +660,7 @@ const ResponseManagement = () => {
         }}
       >
         <Typography variant="h6" sx={{ mb: 3 }}>
-          Create Response
+          Manage Response
         </Typography>
 
         {successMessage && (
@@ -666,10 +698,10 @@ const ResponseManagement = () => {
           <ActionButton onClick={handleCloseDrawer}>Cancel</ActionButton>
           <SubmitButton
             onClick={handleCreateResponse}
-            disabled={isCreating}
-            loading={isCreating}
+            disabled={isCreating || isUpdating}
+            loading={isCreating || isUpdating}
           >
-            Submit
+            Confirm
           </SubmitButton>
         </Box>
       </Drawer>
@@ -681,7 +713,7 @@ const ResponseManagement = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Responses for Reclamation</DialogTitle>
+        <DialogTitle>Response for Reclamation</DialogTitle>
         <DialogContent>
           {isResponsesLoading ? (
             <Box display="flex" justifyContent="center" p={2}>
@@ -689,37 +721,34 @@ const ResponseManagement = () => {
             </Box>
           ) : isResponsesError ? (
             <Alert severity="error" sx={{ mb: 2 }}>
-              Error loading responses
+              Error loading response
             </Alert>
           ) : (
             <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {responsesData?.length ? (
-                responsesData.map((response) => (
-                  <Paper
-                    key={response.id}
-                    sx={{
-                      p: 2,
-                      border: `1px solid ${theme.palette.divider}`,
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Typography variant="body1">
-                      <strong>Content:</strong> {response.content}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      <strong>Created At:</strong>{" "}
-                      {new Date(response.createdAt).toLocaleString("fr-FR", {
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </Typography>
-                  </Paper>
-                ))
+                <Paper
+                  sx={{
+                    p: 2,
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography variant="body1">
+                    <strong>Content:</strong> {responsesData[0].content}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Response Date:</strong>{" "}
+                    {new Date(responsesData[0].createdAt).toLocaleString("fr-FR", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </Typography>
+                </Paper>
               ) : (
-                <Typography align="center">No responses found.</Typography>
+                <Typography align="center">No response found.</Typography>
               )}
             </Box>
           )}

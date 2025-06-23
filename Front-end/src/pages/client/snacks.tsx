@@ -2,6 +2,11 @@ import React, { useState, ReactElement } from "react";
 import { styled, ThemeProvider, createTheme } from "@mui/material/styles";
 import { useGetProductsQuery, Product } from "src/api/productApi";
 import {
+  useCreateDailyProductMutation,
+  useGetDailyProductsQuery,
+  useUpdateDailyProductMutation,
+} from "src/api/dailyproductApi";
+import {
   Grid,
   Card,
   CardContent,
@@ -19,6 +24,16 @@ import {
   Chip,
   Tooltip,
   IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
@@ -29,17 +44,18 @@ import useAuth from "src/hooks/useAuth";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import PublicLayout from "src/layouts/PublicLayout";
 import InventoryIcon from "@mui/icons-material/Inventory";
-import FixedBottomNavigation from "src/components/bottomNavigation/BottomNavigation"; // Import original
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import FixedBottomNavigation from "src/components/bottomNavigation/BottomNavigation";
 
 // Custom theme for professional and modern design
 const theme = createTheme({
   palette: {
     primary: {
-      main: "#1E3A8A", // Deep blue
+      main: "#1E3A8A",
       contrastText: "#FFFFFF",
     },
     secondary: {
-      main: "#2DD4BF", // Teal accent
+      main: "#2DD4BF",
     },
     background: {
       default: "#F7FAFC",
@@ -55,7 +71,7 @@ const theme = createTheme({
     h4: {
       fontWeight: 700,
       fontSize: "1.75rem",
-      "@media (max-width:600px)": {
+      "@media (max-width: 600px)": {
         fontSize: "1.5rem",
       },
     },
@@ -99,6 +115,16 @@ const theme = createTheme({
         root: {
           backgroundColor: "#FFFFFF",
           boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
+        },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: {
+          borderRadius: 12,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+          maxWidth: "600px",
+          width: "100%",
         },
       },
     },
@@ -148,9 +174,33 @@ const Snacks = () => {
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
   const { data: products = [], isLoading, isError } = useGetProductsQuery();
+  const [createDailyProduct] = useCreateDailyProductMutation();
+  const [updateDailyProduct] = useUpdateDailyProductMutation();
+  const {
+    data: dailyProducts = [],
+    isLoading: isDailyLoading,
+    isError: isDailyError,
+  } = useGetDailyProductsQuery();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
+  const [openModal, setOpenModal] = useState(false);
+
+  // Get memberId from sessionStorage
+  const memberId = sessionStorage.getItem("member");
+
+  // Debug user and sessionStorage
+  console.log("User from useAuth:", user);
+  console.log("Member ID from sessionStorage:", memberId);
+  console.log(
+    "Access Token from sessionStorage:",
+    sessionStorage.getItem("accessToken")
+  );
+
+  // Filter daily products by memberId
+  const memberDailyProducts = dailyProducts.filter(
+    (dp) => dp.memberId === memberId
+  );
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem("accessToken");
@@ -178,23 +228,108 @@ const Snacks = () => {
     setSuccessMessage("");
   };
 
-  const handleConfirmSelection = () => {
-    if (!user || !user.id) {
-      setErrorMessage("You must be logged in to select a product.");
-      return;
-    }
-
+  const handleConfirmSelection = async () => {
     if (!selectedProduct) {
       setErrorMessage("Please select a product.");
       return;
     }
 
-    setSuccessMessage(
-      `Product "${selectedProduct.name}" selected successfully! Redirecting...`
+    // Check if product is out of stock
+    if (selectedProduct.stock <= 0) {
+      setErrorMessage("This product is out of stock.");
+      return;
+    }
+
+    const memberId = sessionStorage.getItem("member");
+    console.log("Raw memberId from sessionStorage:", memberId);
+
+    if (!memberId || memberId.trim() === "") {
+      setErrorMessage("No valid member ID found. Please log in again.");
+      router.replace("/client/login");
+      return;
+    }
+
+    const accessToken = sessionStorage.getItem("accessToken");
+    if (!accessToken) {
+      setErrorMessage("No access token found. Please log in again.");
+      router.replace("/client/login");
+      return;
+    }
+
+    // Validate memberId format (basic UUID check)
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(memberId)) {
+      setErrorMessage("Invalid member ID format. Please log in again.");
+      console.error("Invalid memberId format:", memberId);
+      return;
+    }
+
+    const newQuantity = 1; // Quantity to add
+    const currentDate = new Date().toISOString().split("T")[0]; // Current date (YYYY-MM-DD)
+
+    // Check for existing DailyProduct with same productId, memberId, and date
+    const existingDailyProduct = memberDailyProducts.find(
+      (dp) =>
+        dp.productId === selectedProduct.id &&
+        dp.memberId === memberId &&
+        dp.date?.split("T")[0] === currentDate
     );
-    setTimeout(() => {
-      router.push("/client/account");
-    }, 2000);
+
+    try {
+      if (existingDailyProduct) {
+        // Update existing DailyProduct
+        console.log("Updating existing DailyProduct:", existingDailyProduct.id);
+        const response = await updateDailyProduct({
+          id: existingDailyProduct.id,
+          data: {
+            quantite: existingDailyProduct.quantite + newQuantity,
+          },
+        }).unwrap();
+        console.log("DailyProduct update response:", response);
+        setSuccessMessage(
+          `Quantity for "${selectedProduct.name}" updated successfully! Redirecting...`
+        );
+      } else {
+        // Create new DailyProduct
+        const payload = {
+          productId: selectedProduct.id,
+          quantite: newQuantity,
+          date: currentDate,
+          memberId,
+        };
+        console.log("Creating DailyProduct with payload:", payload);
+        const response = await createDailyProduct(payload).unwrap();
+        console.log("DailyProduct creation response:", response);
+        setSuccessMessage(
+          `Product "${selectedProduct.name}" added successfully! Redirecting...`
+        );
+      }
+
+      setTimeout(() => {
+        router.push("/client/account");
+      }, 2000);
+    } catch (error: any) {
+      console.error("Failed to process daily product:", error);
+      const errorMsg =
+        error.data?.message ||
+        error.message ||
+        "Failed to add or update product. Please try again.";
+      setErrorMessage(errorMsg);
+    }
+  };
+
+  const handleOpenModal = () => {
+    if (!memberId || memberId.trim() === "") {
+      setErrorMessage("Please log in to view your daily products.");
+      router.replace("/client/login");
+      return;
+    }
+    setOpenModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setOpenModal(false);
   };
 
   if (isLoading) {
@@ -248,6 +383,21 @@ const Snacks = () => {
             >
               Snacks Menu
             </Typography>
+            <Tooltip title="View Your Daily Products">
+              <IconButton
+                onClick={handleOpenModal}
+                sx={{
+                  color: theme.palette.text.secondary,
+                  "&:hover": {
+                    backgroundColor: theme.palette.action.hover,
+                    color: theme.palette.primary.main,
+                  },
+                  mr: 1,
+                }}
+              >
+                <VisibilityIcon />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Sign Out">
               <IconButton
                 onClick={handleSignOut}
@@ -420,7 +570,7 @@ const Snacks = () => {
               <Button
                 variant="contained"
                 size="large"
-                disabled={!selectedProduct}
+                disabled={!selectedProduct || selectedProduct.stock <= 0}
                 onClick={handleConfirmSelection}
                 sx={{ px: 4, py: 1.5 }}
               >
@@ -429,6 +579,70 @@ const Snacks = () => {
             </Box>
           </Paper>
         </Container>
+
+        {/* Daily Products Modal */}
+        <Dialog
+          open={openModal}
+          onClose={handleCloseModal}
+          aria-labelledby="daily-products-dialog-title"
+        >
+          <DialogTitle id="daily-products-dialog-title">
+            Your Daily Products
+          </DialogTitle>
+          <DialogContent>
+            {isDailyLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>
+                <CircularProgress size={32} color="primary" />
+              </Box>
+            ) : isDailyError ? (
+              <Alert severity="error" sx={{ borderRadius: 2 }}>
+                Error loading your daily products
+              </Alert>
+            ) : memberDailyProducts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+                You have no daily products.
+              </Typography>
+            ) : (
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Product</TableCell>
+                      <TableCell align="right">Quantity</TableCell>
+                      <TableCell align="right">Unit Price (DT)</TableCell>
+                      <TableCell align="right">Total Price (DT)</TableCell>
+                      <TableCell align="right">Date</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {memberDailyProducts.map((dp) => (
+                      <TableRow key={dp.id}>
+                        <TableCell>{dp.product.name}</TableCell>
+                        <TableCell align="right">{dp.quantite}</TableCell>
+                        <TableCell align="right">
+                          {dp.product.sellingPrice.toFixed(2)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {(dp.quantite * dp.product.sellingPrice).toFixed(2)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {dp.date
+                            ? new Date(dp.date).toLocaleDateString()
+                            : "N/A"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseModal} variant="outlined">
+              Close
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Original Bottom Navigation */}
         <FixedBottomNavigation />

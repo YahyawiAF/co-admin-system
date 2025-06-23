@@ -213,6 +213,8 @@ export interface DailyExpense {
   createdAt: string;
   updatedAt: string;
   expense: Expenses;
+  memberId?: string; 
+  member?: Member | null; 
 }
 export interface Product {
   id: string;
@@ -277,9 +279,8 @@ export interface BookingResponse {
 }
 export enum ReclamationStatus {
   PENDING = "PENDING",
-  IN_PROGRESS = "IN_PROGRESS",
   RESOLVED = "RESOLVED",
-  REJECTED = "REJECTED",
+ 
 }
 
 export interface Reclamation {

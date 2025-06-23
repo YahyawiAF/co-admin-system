@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class ProductEntity {
   constructor(partial: Partial<ProductEntity>) {
@@ -54,4 +55,6 @@ export class ProductEntity {
     description: 'Date de dernière mise à jour',
   })
   updatedAt: Date;
+
+  
 }
