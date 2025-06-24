@@ -28,6 +28,7 @@ import {
   Stack,
   Chip,
   InputLabel,
+  Avatar,
 } from "@mui/material";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
@@ -618,18 +619,37 @@ const SubscriptionSelection = () => {
           >
             Subscription Management
           </Typography>
-          <Tooltip title="Sign out">
-            <IconButton
-              onClick={handleSignOut}
-              color="inherit"
-              edge="end"
-              sx={{
-                "&:hover": { backgroundColor: theme.palette.action.hover },
-              }}
-            >
-              <Power fontSize="medium" />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Tooltip title="Sign out">
+              <IconButton
+                onClick={handleSignOut}
+                color="inherit"
+                sx={{
+                  "&:hover": { backgroundColor: theme.palette.action.hover },
+                }}
+              >
+                <Power fontSize="medium" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Account Settings">
+              <IconButton
+                onClick={() => router.push("/client/account")} // Navigate to Account page
+                sx={{
+                  p: 0, // Remove padding to make avatar fit nicely
+                }}
+              >
+                <Avatar
+                  src={sessionStorage.getItem("img") || undefined}
+                  alt={sessionStorage.getItem("username") || "User"}
+                  sx={{
+                    width: 32, // Small size for the avatar
+                    height: 32,
+                    border: `2px solid ${theme.palette.primary.main}`, // Optional: border for style
+                  }}
+                />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Toolbar>
       </AppBar>
 

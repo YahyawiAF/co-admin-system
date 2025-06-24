@@ -181,7 +181,11 @@ const Snacks = () => {
   const [createDailyProduct] = useCreateDailyProductMutation();
   const [updateDailyProduct] = useUpdateDailyProductMutation();
   const [updateProduct] = useUpdateProductMutation(); // Added mutation hook
-  const { data: dailyProducts = [], isLoading: isDailyLoading, isError: isDailyError } = useGetDailyProductsQuery();
+  const {
+    data: dailyProducts = [],
+    isLoading: isDailyLoading,
+    isError: isDailyError,
+  } = useGetDailyProductsQuery();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
@@ -193,7 +197,10 @@ const Snacks = () => {
   // Debug user and sessionStorage
   console.log("User from useAuth:", user);
   console.log("Member ID from sessionStorage:", memberId);
-  console.log("Access Token from sessionStorage:", sessionStorage.getItem("accessToken"));
+  console.log(
+    "Access Token from sessionStorage:",
+    sessionStorage.getItem("accessToken")
+  );
 
   // Get today's date (YYYY-MM-DD)
   const today = new Date().toISOString().split("T")[0];
@@ -258,7 +265,8 @@ const Snacks = () => {
     }
 
     // Validate memberId format (basic UUID check)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(memberId)) {
       setErrorMessage("Invalid member ID format. Please log in again.");
       console.error("Invalid memberId format:", memberId);
@@ -393,35 +401,57 @@ const Snacks = () => {
             >
               Snacks Menu
             </Typography>
-            <Tooltip title="View Your Daily Products">
-              <IconButton
-                onClick={handleOpenModal}
-                sx={{
-                  color: theme.palette.text.secondary,
-                  "&:hover": {
-                    backgroundColor: theme.palette.action.hover,
-                    color: theme.palette.primary.main,
-                  },
-                  mr: 1,
-                }}
-              >
-                <VisibilityIcon />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Sign Out">
-              <IconButton
-                onClick={handleSignOut}
-                sx={{
-                  color: theme.palette.text.secondary,
-                  "&:hover": {
-                    backgroundColor: theme.palette.action.hover,
-                    color: theme.palette.primary.main,
-                  },
-                }}
-              >
-                <Power fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              {" "}
+              {/* Increased gap for spacing */}
+              <Tooltip title="View Your Daily Products">
+                <IconButton
+                  onClick={handleOpenModal}
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    "&:hover": {
+                      backgroundColor: theme.palette.action.hover,
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                >
+                  <VisibilityIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Sign Out">
+                <IconButton
+                  onClick={handleSignOut}
+                  sx={{
+                    color: theme.palette.text.secondary,
+                    "&:hover": {
+                      backgroundColor: theme.palette.action.hover,
+                      color: theme.palette.primary.main,
+                    },
+                  }}
+                >
+                  <Power fontSize="small" />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Account Settings">
+                <IconButton
+                  onClick={() => router.push("/client/account")} // Navigate to Account page
+                  sx={{
+                    p: 0,
+                    ml: 1,
+                  }}
+                >
+                  <Avatar
+                    src={sessionStorage.getItem("img") || undefined}
+                    alt={sessionStorage.getItem("username") || "User"}
+                    sx={{
+                      width: 32, // Small size for the avatar
+                      height: 32,
+                      border: `2px solid ${theme.palette.primary.main}`, // Optional: border for style
+                    }}
+                  />
+                </IconButton>
+              </Tooltip>
+            </Box>
           </Toolbar>
         </AppBar>
 
@@ -550,9 +580,7 @@ const Snacks = () => {
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                           }}
-                        >
-                         
-                        </Typography>
+                        ></Typography>
                       </Box>
                       <Box sx={{ mt: 1.5 }}>
                         <Typography
@@ -628,10 +656,16 @@ const Snacks = () => {
                       <TableRow key={dp.id}>
                         <TableCell>{dp.product.name}</TableCell>
                         <TableCell align="right">{dp.quantite}</TableCell>
-                        <TableCell align="right">{dp.product.sellingPrice.toFixed(2)}</TableCell>
-                        <TableCell align="right">{(dp.quantite * dp.product.sellingPrice).toFixed(2)}</TableCell>
                         <TableCell align="right">
-                          {dp.date ? new Date(dp.date).toLocaleDateString() : 'N/A'}
+                          {dp.product.sellingPrice.toFixed(2)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {(dp.quantite * dp.product.sellingPrice).toFixed(2)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {dp.date
+                            ? new Date(dp.date).toLocaleDateString()
+                            : "N/A"}
                         </TableCell>
                       </TableRow>
                     ))}

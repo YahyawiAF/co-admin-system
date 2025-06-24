@@ -12,13 +12,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,6 +19,7 @@ import {
   Button,
   Typography,
   CircularProgress,
+  Avatar,
 } from "@mui/material";
 import { Power } from "react-feather";
 import { CiEdit } from "react-icons/ci";
@@ -47,7 +41,11 @@ import {
 } from "src/api/reclamationApi";
 import { useGetResponsesByClaimsIdQuery } from "src/api/reponseApi";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation, ResponseEntity, ReclamationStatus } from "src/types/shared";
+import {
+  Reclamation,
+  ResponseEntity,
+  ReclamationStatus,
+} from "src/types/shared";
 
 // Form data interface for react-hook-form
 interface ReclamationFormData {
@@ -65,34 +63,35 @@ const ReclamationCard = styled(Box)(({ theme }) => ({
   background: theme.palette.background.paper,
   border: `2px solid ${theme.palette.primary.main}`,
   boxShadow: theme.shadows[2],
-  width: "100%",
-  margin: "0 auto",
-  overflow: "hidden",
+  padding: theme.spacing(2),
+  marginBottom: theme.spacing(2),
   "&:hover": {
     transform: "translateY(-8px)",
     boxShadow: theme.shadows[6],
     borderColor: theme.palette.primary.light,
   },
+  [theme.breakpoints.up("sm")]: {
+    padding: theme.spacing(3),
+  },
 }));
 
-const HeaderBox = styled(Box)(({ theme }) => ({
-  background: `linear-gradient(90deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
-  color: theme.palette.primary.contrastText,
-  padding: theme.spacing(2),
-  textAlign: "center",
-}));
-
-const NavigationContainer = styled(Box)(({ theme }) => ({
-  width: "100%",
-  padding: theme.spacing(2),
-  borderTop: `1px solid ${theme.palette.divider}`,
+const ActionsContainer = styled(Box)(({ theme }) => ({
   display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: theme.spacing(2),
+  gap: theme.spacing(1),
+  justifyContent: "flex-end",
   marginTop: theme.spacing(2),
-  backgroundColor: theme.palette.background.paper,
+}));
+
+const ReclamationsGrid = styled(Box)(({ theme }) => ({
+  display: "grid",
+  gridTemplateColumns: "1fr",
+  gap: theme.spacing(2),
+  [theme.breakpoints.up("sm")]: {
+    gridTemplateColumns: "repeat(2, 1fr)",
+  },
+  [theme.breakpoints.up("md")]: {
+    gridTemplateColumns: "repeat(3, 1fr)",
+  },
 }));
 
 const ReclamationManagement = () => {
@@ -101,10 +100,6 @@ const ReclamationManagement = () => {
   const router = useRouter();
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
-
-  // State for pagination
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // State for modals and stepper
   const [activeStep, setActiveStep] = useState(0);
@@ -117,7 +112,7 @@ const ReclamationManagement = () => {
 
   const steps = ["Enter Details", "Confirm"];
 
-  // State for selected reclamation ID (for editing, deleting, and viewing responses)
+  // State for selected reclamation ID
   const [selectedReclamationId, setSelectedReclamationId] = useState<
     string | null
   >(null);
@@ -131,14 +126,7 @@ const ReclamationManagement = () => {
     isLoading,
     isError,
     error,
-  } = useGetReclamationsByMemberIdQuery(
-    {
-      memberId,
-      page: page + 1,
-      perPage: rowsPerPage,
-    },
-    { skip: !memberId }
-  );
+  } = useGetReclamationsByMemberIdQuery({ memberId }, { skip: !memberId });
 
   const {
     data: responsesData,
@@ -200,18 +188,6 @@ const ReclamationManagement = () => {
       dispatch(signOut());
       router.replace("/client/login");
     }
-  };
-
-  // Handle pagination
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
   };
 
   // Handle create dialog
@@ -367,7 +343,7 @@ const ReclamationManagement = () => {
   }, [memberId, router]);
 
   if (!memberId) {
-    return null; // Render nothing while redirecting
+    return null;
   }
 
   if (isLoading) {
@@ -417,18 +393,37 @@ const ReclamationManagement = () => {
           >
             Reclamation Management
           </Typography>
-          <Tooltip title="Sign out">
-            <IconButton
-              onClick={handleSignOut}
-              color="inherit"
-              edge="end"
-              sx={{
-                "&:hover": { backgroundColor: theme.palette.action.hover },
-              }}
-            >
-              <Power fontSize="medium" />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Tooltip title="Sign out">
+              <IconButton
+                onClick={handleSignOut}
+                color="inherit"
+                sx={{
+                  "&:hover": { backgroundColor: theme.palette.action.hover },
+                }}
+              >
+                <Power fontSize="medium" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Account Settings">
+              <IconButton
+                onClick={() => router.push("/client/account")}
+                sx={{
+                  p: 0,
+                }}
+              >
+                <Avatar
+                  src={sessionStorage.getItem("img") || undefined}
+                  alt={sessionStorage.getItem("username") || "User"}
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    border: `2px solid ${theme.palette.primary.main}`,
+                  }}
+                />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -478,108 +473,80 @@ const ReclamationManagement = () => {
             </Tooltip>
           </Box>
 
-          {/* Reclamations Table */}
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Title</TableCell>
-                  <TableCell>Description</TableCell>
-                  <TableCell>Status</TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell align="center">Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {reclamationsData?.data.length ? (
-                  reclamationsData.data.map((reclamation) => (
-                    <TableRow key={reclamation.id}>
-                      <TableCell>{reclamation.title}</TableCell>
-                      <TableCell
-                        sx={{
-                          maxWidth: 300,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {reclamation.description.length > 100
-                          ? `${reclamation.description.substring(0, 100)}...`
-                          : reclamation.description}
-                      </TableCell>
-                      <TableCell>
-                        <Typography
-                          sx={{
-                            color:
-                              reclamation.status === ReclamationStatus.PENDING
-                                ? "#f28c38" // Orange
-                                : "#4caf50", // Green
-                            fontWeight: "medium",
-                          }}
-                        >
-                          {reclamation.status}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(reclamation.createdAt).toLocaleString(
-                          "fr-FR",
-                          {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
+          {/* Reclamations Grid */}
+          <ReclamationsGrid>
+            {reclamationsData?.data.length ? (
+              reclamationsData.data.map((reclamation) => (
+                <ReclamationCard key={reclamation.id}>
+                  <Typography variant="h6" gutterBottom>
+                    {reclamation.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" paragraph>
+                    {reclamation.description}
+                  </Typography>
+                  <Typography
+                    sx={{
+                      color:
+                        reclamation.status === ReclamationStatus.PENDING
+                          ? "#f28c38"
+                          : "#4caf50",
+                      fontWeight: "medium",
+                      mb: 1,
+                    }}
+                  >
+                    Status: {reclamation.status}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Date:{" "}
+                    {new Date(reclamation.createdAt).toLocaleString("fr-FR", {
+                      year: "numeric",
+                      month: "2-digit",
+                      day: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      second: "2-digit",
+                    })}
+                  </Typography>
+                  <ActionsContainer>
+                    {reclamation.status === ReclamationStatus.RESOLVED ? (
+                      <Tooltip title="View Responses">
+                        <IconButton
+                          onClick={() =>
+                            handleOpenResponsesDialog(reclamation.id)
                           }
-                        )}
-                      </TableCell>
-                      <TableCell align="center">
-                        {reclamation.status === ReclamationStatus.RESOLVED ? (
-                          <Tooltip title="View Responses">
-                            <IconButton
-                              onClick={() =>
-                                handleOpenResponsesDialog(reclamation.id)
-                              }
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        ) : (
-                          <>
-                            <Tooltip title="Edit">
-                              <IconButton
-                                onClick={() => handleOpenEditDialog(reclamation)}
-                              >
-                                <CiEdit size={24} />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Delete">
-                              <IconButton
-                                onClick={() =>
-                                  handleOpenDeleteDialog(reclamation.id)
-                                }
-                              >
-                                <MdOutlineDeleteOutline size={24} />
-                              </IconButton>
-                            </Tooltip>
-                          </>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={5} align="center">
-                      No reclamations found.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-
-        
-          
+                        >
+                          <VisibilityIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <>
+                        <Tooltip title="Edit">
+                          <IconButton
+                            onClick={() => handleOpenEditDialog(reclamation)}
+                          >
+                            <CiEdit size={24} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete">
+                          <IconButton
+                            onClick={() =>
+                              handleOpenDeleteDialog(reclamation.id)
+                            }
+                          >
+                            <MdOutlineDeleteOutline size={24} />
+                          </IconButton>
+                        </Tooltip>
+                      </>
+                    )}
+                  </ActionsContainer>
+                </ReclamationCard>
+              ))
+            ) : (
+              <Box sx={{ gridColumn: "span 3", textAlign: "center", py: 4 }}>
+                <Typography>No reclamations found.</Typography>
+              </Box>
+            )}
+          </ReclamationsGrid>
         </Paper>
       </Container>
 
@@ -643,8 +610,6 @@ const ReclamationManagement = () => {
                   <strong>Description:</strong>{" "}
                   {createMethods.getValues("description")}
                 </Typography>
-                
-                
               </Box>
             )}
           </FormProvider>
@@ -764,41 +729,35 @@ const ReclamationManagement = () => {
               Error loading responses
             </Alert>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Content</TableCell>
-                    <TableCell>Created At</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {responsesData?.length ? (
-                    responsesData.map((response) => (
-                      <TableRow key={response.id}>
-                        <TableCell>{response.content}</TableCell>
-                        <TableCell>
-                          {new Date(response.createdAt).toLocaleString("fr-FR", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          })}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={2} align="center">
-                        No responses found.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </TableContainer>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              {responsesData?.length ? (
+                responsesData.map((response) => (
+                  <Box
+                    key={response.id}
+                    sx={{
+                      p: 2,
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography>{response.content}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Date:{" "}
+                      {new Date(response.createdAt).toLocaleString("fr-FR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                      })}
+                    </Typography>
+                  </Box>
+                ))
+              ) : (
+                <Typography align="center">No responses found.</Typography>
+              )}
+            </Box>
           )}
         </DialogContent>
         <DialogActions>
