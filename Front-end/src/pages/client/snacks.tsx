@@ -1,6 +1,10 @@
 import React, { useState, ReactElement } from "react";
 import { styled, ThemeProvider, createTheme } from "@mui/material/styles";
-import { useGetProductsQuery, Product } from "src/api/productApi";
+import {
+  useGetProductsQuery,
+  Product,
+  useUpdateProductMutation, // Added import
+} from "src/api/productApi";
 import {
   useCreateDailyProductMutation,
   useGetDailyProductsQuery,
@@ -47,7 +51,7 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import FixedBottomNavigation from "src/components/bottomNavigation/BottomNavigation";
 
-// Custom theme for professional and modern design
+// Custom theme (unchanged)
 const theme = createTheme({
   palette: {
     primary: {
@@ -131,7 +135,7 @@ const theme = createTheme({
   },
 });
 
-// Styled components
+// Styled components (unchanged)
 const ProductCard = styled(Card)(({ theme }) => ({
   cursor: "pointer",
   transition: "all 0.3s ease",
@@ -176,11 +180,8 @@ const Snacks = () => {
   const { data: products = [], isLoading, isError } = useGetProductsQuery();
   const [createDailyProduct] = useCreateDailyProductMutation();
   const [updateDailyProduct] = useUpdateDailyProductMutation();
-  const {
-    data: dailyProducts = [],
-    isLoading: isDailyLoading,
-    isError: isDailyError,
-  } = useGetDailyProductsQuery();
+  const [updateProduct] = useUpdateProductMutation(); // Added mutation hook
+  const { data: dailyProducts = [], isLoading: isDailyLoading, isError: isDailyError } = useGetDailyProductsQuery();
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
@@ -192,14 +193,14 @@ const Snacks = () => {
   // Debug user and sessionStorage
   console.log("User from useAuth:", user);
   console.log("Member ID from sessionStorage:", memberId);
-  console.log(
-    "Access Token from sessionStorage:",
-    sessionStorage.getItem("accessToken")
-  );
+  console.log("Access Token from sessionStorage:", sessionStorage.getItem("accessToken"));
 
-  // Filter daily products by memberId
+  // Get today's date (YYYY-MM-DD)
+  const today = new Date().toISOString().split("T")[0];
+
+  // Filter daily products by memberId and today's date
   const memberDailyProducts = dailyProducts.filter(
-    (dp) => dp.memberId === memberId
+    (dp) => dp.memberId === memberId && dp.date?.split("T")[0] === today
   );
 
   const handleSignOut = async () => {
@@ -257,8 +258,7 @@ const Snacks = () => {
     }
 
     // Validate memberId format (basic UUID check)
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(memberId)) {
       setErrorMessage("Invalid member ID format. Please log in again.");
       console.error("Invalid memberId format:", memberId);
@@ -287,8 +287,15 @@ const Snacks = () => {
           },
         }).unwrap();
         console.log("DailyProduct update response:", response);
+
+        // Update product stock
+        await updateProduct({
+          id: selectedProduct.id,
+          data: { stock: selectedProduct.stock - newQuantity },
+        }).unwrap();
+
         setSuccessMessage(
-          `Quantity for "${selectedProduct.name}" updated successfully! Redirecting...`
+          `Snacks "${selectedProduct.name}" added successfully!`
         );
       } else {
         // Create new DailyProduct
@@ -301,20 +308,23 @@ const Snacks = () => {
         console.log("Creating DailyProduct with payload:", payload);
         const response = await createDailyProduct(payload).unwrap();
         console.log("DailyProduct creation response:", response);
+
+        // Update product stock
+        await updateProduct({
+          id: selectedProduct.id,
+          data: { stock: selectedProduct.stock - newQuantity },
+        }).unwrap();
+
         setSuccessMessage(
-          `Product "${selectedProduct.name}" added successfully! Redirecting...`
+          `Snacks "${selectedProduct.name}" added successfully!`
         );
       }
-
-      setTimeout(() => {
-        router.push("/client/account");
-      }, 2000);
     } catch (error: any) {
-      console.error("Failed to process daily product:", error);
+      console.error("Failed to process daily product or update stock:", error);
       const errorMsg =
         error.data?.message ||
         error.message ||
-        "Failed to add or update product. Please try again.";
+        "Failed to process request. Please try again.";
       setErrorMessage(errorMsg);
     }
   };
@@ -421,7 +431,6 @@ const Snacks = () => {
           sx={{ py: { xs: 3, md: 5 }, pb: { xs: 12, md: 14 }, flexGrow: 1 }}
         >
           <Paper
-            elevation={0}
             sx={{
               borderRadius: 12,
               border: `1px solid ${theme.palette.divider}`,
@@ -542,7 +551,7 @@ const Snacks = () => {
                             textOverflow: "ellipsis",
                           }}
                         >
-                          {product.description}
+                         
                         </Typography>
                       </Box>
                       <Box sx={{ mt: 1.5 }}>
@@ -587,7 +596,7 @@ const Snacks = () => {
           aria-labelledby="daily-products-dialog-title"
         >
           <DialogTitle id="daily-products-dialog-title">
-            Your Daily Products
+            Your Consumption (Today)
           </DialogTitle>
           <DialogContent>
             {isDailyLoading ? (
@@ -600,7 +609,7 @@ const Snacks = () => {
               </Alert>
             ) : memberDailyProducts.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                You have no daily products.
+                You have no consumption for today.
               </Typography>
             ) : (
               <TableContainer>
@@ -619,16 +628,10 @@ const Snacks = () => {
                       <TableRow key={dp.id}>
                         <TableCell>{dp.product.name}</TableCell>
                         <TableCell align="right">{dp.quantite}</TableCell>
+                        <TableCell align="right">{dp.product.sellingPrice.toFixed(2)}</TableCell>
+                        <TableCell align="right">{(dp.quantite * dp.product.sellingPrice).toFixed(2)}</TableCell>
                         <TableCell align="right">
-                          {dp.product.sellingPrice.toFixed(2)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {(dp.quantite * dp.product.sellingPrice).toFixed(2)}
-                        </TableCell>
-                        <TableCell align="right">
-                          {dp.date
-                            ? new Date(dp.date).toLocaleDateString()
-                            : "N/A"}
+                          {dp.date ? new Date(dp.date).toLocaleDateString() : 'N/A'}
                         </TableCell>
                       </TableRow>
                     ))}

@@ -42,11 +42,13 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { FormProvider, useForm } from "react-hook-form";
 import { RHFDatePeakerField } from "src/components/hook-form/RHTextFieldDate";
+import { format, addHours, parse } from "date-fns";
 
 // Extend the Abonnement and Journal types to include space and selectedChairs
 interface ExtendedAbonnement extends Abonnement {
   space: string;
   selectedChairs: { tableId: number; chairId: number }[];
+  createdbyUserID?: string;
 }
 
 interface ExtendedJournal extends Journal {
@@ -204,22 +206,6 @@ const SpaceStepContainer = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.background.paper,
 }));
 
-const calculateLeaveDate = (price: Price, startDate: Date): Date => {
-  const endDate = new Date(startDate);
-  const priceName = price.name.toLowerCase();
-
-  if (priceName.includes("semaine")) {
-    endDate.setDate(endDate.getDate() + (priceName.includes("2") ? 14 : 7));
-  } else if (priceName.includes("mois")) {
-    const months = priceName.match(/3/) ? 3 : priceName.match(/6/) ? 6 : 1;
-    endDate.setMonth(endDate.getMonth() + months);
-  } else if (priceName.includes("année")) {
-    endDate.setFullYear(endDate.getFullYear() + 1);
-  }
-
-  return endDate;
-};
-
 // Define spaces with their tables and chairs, including positions
 const spaces = {
   general: {
@@ -336,6 +322,53 @@ const spaces = {
   },
 };
 
+// Calculate leave date based on price and start date
+const calculateLeaveDate = (price: Price, startDate: Date): Date => {
+  const leaveDate = new Date(startDate);
+
+  if (price.type === "abonnement") {
+    const start = parseInt(price.timePeriod.start, 10);
+    const end = parseInt(price.timePeriod.end, 10);
+    const durationDays = end - start;
+
+    if (durationDays > 0) {
+      leaveDate.setDate(leaveDate.getDate() + durationDays);
+    } else {
+      // Default to 30 days for abonnement if duration is invalid
+      leaveDate.setDate(leaveDate.getDate() + 30);
+    }
+  } else if (price.type === "journal") {
+    // Parse timePeriod.end as hours (e.g., "2h" or "2:00")
+    const endTime = price.timePeriod.end;
+    let hours = 0;
+
+    if (endTime.includes("h")) {
+      hours = parseInt(endTime.replace("h", ""), 10);
+    } else if (endTime.includes(":")) {
+      const [hoursStr] = endTime.split(":");
+      hours = parseInt(hoursStr, 10);
+    }
+
+    if (hours > 0) {
+      leaveDate.setHours(leaveDate.getHours() + hours);
+    } else {
+      // Default to 2 hours for journal if duration is invalid
+      leaveDate.setHours(leaveDate.getHours() + 2);
+    }
+  }
+
+  return leaveDate;
+};
+
+// Calculate stayedPeriode based on price
+const calculateStayedPeriode = (price: Price): string => {
+  if (price.type === "abonnement") {
+    return `${price.name} (${price.timePeriod.start}-${price.timePeriod.end} days)`;
+  } else {
+    return `${price.name} (${price.timePeriod.start}-${price.timePeriod.end})`;
+  }
+};
+
 const SubscriptionSelection = () => {
   const theme = useTheme();
   const { user } = useAuth();
@@ -365,8 +398,8 @@ const SubscriptionSelection = () => {
   const [selectedJournalPrice, setSelectedJournalPrice] =
     useState<Price | null>(null);
   const [selectedSubscriptionType, setSelectedSubscriptionType] = useState<
-    "abonnement" | "journal"
-  >("abonnement");
+    "abonnement" | "journal" | null
+  >(null);
   const [selectedSpace, setSelectedSpace] = useState<
     "general" | "openSpace" | "meetingRoom" | null
   >(null);
@@ -403,20 +436,12 @@ const SubscriptionSelection = () => {
       dispatch(signOut());
       router.replace("/client/login");
     } catch (error) {
-      console.error("Déconnexion échouée:", error);
+      console.error("Sign out failed:", error);
       sessionStorage.clear();
       dispatch(signOut());
       router.replace("/client/login");
     }
   };
-
-  useEffect(() => {
-    if (isSuccessAbonnement || isSuccessJournal) {
-      setTimeout(() => {
-        window.location.href = "/client/account";
-      }, 2000);
-    }
-  }, [isSuccessAbonnement, isSuccessJournal]);
 
   const handleChairSelect = (
     tableId: number,
@@ -457,9 +482,20 @@ const SubscriptionSelection = () => {
         return;
       }
     }
-    if (activeStep === 1 && !selectedPrice && !selectedJournalPrice) {
-      setErrorMessage("Please select a subscription type.");
-      return;
+    if (activeStep === 1) {
+      if (!selectedSubscriptionType) {
+        setErrorMessage("Please select a subscription type.");
+        return;
+      }
+      if (
+        (selectedSubscriptionType === "abonnement" && !selectedPrice) ||
+        (selectedSubscriptionType === "journal" && !selectedJournalPrice)
+      ) {
+        setErrorMessage(
+          "Please select a plan for the chosen subscription type."
+        );
+        return;
+      }
     }
     if (activeStep === 2 && (!selectedSpace || !chairsConfirmed)) {
       setErrorMessage(
@@ -485,18 +521,23 @@ const SubscriptionSelection = () => {
 
   const handleFinalSubmit = async () => {
     const memberId = sessionStorage.getItem("member");
-    if (!memberId || memberId === "") {
+    const createdByID = sessionStorage.getItem("userID");
+    if (!memberId) {
       setErrorMessage("No member ID found. Please log in again.");
       return;
     }
+    if (!selectedSubscriptionType) {
+      setErrorMessage("No subscription type selected.");
+      return;
+    }
 
-    // Get selectedDateTime from form
     const selectedDateTime =
       methods.getValues("selectedDateTime") || new Date();
 
     if (selectedSubscriptionType === "abonnement" && selectedPrice) {
       try {
         const leaveDate = calculateLeaveDate(selectedPrice, selectedDateTime);
+        const stayedPeriode = calculateStayedPeriode(selectedPrice);
         const abonnementData: Partial<ExtendedAbonnement> = {
           isPayed: false,
           registredDate: selectedDateTime,
@@ -504,45 +545,45 @@ const SubscriptionSelection = () => {
           payedAmount: selectedPrice.price,
           memberID: memberId,
           priceId: selectedPrice.id,
-          stayedPeriode: `${selectedPrice.name} (${selectedPrice.timePeriod.start}-${selectedPrice.timePeriod.end})`,
+          stayedPeriode,
           isReservation: true,
           space: selectedSpace!,
           selectedChairs,
+          createdbyUserID: createdByID ?? undefined,
         };
         await createAbonnement(abonnementData).unwrap();
       } catch (err: any) {
-        setErrorMessage(
-          err.data?.message || "Erreur lors de la création de l'abonnement"
-        );
+        setErrorMessage(err.data?.message || "Error creating subscription");
       }
     } else if (selectedSubscriptionType === "journal" && selectedJournalPrice) {
       try {
-        const journalData: ExtendedJournal = {
-          id: "unique-journal-id",
+        const stayedPeriode = calculateStayedPeriode(selectedJournalPrice);
+        const now = new Date();
+        const journalData: Journal = {
+          id: "", // Set to empty string or generate a new id if needed
           isPayed: false,
           registredTime: selectedDateTime,
-          leaveTime: selectedDateTime,
+          leaveTime: calculateLeaveDate(selectedJournalPrice, selectedDateTime),
           payedAmount: selectedJournalPrice.price,
           memberID: memberId,
           priceId: selectedJournalPrice.id,
           isReservation: true,
-          createdAt: selectedDateTime,
-          updatedAt: selectedDateTime,
+          createdbyUserID: createdByID,
           space: selectedSpace!,
           selectedChairs,
+          stayedPeriode,
+          createdAt: now,
+          updatedAt: now,
         };
         await createJournal(journalData).unwrap();
       } catch (err: any) {
-        setErrorMessage(
-          err.data?.message || "Erreur lors de la création du journal"
-        );
+        setErrorMessage(err.data?.message || "Error creating daily pass");
       }
     }
   };
 
   if (isLoading) return <CircularProgress />;
-  if (isError)
-    return <Alert severity="error">Erreur de chargement des tarifs</Alert>;
+  if (isError) return <Alert severity="error">Error loading prices</Alert>;
 
   return (
     <Box
@@ -621,9 +662,20 @@ const SubscriptionSelection = () => {
               {errorMessage}
             </Alert>
           )}
+          {(errorAbonnement || errorJournal) && (
+            <Alert severity="error" sx={{ mb: 3, borderRadius: 1 }}>
+              {errorAbonnement
+                ? (errorAbonnement as any).data?.message ||
+                  "Error creating subscription"
+                : (errorJournal as any).data?.message ||
+                  "Error creating daily pass"}
+            </Alert>
+          )}
           {isSuccessAbonnement || isSuccessJournal ? (
             <Alert severity="success" sx={{ mb: 3, borderRadius: 1 }}>
-              Subscription activated successfully! Redirecting...
+              {isSuccessAbonnement
+                ? "Subscription activated successfully!"
+                : "Daily pass created successfully!"}{" "}
             </Alert>
           ) : (
             <>
@@ -636,7 +688,7 @@ const SubscriptionSelection = () => {
                     sx={{
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1rem", md: "1.5rem" },
+                      fontSize: { xs: "1.5rem", md: "2rem" },
                     }}
                   >
                     Select Date and Time
@@ -690,7 +742,7 @@ const SubscriptionSelection = () => {
                     sx={{
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1rem", md: "1.5rem" },
+                      fontSize: { xs: "1.5rem", md: "2rem" },
                     }}
                   >
                     Select Subscription Type
@@ -703,7 +755,15 @@ const SubscriptionSelection = () => {
                           : "outlined"
                       }
                       size="large"
-                      onClick={() => setSelectedSubscriptionType("abonnement")}
+                      onClick={() => {
+                        if (selectedSubscriptionType === "abonnement") {
+                          setSelectedSubscriptionType(null);
+                          setSelectedPrice(null);
+                        } else {
+                          setSelectedSubscriptionType("abonnement");
+                          setSelectedJournalPrice(null);
+                        }
+                      }}
                       sx={{
                         minWidth: { xs: "100%", sm: 200 },
                         mx: { xs: 0, sm: 2 },
@@ -722,7 +782,15 @@ const SubscriptionSelection = () => {
                           : "outlined"
                       }
                       size="large"
-                      onClick={() => setSelectedSubscriptionType("journal")}
+                      onClick={() => {
+                        if (selectedSubscriptionType === "journal") {
+                          setSelectedSubscriptionType(null);
+                          setSelectedJournalPrice(null);
+                        } else {
+                          setSelectedSubscriptionType("journal");
+                          setSelectedPrice(null);
+                        }
+                      }}
                       sx={{
                         minWidth: { xs: "100%", sm: 200 },
                         mx: { xs: 0, sm: 2 },
@@ -805,8 +873,8 @@ const SubscriptionSelection = () => {
                                     fontSize: "0.875rem",
                                   }}
                                 >
-                                  Valid from {price.timePeriod.start} day to{" "}
-                                  {price.timePeriod.end} day
+                                  Valid from {price.timePeriod.start} to{" "}
+                                  {price.timePeriod.end} days
                                 </Typography>
                                 {selectedPrice?.id === price.id && (
                                   <Chip
@@ -827,7 +895,7 @@ const SubscriptionSelection = () => {
                         ))}
                       </Grid>
                     </>
-                  ) : (
+                  ) : selectedSubscriptionType === "journal" ? (
                     <>
                       <Typography
                         variant="h5"
@@ -896,8 +964,8 @@ const SubscriptionSelection = () => {
                                     fontSize: "0.875rem",
                                   }}
                                 >
-                                  From {price.timePeriod.start}h to{" "}
-                                  {price.timePeriod.end}h
+                                  From {price.timePeriod.start} to{" "}
+                                  {price.timePeriod.end}
                                 </Typography>
                                 {selectedJournalPrice?.id === price.id && (
                                   <Chip
@@ -918,6 +986,16 @@ const SubscriptionSelection = () => {
                         ))}
                       </Grid>
                     </>
+                  ) : (
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        textAlign: "center",
+                        color: theme.palette.text.secondary,
+                      }}
+                    >
+                      Please select a subscription type to view available plans.
+                    </Typography>
                   )}
                   <NavigationContainer>
                     <Button
@@ -957,7 +1035,7 @@ const SubscriptionSelection = () => {
                     sx={{
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1rem", md: "1.5rem" },
+                      fontSize: { xs: "1.5rem", md: "2rem" },
                       textAlign: "center",
                     }}
                   >
