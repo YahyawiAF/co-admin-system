@@ -29,8 +29,11 @@ import {
   Chip,
   InputLabel,
   Avatar,
+  Dialog,
+  DialogContent,
+  Fade,
 } from "@mui/material";
-import { Power } from "react-feather";
+import { Power, X } from "react-feather";
 import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
 import { signOut } from "src/redux/authSlice";
@@ -44,6 +47,9 @@ import { LocalizationProvider } from "@mui/x-date-pickers";
 import { FormProvider, useForm } from "react-hook-form";
 import { RHFDatePeakerField } from "src/components/hook-form/RHTextFieldDate";
 import { format, addHours, parse } from "date-fns";
+import meetingRoomImage from "public/images/meeting.png";
+import generalSpaceImage from "public/images/general.png";
+import openSpaceImage from "public/images/open.png";
 
 // Extend the Abonnement and Journal types to include space and selectedChairs
 interface ExtendedAbonnement extends Abonnement {
@@ -409,6 +415,7 @@ const SubscriptionSelection = () => {
   >([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [chairsConfirmed, setChairsConfirmed] = useState(false);
+  const [openModal, setOpenModal] = useState(false); // State to control modal visibility
 
   const steps = ["Select Date & Time", "Select Subscription", "Select Space"];
 
@@ -633,18 +640,18 @@ const SubscriptionSelection = () => {
             </Tooltip>
             <Tooltip title="Account Settings">
               <IconButton
-                onClick={() => router.push("/client/account")} // Navigate to Account page
+                onClick={() => router.push("/client/account")} 
                 sx={{
-                  p: 0, // Remove padding to make avatar fit nicely
+                  p: 0,
                 }}
               >
                 <Avatar
                   src={sessionStorage.getItem("img") || undefined}
                   alt={sessionStorage.getItem("username") || "User"}
                   sx={{
-                    width: 32, // Small size for the avatar
+                    width: 32, 
                     height: 32,
-                    border: `2px solid ${theme.palette.primary.main}`, // Optional: border for style
+                    border: `2px solid ${theme.palette.primary.main}`, 
                   }}
                 />
               </IconButton>
@@ -1068,15 +1075,34 @@ const SubscriptionSelection = () => {
                     <InputLabel>Select Space</InputLabel>
                     <Select
                       value={selectedSpace || ""}
-                      onChange={(e) =>
+                      onChange={(e) => {
                         setSelectedSpace(
                           e.target.value as
                             | "general"
                             | "openSpace"
                             | "meetingRoom"
-                        )
-                      }
+                        );
+                        setOpenModal(true); // Open modal when a space is selected
+                      }}
                       label="Select Space"
+                      renderValue={(value) => (
+                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                          {value && (
+                            <Avatar
+                              variant="square"
+                              src={
+                                value === "meetingRoom"
+                                  ? meetingRoomImage.src
+                                  : value === "general"
+                                  ? generalSpaceImage.src
+                                  : openSpaceImage.src
+                              }
+                              sx={{ width: 50, height: 50 }}
+                            />
+                          )}
+                          <Typography>{value || "Select Space"}</Typography>
+                        </Box>
+                      )}
                     >
                       <MenuItem value="general">General Space</MenuItem>
                       <MenuItem value="openSpace">Open Space</MenuItem>
@@ -1460,6 +1486,71 @@ const SubscriptionSelection = () => {
           )}
         </Paper>
       </Container>
+
+      {/* Modal for displaying the selected space image */}
+      <Dialog
+        open={openModal}
+        onClose={() => setOpenModal(false)}
+        maxWidth={false}
+        TransitionComponent={Fade}
+        TransitionProps={{ timeout: 300 }}
+        PaperProps={{
+          style: {
+            width: 700,
+            height: 350,
+            maxWidth: 700,
+            maxHeight: 350,
+            margin: 0,
+            borderRadius: 12,
+            overflow: "hidden",
+            boxShadow: theme.shadows[10],
+            border: "none",
+          },
+        }}
+      >
+        <Box
+          sx={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+          }}
+        >
+          <img
+            src={
+              selectedSpace === "meetingRoom"
+                ? meetingRoomImage.src
+                : selectedSpace === "general"
+                ? generalSpaceImage.src
+                : openSpaceImage.src
+            }
+            alt={selectedSpace || "Space Preview"}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+          <IconButton
+            onClick={() => setOpenModal(false)}
+            sx={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              backgroundColor: "rgba(0, 0, 0, 0.6)",
+              color: theme.palette.common.white,
+              "&:hover": {
+                backgroundColor: "rgba(0, 0, 0, 0.8)",
+              },
+              transition: "background-color 0.2s ease",
+              borderRadius: "50%",
+              padding: 0.5,
+            }}
+          >
+            <X size={20} />
+          </IconButton>
+        </Box>
+      </Dialog>
     </Box>
   );
 };
