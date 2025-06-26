@@ -371,7 +371,7 @@ function Account(): React.JSX.Element {
                   phoneDisabled={true}
                 />
 
-                <Box sx={{ mt: 4 }}>
+                <Box sx={{ mt: 4}}>
                   <Card sx={{ width: "100%", boxSizing: "border-box" }}>
                     <CardHeader
                       title="Change Password"

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, ReactElement } from "react";
 import { useRouter } from "next/router";
 import { useTheme, styled } from "@mui/material/styles";
+import { FaSearch } from "react-icons/fa";
+
 import {
   Box,
   Alert,
@@ -26,12 +28,20 @@ import {
   DialogActions,
   Button,
   Tooltip,
+  TextField,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
 } from "@mui/material";
 import { LoadingButton } from "@mui/lab";
 import DashboardLayout from "src/layouts/Dashboard";
 import AddCommentIcon from "@mui/icons-material/AddComment";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import { useGetReclamationsQuery, useUpdateReclamationMutation } from "src/api/reclamationApi";
+import {
+  useGetReclamationsQuery,
+  useUpdateReclamationMutation,
+} from "src/api/reclamationApi";
 import {
   useGetResponsesByClaimsIdQuery,
   useCreateResponseMutation,
@@ -39,7 +49,11 @@ import {
 import { FormProvider, useForm } from "react-hook-form";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import RHFTextField from "src/components/hook-form/RHTextField";
-import { Reclamation, ResponseEntity, ReclamationStatus } from "src/types/shared";
+import {
+  Reclamation,
+  ResponseEntity,
+  ReclamationStatus,
+} from "src/types/shared";
 import { EnhancedTableHeadProps } from "src/types/table";
 
 // Form data interface
@@ -166,6 +180,16 @@ const ActionButton = styled(LoadingButton)(({ theme }) => ({
   },
 }));
 
+const FilterContainer = styled(Box)(({ theme }) => ({
+  display: "flex",
+  flexDirection: "column",
+  gap: theme.spacing(2),
+  [theme.breakpoints.up("sm")]: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+}));
+
 // Table head cells
 const headCells = [
   {
@@ -284,6 +308,8 @@ const ResponseManagement = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Fetch admin ID from sessionStorage
   const adminId = sessionStorage.getItem("userID") || "";
@@ -325,8 +351,8 @@ const ResponseManagement = () => {
 
   // Handle selection
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.checked && reclamationsData?.data) {
-      const newSelected = reclamationsData.data.map(
+    if (event.target.checked && filteredReclamations?.length) {
+      const newSelected = filteredReclamations.map(
         (reclamation) => reclamation.id
       );
       setSelected(newSelected);
@@ -445,15 +471,30 @@ const ResponseManagement = () => {
         },
       }).unwrap();
 
-      setSuccessMessage("Response created and reclamation resolved successfully!");
+      setSuccessMessage(
+        "Response created and reclamation resolved successfully!"
+      );
       setTimeout(() => {
         handleCloseDrawer();
       }, 2000);
     } catch (err: any) {
       console.error("Error creating response or updating reclamation:", err);
-      setErrorMessage(err.data?.message || "Failed to create response or update reclamation.");
+      setErrorMessage(
+        err.data?.message || "Failed to create response or update reclamation."
+      );
     }
   };
+
+  // Handle filter and search
+  const filteredReclamations = reclamationsData?.data.filter((reclamation) => {
+    const matchesStatus =
+      statusFilter === "all" ||
+      reclamation.status.toLowerCase() === statusFilter.toLowerCase();
+    const matchesSearch = (reclamation.memberFullName ?? "")
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
 
   // Effect for success messages
   useEffect(() => {
@@ -464,7 +505,6 @@ const ResponseManagement = () => {
     }
   }, [isCreateSuccess, isUpdateSuccess]);
 
-  
   useEffect(() => {
     if (!adminId) {
       setErrorMessage("Admin ID is missing. Please log in again.");
@@ -492,14 +532,58 @@ const ResponseManagement = () => {
 
       <MainContainer>
         <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
-          <Grid
-            item
-            xs={12}
-            sm={8}
-            md={9}
-            sx={{ display: "flex", justifyContent: "flex-end" }}
-          >
-            {/* Placeholder for BulkActions if needed */}
+          <Grid item xs={12} sm={12} md={12}>
+            <FilterContainer
+              sx={{ display: "flex", justifyContent: "space-between", gap: 2 }}
+            >
+              <FormControl
+                sx={{ minWidth: { xs: "100%", sm: 180 }, maxWidth: 150 }}
+              >
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  displayEmpty
+                  sx={{
+                    height: 40,
+                    borderRadius: 1,
+                    backgroundColor: theme.palette.background.paper,
+                    ".MuiSelect-select": {
+                      padding: "8px 12px",
+                    },
+                  }}
+                >
+                  <MenuItem value="all">All</MenuItem>
+                  <MenuItem value="pending">Pending</MenuItem>
+                  <MenuItem value="resolved">Resolved</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                placeholder="Search by Member Name"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                fullWidth={isMobile}
+                sx={{
+                  maxWidth: { xs: "100%", sm: 220 },
+                  backgroundColor: theme.palette.background.paper,
+                  borderRadius: 1,
+                  "& .MuiInputBase-root": {
+                    height: 40,
+                    padding: "0 12px",
+                  },
+                }}
+                variant="outlined"
+                InputProps={{
+                  startAdornment: (
+                    <FaSearch
+                      style={{
+                        marginRight: 8,
+                        color: theme.palette.text.secondary,
+                      }}
+                    />
+                  ),
+                }}
+              />
+            </FilterContainer>
           </Grid>
         </Grid>
 
@@ -512,13 +596,13 @@ const ResponseManagement = () => {
                 orderBy={orderBy}
                 onSelectAllClick={handleSelectAllClick}
                 onRequestSort={handleRequestSort}
-                rowCount={reclamationsData?.data.length || 0}
+                rowCount={filteredReclamations?.length || 0}
                 headCells={headCells}
                 isMobile={isMobile}
               />
               <TableBody>
-                {reclamationsData?.data.length ? (
-                  reclamationsData.data.map((reclamation) => {
+                {filteredReclamations?.length ? (
+                  filteredReclamations.map((reclamation) => {
                     const isItemSelected = isSelected(reclamation.id);
                     return (
                       <TableRow
@@ -562,8 +646,8 @@ const ResponseManagement = () => {
                             sx={{
                               color:
                                 reclamation.status === ReclamationStatus.PENDING
-                                  ? "#f28c38" 
-                                  : "#4caf50", 
+                                  ? "#f28c38"
+                                  : "#4caf50",
                               fontWeight: "medium",
                             }}
                           >
@@ -586,7 +670,8 @@ const ResponseManagement = () => {
                         </ResponsiveTableCell>
                         <ResponsiveTableCell align="center">
                           <Box display="flex" justifyContent="center" gap={1}>
-                            {reclamation.status === ReclamationStatus.PENDING ? (
+                            {reclamation.status ===
+                            ReclamationStatus.PENDING ? (
                               <Tooltip title="Add Response">
                                 <IconButton
                                   onClick={(e) => {
@@ -635,7 +720,7 @@ const ResponseManagement = () => {
           <TablePagination
             rowsPerPageOptions={[5, 10, 25]}
             component="div"
-            count={reclamationsData?.total || 0}
+            count={filteredReclamations?.length || 0}
             rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={handleChangePage}
@@ -738,13 +823,16 @@ const ResponseManagement = () => {
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     <strong>Response Date:</strong>{" "}
-                    {new Date(responsesData[0].createdAt).toLocaleString("fr-FR", {
-                      year: "numeric",
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {new Date(responsesData[0].createdAt).toLocaleString(
+                      "fr-FR",
+                      {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }
+                    )}
                   </Typography>
                 </Paper>
               ) : (

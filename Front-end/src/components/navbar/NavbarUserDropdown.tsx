@@ -3,8 +3,7 @@ import styled from "@emotion/styled";
 import { Power } from "react-feather";
 import { useRouter } from "next/router";
 import { useDispatch } from "react-redux";
-import { signOut } from "src/redux/authSlice"; // Assurez-vous que le chemin est correct
-
+import { signOut } from "src/redux/authSlice";
 import {
   Tooltip,
   Menu,
@@ -24,7 +23,7 @@ function NavbarUserDropdown() {
   const [anchorMenu, setAnchorMenu] = React.useState<any>(null);
   const router = useRouter();
   const dispatch = useDispatch();
-  const [logout] = useLogoutMutation(); // Initialisez la mutation de déconnexion
+  const [logout] = useLogoutMutation();
 
   const toggleMenu = (event: React.SyntheticEvent) => {
     setAnchorMenu(event.currentTarget);
@@ -34,36 +33,31 @@ function NavbarUserDropdown() {
     setAnchorMenu(null);
   };
 
+  // Nouvelle fonction pour rediriger vers /dashboard/facility
+  const handleProfileClick = () => {
+    closeMenu(); // Ferme le menu
+    router.push("/dashboard/facility"); // Redirige vers la page souhaitée
+  };
+
   const handleSignOut = async () => {
-    // Récupérez le token depuis sessionStorage
     const accessToken = sessionStorage.getItem("accessToken");
 
     if (!accessToken) {
       console.error("Aucun token d'accès trouvé.");
-      // Redirigez l'utilisateur vers la page de connexion
       router.replace("/auth/sign-in");
       return;
     }
 
     try {
-      // Appel à l'API de déconnexion
       await logout().unwrap();
-
-      // Efface les données de session
-
       sessionStorage.removeItem("username");
-      sessionStorage.removeItem("accessToken"); // Supprimez le token du sessionStorage
-      sessionStorage.removeItem("refreshToken"); // Supprimez également le refreshToken si nécessaire
-
-      // Dispatcher l'action de déconnexion
+      sessionStorage.removeItem("accessToken");
+      sessionStorage.removeItem("refreshToken");
       dispatch(signOut());
-
-      // Redirige l'utilisateur vers la page de connexion
       router.replace("/auth/sign-in");
     } catch (error) {
       console.error("Erreur lors de la déconnexion:", error);
 
-      // Si le token est invalide, forcez la déconnexion côté client
       if (typeof error === "object" && error !== null && "status" in error) {
         const fetchError = error as {
           status: number;
@@ -74,7 +68,6 @@ function NavbarUserDropdown() {
         }
       }
 
-      // Forcez la déconnexion côté client en cas d'erreur
       sessionStorage.removeItem("token");
       sessionStorage.removeItem("username");
       sessionStorage.removeItem("accessToken");
@@ -103,7 +96,7 @@ function NavbarUserDropdown() {
         open={Boolean(anchorMenu)}
         onClose={closeMenu}
       >
-        <MenuItem onClick={closeMenu}>Profile</MenuItem>
+        <MenuItem onClick={handleProfileClick}>Facility Profil</MenuItem>
         <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
       </Menu>
     </React.Fragment>

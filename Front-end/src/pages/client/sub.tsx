@@ -123,7 +123,7 @@ const SpaceMap = styled(Box, {
   border: `2px solid ${theme.palette.divider}`,
   borderRadius: theme.shape.borderRadius,
   backgroundColor:
-    spaceType === "general"
+    spaceType === "generalSpace"
       ? "rgba(0, 150, 255, 0.05)"
       : spaceType === "openSpace"
       ? "rgba(255, 0, 0, 0.05)"
@@ -215,7 +215,7 @@ const SpaceStepContainer = styled(Box)(({ theme }) => ({
 
 // Define spaces with their tables and chairs, including positions
 const spaces = {
-  general: {
+  generalSpace: {
     tables: [
       {
         id: 1,
@@ -408,7 +408,7 @@ const SubscriptionSelection = () => {
     "abonnement" | "journal" | null
   >(null);
   const [selectedSpace, setSelectedSpace] = useState<
-    "general" | "openSpace" | "meetingRoom" | null
+    "generalSpace" | "openSpace" | "meetingRoom" | null
   >(null);
   const [selectedChairs, setSelectedChairs] = useState<
     { tableId: number; chairId: number }[]
@@ -417,7 +417,7 @@ const SubscriptionSelection = () => {
   const [chairsConfirmed, setChairsConfirmed] = useState(false);
   const [openModal, setOpenModal] = useState(false); // State to control modal visibility
 
-  const steps = ["Select Date & Time", "Select Subscription", "Select Space"];
+  const steps = ["Date & Time", " Subscription", "Space"];
 
   const abonnementPrices = prices.filter(
     (price) => price.type === "abonnement"
@@ -640,7 +640,7 @@ const SubscriptionSelection = () => {
             </Tooltip>
             <Tooltip title="Account Settings">
               <IconButton
-                onClick={() => router.push("/client/account")} 
+                onClick={() => router.push("/client/account")}
                 sx={{
                   p: 0,
                 }}
@@ -649,9 +649,9 @@ const SubscriptionSelection = () => {
                   src={sessionStorage.getItem("img") || undefined}
                   alt={sessionStorage.getItem("username") || "User"}
                   sx={{
-                    width: 32, 
+                    width: 32,
                     height: 32,
-                    border: `2px solid ${theme.palette.primary.main}`, 
+                    border: `2px solid ${theme.palette.primary.main}`,
                   }}
                 />
               </IconButton>
@@ -715,7 +715,7 @@ const SubscriptionSelection = () => {
                     sx={{
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1.5rem", md: "2rem" },
+                      fontSize: { xs: "1.5rem", md: "1.5rem" },
                     }}
                   >
                     Select Date and Time
@@ -767,9 +767,10 @@ const SubscriptionSelection = () => {
                     variant="h4"
                     component="h2"
                     sx={{
+                      textAlign: "center",
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1.5rem", md: "2rem" },
+                      fontSize: { xs: "1.5rem", md: "1.5rem" },
                     }}
                   >
                     Select Subscription Type
@@ -992,7 +993,7 @@ const SubscriptionSelection = () => {
                                   }}
                                 >
                                   From {price.timePeriod.start} to{" "}
-                                  {price.timePeriod.end}
+                                  {price.timePeriod.end} hours
                                 </Typography>
                                 {selectedJournalPrice?.id === price.id && (
                                   <Chip
@@ -1062,7 +1063,7 @@ const SubscriptionSelection = () => {
                     sx={{
                       mb: 4,
                       fontWeight: 700,
-                      fontSize: { xs: "1.5rem", md: "2rem" },
+                      fontSize: { xs: "1.5rem", md: "1.5rem" },
                       textAlign: "center",
                     }}
                   >
@@ -1078,7 +1079,7 @@ const SubscriptionSelection = () => {
                       onChange={(e) => {
                         setSelectedSpace(
                           e.target.value as
-                            | "general"
+                            | "generalSpace"
                             | "openSpace"
                             | "meetingRoom"
                         );
@@ -1086,14 +1087,16 @@ const SubscriptionSelection = () => {
                       }}
                       label="Select Space"
                       renderValue={(value) => (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <Box
+                          sx={{ display: "flex", alignItems: "center", gap: 2 }}
+                        >
                           {value && (
                             <Avatar
                               variant="square"
                               src={
                                 value === "meetingRoom"
                                   ? meetingRoomImage.src
-                                  : value === "general"
+                                  : value === "generalSpace"
                                   ? generalSpaceImage.src
                                   : openSpaceImage.src
                               }
@@ -1104,7 +1107,7 @@ const SubscriptionSelection = () => {
                         </Box>
                       )}
                     >
-                      <MenuItem value="general">General Space</MenuItem>
+                      <MenuItem value="generalSpace">General Space</MenuItem>
                       <MenuItem value="openSpace">Open Space</MenuItem>
                       <MenuItem value="meetingRoom">Meeting Room</MenuItem>
                     </Select>
@@ -1519,7 +1522,7 @@ const SubscriptionSelection = () => {
             src={
               selectedSpace === "meetingRoom"
                 ? meetingRoomImage.src
-                : selectedSpace === "general"
+                : selectedSpace === "generalSpace"
                 ? generalSpaceImage.src
                 : openSpaceImage.src
             }
