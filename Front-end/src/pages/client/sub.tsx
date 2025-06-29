@@ -367,7 +367,7 @@ const calculateLeaveDate = (price: Price, startDate: Date): Date => {
   return leaveDate;
 };
 
-// Calculate stayedPeriode based on price
+
 const calculateStayedPeriode = (price: Price): string => {
   if (price.type === "abonnement") {
     return `${price.name} (${price.timePeriod.start}-${price.timePeriod.end} days)`;
@@ -663,7 +663,7 @@ const SubscriptionSelection = () => {
       {/* Main Content */}
       <Container
         maxWidth="lg"
-        sx={{ py: { xs: 3, md: 6 }, px: { xs: 2, sm: 4 } }}
+        sx={{ py: { xs: 12, md: 16 }, px: { xs: 2, sm: 4 } }}
       >
         {/* Stepper */}
         <Stepper activeStep={activeStep} sx={{ mb: 4 }}>

@@ -343,7 +343,10 @@ function Account(): React.JSX.Element {
           </Tooltip>
         </Stack>
 
-        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+        <Paper
+          elevation={2}
+          sx={{ py: { xs: 16, md: 20 }, px: { xs: 2, md: 4 }, borderRadius: 2 }}
+        >
           <Grid container spacing={4}>
             <Grid item lg={4} md={6} xs={12}>
               <AccountInfo
@@ -371,7 +374,7 @@ function Account(): React.JSX.Element {
                   phoneDisabled={true}
                 />
 
-                <Box sx={{ mt: 4}}>
+                <Box sx={{ mt: 4 }}>
                   <Card sx={{ width: "100%", boxSizing: "border-box" }}>
                     <CardHeader
                       title="Change Password"
