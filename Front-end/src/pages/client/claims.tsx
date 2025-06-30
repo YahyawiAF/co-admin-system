@@ -430,7 +430,7 @@ const ReclamationManagement = () => {
       {/* Main Content */}
       <Container
         maxWidth="lg"
-        sx={{ py: { xs: 3, md: 6 }, px: { xs: 2, sm: 4 } }}
+         sx={{ py: { xs: 16, md: 20 }, px: { xs: 2, md: 4 }, borderRadius: 2 }}
       >
         <Paper
           elevation={0}

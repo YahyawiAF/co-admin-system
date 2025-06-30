@@ -484,7 +484,6 @@ const ProductComponent = () => {
         <Typography variant="h6" sx={{ mb: 3 }}>
           {editProduct ? "Manage Product" : "Add Product"}
         </Typography>
-
         {/* Image Upload Section */}
         <Box
           sx={{
@@ -563,7 +562,6 @@ const ProductComponent = () => {
             Click image to upload
           </Typography>
         </Box>
-
         {/* Product Form Fields */}
         <TextField
           label="Product Name"
@@ -578,7 +576,6 @@ const ProductComponent = () => {
           helperText={errors.name}
           required
         />
-
         <TextField
           label="Description"
           fullWidth
@@ -591,7 +588,7 @@ const ProductComponent = () => {
               : setNewProduct({ ...newProduct, description: e.target.value })
           }
         />
-
+    
         <Grid container spacing={2}>
           <Grid item xs={6}>
             <TextField
@@ -600,11 +597,15 @@ const ProductComponent = () => {
               type="number"
               value={
                 editProduct
-                  ? editProduct.purchasePrice
+                  ? editProduct.purchasePrice === 0
+                    ? ""
+                    : editProduct.purchasePrice
+                  : newProduct.purchasePrice === 0
+                  ? ""
                   : newProduct.purchasePrice
               }
               onChange={(e) => {
-                const value = Math.max(0, parseFloat(e.target.value) || 0);
+                const value = parseFloat(e.target.value) || 0;
                 editProduct
                   ? setEditProduct({ ...editProduct, purchasePrice: value })
                   : setNewProduct({ ...newProduct, purchasePrice: value });
@@ -620,10 +621,16 @@ const ProductComponent = () => {
               fullWidth
               type="number"
               value={
-                editProduct ? editProduct.sellingPrice : newProduct.sellingPrice
+                editProduct
+                  ? editProduct.sellingPrice === 0
+                    ? ""
+                    : editProduct.sellingPrice
+                  : newProduct.sellingPrice === 0
+                  ? ""
+                  : newProduct.sellingPrice
               }
               onChange={(e) => {
-                const value = Math.max(0, parseFloat(e.target.value) || 0);
+                const value = parseFloat(e.target.value) || 0;
                 editProduct
                   ? setEditProduct({ ...editProduct, sellingPrice: value })
                   : setNewProduct({ ...newProduct, sellingPrice: value });
@@ -634,14 +641,21 @@ const ProductComponent = () => {
             />
           </Grid>
         </Grid>
-
         <TextField
           label="Stock Quantity"
           fullWidth
           type="number"
-          value={editProduct ? editProduct.stock : newProduct.stock}
+          value={
+            editProduct
+              ? editProduct.stock === 0
+                ? ""
+                : editProduct.stock
+              : newProduct.stock === 0
+              ? ""
+              : newProduct.stock
+          }
           onChange={(e) => {
-            const value = Math.max(0, parseInt(e.target.value) || 0);
+            const value = parseInt(e.target.value) || 0;
             editProduct
               ? setEditProduct({ ...editProduct, stock: value })
               : setNewProduct({ ...newProduct, stock: value });
@@ -650,7 +664,6 @@ const ProductComponent = () => {
           helperText={errors.stock}
           required
         />
-
         {/* Form Actions */}
         <Box
           sx={{

@@ -537,20 +537,31 @@ const ExpenseComponent = () => {
             step: "0.01",
             pattern: "^\\d+(\\.\\d{1,2})?$",
           }}
-          value={editExpense?.amount ?? newExpense.amount}
+          value={
+            editExpense
+              ? editExpense.amount === 0
+                ? ""
+                : editExpense.amount
+              : newExpense.amount === 0
+              ? ""
+              : newExpense.amount
+          }
           onChange={(e) => {
             const value = parseFloat(e.target.value);
-
             if (!isNaN(value)) {
               editExpense
                 ? setEditExpense({ ...editExpense, amount: value })
                 : setNewExpense({ ...newExpense, amount: value });
+            } else {
+             
+              editExpense
+                ? setEditExpense({ ...editExpense, amount: 0 })
+                : setNewExpense({ ...newExpense, amount: 0 });
             }
           }}
           error={!!errors?.amount}
           helperText={errors?.amount || ""}
         />
-
         <FormControl fullWidth error={!!errors?.type}>
           <Select
             value={editExpense?.type || newExpense.type}

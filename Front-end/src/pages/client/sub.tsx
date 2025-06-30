@@ -39,17 +39,25 @@ import { useDispatch } from "react-redux";
 import { signOut } from "src/redux/authSlice";
 import { useLogoutMutation } from "src/api/auth.repo";
 import useAuth from "src/hooks/useAuth";
-import { Abonnement, Journal } from "src/types/shared";
+import { Abonnement, Journal, BookingResponse } from "src/types/shared";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import PublicLayout from "src/layouts/PublicLayout";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { FormProvider, useForm } from "react-hook-form";
 import { RHFDatePeakerField } from "src/components/hook-form/RHTextFieldDate";
-import { format, addHours, parse } from "date-fns";
+import { format } from "date-fns";
 import meetingRoomImage from "public/images/meeting.png";
 import generalSpaceImage from "public/images/general.png";
 import openSpaceImage from "public/images/open.png";
+import { BookingService } from "src/api/bookingservice";
+import { BookSeatsPayload } from "src/types/shared";
+
+// Use environment variable for API URL
+const API_URL = process.env.NEXT_PUBLIC_WEB_SERVER || "http://localhost:4000/";
+
+// Instantiate BookingService
+const bookingService = new BookingService(API_URL);
 
 // Extend the Abonnement and Journal types to include space and selectedChairs
 interface ExtendedAbonnement extends Abonnement {
@@ -214,7 +222,7 @@ const SpaceStepContainer = styled(Box)(({ theme }) => ({
 }));
 
 // Define spaces with their tables and chairs, including positions
-const spaces = {
+const initialSpaces = {
   generalSpace: {
     tables: [
       {
@@ -225,7 +233,7 @@ const spaces = {
         left: 500,
         chairs: Array(10)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 2 === 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 2,
@@ -235,7 +243,7 @@ const spaces = {
         left: 80,
         chairs: Array(2)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 3 !== 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 3,
@@ -245,7 +253,7 @@ const spaces = {
         left: 80,
         chairs: Array(2)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 2 === 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 4,
@@ -255,7 +263,7 @@ const spaces = {
         left: 88,
         chairs: Array(3)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 4 !== 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 5,
@@ -265,7 +273,7 @@ const spaces = {
         left: 250,
         chairs: Array(2)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 2 === 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 6,
@@ -275,7 +283,7 @@ const spaces = {
         left: 520,
         chairs: Array(5)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 3 !== 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
     ],
   },
@@ -289,7 +297,7 @@ const spaces = {
         left: 340,
         chairs: Array(8)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 2 === 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 8,
@@ -299,7 +307,7 @@ const spaces = {
         left: 200,
         chairs: Array(4)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 3 !== 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
       {
         id: 9,
@@ -309,7 +317,7 @@ const spaces = {
         left: 500,
         chairs: Array(4)
           .fill(null)
-          .map((_, i) => ({ id: i + 1, isAvailable: i % 2 === 0 })),
+          .map((_, i) => ({ id: i + 1, isAvailable: true })),
       },
     ],
   },
@@ -329,6 +337,51 @@ const spaces = {
   },
 };
 
+// Map tableId and chairId to seat.io label
+const mapToSeatIoLabel = (tableId: number, chairId: number): string => {
+  // Use tableId-chairId format to match seat.io chart
+  return `${tableId}-${chairId}`;
+};
+
+// Parse time string to minutes
+const parseTimeToMinutes = (timeStr: string): number => {
+  if (!timeStr) return 0;
+
+  const [hoursStr, minutesStr] = timeStr.split("h");
+  const hours = parseInt(hoursStr) || 0;
+  const minutes = parseInt(minutesStr) || 0;
+
+  return hours * 60 + minutes;
+};
+
+// Find matching price based on duration
+const findMatchingPrice = (
+  startDate: Date,
+  endDate: Date,
+  journalPrices: Price[]
+): Price | null => {
+  if (!journalPrices || journalPrices.length === 0) return null;
+
+  const realDurationMinutes = Math.floor(
+    (endDate.getTime() - startDate.getTime()) / (1000 * 60)
+  );
+
+  const sortedPrices = [...journalPrices].sort((a, b) => {
+    const aMax = parseTimeToMinutes(a.timePeriod.end);
+    const bMax = parseTimeToMinutes(b.timePeriod.end);
+    return aMax - bMax;
+  });
+
+  for (const price of sortedPrices) {
+    const priceMax = parseTimeToMinutes(price.timePeriod.end);
+    if (realDurationMinutes <= priceMax + 15) {
+      return price;
+    }
+  }
+
+  return sortedPrices[sortedPrices.length - 1] || null;
+};
+
 // Calculate leave date based on price and start date
 const calculateLeaveDate = (price: Price, startDate: Date): Date => {
   const leaveDate = new Date(startDate);
@@ -341,25 +394,14 @@ const calculateLeaveDate = (price: Price, startDate: Date): Date => {
     if (durationDays > 0) {
       leaveDate.setDate(leaveDate.getDate() + durationDays);
     } else {
-      // Default to 30 days for abonnement if duration is invalid
       leaveDate.setDate(leaveDate.getDate() + 30);
     }
   } else if (price.type === "journal") {
-    // Parse timePeriod.end as hours (e.g., "2h" or "2:00")
     const endTime = price.timePeriod.end;
-    let hours = 0;
-
-    if (endTime.includes("h")) {
-      hours = parseInt(endTime.replace("h", ""), 10);
-    } else if (endTime.includes(":")) {
-      const [hoursStr] = endTime.split(":");
-      hours = parseInt(hoursStr, 10);
-    }
-
-    if (hours > 0) {
-      leaveDate.setHours(leaveDate.getHours() + hours);
+    const minutes = parseTimeToMinutes(endTime);
+    if (minutes > 0) {
+      leaveDate.setMinutes(leaveDate.getMinutes() + minutes);
     } else {
-      // Default to 2 hours for journal if duration is invalid
       leaveDate.setHours(leaveDate.getHours() + 2);
     }
   }
@@ -367,13 +409,33 @@ const calculateLeaveDate = (price: Price, startDate: Date): Date => {
   return leaveDate;
 };
 
-
 const calculateStayedPeriode = (price: Price): string => {
   if (price.type === "abonnement") {
     return `${price.name} (${price.timePeriod.start}-${price.timePeriod.end} days)`;
   } else {
     return `${price.name} (${price.timePeriod.start}-${price.timePeriod.end})`;
   }
+};
+
+// Format time remaining
+const formatTimeRemaining = (timeDiff: number): string => {
+  if (timeDiff <= 0) return "00:00:00";
+
+  const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+  const hours = Math.floor(
+    (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+  );
+  const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+
+  if (days > 0) {
+    return `${days}d ${hours.toString().padStart(2, "0")}:${minutes
+      .toString()
+      .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+  }
+  return `${hours.toString().padStart(2, "0")}:${minutes
+    .toString()
+    .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
 };
 
 const SubscriptionSelection = () => {
@@ -389,6 +451,7 @@ const SubscriptionSelection = () => {
       isLoading: isSubmittingAbonnement,
       isSuccess: isSuccessAbonnement,
       error: errorAbonnement,
+      data: abonnementData,
     },
   ] = useCreateAbonnementMutation();
   const [
@@ -397,6 +460,7 @@ const SubscriptionSelection = () => {
       isLoading: isSubmittingJournal,
       isSuccess: isSuccessJournal,
       error: errorJournal,
+      data: journalData,
     },
   ] = useCreateJournalMutation();
 
@@ -415,10 +479,13 @@ const SubscriptionSelection = () => {
   >([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [chairsConfirmed, setChairsConfirmed] = useState(false);
-  const [openModal, setOpenModal] = useState(false); // State to control modal visibility
+  const [openModal, setOpenModal] = useState(false);
+  const [journalTimeRemaining, setJournalTimeRemaining] = useState<string>("");
+  const [abonnementTimeRemaining, setAbonnementTimeRemaining] =
+    useState<string>("");
+  const [spaces, setSpaces] = useState(initialSpaces);
 
-  const steps = ["Date & Time", " Subscription", "Space"];
-
+  const steps = ["Date & Time", "Subscription", "Space"];
   const abonnementPrices = prices.filter(
     (price) => price.type === "abonnement"
   );
@@ -431,13 +498,102 @@ const SubscriptionSelection = () => {
     },
   });
 
+  // Fetch bookings to update seat availability
+  useEffect(() => {
+    const fetchBookings = async () => {
+      try {
+        const bookings = await bookingService.getAllBookings();
+        const updatedSpaces = JSON.parse(JSON.stringify(initialSpaces));
+        bookings.forEach((booking: BookingResponse) => {
+          const match = booking.seatId.match(/(\d+)-(\d+)/);
+          if (match) {
+            const tableId = parseInt(match[1], 10);
+            const chairId = parseInt(match[2], 10);
+            Object.values(updatedSpaces).forEach((space: any) => {
+              const table = space.tables.find((t: any) => t.id === tableId);
+              if (table) {
+                const chair = table.chairs.find((c: any) => c.id === chairId);
+                if (chair) chair.isAvailable = false;
+              }
+            });
+          }
+        });
+        setSpaces(updatedSpaces);
+      } catch (error) {
+        console.error("Failed to fetch bookings:", error);
+        setErrorMessage("Failed to load seat availability. Please try again.");
+      }
+    };
+    fetchBookings();
+  }, []);
+
+  // Refresh bookings when space changes
+  useEffect(() => {
+    if (selectedSpace) {
+      const fetchBookings = async () => {
+        try {
+          const bookings = await bookingService.getAllBookings();
+          const updatedSpaces = JSON.parse(JSON.stringify(initialSpaces));
+          bookings.forEach((booking: BookingResponse) => {
+            const match = booking.seatId.match(/(\d+)-(\d+)/);
+            if (match) {
+              const tableId = parseInt(match[1], 10);
+              const chairId = parseInt(match[2], 10);
+              Object.values(updatedSpaces).forEach((space: any) => {
+                const table = space.tables.find((t: any) => t.id === tableId);
+                if (table) {
+                  const chair = table.chairs.find((c: any) => c.id === chairId);
+                  if (chair) chair.isAvailable = false;
+                }
+              });
+            }
+          });
+          setSpaces(updatedSpaces);
+        } catch (error) {
+          console.error("Failed to fetch bookings:", error);
+          setErrorMessage("Failed to load seat availability. Please try again.");
+        }
+      };
+      fetchBookings();
+    }
+  }, [selectedSpace]);
+
+  // Countdown timer logic for journal
+  useEffect(() => {
+    if (isSuccessJournal && journalData?.leaveTime) {
+      const leaveTime = new Date(journalData.leaveTime);
+      const updateTimer = () => {
+        const now = new Date();
+        const timeDiff = leaveTime.getTime() - now.getTime();
+        setJournalTimeRemaining(formatTimeRemaining(timeDiff));
+      };
+      updateTimer();
+      const timer = setInterval(updateTimer, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isSuccessJournal, journalData]);
+
+  // Countdown timer logic for abonnement
+  useEffect(() => {
+    if (isSuccessAbonnement && abonnementData?.leaveDate) {
+      const leaveDate = new Date(abonnementData.leaveDate);
+      const updateTimer = () => {
+        const now = new Date();
+        const timeDiff = leaveDate.getTime() - now.getTime();
+        setAbonnementTimeRemaining(formatTimeRemaining(timeDiff));
+      };
+      updateTimer();
+      const timer = setInterval(updateTimer, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isSuccessAbonnement, abonnementData]);
+
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem("accessToken");
     if (!accessToken) {
       router.replace("/client/login");
       return;
     }
-
     try {
       await logoutQuery().unwrap();
       sessionStorage.clear();
@@ -457,7 +613,6 @@ const SubscriptionSelection = () => {
     isAvailable: boolean
   ) => {
     if (!isAvailable) return;
-
     setSelectedChairs((prev) => {
       const chair = { tableId, chairId };
       const exists = prev.some(
@@ -499,9 +654,7 @@ const SubscriptionSelection = () => {
         (selectedSubscriptionType === "abonnement" && !selectedPrice) ||
         (selectedSubscriptionType === "journal" && !selectedJournalPrice)
       ) {
-        setErrorMessage(
-          "Please select a plan for the chosen subscription type."
-        );
+        setErrorMessage("Please select a plan for the chosen subscription type.");
         return;
       }
     }
@@ -527,6 +680,18 @@ const SubscriptionSelection = () => {
     setActiveStep((prev) => prev - 1);
   };
 
+  const handleGoToDashboard = () => {
+    setActiveStep(0);
+    setSelectedPrice(null);
+    setSelectedJournalPrice(null);
+    setSelectedSubscriptionType(null);
+    setSelectedSpace(null);
+    setSelectedChairs([]);
+    setChairsConfirmed(false);
+    setErrorMessage("");
+    router.push("/client/account");
+  };
+
   const handleFinalSubmit = async () => {
     const memberId = sessionStorage.getItem("member");
     const createdByID = sessionStorage.getItem("userID");
@@ -539,11 +704,16 @@ const SubscriptionSelection = () => {
       return;
     }
 
-    const selectedDateTime =
-      methods.getValues("selectedDateTime") || new Date();
+    const selectedDateTime = methods.getValues("selectedDateTime") || new Date();
+    const selectedChair = selectedChairs[0];
+    if (!selectedChair) {
+      setErrorMessage("No chair selected.");
+      return;
+    }
+    const seatId = mapToSeatIoLabel(selectedChair.tableId, selectedChair.chairId);
 
-    if (selectedSubscriptionType === "abonnement" && selectedPrice) {
-      try {
+    try {
+      if (selectedSubscriptionType === "abonnement" && selectedPrice) {
         const leaveDate = calculateLeaveDate(selectedPrice, selectedDateTime);
         const stayedPeriode = calculateStayedPeriode(selectedPrice);
         const abonnementData: Partial<ExtendedAbonnement> = {
@@ -560,18 +730,22 @@ const SubscriptionSelection = () => {
           createdbyUserID: createdByID ?? undefined,
         };
         await createAbonnement(abonnementData).unwrap();
-      } catch (err: any) {
-        setErrorMessage(err.data?.message || "Error creating subscription");
-      }
-    } else if (selectedSubscriptionType === "journal" && selectedJournalPrice) {
-      try {
+
+        const bookingPayload: BookSeatsPayload = {
+          eventKey: "180346ed-b27d-4677-8975-f4b168d98cc0",
+          seats: [seatId],
+          memberId,
+        };
+        await bookingService.createBooking(bookingPayload);
+      } else if (selectedSubscriptionType === "journal" && selectedJournalPrice) {
         const stayedPeriode = calculateStayedPeriode(selectedJournalPrice);
         const now = new Date();
+        const leaveTime = calculateLeaveDate(selectedJournalPrice, selectedDateTime);
         const journalData: Journal = {
-          id: "", // Set to empty string or generate a new id if needed
+          id: "",
           isPayed: false,
           registredTime: selectedDateTime,
-          leaveTime: calculateLeaveDate(selectedJournalPrice, selectedDateTime),
+          leaveTime,
           payedAmount: selectedJournalPrice.price,
           memberID: memberId,
           priceId: selectedJournalPrice.id,
@@ -584,9 +758,28 @@ const SubscriptionSelection = () => {
           updatedAt: now,
         };
         await createJournal(journalData).unwrap();
-      } catch (err: any) {
-        setErrorMessage(err.data?.message || "Error creating daily pass");
+
+        const bookingPayload: BookSeatsPayload = {
+          eventKey: "180346ed-b27d-4677-8975-f4b168d98cc0",
+          seats: [seatId],
+          memberId,
+        };
+        await bookingService.createBooking(bookingPayload);
       }
+      setActiveStep(0);
+      setSelectedPrice(null);
+      setSelectedJournalPrice(null);
+      setSelectedSubscriptionType(null);
+      setSelectedSpace(null);
+      setSelectedChairs([]);
+      setChairsConfirmed(false);
+    } catch (err: any) {
+      const errorMessage =
+        err.response?.data?.error ||
+        err.message ||
+        "Error creating subscription or booking";
+      const suggestion = err.response?.data?.suggestion || "Please try a different seat.";
+      setErrorMessage(`${errorMessage} - Suggestion: ${suggestion}`);
     }
   };
 
@@ -686,7 +879,14 @@ const SubscriptionSelection = () => {
         >
           {errorMessage && (
             <Alert severity="error" sx={{ mb: 3, borderRadius: 1 }}>
-              {errorMessage}
+              {errorMessage.split(" - Suggestion: ")[0]}
+              {errorMessage.includes(" - Suggestion: ") && (
+                <>
+                  <br />
+                  <strong>Suggestion:</strong>{" "}
+                  {errorMessage.split(" - Suggestion: ")[1]}
+                </>
+              )}
             </Alert>
           )}
           {(errorAbonnement || errorJournal) && (
@@ -699,11 +899,89 @@ const SubscriptionSelection = () => {
             </Alert>
           )}
           {isSuccessAbonnement || isSuccessJournal ? (
-            <Alert severity="success" sx={{ mb: 3, borderRadius: 1 }}>
-              {isSuccessAbonnement
-                ? "Subscription activated successfully!"
-                : "Daily pass created successfully!"}{" "}
-            </Alert>
+            <Box sx={{ textAlign: "center" }}>
+              <Alert severity="success" sx={{ mb: 3, borderRadius: 1 }}>
+                {isSuccessAbonnement
+                  ? "Subscription activated successfully!"
+                  : "Daily pass created successfully!"}
+              </Alert>
+              {isSuccessJournal && journalTimeRemaining && (
+                <Box
+                  sx={{
+                    mt: 4,
+                    p: 3,
+                    borderRadius: 2,
+                    backgroundColor: theme.palette.primary.light,
+                    color: theme.palette.primary.contrastText,
+                    boxShadow: theme.shadows[4],
+                  }}
+                >
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+                    Daily Pass Time Remaining
+                  </Typography>
+                  <Typography
+                    variant="h3"
+                    sx={{
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {journalTimeRemaining}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
+                    Your daily pass will expire at{" "}
+                    {journalData?.leaveTime
+                      ? format(new Date(journalData.leaveTime), "PPp")
+                      : ""}
+                  </Typography>
+                </Box>
+              )}
+              {isSuccessAbonnement && abonnementTimeRemaining && (
+                <Box
+                  sx={{
+                    mt: 4,
+                    p: 3,
+                    borderRadius: 2,
+                    backgroundColor: theme.palette.primary.light,
+                    color: theme.palette.primary.contrastText,
+                    boxShadow: theme.shadows[4],
+                  }}
+                >
+                  <Typography variant="h5" sx={{ mb: 2, fontWeight: 700 }}>
+                    Membership Time Remaining
+                  </Typography>
+                  <Typography
+                    variant="h3"
+                    sx={{
+                      fontWeight: 800,
+                      letterSpacing: 2,
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    {abonnementTimeRemaining}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 1, opacity: 0.9 }}>
+                    Your membership will expire at{" "}
+                    {abonnementData?.leaveDate
+                      ? format(new Date(abonnementData.leaveDate), "PPp")
+                      : ""}
+                  </Typography>
+                </Box>
+              )}
+              <Button
+                variant="contained"
+                onClick={handleGoToDashboard}
+                sx={{
+                  mt: 4,
+                  py: 1.5,
+                  px: 6,
+                  borderRadius: 8,
+                }}
+              >
+                Go to Dashboard
+              </Button>
+            </Box>
           ) : (
             <>
               {/* Step 1: Select Date and Time */}
@@ -739,6 +1017,78 @@ const SubscriptionSelection = () => {
                             maxWidth: 300,
                           }}
                         />
+                        {(journalTimeRemaining || abonnementTimeRemaining) && (
+                          <Box sx={{ mt: 2, textAlign: "center" }}>
+                            {journalTimeRemaining && (
+                              <Box sx={{ mb: 2 }}>
+                                <Typography
+                                  variant="h6"
+                                  sx={{ fontWeight: 600 }}
+                                >
+                                  Daily Pass Time Remaining
+                                </Typography>
+                                <Typography
+                                  variant="h4"
+                                  sx={{
+                                    fontWeight: 800,
+                                    fontFamily: "monospace",
+                                  }}
+                                >
+                                  {journalTimeRemaining}
+                                </Typography>
+                                {journalData?.leaveTime && (
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      mt: 1,
+                                      color: theme.palette.text.secondary,
+                                    }}
+                                  >
+                                    Expires at{" "}
+                                    {format(
+                                      new Date(journalData.leaveTime),
+                                      "PPp"
+                                    )}
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
+                            {abonnementTimeRemaining && (
+                              <Box>
+                                <Typography
+                                  variant="h6"
+                                  sx={{ fontWeight: 600 }}
+                                >
+                                  Membership Time Remaining
+                                </Typography>
+                                <Typography
+                                  variant="h4"
+                                  sx={{
+                                    fontWeight: 800,
+                                    fontFamily: "monospace",
+                                  }}
+                                >
+                                  {abonnementTimeRemaining}
+                                </Typography>
+                                {abonnementData?.leaveDate && (
+                                  <Typography
+                                    variant="body2"
+                                    sx={{
+                                      mt: 1,
+                                      color: theme.palette.text.secondary,
+                                    }}
+                                  >
+                                    Expires at{" "}
+                                    {format(
+                                      new Date(abonnementData.leaveDate),
+                                      "PPp"
+                                    )}
+                                  </Typography>
+                                )}
+                              </Box>
+                            )}
+                          </Box>
+                        )}
                       </Box>
                     </FormProvider>
                   </LocalizationProvider>
@@ -1083,7 +1433,7 @@ const SubscriptionSelection = () => {
                             | "openSpace"
                             | "meetingRoom"
                         );
-                        setOpenModal(true); // Open modal when a space is selected
+                        setOpenModal(true);
                       }}
                       label="Select Space"
                       renderValue={(value) => (

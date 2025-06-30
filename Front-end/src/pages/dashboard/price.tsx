@@ -661,9 +661,17 @@ const PriceComponent = () => {
           label="Price (DT)"
           fullWidth
           type="number"
-          value={editPrice ? editPrice.price : newPrice.price}
+          value={
+            editPrice
+              ? editPrice.price === 0
+                ? ""
+                : editPrice.price
+              : newPrice.price === 0
+              ? ""
+              : newPrice.price
+          }
           onChange={(e) => {
-            const value = Math.max(0, +e.target.value);
+            const value = Math.max(0, +e.target.value || 0);
             editPrice
               ? setEditPrice({ ...editPrice, price: value })
               : setNewPrice({ ...newPrice, price: value });
