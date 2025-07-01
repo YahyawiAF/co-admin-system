@@ -180,6 +180,15 @@ export class AbonnementService {
       );
     }
   }
+  async getAbonnementByMember(memberID: string) {
+  return this.prisma.abonnement.findMany({
+    where: { memberID },
+    include: {
+      members: true,
+      price: true,
+    },
+  });
+}
 
   remove(id: string) {
     return this.prisma.abonnement.delete({

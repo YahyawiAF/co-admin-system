@@ -161,7 +161,32 @@ export class JournalService {
       );
     }
   }
-
+async getJournalByMember(memberId: string) {
+  return this.prisma.journal.findMany({
+    where: { memberID: memberId },
+    include: {
+      members: true,
+      prices: true, // Changed from 'price' to 'prices' to match Prisma schema
+      createdBy: {
+        select: {
+          id: true,
+          createdAt: true,
+          updatedAt: true,
+          isActive: true,
+          deletedAt: true,
+          email: true,
+          fullname: true,
+          role: true,
+          phoneNumber: true,
+          img: true,
+        },
+      },
+    },
+    orderBy: {
+      registredTime: 'desc',
+    },
+  });
+}
   remove(id: string) {
     return this.prisma.journal.delete({ where: { id } });
   }

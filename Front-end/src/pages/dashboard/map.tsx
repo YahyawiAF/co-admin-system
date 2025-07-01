@@ -71,13 +71,14 @@ interface BookingWithMember extends BookingResponse {
   journal?: Journal;
   abonnement?: Abonnement;
   fullName?: string;
+  subscriptionTypes: { type: string; journal?: Journal; abonnement?: Abonnement }[];
 }
 
 interface SeatingChartProps {
   selectedDate?: Date;
 }
 
-// Styled Components (inchangés)
+// Styled Components
 const PageContainer = styled(Box)(({ theme }) => ({
   display: "flex",
   flexDirection: "column",
@@ -244,7 +245,7 @@ const RefreshButton = styled(IconButton)(({ theme }) => ({
   marginLeft: theme.spacing(2),
 }));
 
-// Options de recherche Fuse.js pour les membres
+// Search options for Fuse.js
 const memberSearchOptions = {
   keys: [
     { name: "firstName", weight: 0.4 },
@@ -258,12 +259,11 @@ const memberSearchOptions = {
   shouldSort: true,
 };
 
-// Options de recherche Fuse.js pour les réservations
 const bookingSearchOptions = {
   keys: [
     { name: "seatId", weight: 0.4 },
     { name: "fullName", weight: 0.4 },
-    { name: "subscriptionType", weight: 0.2 },
+    { name: "subscriptionTypes.type", weight: 0.2 },
   ],
   threshold: 0.4,
   includeScore: true,
@@ -271,7 +271,7 @@ const bookingSearchOptions = {
   shouldSort: true,
 };
 
-// Fonction pour appliquer le filtre avec Fuse.js pour les membres
+// Apply filters for members
 const applyMemberFilters = (
   members: Member[],
   searchTerm: string,
@@ -279,7 +279,6 @@ const applyMemberFilters = (
   abonnements: Abonnement[],
   selectedDate: Date
 ): Member[] => {
-  // Filtrer les membres ayant un journal actif pour la date sélectionnée ou un abonnement actif
   const activeMembers = members.filter((member) => {
     const hasJournal = journals.some((j) => {
       if (j.memberID !== member.id || !j.registredTime) return false;
@@ -300,7 +299,6 @@ const applyMemberFilters = (
     return hasJournal || hasAbonnement;
   });
 
-  // Ajouter les indicateurs hasJournal et hasAbonnement
   const enrichedMembers = activeMembers.map((member) => ({
     ...member,
     hasJournal: journals.some((j) => {
@@ -330,31 +328,31 @@ const applyMemberFilters = (
   return results.map((result) => result.item);
 };
 
-// Fonction pour appliquer le filtre avec Fuse.js pour les réservations
+// Apply filters for bookings
 const applyBookingFilters = (
   bookings: BookingWithMember[],
   searchTerm: string,
   selectedDate: Date
 ): BookingWithMember[] => {
-  // Filtrer les réservations : inclure les journaux pour la date sélectionnée et tous les abonnements actifs
   const filteredBookings = bookings.filter((booking) => {
-    if (booking.journal && booking.journal.registredTime) {
-      const journalDate = new Date(booking.journal.registredTime);
-      return (
-        journalDate.getFullYear() === selectedDate.getFullYear() &&
-        journalDate.getMonth() === selectedDate.getMonth() &&
-        journalDate.getDate() === selectedDate.getDate() &&
-        (!booking.journal.leaveTime ||
-          new Date(booking.journal.leaveTime) > new Date())
-      );
-    }
-    if (booking.abonnement && booking.abonnement.registredDate) {
-      return (
-        !booking.abonnement.leaveDate ||
-        new Date(booking.abonnement.leaveDate) > new Date()
-      );
-    }
-    return false;
+    return booking.subscriptionTypes.some((sub) => {
+      if (sub.type === "Journal" && sub.journal?.registredTime) {
+        const journalDate = new Date(sub.journal.registredTime);
+        return (
+          journalDate.getFullYear() === selectedDate.getFullYear() &&
+          journalDate.getMonth() === selectedDate.getMonth() &&
+          journalDate.getDate() === selectedDate.getDate() &&
+          (!sub.journal.leaveTime || new Date(sub.journal.leaveTime) > new Date())
+        );
+      }
+      if (sub.type === "Membership" && sub.abonnement?.registredDate) {
+        return (
+          !sub.abonnement.leaveDate ||
+          new Date(sub.abonnement.leaveDate) > new Date()
+        );
+      }
+      return false;
+    });
   });
 
   if (!searchTerm || searchTerm.length < 2) {
@@ -434,26 +432,27 @@ const SeatingChart: NextPage<SeatingChartProps> & {
       setIsLoading(true);
       const bookingsData = await bookingService.getAllBookings();
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
-      // Filtrer les réservations pour les statistiques
-      const filteredBookings = enrichedBookings.filter((booking) => {
-        if (booking.journal && booking.journal.registredTime) {
-          const journalDate = new Date(booking.journal.registredTime);
-          return (
-            journalDate.getFullYear() === selectedDate.getFullYear() &&
-            journalDate.getMonth() === selectedDate.getMonth() &&
-            journalDate.getDate() === selectedDate.getDate() &&
-            (!booking.journal.leaveTime ||
-              new Date(booking.journal.leaveTime) > new Date())
-          );
-        }
-        if (booking.abonnement && booking.abonnement.registredDate) {
-          return (
-            !booking.abonnement.leaveDate ||
-            new Date(booking.abonnement.leaveDate) > new Date()
-          );
-        }
-        return false;
-      });
+      const filteredBookings = enrichedBookings.filter((booking) =>
+        booking.subscriptionTypes.some((sub) => {
+          if (sub.type === "Journal" && sub.journal?.registredTime) {
+            const journalDate = new Date(sub.journal.registredTime);
+            return (
+              journalDate.getFullYear() === selectedDate.getFullYear() &&
+              journalDate.getMonth() === selectedDate.getMonth() &&
+              journalDate.getDate() === selectedDate.getDate() &&
+              (!sub.journal.leaveTime ||
+                new Date(sub.journal.leaveTime) > new Date())
+            );
+          }
+          if (sub.type === "Membership" && sub.abonnement?.registredDate) {
+            return (
+              !sub.abonnement.leaveDate ||
+              new Date(sub.abonnement.leaveDate) > new Date()
+            );
+          }
+          return false;
+        })
+      );
       setBookings(enrichedBookings);
       const totalSeats = 48;
       setBookedSeats(filteredBookings.length);
@@ -475,7 +474,9 @@ const SeatingChart: NextPage<SeatingChartProps> & {
           (j) =>
             j.memberID === booking.memberId &&
             j.registredTime &&
-            (!j.leaveTime || new Date(j.leaveTime) > new Date())
+            (!j.leaveTime || new Date(j.leaveTime) > new Date()) &&
+            new Date(j.registredTime).toDateString() ===
+              selectedDate.toDateString()
         );
         const abonnement = abonnements.data.find(
           (a) =>
@@ -483,6 +484,13 @@ const SeatingChart: NextPage<SeatingChartProps> & {
             a.registredDate &&
             (!a.leaveDate || new Date(a.leaveDate) > new Date())
         );
+        const subscriptionTypes = [];
+        if (journal) {
+          subscriptionTypes.push({ type: "Journal", journal });
+        }
+        if (abonnement) {
+          subscriptionTypes.push({ type: "Membership", abonnement });
+        }
         return {
           ...booking,
           member,
@@ -491,11 +499,7 @@ const SeatingChart: NextPage<SeatingChartProps> & {
           fullName: member
             ? `${member.firstName} ${member.lastName}`
             : "Unknown",
-          subscriptionType: journal
-            ? "Journal"
-            : abonnement
-            ? "Membership"
-            : "Unknown",
+          subscriptionTypes,
         };
       })
     );
@@ -504,32 +508,39 @@ const SeatingChart: NextPage<SeatingChartProps> & {
   const checkExpiredBookings = async () => {
     const now = new Date();
     for (const booking of bookings) {
-      if (
-        booking.journal &&
-        booking.journal.leaveTime &&
-        new Date(booking.journal.leaveTime) <= now
-      ) {
-        await bookingService.deleteBooking(booking.id);
-      }
-      if (
-        booking.abonnement &&
-        booking.abonnement.leaveDate &&
-        new Date(booking.abonnement.leaveDate) <= now
-      ) {
-        await bookingService.deleteBooking(booking.id);
+      for (const sub of booking.subscriptionTypes) {
+        if (
+          sub.type === "Journal" &&
+          sub.journal?.leaveTime &&
+          new Date(sub.journal.leaveTime) <= now
+        ) {
+          await bookingService.deleteBooking(booking.id);
+        }
+        if (
+          sub.type === "Membership" &&
+          sub.abonnement?.leaveDate &&
+          new Date(sub.abonnement.leaveDate) <= now
+        ) {
+          await bookingService.deleteBooking(booking.id);
+        }
       }
     }
     await fetchBookings();
   };
 
-  const calculateRemainingTime = (booking: BookingWithMember): string => {
+  const calculateRemainingTime = (
+    subscription: { type: string; journal?: Journal; abonnement?: Abonnement }
+  ): string => {
     const now = new Date();
     let endDate: Date | null = null;
 
-    if (booking.journal && booking.journal.leaveTime) {
-      endDate = new Date(booking.journal.leaveTime);
-    } else if (booking.abonnement && booking.abonnement.leaveDate) {
-      endDate = new Date(booking.abonnement.leaveDate);
+    if (subscription.type === "Journal" && subscription.journal?.leaveTime) {
+      endDate = new Date(subscription.journal.leaveTime);
+    } else if (
+      subscription.type === "Membership" &&
+      subscription.abonnement?.leaveDate
+    ) {
+      endDate = new Date(subscription.abonnement.leaveDate);
     }
 
     if (!endDate) return "N/A";
@@ -687,7 +698,6 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     return member ? `${member.firstName} ${member.lastName}` : "Unknown";
   };
 
-  // Filtrage des membres avec Fuse.js
   const filteredMembers = applyMemberFilters(
     members,
     searchTerm,
@@ -696,7 +706,6 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     selectedDate
   );
 
-  // Filtrage des réservations avec Fuse.js
   const filteredBookings = applyBookingFilters(
     bookings,
     tableSearchTerm,
@@ -862,85 +871,91 @@ const SeatingChart: NextPage<SeatingChartProps> & {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredBookings.map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell>{booking.seatId}</TableCell>
-                        <TableCell>
-                          {booking.member
-                            ? `${booking.member.firstName} ${booking.member.lastName}`
-                            : "Unknown"}
-                        </TableCell>
-                        <TableCell>
-                          <Chip
-                            label={
-                              booking.journal
-                                ? "Journal"
-                                : booking.abonnement
-                                ? "Membership"
-                                : "Unknown"
-                            }
-                            color={booking.journal ? "primary" : "secondary"}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(
-                            booking.journal?.registredTime ||
-                              booking.abonnement?.registredDate
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {formatDate(
-                            booking.journal?.leaveTime ||
-                              booking.abonnement?.leaveDate
-                          )}
-                        </TableCell>
-                        <TableCell>{calculateRemainingTime(booking)}</TableCell>
-                        <TableCell>
-                          <IconButton
-                            size="small"
-                            onClick={async () => {
-                              try {
-                                const fetchedBooking =
-                                  await bookingService.getBookingById(
-                                    booking.id
-                                  );
-                                const enrichedBooking = (
-                                  await enrichBookingsWithMemberData([
-                                    fetchedBooking,
-                                  ])
-                                )[0];
-                                setSelectedBooking(enrichedBooking);
-                                setCurrentSeat({ label: booking.seatId });
-                                setMemberId(fetchedBooking.memberId || "");
-                                setModalMode("view");
-                                setShowModal(true);
-                              } catch (error: any) {
-                                setBookingError(error.message);
-                              }
-                            }}
-                          >
-                            <PersonIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton
-                            size="small"
-                            onClick={async () => {
-                              try {
-                                await bookingService.deleteBooking(booking.id);
-                                setBookingSuccess(
-                                  "Booking deleted successfully!"
-                                );
-                                await fetchBookings();
-                              } catch (error: any) {
-                                setBookingError(error.message);
-                              }
-                            }}
-                          >
-                            <DeleteIcon fontSize="small" color="error" />
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    filteredBookings.flatMap((booking) =>
+                      booking.subscriptionTypes.map((sub, index) => (
+                        <TableRow key={`${booking.id}-${sub.type}`}>
+                          {index === 0 ? (
+                            <>
+                              <TableCell rowSpan={booking.subscriptionTypes.length}>
+                                {booking.seatId}
+                              </TableCell>
+                              <TableCell rowSpan={booking.subscriptionTypes.length}>
+                                {booking.member
+                                  ? `${booking.member.firstName} ${booking.member.lastName}`
+                                  : "Unknown"}
+                              </TableCell>
+                            </>
+                          ) : null}
+                          <TableCell>
+                            <Chip
+                              label={sub.type}
+                              color={sub.type === "Journal" ? "primary" : "secondary"}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(
+                              sub.type === "Journal"
+                                ? sub.journal?.registredTime
+                                : sub.abonnement?.registredDate
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(
+                              sub.type === "Journal"
+                                ? sub.journal?.leaveTime
+                                : sub.abonnement?.leaveDate
+                            )}
+                          </TableCell>
+                          <TableCell>{calculateRemainingTime(sub)}</TableCell>
+                          {index === 0 ? (
+                            <TableCell rowSpan={booking.subscriptionTypes.length}>
+                              <IconButton
+                                size="small"
+                                onClick={async () => {
+                                  try {
+                                    const fetchedBooking =
+                                      await bookingService.getBookingById(
+                                        booking.id
+                                      );
+                                    const enrichedBooking = (
+                                      await enrichBookingsWithMemberData([
+                                        fetchedBooking,
+                                      ])
+                                    )[0];
+                                    setSelectedBooking(enrichedBooking);
+                                    setCurrentSeat({ label: booking.seatId });
+                                    setMemberId(fetchedBooking.memberId || "");
+                                    setModalMode("view");
+                                    setShowModal(true);
+                                  } catch (error: any) {
+                                    setBookingError(error.message);
+                                  }
+                                }}
+                              >
+                                <PersonIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={async () => {
+                                  try {
+                                    await bookingService.deleteBooking(booking.id);
+                                    setBookingSuccess(
+                                      "Booking deleted successfully!"
+                                    );
+                                    await fetchBookings();
+                                  } catch (error: any) {
+                                    setBookingError(error.message);
+                                  }
+                                }}
+                              >
+                                <DeleteIcon fontSize="small" color="error" />
+                              </IconButton>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))
+                    )
                   )}
                 </TableBody>
               </Table>
@@ -1025,68 +1040,68 @@ const SeatingChart: NextPage<SeatingChartProps> & {
                       </Typography>
                     </Box>
                   </InfoRow>
-                  <InfoRow>
-                    <InfoIconWrapper>
-                      <DateIcon />
-                    </InfoIconWrapper>
-                    <Box>
-                      <Typography variant="subtitle2" color="textSecondary">
-                        Registered
-                      </Typography>
-                      <Typography variant="body1">
-                        {formatDate(
-                          selectedBooking.journal?.registredTime ||
-                            selectedBooking.abonnement?.registredDate
-                        )}
-                      </Typography>
+                  {selectedBooking.subscriptionTypes.map((sub) => (
+                    <Box key={sub.type}>
+                      <InfoRow>
+                        <InfoIconWrapper>
+                          {sub.type === "Journal" ? <PersonIcon /> : <DateIcon />}
+                        </InfoIconWrapper>
+                        <Box>
+                          <Typography variant="subtitle2" color="textSecondary">
+                            Subscription Type
+                          </Typography>
+                          <Typography variant="body1">{sub.type}</Typography>
+                        </Box>
+                      </InfoRow>
+                      <InfoRow>
+                        <InfoIconWrapper>
+                          <DateIcon />
+                        </InfoIconWrapper>
+                        <Box>
+                          <Typography variant="subtitle2" color="textSecondary">
+                            Registered
+                          </Typography>
+                          <Typography variant="body1">
+                            {formatDate(
+                              sub.type === "Journal"
+                                ? sub.journal?.registredTime
+                                : sub.abonnement?.registredDate
+                            )}
+                          </Typography>
+                        </Box>
+                      </InfoRow>
+                      <InfoRow>
+                        <InfoIconWrapper>
+                          <DateIcon />
+                        </InfoIconWrapper>
+                        <Box>
+                          <Typography variant="subtitle2" color="textSecondary">
+                            Leave
+                          </Typography>
+                          <Typography variant="body1">
+                            {formatDate(
+                              sub.type === "Journal"
+                                ? sub.journal?.leaveTime
+                                : sub.abonnement?.leaveDate
+                            )}
+                          </Typography>
+                        </Box>
+                      </InfoRow>
+                      <InfoRow>
+                        <InfoIconWrapper>
+                          <DateIcon />
+                        </InfoIconWrapper>
+                        <Box>
+                          <Typography variant="subtitle2" color="textSecondary">
+                            Remaining Time
+                          </Typography>
+                          <Typography variant="body1">
+                            {calculateRemainingTime(sub)}
+                          </Typography>
+                        </Box>
+                      </InfoRow>
                     </Box>
-                  </InfoRow>
-                  <InfoRow>
-                    <InfoIconWrapper>
-                      <DateIcon />
-                    </InfoIconWrapper>
-                    <Box>
-                      <Typography variant="subtitle2" color="textSecondary">
-                        Leave
-                      </Typography>
-                      <Typography variant="body1">
-                        {formatDate(
-                          selectedBooking.journal?.leaveTime ||
-                            selectedBooking.abonnement?.leaveDate
-                        )}
-                      </Typography>
-                    </Box>
-                  </InfoRow>
-                  <InfoRow>
-                    <InfoIconWrapper>
-                      <DateIcon />
-                    </InfoIconWrapper>
-                    <Box>
-                      <Typography variant="subtitle2" color="textSecondary">
-                        Remaining Time
-                      </Typography>
-                      <Typography variant="body1">
-                        {calculateRemainingTime(selectedBooking)}
-                      </Typography>
-                    </Box>
-                  </InfoRow>
-                  <InfoRow>
-                    <InfoIconWrapper>
-                      {selectedBooking.journal ? <PersonIcon /> : <DateIcon />}
-                    </InfoIconWrapper>
-                    <Box>
-                      <Typography variant="subtitle2" color="textSecondary">
-                        Subscription Type
-                      </Typography>
-                      <Typography variant="body1">
-                        {selectedBooking.journal
-                          ? "Journal"
-                          : selectedBooking.abonnement
-                          ? "Membership"
-                          : "Unknown"}
-                      </Typography>
-                    </Box>
-                  </InfoRow>
+                  ))}
                 </>
               )}
 

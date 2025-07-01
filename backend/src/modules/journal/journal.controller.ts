@@ -20,12 +20,16 @@ import {
   ApiBearerAuth,
   ApiCreatedResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
 import { JournalEntity } from './entities/journal.entity';
 import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
 import { PaginatedResult } from 'prisma-pagination';
 import { startOfDay, endOfDay } from 'date-fns';
+import { MemberEntity } from '../member/entities/member.entity';
+import { PriceEntity } from '../price/entities/price.entity';
+import { UserEntity } from '../user/entities/user.entity';
 
 @Controller('Journal')
 @ApiTags('journal')
@@ -95,6 +99,30 @@ export class JournalController {
       await this.JournalService.update(id, updateJournalDto),
     );
   }
+  @Get('member/:memberID')
+@ApiBearerAuth()
+@ApiOperation({ summary: 'Get journal entries by member ID' })
+@ApiOkResponse({
+  description: 'List of journal entries for the member',
+  type: [JournalEntity],
+})
+async findByMember(@Param('memberID') memberID: string) {
+  const journals = await this.JournalService.getJournalByMember(memberID);
+  return journals.map((journal) => {
+    const { members, prices, createdBy, ...rest } = journal;
+    return new JournalEntity({
+      ...rest,
+      members: members ? new MemberEntity(members) : undefined,
+      price: prices
+        ? new PriceEntity({
+            ...prices,
+            timePeriod: prices.timePeriod as { start: string; end: string },
+          })
+        : undefined,
+      createdBy: createdBy ? new UserEntity(createdBy) : undefined,
+    });
+  });
+}
 
   @Delete(':id')
   // @UseGuards(JwtAuthGuard)

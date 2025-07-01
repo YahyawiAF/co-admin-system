@@ -111,7 +111,23 @@ export class AbonnementController {
     return this.abonnementService.update(id, updateAbonnementDto);
   }
 
-  @Delete(':id')
+  
+
+  @Get('member/:memberID')
+@ApiOperation({ summary: 'Get subscriptions by member ID' })
+@ApiResponse({
+  status: HttpStatus.OK,
+  description: 'List of subscriptions for the member',
+  type: [AbonnementEntity],
+})
+@ApiResponse({
+  status: HttpStatus.NOT_FOUND,
+  description: 'No subscriptions found for the member',
+})
+findByMember(@Param('memberID') memberID: string) {
+  return this.abonnementService.getAbonnementByMember(memberID);
+}
+@Delete(':id')
   @ApiOperation({ summary: 'Delete a subscription' })
   @ApiResponse({
     status: HttpStatus.OK,

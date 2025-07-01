@@ -35,6 +35,10 @@ export const abonnementApi = createApi({
       query: () => "abonnements/all",
       providesTags: ["Abonnement"],
     }),
+    getAbonnementByMember: builder.query<Abonnement[], string>({
+  query: (memberID) => `abonnements/member/${memberID}`,
+  providesTags: ["Abonnement"],
+}),
 
     getAbonnementById: builder.query<Abonnement, string>({
       query: (id) => `abonnements/${id}`,
@@ -82,4 +86,5 @@ export const {
   useCreateAbonnementMutation,
   useUpdateAbonnementMutation,
   useDeleteAbonnementMutation,
+  useGetAbonnementByMemberQuery,
 } = abonnementApi;

@@ -37,6 +37,10 @@ export const journalServerApi = createApi({
       }),
       invalidatesTags: ["journalApi"],
     }),
+    getJournalByMember: builder.query<Journal[], string>({
+  query: (memberID) => `Journal/member/${memberID}`,
+  providesTags: ["journalApi"],
+}),
     updateJournal: builder.mutation<Journal, Journal>({
       query: (data) => ({
         url: `journal/${data.id}`,
@@ -60,4 +64,5 @@ export const {
   useCreateJournalMutation,
   useUpdateJournalMutation,
   useDeleteJournalMutation,
+  useGetJournalByMemberQuery,
 } = journalServerApi;

@@ -31,6 +31,7 @@ import { AccountInfo } from "src/components/pages/dashboard/account/AccountInfo"
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import { useUpdateUserMutation, useGetUserByIdQuery } from "src/api/user.repo";
 import { useChangePasswordMutation } from "src/api/user.repo";
+import imageCompression from "browser-image-compression";
 
 export const metadata: Metadata = {
   title: `Account Settings | Dashboard | Collabora`,
@@ -117,12 +118,56 @@ function Account(): React.JSX.Element {
     try {
       setIsUploading(true);
 
+      // Define allowed image MIME types
+      const allowedImageTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+      ];
+
+      // Validate file type
+      if (!allowedImageTypes.includes(file.type)) {
+        throw new Error(
+          "Unsupported image format. Please upload a JPG, PNG, GIF, WEBP, BMP, or TIFF image."
+        );
+      }
+
+      // Compression options
+      const options = {
+        maxSizeMB: 0.5, // 500KB
+        maxWidthOrHeight: 800, // 800px
+        useWebWorker: true,
+        initialQuality: 0.7, // Lower quality for better compression
+      };
+
+      // Compress the image
+      const compressedFile = await imageCompression(file, options);
+
+      // Check compressed file size (in bytes)
+      const maxSizeBytes = 500 * 1024; // 500KB
+      if (compressedFile.size > maxSizeBytes) {
+        throw new Error(
+          `Compressed image is too large (${(compressedFile.size / 1024).toFixed(
+            2
+          )}KB). Please upload a smaller image.`
+        );
+      }
+
+      // Log compressed file size for debugging
+      console.log(
+        `Compressed image size: ${(compressedFile.size / 1024).toFixed(2)}KB`
+      );
+
+      // Convert compressed image to Data URL
       const uploadedImageUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => {
           resolve(event.target?.result as string);
         };
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(compressedFile);
       });
 
       setUserData((prev) => ({ ...prev, img: uploadedImageUrl }));
@@ -142,11 +187,11 @@ function Account(): React.JSX.Element {
         message: "Profile picture updated successfully!",
         severity: "success",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to upload image:", error);
       setNotification({
         open: true,
-        message: "Failed to upload image.",
+        message: error.message || "Failed to upload image.",
         severity: "error",
       });
     } finally {
@@ -257,6 +302,8 @@ function Account(): React.JSX.Element {
         ) {
           notificationMessage = "This phone number is already in use.";
         }
+      } else if (statusCode === 413) {
+        notificationMessage = "Image size is too large. Please upload a smaller image.";
       }
 
       setNotification({
