@@ -1,9 +1,9 @@
-import React, { useState, ReactElement } from "react";
+import React, { useState, useEffect, ReactElement } from "react";
 import { styled, ThemeProvider, createTheme } from "@mui/material/styles";
 import {
   useGetProductsQuery,
   Product,
-  useUpdateProductMutation, // Added import
+  useUpdateProductMutation,
 } from "src/api/productApi";
 import {
   useCreateDailyProductMutation,
@@ -51,7 +51,7 @@ import InventoryIcon from "@mui/icons-material/Inventory";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import FixedBottomNavigation from "src/components/bottomNavigation/BottomNavigation";
 
-// Custom theme (unchanged)
+// Custom theme
 const theme = createTheme({
   palette: {
     primary: {
@@ -135,7 +135,7 @@ const theme = createTheme({
   },
 });
 
-// Styled components (unchanged)
+// Styled components
 const ProductCard = styled(Card)(({ theme }) => ({
   cursor: "pointer",
   transition: "all 0.3s ease",
@@ -180,7 +180,7 @@ const Snacks = () => {
   const { data: products = [], isLoading, isError } = useGetProductsQuery();
   const [createDailyProduct] = useCreateDailyProductMutation();
   const [updateDailyProduct] = useUpdateDailyProductMutation();
-  const [updateProduct] = useUpdateProductMutation(); // Added mutation hook
+  const [updateProduct] = useUpdateProductMutation();
   const {
     data: dailyProducts = [],
     isLoading: isDailyLoading,
@@ -209,6 +209,18 @@ const Snacks = () => {
   const memberDailyProducts = dailyProducts.filter(
     (dp) => dp.memberId === memberId && dp.date?.split("T")[0] === today
   );
+
+  // Auto-dismiss success message after 3 seconds
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage("");
+      }, 3000); // 3000ms = 3 seconds
+
+      // Cleanup timer on component unmount or when successMessage changes
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
 
   const handleSignOut = async () => {
     const accessToken = sessionStorage.getItem("accessToken");
@@ -242,7 +254,6 @@ const Snacks = () => {
       return;
     }
 
-    // Check if product is out of stock
     if (selectedProduct.stock <= 0) {
       setErrorMessage("This product is out of stock.");
       return;
@@ -264,7 +275,6 @@ const Snacks = () => {
       return;
     }
 
-    // Validate memberId format (basic UUID check)
     const uuidRegex =
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (!uuidRegex.test(memberId)) {
@@ -273,10 +283,9 @@ const Snacks = () => {
       return;
     }
 
-    const newQuantity = 1; // Quantity to add
-    const currentDate = new Date().toISOString().split("T")[0]; // Current date (YYYY-MM-DD)
+    const newQuantity = 1;
+    const currentDate = new Date().toISOString().split("T")[0];
 
-    // Check for existing DailyProduct with same productId, memberId, and date
     const existingDailyProduct = memberDailyProducts.find(
       (dp) =>
         dp.productId === selectedProduct.id &&
@@ -286,7 +295,6 @@ const Snacks = () => {
 
     try {
       if (existingDailyProduct) {
-        // Update existing DailyProduct
         console.log("Updating existing DailyProduct:", existingDailyProduct.id);
         const response = await updateDailyProduct({
           id: existingDailyProduct.id,
@@ -296,7 +304,6 @@ const Snacks = () => {
         }).unwrap();
         console.log("DailyProduct update response:", response);
 
-        // Update product stock
         await updateProduct({
           id: selectedProduct.id,
           data: { stock: selectedProduct.stock - newQuantity },
@@ -306,7 +313,6 @@ const Snacks = () => {
           `Snacks "${selectedProduct.name}" added successfully!`
         );
       } else {
-        // Create new DailyProduct
         const payload = {
           productId: selectedProduct.id,
           quantite: newQuantity,
@@ -317,7 +323,6 @@ const Snacks = () => {
         const response = await createDailyProduct(payload).unwrap();
         console.log("DailyProduct creation response:", response);
 
-        // Update product stock
         await updateProduct({
           id: selectedProduct.id,
           data: { stock: selectedProduct.stock - newQuantity },
@@ -402,8 +407,6 @@ const Snacks = () => {
               Snacks Menu
             </Typography>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-              {" "}
-              {/* Increased gap for spacing */}
               <Tooltip title="View Your Daily Products">
                 <IconButton
                   onClick={handleOpenModal}
@@ -434,7 +437,7 @@ const Snacks = () => {
               </Tooltip>
               <Tooltip title="Account Settings">
                 <IconButton
-                  onClick={() => router.push("/client/account")} // Navigate to Account page
+                  onClick={() => router.push("/client/account")}
                   sx={{
                     p: 0,
                     ml: 1,
@@ -444,9 +447,9 @@ const Snacks = () => {
                     src={sessionStorage.getItem("img") || undefined}
                     alt={sessionStorage.getItem("username") || "User"}
                     sx={{
-                      width: 32, // Small size for the avatar
+                      width: 32,
                       height: 32,
-                      border: `2px solid ${theme.palette.primary.main}`, // Optional: border for style
+                      border: `2px solid ${theme.palette.primary.main}`,
                     }}
                   />
                 </IconButton>
