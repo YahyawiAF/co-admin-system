@@ -4,6 +4,7 @@ import {
   useCreateFacilityMutation,
   useUpdateFacilityMutation,
 } from "src/api/facility.repo";
+import imageCompression from "browser-image-compression";
 import {
   Box,
   Tab,
@@ -42,7 +43,7 @@ import {
   Add as AddIcon,
   People as PeopleIcon,
   Business as BusinessIcon,
-  MeetingRoom as MeetingRoomIcon, // Added for default space icon
+  MeetingRoom as MeetingRoomIcon,
 } from "@mui/icons-material";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import DashboardLayout from "../../layouts/Dashboard";
@@ -194,6 +195,48 @@ const FacilityProfile = () => {
     }));
   };
 
+  const compressAndUploadImage = async (file: File) => {
+    // Validate file type
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error("Seuls les formats JPG, PNG et WEBP sont acceptés");
+    }
+
+    // Validate file size before compression (3MB max)
+    const MAX_FILE_SIZE_MB = 3;
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      throw new Error(`L'image ne doit pas dépasser ${MAX_FILE_SIZE_MB}MB`);
+    }
+
+    // More aggressive compression options
+    const options = {
+      maxSizeMB: 0.2, // Réduit à 200KB
+      maxWidthOrHeight: 800, // Réduit la dimension maximale
+      useWebWorker: true,
+      fileType: "image/webp", // Conversion systématique en WebP
+      initialQuality: 0.6, // Qualité plus basse
+    };
+
+    try {
+      const compressedFile = await imageCompression(file, options);
+
+      // Double verification
+      if (compressedFile.size > 200 * 1024) {
+        throw new Error("L'image compressée est toujours trop volumineuse");
+      }
+
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () =>
+          reject(new Error("Échec de la lecture du fichier"));
+        reader.readAsDataURL(compressedFile);
+      });
+    } catch (error) {
+      console.error("Erreur de compression:", error);
+      throw new Error("Échec de la compression de l'image");
+    }
+  };
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     isNewSpace: boolean
@@ -203,27 +246,23 @@ const FacilityProfile = () => {
 
     try {
       setIsUploading(true);
-
-      const uploadedImageUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          resolve(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-      });
+      const imageUrl = await compressAndUploadImage(file);
 
       if (isNewSpace) {
-        setNewSpace((prev) => ({ ...prev, image: uploadedImageUrl }));
+        setNewSpace((prev) => ({ ...prev, image: imageUrl }));
       } else if (editingSpace) {
-        setEditingSpace((prev) =>
-          prev ? { ...prev, image: uploadedImageUrl } : prev
-        );
+        setEditingSpace((prev) => (prev ? { ...prev, image: imageUrl } : prev));
       }
-    } catch (error) {
-      console.error("Failed to upload image:", error);
+
       setSnackbar({
         open: true,
-        message: "Failed to upload image",
+        message: "Image uploaded successfully!",
+        severity: "success",
+      });
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.message || "Failed to upload image",
         severity: "error",
       });
     } finally {
@@ -239,36 +278,23 @@ const FacilityProfile = () => {
 
     try {
       setIsUploading(true);
-
-      const uploadedLogoUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          resolve(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-      });
+      const logoUrl = await compressAndUploadImage(file);
 
       await updateFacility({
         id: facility.id,
-        data: {
-          logo: uploadedLogoUrl,
-        },
+        data: { logo: logoUrl },
       }).unwrap();
 
-      setFormData((prev) => ({
-        ...prev,
-        logo: uploadedLogoUrl,
-      }));
-
+      setFormData((prev) => ({ ...prev, logo: logoUrl }));
       setSnackbar({
         open: true,
-        message: "Logo updated successfully",
+        message: "Logo updated successfully!",
         severity: "success",
       });
-    } catch (error) {
+    } catch (error: any) {
       setSnackbar({
         open: true,
-        message: "Failed to upload logo",
+        message: error.message || "Failed to upload logo",
         severity: "error",
       });
     } finally {
@@ -314,9 +340,7 @@ const FacilityProfile = () => {
 
       await updateFacility({
         id: facility.id,
-        data: {
-          places: updatedSpaces,
-        },
+        data: { places: updatedSpaces },
       }).unwrap();
 
       setEditingSpace(null);
@@ -339,10 +363,20 @@ const FacilityProfile = () => {
     if (!newSpace.name || !facility) return;
 
     try {
+      // Vérification supplémentaire de la taille de l'image
+      if (newSpace.image && newSpace.image.length > 300 * 1024) {
+        // 300KB
+        throw new Error("L'image est trop volumineuse après compression");
+      }
+
       const newSpaceId = crypto.randomUUID();
       const updatedSpaces = {
         ...facility.places,
-        [newSpaceId]: { ...newSpace, id: newSpaceId },
+        [newSpaceId]: {
+          ...newSpace,
+          id: newSpaceId,
+          image: newSpace.image || null, // Envoyer null si pas d'image
+        },
       };
 
       await updateFacility({
@@ -352,6 +386,7 @@ const FacilityProfile = () => {
         },
       }).unwrap();
 
+      // Réinitialisation après succès
       setNewSpace({
         id: "",
         name: "",
@@ -360,15 +395,17 @@ const FacilityProfile = () => {
         image: "",
       });
       setOpenAddDialog(false);
+
       setSnackbar({
         open: true,
-        message: "Space added successfully",
+        message: "Espace ajouté avec succès",
         severity: "success",
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Erreur:", error);
       setSnackbar({
         open: true,
-        message: "Failed to add space",
+        message: error.message || "Échec de l'ajout de l'espace",
         severity: "error",
       });
     }
@@ -383,9 +420,7 @@ const FacilityProfile = () => {
 
       await updateFacility({
         id: facility.id,
-        data: {
-          places: updatedSpaces,
-        },
+        data: { places: updatedSpaces },
       }).unwrap();
 
       setSnackbar({
@@ -602,33 +637,6 @@ const FacilityProfile = () => {
                     />
                   </Grid>
                 </Grid>
-                <Box mt={4} display="flex" justifyContent="flex-start">
-                  {/* <Box mt={4} display="flex" justifyContent="flex-start">
-  <Button
-    startIcon={<DeleteIcon />}
-    color="error"
-    variant="outlined"
-    sx={{
-      borderRadius: "50px",
-      textTransform: "none",
-      fontWeight: 500,
-      px: 3,
-      py: 1,
-      borderColor: (theme) => theme.palette.error.main,
-      color: (theme) => theme.palette.error.main,
-      "&:hover": {
-        backgroundColor: (theme) => theme.palette.error.light,
-        borderColor: (theme) => theme.palette.error.main,
-        transform: "translateY(-1px)",
-        boxShadow: "0 2px 6px rgba(244, 67, 54, 0.2)",
-      },
-      transition: "all 0.2s ease-in-out",
-    }}
-  >
-    Delete Facility
-  </Button>
-</Box> */}
-                </Box>
               </TabPanel>
 
               <TabPanel value={value} index={1}>

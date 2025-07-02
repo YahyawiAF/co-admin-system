@@ -6,6 +6,7 @@ import {
   useDeleteProductMutation,
 } from "src/api/productApi";
 import { Product } from "src/types/shared";
+import imageCompression from 'browser-image-compression';
 import {
   Button,
   IconButton,
@@ -195,35 +196,75 @@ const ProductComponent = () => {
   const productImageInputRef = React.useRef<HTMLInputElement>(null);
 
   // Image Upload Handler
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
 
-    try {
-      setIsUploading(true);
+  try {
+    setIsUploading(true);
 
-      // Simulate upload (replace with actual API call)
-      const uploadedImageUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          resolve(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-      });
+    // Définir les types d'images autorisés
+    const allowedImageTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+      'image/bmp',
+      'image/tiff'
+    ];
 
-      // Update state
-      if (editProduct) {
-        setEditProduct({ ...editProduct, img: uploadedImageUrl });
-      } else {
-        setNewProduct({ ...newProduct, img: uploadedImageUrl });
-      }
-    } catch (error) {
-      console.error("Failed to upload image:", error);
-    } finally {
-      setIsUploading(false);
+    // Valider le type de fichier
+    if (!allowedImageTypes.includes(file.type)) {
+      throw new Error(
+        "Format d'image non supporté. Veuillez uploader une image JPG, PNG, GIF, WEBP, BMP ou TIFF."
+      );
     }
-  };
 
+    // Options de compression
+    const options = {
+      maxSizeMB: 0.5, // 500KB
+      maxWidthOrHeight: 800, // 800px
+      useWebWorker: true,
+      initialQuality: 0.7, // Qualité réduite pour une meilleure compression
+      fileType: 'image/webp' // Convertir en WebP pour une meilleure compression
+    };
+
+    // Compresser l'image
+    const compressedFile = await imageCompression(file, options);
+
+    // Vérifier la taille du fichier compressé (en bytes)
+    const maxSizeBytes = 500 * 1024; // 500KB
+    if (compressedFile.size > maxSizeBytes) {
+      throw new Error(
+        `L'image compressée est trop grande (${(compressedFile.size / 1024).toFixed(2)}KB). 
+        Veuillez uploader une image plus petite.`
+      );
+    }
+
+    // Convertir l'image compressée en Data URL
+    const uploadedImageUrl = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        resolve(event.target?.result as string);
+      };
+      reader.readAsDataURL(compressedFile);
+    });
+
+    // Mettre à jour l'état
+    if (editProduct) {
+      setEditProduct({ ...editProduct, img: uploadedImageUrl });
+    } else {
+      setNewProduct({ ...newProduct, img: uploadedImageUrl });
+    }
+
+  } catch (error: any) {
+    console.error("Échec de l'upload de l'image:", error);
+    // Vous pouvez ajouter ici une notification d'erreur si vous en avez un système
+    alert(error.message || "Échec de l'upload de l'image.");
+  } finally {
+    setIsUploading(false);
+  }
+};
   // Form Validation
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
