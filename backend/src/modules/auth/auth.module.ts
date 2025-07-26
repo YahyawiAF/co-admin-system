@@ -22,7 +22,7 @@ import { MemberModule } from '../member/member.module';
     }),
     PrismaModule,
     PassportModule,
-    forwardRef(() => UserModule),  // Use forwardRef() to resolve circular dependency
+    forwardRef(() => UserModule), 
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, RefreshTokenStrategy,PrismaService, JwtAuthGuard],

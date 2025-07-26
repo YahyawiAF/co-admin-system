@@ -119,7 +119,7 @@ const SignUpPage: React.FC = () => {
                     type="text"
                     name="identifier"
                     id="identifier"
-                    placeholder="Email or Phone Number"
+                    placeholder=" Phone Number"
                     value={formData.identifier}
                     onChange={handleChange}
                     required
@@ -156,7 +156,7 @@ const SignUpPage: React.FC = () => {
                     type="password"
                     name="repeatPassword"
                     id="repeatPassword"
-                    placeholder="Repeat Your Password"
+                    placeholder="Repeat Password"
                     value={formData.repeatPassword}
                     onChange={handleChange}
                     required
