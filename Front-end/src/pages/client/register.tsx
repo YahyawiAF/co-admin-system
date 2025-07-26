@@ -116,12 +116,32 @@ const SignUpPage: React.FC = () => {
                     </span>
                   </label>
                   <input
-                    type="text"
+                    type="tel"
                     name="identifier"
                     id="identifier"
-                    placeholder=" Phone Number"
+                    placeholder=" phone number "
                     value={formData.identifier}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      const inputValue = e.target.value;
+                      const numericValue = inputValue.replace(/[^0-9]/g, "");
+                      if (inputValue !== numericValue) {
+                        alert(
+                          "Please enter only numbers for the phone number."
+                        );
+                      }
+                      setFormData((prev) => ({
+                        ...prev,
+                        identifier: numericValue,
+                      }));
+                    }}
+                    className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                      formData.identifier &&
+                      formData.identifier !==
+                        formData.identifier.replace(/[^0-9]/g, "")
+                        ? "border-red-500"
+                        : "border-gray-300"
+                    }`}
+                    pattern="[0-9]*"
                     required
                   />
                 </div>
