@@ -100,4 +100,66 @@ async getUsersEvolution(
   const monthsNumber = Math.min(Math.max(parseInt(months, 10) || 12, 1), 24);
   return this.statisticsService.getUsersEvolution(monthsNumber);
 }
+// Add to StatisticsController
+@Get('daily-journal-registrations')
+async getDailyJournalRegistrations(
+  @Query('month') month: string,
+  @Query('year') year: string,
+) {
+  const monthNum = parseInt(month, 10);
+  const yearNum = parseInt(year, 10);
+
+  if (isNaN(monthNum) || isNaN(yearNum)) {
+    throw new Error('Month and year must be numbers');
+  }
+  if (monthNum < 1 || monthNum > 12) {
+    throw new Error('Month must be between 1 and 12');
+  }
+
+  return this.statisticsService.getDailyJournalRegistrations(monthNum, yearNum);
+}
+
+@Get('monthly-journal-registrations')
+async getMonthlyJournalRegistrations(
+  @Query('year') year: string,
+) {
+  const yearNum = parseInt(year, 10);
+
+  if (isNaN(yearNum)) {
+    throw new Error('Year must be a number');
+  }
+
+  return this.statisticsService.getMonthlyJournalRegistrations(yearNum);
+}
+
+@Get('daily-subscriptions')
+async getDailySubscriptions(
+  @Query('month') month: string,
+  @Query('year') year: string,
+) {
+  const monthNum = parseInt(month, 10);
+  const yearNum = parseInt(year, 10);
+
+  if (isNaN(monthNum) || isNaN(yearNum)) {
+    throw new Error('Month and year must be numbers');
+  }
+  if (monthNum < 1 || monthNum > 12) {
+    throw new Error('Month must be between 1 and 12');
+  }
+
+  return this.statisticsService.getDailySubscriptions(monthNum, yearNum);
+}
+
+@Get('monthly-subscriptions')
+async getMonthlySubscriptions(
+  @Query('year') year: string,
+) {
+  const yearNum = parseInt(year, 10);
+
+  if (isNaN(yearNum)) {
+    throw new Error('Year must be a number');
+  }
+
+  return this.statisticsService.getMonthlySubscriptions(yearNum);
+}
 }

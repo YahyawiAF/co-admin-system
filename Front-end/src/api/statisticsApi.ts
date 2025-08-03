@@ -10,6 +10,15 @@ export interface RevenueData {
   dailyProductProfit: number;
   total: number;
 }
+export interface DailyRegistration {
+  date: string;
+  count: number;
+}
+
+export interface MonthlyRegistration {
+  month: string;
+  count: number;
+}
 
 export interface ExpenseData {
   month: number;
@@ -104,6 +113,44 @@ export const fetchUsersEvolution = async (months: number = 12): Promise<UsersEvo
 export const fetchMostPresentUsers = async (month: number, year: number, limit: number = 10) => {
   const response = await axios.get(`${API_BASE_URL}/statistics/most-present`, {
     params: { month, year, limit }
+  });
+  return response.data;
+
+};
+export const fetchDailyJournalRegistrations = async (
+  month: number,
+  year: number
+): Promise<DailyRegistration[]> => {
+  const response = await axios.get(`${API_BASE_URL}/statistics/daily-journal-registrations`, {
+    params: { month, year },
+  });
+  return response.data;
+};
+
+export const fetchMonthlyJournalRegistrations = async (
+  year: number
+): Promise<MonthlyRegistration[]> => {
+  const response = await axios.get(`${API_BASE_URL}/statistics/monthly-journal-registrations`, {
+    params: { year },
+  });
+  return response.data;
+};
+
+export const fetchDailySubscriptions = async (
+  month: number,
+  year: number
+): Promise<DailyRegistration[]> => {
+  const response = await axios.get(`${API_BASE_URL}/statistics/daily-subscriptions`, {
+    params: { month, year },
+  });
+  return response.data;
+};
+
+export const fetchMonthlySubscriptions = async (
+  year: number
+): Promise<MonthlyRegistration[]> => {
+  const response = await axios.get(`${API_BASE_URL}/statistics/monthly-subscriptions`, {
+    params: { year },
   });
   return response.data;
 };

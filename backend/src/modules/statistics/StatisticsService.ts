@@ -279,4 +279,112 @@ async getHistoricalStats(months: number) {
   
   return results.reverse(); // Pour avoir du plus ancien au plus récent
 }
+// Add to StatisticsService
+async getDailyJournalRegistrations(month: number, year: number) {
+  const startDate = startOfMonth(new Date(year, month - 1));
+  const endDate = endOfMonth(new Date(year, month - 1));
+
+  const journalRegistrations = await this.prisma.journal.groupBy({
+    by: ['registredTime'],
+    _count: { id: true },
+    where: {
+      registredTime: { gte: startDate, lte: endDate },
+      isPayed: true,
+    },
+  });
+
+  // Aggregate by date (ignoring time part)
+  const dailyCounts = journalRegistrations.reduce((acc, curr) => {
+    const date = new Date(curr.registredTime).toISOString().split('T')[0];
+    acc[date] = (acc[date] || 0) + curr._count.id;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Convert to array format for frontend
+  return Object.entries(dailyCounts).map(([date, count]) => ({
+    date,
+    count,
+  }));
+}
+
+async getMonthlyJournalRegistrations(year: number) {
+  const startDate = new Date(year, 0, 1);
+  const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  const journalRegistrations = await this.prisma.journal.groupBy({
+    by: ['registredTime'],
+    _count: { id: true },
+    where: {
+      registredTime: { gte: startDate, lte: endDate },
+      isPayed: true,
+    },
+  });
+
+  // Aggregate by month
+  const monthlyCounts = journalRegistrations.reduce((acc, curr) => {
+    const month = new Date(curr.registredTime).toLocaleString('en-US', { month: 'long' });
+    acc[month] = (acc[month] || 0) + curr._count.id;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Convert to array format for frontend
+  return Object.entries(monthlyCounts).map(([month, count]) => ({
+    month,
+    count,
+  }));
+}
+
+async getDailySubscriptions(month: number, year: number) {
+  const startDate = startOfMonth(new Date(year, month - 1));
+  const endDate = endOfMonth(new Date(year, month - 1));
+
+  const subscriptions = await this.prisma.abonnement.groupBy({
+    by: ['registredDate'],
+    _count: { id: true },
+    where: {
+      registredDate: { gte: startDate, lte: endDate },
+      isPayed: true,
+    },
+  });
+
+  // Aggregate by date
+  const dailyCounts = subscriptions.reduce((acc, curr) => {
+    const date = new Date(curr.registredDate).toISOString().split('T')[0];
+    acc[date] = (acc[date] || 0) + curr._count.id;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Convert to array format for frontend
+  return Object.entries(dailyCounts).map(([date, count]) => ({
+    date,
+    count,
+  }));
+}
+
+async getMonthlySubscriptions(year: number) {
+  const startDate = new Date(year, 0, 1);
+  const endDate = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  const subscriptions = await this.prisma.abonnement.groupBy({
+    by: ['registredDate'],
+    _count: { id: true },
+    where: {
+      registredDate: { gte: startDate, lte: endDate },
+      isPayed: true,
+    },
+  });
+
+  // Aggregate by month
+  const monthlyCounts = subscriptions.reduce((acc, curr) => {
+    const month = new Date(curr.registredDate).toLocaleString('en-US', { month: 'long' });
+    acc[month] = (acc[month] || 0) + curr._count.id;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Convert to array format for frontend
+  return Object.entries(monthlyCounts).map(([month, count]) => ({
+    month,
+    count,
+  }));
+}
 }

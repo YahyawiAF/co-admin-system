@@ -1,5 +1,5 @@
 // src/components/Dashboard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import styled from "@emotion/styled";
 import { Bar, Line, Pie, Doughnut } from "react-chartjs-2";
 import {
@@ -12,27 +12,31 @@ import {
   ArcElement,
   Title,
   Tooltip,
-  Legend
-} from 'chart.js';
+  Legend,
+} from "chart.js";
 import {
   fetchHistoricalStats,
   fetchMonthlyRevenue,
   fetchMonthlyExpenses,
   fetchMonthlyRegistrations,
+  fetchDailyJournalRegistrations,
+  fetchMonthlyJournalRegistrations,
+  fetchDailySubscriptions,
+  fetchMonthlySubscriptions,
   fetchMemberships,
   fetchUsersCount,
   fetchMostPresentUsers,
   RevenueData,
   ExpenseData,
-  HistoricalDataItem
-} from 'src/api/statisticsApi';
-import { 
-  Box, 
-  Grid, 
-  Typography, 
-  Select, 
-  MenuItem, 
-  FormControl, 
+  HistoricalDataItem,
+} from "src/api/statisticsApi";
+import {
+  Box,
+  Grid,
+  Typography,
+  Select,
+  MenuItem,
+  FormControl,
   InputLabel,
   CardContent,
   Card as MuiCard,
@@ -44,9 +48,9 @@ import {
   TableRow,
   Paper,
   CircularProgress,
-  Alert
-} from '@mui/material';
-import { spacing } from '@mui/system';
+  Alert,
+} from "@mui/material";
+import { spacing } from "@mui/system";
 import { Helmet } from "react-helmet-async";
 import DashboardLayout from "../../layouts/Dashboard";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
@@ -77,20 +81,24 @@ interface DashboardData {
   };
   revenue: RevenueData;
   expenses: ExpenseData;
-  registrations: HistoricalDataItem['registrations'];
-  memberships: HistoricalDataItem['memberships'];
+  registrations: HistoricalDataItem["registrations"];
+  memberships: HistoricalDataItem["memberships"];
   usersCount: number;
-  mostPresent: HistoricalDataItem['mostPresent'];
+  mostPresent: HistoricalDataItem["mostPresent"];
+  dailyJournalRegistrations: { date: string; count: number }[];
+  monthlyJournalRegistrations: { month: string; count: number }[];
+  dailySubscriptions: { date: string; count: number }[];
+  monthlySubscriptions: { month: string; count: number }[];
 }
 
-const ChartCard = ({ 
-  title, 
-  description, 
-  children 
-}: { 
-  title: string; 
-  description: string; 
-  children: React.ReactNode 
+const ChartCard = ({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
 }) => (
   <Card mb={1}>
     <CardContent>
@@ -100,19 +108,17 @@ const ChartCard = ({
       <Typography variant="body2" gutterBottom>
         {description}
       </Typography>
-      <ChartWrapper>
-        {children}
-      </ChartWrapper>
+      <ChartWrapper>{children}</ChartWrapper>
     </CardContent>
   </Card>
 );
 
-const StatCard = ({ 
-  title, 
+const StatCard = ({
+  title,
   value,
-  isCurrency = false
-}: { 
-  title: string; 
+  isCurrency = false,
+}: {
+  title: string;
   value: number;
   isCurrency?: boolean;
 }) => (
@@ -145,17 +151,25 @@ const Dashboard = () => {
           revenue,
           expenses,
           registrations,
+          dailyJournalRegistrations,
+          monthlyJournalRegistrations,
+          dailySubscriptions,
+          monthlySubscriptions,
           memberships,
           usersCount,
-          mostPresent
+          mostPresent,
         ] = await Promise.all([
           fetchHistoricalStats(12),
           fetchMonthlyRevenue(selectedMonth, selectedYear),
           fetchMonthlyExpenses(selectedMonth, selectedYear),
           fetchMonthlyRegistrations(selectedMonth, selectedYear),
+          fetchDailyJournalRegistrations(selectedMonth, selectedYear),
+          fetchMonthlyJournalRegistrations(selectedYear),
+          fetchDailySubscriptions(selectedMonth, selectedYear),
+          fetchMonthlySubscriptions(selectedYear),
           fetchMemberships(selectedMonth, selectedYear),
           fetchUsersCount(),
-          fetchMostPresentUsers(selectedMonth, selectedYear, 5)
+          fetchMostPresentUsers(selectedMonth, selectedYear, 5),
         ]);
 
         setData({
@@ -163,13 +177,17 @@ const Dashboard = () => {
           revenue,
           expenses,
           registrations,
+          dailyJournalRegistrations,
+          monthlyJournalRegistrations,
+          dailySubscriptions,
+          monthlySubscriptions,
           memberships,
           usersCount,
-          mostPresent
+          mostPresent,
         });
       } catch (err) {
-        console.error('Failed to load data:', err);
-        setError('Failed to load data. Please try again.');
+        console.error("Failed to load data:", err);
+        setError("Failed to load data. Please try again.");
       } finally {
         setLoading(false);
       }
@@ -180,7 +198,12 @@ const Dashboard = () => {
 
   if (loading && !data) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        minHeight="200px"
+      >
         <CircularProgress />
       </Box>
     );
@@ -195,14 +218,14 @@ const Dashboard = () => {
   }
 
   if (!data) return null;
-  
+
   // Tooltip safety function
   const safeTooltipLabel = (context: any) => {
     try {
-      const label = context.dataset?.label || '';
+      const label = context.dataset?.label || "";
       const value = context.raw || 0;
-      const isCurrency = typeof label === 'string' && label.includes('D');
-      return `${label}: ${value}${isCurrency ? ' D' : ''}`;
+      const isCurrency = typeof label === "string" && label.includes("D");
+      return `${label}: ${value}${isCurrency ? " D" : ""}`;
     } catch (e) {
       return `${context.raw || 0}`;
     }
@@ -214,27 +237,27 @@ const Dashboard = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: "top" as const,
       },
       tooltip: {
         callbacks: {
-          label: safeTooltipLabel
-        }
-      }
+          label: safeTooltipLabel,
+        },
+      },
     },
     scales: {
       y: {
         beginAtZero: true,
         ticks: {
           callback: (value: any) => {
-            if (typeof value === 'number') {
+            if (typeof value === "number") {
               return value % 1 === 0 ? value : `${value} D`;
             }
             return value;
-          }
-        }
-      }
-    }
+          },
+        },
+      },
+    },
   };
 
   // Options for charts with integers (no D)
@@ -243,24 +266,24 @@ const Dashboard = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: "top" as const,
       },
       tooltip: {
         callbacks: {
           label: (context: any) => {
             return `${context.dataset.label}: ${context.raw}`;
-          }
-        }
-      }
+          },
+        },
+      },
     },
     scales: {
       y: {
         beginAtZero: true,
         ticks: {
-          precision: 0
-        }
-      }
-    }
+          precision: 0,
+        },
+      },
+    },
   };
 
   // Options for circle charts (no axes)
@@ -269,13 +292,13 @@ const Dashboard = () => {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'top' as const,
+        position: "top" as const,
       },
       tooltip: {
         callbacks: {
-          label: safeTooltipLabel
-        }
-      }
+          label: safeTooltipLabel,
+        },
+      },
     },
     scales: {
       x: {
@@ -283,139 +306,216 @@ const Dashboard = () => {
       },
       y: {
         display: false,
-      }
-    }
+      },
+    },
   };
 
   // 1. Revenue history
   const revenueHistoryData = {
-    labels: data.historical.historicalData.map(item => `${item.month}/${item.year}`),
-    datasets: [{
-      label: 'Total Revenue (D)',
-      data: data.historical.historicalData.map(item => item.revenue.total),
-      backgroundColor: 'rgba(54, 162, 235, 0.6)',
-      borderColor: 'rgba(54, 162, 235, 1)',
-      borderWidth: 1
-    }]
+    labels: data.historical.historicalData.map(
+      (item) => `${item.month}/${item.year}`
+    ),
+    datasets: [
+      {
+        label: "Total Revenue (D)",
+        data: data.historical.historicalData.map((item) => item.revenue.total),
+        backgroundColor: "rgba(54, 162, 235, 0.6)",
+        borderColor: "rgba(54, 162, 235, 1)",
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 2. Expenses history
   const expensesHistoryData = {
-    labels: data.historical.historicalData.map(item => `${item.month}/${item.year}`),
-    datasets: [{
-      label: 'Total Expenses (D)',
-      data: data.historical.historicalData.map(item => item.expenses.total),
-      backgroundColor: 'rgba(255, 99, 132, 0.6)',
-      borderColor: 'rgba(255, 99, 132, 1)',
-      borderWidth: 1
-    }]
+    labels: data.historical.historicalData.map(
+      (item) => `${item.month}/${item.year}`
+    ),
+    datasets: [
+      {
+        label: "Total Expenses (D)",
+        data: data.historical.historicalData.map((item) => item.expenses.total),
+        backgroundColor: "rgba(255, 99, 132, 0.6)",
+        borderColor: "rgba(255, 99, 132, 1)",
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 3. Net profit history
   const netProfitHistoryData = {
-    labels: data.historical.historicalData.map(item => `${item.month}/${item.year}`),
-    datasets: [{
-      label: 'Net Profit (D)',
-      data: data.historical.historicalData.map(item => 
-        item.revenue.total - item.expenses.total
-      ),
-      backgroundColor: 'rgba(75, 192, 192, 0.6)',
-      borderColor: 'rgba(75, 192, 192, 1)',
-      borderWidth: 1
-    }]
+    labels: data.historical.historicalData.map(
+      (item) => `${item.month}/${item.year}`
+    ),
+    datasets: [
+      {
+        label: "Net Profit (D)",
+        data: data.historical.historicalData.map(
+          (item) => item.revenue.total - item.expenses.total
+        ),
+        backgroundColor: "rgba(75, 192, 192, 0.6)",
+        borderColor: "rgba(75, 192, 192, 1)",
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 4. Users history
   const usersHistoryData = {
-    labels: data.historical.historicalData.map(item => `${item.month}/${item.year}`),
-    datasets: [{
-      label: 'Total Users',
-      data: data.historical.historicalData.map(item => item.registrations.total),
-      backgroundColor: 'rgba(201, 203, 207, 0.6)',
-      borderColor: 'rgba(201, 203, 207, 1)',
-      borderWidth: 1,
-      tension: 0.1
-    }]
+    labels: data.historical.historicalData.map(
+      (item) => `${item.month}/${item.year}`
+    ),
+    datasets: [
+      {
+        label: "Total Users",
+        data: data.historical.historicalData.map(
+          (item) => item.registrations.total
+        ),
+        backgroundColor: "rgba(201, 203, 207, 0.6)",
+        borderColor: "rgba(201, 203, 207, 1)",
+        borderWidth: 1,
+        tension: 0.1,
+      },
+    ],
   };
 
   // 5. Monthly revenue details
   const monthlyRevenueData = {
-    labels: ['Subscriptions', 'Daily', 'Products'],
-    datasets: [{
-      label: 'Revenue (D)',
-      data: [
-        data.revenue.abonnement,
-        data.revenue.journal,
-        data.revenue.dailyProductProfit
-      ],
-      backgroundColor: [
-        'rgba(54, 162, 235, 0.6)',
-        'rgba(255, 206, 86, 0.6)',
-        'rgba(75, 192, 192, 0.6)'
-      ],
-      borderColor: [
-        'rgba(54, 162, 235, 1)',
-        'rgba(255, 206, 86, 1)',
-        'rgba(75, 192, 192, 1)'
-      ],
-      borderWidth: 1
-    }]
+    labels: ["Subscriptions", "Daily", "Products"],
+    datasets: [
+      {
+        label: "Revenue (D)",
+        data: [
+          data.revenue.abonnement,
+          data.revenue.journal,
+          data.revenue.dailyProductProfit,
+        ],
+        backgroundColor: [
+          "rgba(54, 162, 235, 0.6)",
+          "rgba(255, 206, 86, 0.6)",
+          "rgba(75, 192, 192, 0.6)",
+        ],
+        borderColor: [
+          "rgba(54, 162, 235, 1)",
+          "rgba(255, 206, 86, 1)",
+          "rgba(75, 192, 192, 1)",
+        ],
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 6. Monthly expenses details
   const monthlyExpensesData = {
-    labels: ['Monthly Expenses', 'Daily Expenses'],
-    datasets: [{
-      label: 'Expenses (D)',
-      data: [
-        data.expenses.byType.mensuel,
-        data.expenses.byType.journalier
-      ],
-      backgroundColor: [
-        'rgba(255, 99, 132, 0.6)',
-        'rgba(255, 159, 64, 0.6)'
-      ],
-      borderColor: [
-        'rgba(255, 99, 132, 1)',
-        'rgba(255, 159, 64, 1)'
-      ],
-      borderWidth: 1
-    }]
+    labels: ["Monthly Expenses", "Daily Expenses"],
+    datasets: [
+      {
+        label: "Expenses (D)",
+        data: [data.expenses.byType.mensuel, data.expenses.byType.journalier],
+        backgroundColor: ["rgba(255, 99, 132, 0.6)", "rgba(255, 159, 64, 0.6)"],
+        borderColor: ["rgba(255, 99, 132, 1)", "rgba(255, 159, 64, 1)"],
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 7. Registration history
   const registrationsHistoryData = {
-    labels: data.historical.historicalData.map(item => `${item.month}/${item.year}`),
-    datasets: [{
-      label: 'New Registrations',
-      data: data.historical.historicalData.map(item => item.registrations.monthlyCount),
-      backgroundColor: 'rgba(153, 102, 255, 0.6)',
-      borderColor: 'rgba(153, 102, 255, 1)',
-      borderWidth: 1
-    }]
+    labels: data.historical.historicalData.map(
+      (item) => `${item.month}/${item.year}`
+    ),
+    datasets: [
+      {
+        label: "New Registrations",
+        data: data.historical.historicalData.map(
+          (item) => item.registrations.monthlyCount
+        ),
+        backgroundColor: "rgba(153, 102, 255, 0.6)",
+        borderColor: "rgba(153, 102, 255, 1)",
+        borderWidth: 1,
+      },
+    ],
   };
 
   // 8. Memberships distribution
   const membershipsData = {
-    labels: data.memberships.categories.map(item => item.period),
-    datasets: [{
-      data: data.memberships.categories.map(item => item.count),
-      backgroundColor: [
-        'rgba(255, 99, 132, 0.6)',
-        'rgba(54, 162, 235, 0.6)',
-        'rgba(255, 206, 86, 0.6)',
-        'rgba(75, 192, 192, 0.6)',
-        'rgba(153, 102, 255, 0.6)'
-      ],
-      borderColor: [
-        'rgba(255, 99, 132, 1)',
-        'rgba(54, 162, 235, 1)',
-        'rgba(255, 206, 86, 1)',
-        'rgba(75, 192, 192, 1)',
-        'rgba(153, 102, 255, 1)'
-      ],
-      borderWidth: 1
-    }]
+    labels: data.memberships.categories.map((item) => item.period),
+    datasets: [
+      {
+        data: data.memberships.categories.map((item) => item.count),
+        backgroundColor: [
+          "rgba(255, 99, 132, 0.6)",
+          "rgba(54, 162, 235, 0.6)",
+          "rgba(255, 206, 86, 0.6)",
+          "rgba(75, 192, 192, 0.6)",
+          "rgba(153, 102, 255, 0.6)",
+        ],
+        borderColor: [
+          "rgba(255, 99, 132, 1)",
+          "rgba(54, 162, 235, 1)",
+          "rgba(255, 206, 86, 1)",
+          "rgba(75, 192, 192, 1)",
+          "rgba(153, 102, 255, 1)",
+        ],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // 9. Daily journal registrations
+  const dailyJournalRegistrationsData = {
+    labels: data.dailyJournalRegistrations.map((item) => item.date),
+    datasets: [
+      {
+        label: "Daily Journal Registrations",
+        data: data.dailyJournalRegistrations.map((item) => item.count),
+        backgroundColor: "rgba(75, 192, 192, 0.6)",
+        borderColor: "rgba(75, 192, 192, 1)",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // 10. Monthly journal registrations
+  const monthlyJournalRegistrationsData = {
+    labels: data.monthlyJournalRegistrations.map((item) => item.month),
+    datasets: [
+      {
+        label: "Monthly Journal Registrations",
+        data: data.monthlyJournalRegistrations.map((item) => item.count),
+        backgroundColor: "rgba(153, 102, 255, 0.6)",
+        borderColor: "rgba(153, 102, 255, 1)",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // 11. Daily subscriptions
+  const dailySubscriptionsData = {
+    labels: data.dailySubscriptions.map((item) => item.date),
+    datasets: [
+      {
+        label: "Daily Subscriptions",
+        data: data.dailySubscriptions.map((item) => item.count),
+        backgroundColor: "rgba(255, 159, 64, 0.6)",
+        borderColor: "rgba(255, 159, 64, 1)",
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  // 12. Monthly subscriptions
+  const monthlySubscriptionsData = {
+    labels: data.monthlySubscriptions.map((item) => item.month),
+    datasets: [
+      {
+        label: "Monthly Subscriptions",
+        data: data.monthlySubscriptions.map((item) => item.count),
+        backgroundColor: "rgba(54, 162, 235, 0.6)",
+        borderColor: "rgba(54, 162, 235, 1)",
+        borderWidth: 1,
+      },
+    ],
   };
 
   const tableOptions = {
@@ -426,11 +526,30 @@ const Dashboard = () => {
 
   // Current statistics
   const currentStats = [
-    { name: 'Total Users', value: data.usersCount },
-    { name: 'New Members This Month', value: data.registrations.monthlyCount },
-    { name: 'Total Revenue', value: data.revenue.total, isCurrency: true },
-    { name: 'Total Expenses', value: data.expenses.total, isCurrency: true },
-    { name: 'Net Profit', value: data.revenue.total - data.expenses.total, isCurrency: true }
+    { name: "Total Users", value: data.usersCount },
+    { name: "New Members This Month", value: data.registrations.monthlyCount },
+    {
+      name: `Monthly Journal Registrations (${selectedMonth}/${selectedYear})`,
+      value: data.monthlyJournalRegistrations.reduce(
+        (sum, item) => sum + item.count,
+        0
+      ),
+    },
+
+    {
+      name: `Monthly Subscriptions (${selectedMonth}/${selectedYear})`,
+      value: data.monthlySubscriptions.reduce(
+        (sum, item) => sum + item.count,
+        0
+      ),
+    },
+    { name: "Total Revenue", value: data.revenue.total, isCurrency: true },
+    { name: "Total Expenses", value: data.expenses.total, isCurrency: true },
+    {
+      name: "Net Profit",
+      value: data.revenue.total - data.expenses.total,
+      isCurrency: true,
+    },
   ];
 
   return (
@@ -441,7 +560,7 @@ const Dashboard = () => {
           Financial Dashboard
         </Typography>
 
-        <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
+        <Box sx={{ mb: 3, display: "flex", gap: 2 }}>
           <FormControl sx={{ minWidth: 120 }}>
             <InputLabel>Month</InputLabel>
             <Select
@@ -451,7 +570,7 @@ const Dashboard = () => {
             >
               {Array.from({ length: 12 }, (_, i) => (
                 <MenuItem key={i + 1} value={i + 1}>
-                  {new Date(0, i).toLocaleString('en-US', { month: 'long' })}
+                  {new Date(0, i).toLocaleString("en-US", { month: "long" })}
                 </MenuItem>
               ))}
             </Select>
@@ -490,123 +609,169 @@ const Dashboard = () => {
 
         {/* Quick statistics */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          {currentStats.map((stat, index) => (
-            <Grid item xs={12} sm={6} md={4} lg={2.4} key={index}>
-              <StatCard 
-                title={stat.name} 
-                value={stat.value} 
+          {currentStats.slice(0, 4).map((stat, index) => (
+            <Grid item xs={12} sm={6} md={3} key={index}>
+              <StatCard
+                title={stat.name}
+                value={stat.value}
                 isCurrency={stat.isCurrency}
               />
             </Grid>
           ))}
         </Grid>
 
+        {/* Deuxième ligne avec 3 cartes */}
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {currentStats.slice(4, 7).map((stat, index) => (
+            <Grid item xs={12} sm={6} md={4} key={index + 4}>
+              <StatCard
+                title={stat.name}
+                value={stat.value}
+                isCurrency={stat.isCurrency}
+              />
+            </Grid>
+          ))}
+        </Grid>
         <Grid container spacing={3}>
           {/* 1. Revenue history */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title="Revenue History (12 months)" 
+            <ChartCard
+              title="Revenue History (12 months)"
               description="Total revenue evolution over the last 12 months"
             >
-              <Bar 
-                data={revenueHistoryData} 
-                options={chartOptions} 
-              />
+              <Bar data={revenueHistoryData} options={chartOptions} />
             </ChartCard>
           </Grid>
 
           {/* 2. Expenses history */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title="Expenses History (12 months)" 
+            <ChartCard
+              title="Expenses History (12 months)"
               description="Expenses evolution over the last 12 months"
             >
-              <Line 
-                data={expensesHistoryData} 
-                options={chartOptions} 
-              />
+              <Line data={expensesHistoryData} options={chartOptions} />
             </ChartCard>
           </Grid>
 
           {/* 3. Net profit history */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title="Net Profit (12 months)" 
+            <ChartCard
+              title="Net Profit (12 months)"
               description="Revenue minus expenses over the last 12 months"
             >
-              <Bar 
-                data={netProfitHistoryData} 
-                options={chartOptions} 
-              />
+              <Bar data={netProfitHistoryData} options={chartOptions} />
             </ChartCard>
           </Grid>
 
           {/* 4. Users history */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title="Users Evolution (12 months)" 
+            <ChartCard
+              title="Users Evolution (12 months)"
               description="Total users over time"
             >
-              <Line 
-                data={usersHistoryData} 
-                options={integerChartOptions} 
-              />
+              <Line data={usersHistoryData} options={integerChartOptions} />
             </ChartCard>
           </Grid>
 
           {/* 5. Monthly revenue details */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title={`Revenue (${selectedMonth}/${selectedYear})`} 
+            <ChartCard
+              title={`Revenue (${selectedMonth}/${selectedYear})`}
               description="Revenue breakdown for selected month"
             >
-              <Doughnut 
-                data={monthlyRevenueData} 
-                options={circleChartOptions} 
+              <Doughnut
+                data={monthlyRevenueData}
+                options={circleChartOptions}
               />
             </ChartCard>
           </Grid>
 
           {/* 6. Monthly expenses details */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title={`Expenses (${selectedMonth}/${selectedYear})`} 
+            <ChartCard
+              title={`Expenses (${selectedMonth}/${selectedYear})`}
               description="Expenses breakdown for selected month"
             >
-              <Pie 
-                data={monthlyExpensesData} 
-                options={circleChartOptions} 
-              />
+              <Pie data={monthlyExpensesData} options={circleChartOptions} />
             </ChartCard>
           </Grid>
 
           {/* 7. Registration history */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title="Registration History" 
+            <ChartCard
+              title="Registration History"
               description="New registrations over the last 12 months"
             >
-              <Line 
-                data={registrationsHistoryData} 
-                options={integerChartOptions} 
+              <Line
+                data={registrationsHistoryData}
+                options={integerChartOptions}
               />
             </ChartCard>
           </Grid>
 
           {/* 8. Memberships distribution */}
           <Grid item xs={12} md={6}>
-            <ChartCard 
-              title={`Memberships (${selectedMonth}/${selectedYear})`} 
+            <ChartCard
+              title={`Memberships (${selectedMonth}/${selectedYear})`}
               description="Membership type distribution"
             >
-              <Pie 
-                data={membershipsData} 
-                options={circleChartOptions} 
+              <Pie data={membershipsData} options={circleChartOptions} />
+            </ChartCard>
+          </Grid>
+
+          {/* 9. Daily journal registrations */}
+          <Grid item xs={12} md={6}>
+            <ChartCard
+              title={`Daily Journal Registrations (${selectedMonth}/${selectedYear})`}
+              description="Number of members registered in journal by day"
+            >
+              <Bar
+                data={dailyJournalRegistrationsData}
+                options={integerChartOptions}
               />
             </ChartCard>
           </Grid>
 
-          {/* 9. Most active members */}
+          {/* 10. Monthly journal registrations */}
+          <Grid item xs={12} md={6}>
+            <ChartCard
+              title="Monthly Journal Registrations"
+              description="Number of members registered in journal by month"
+            >
+              <Bar
+                data={monthlyJournalRegistrationsData}
+                options={integerChartOptions}
+              />
+            </ChartCard>
+          </Grid>
+
+          {/* 11. Daily subscriptions */}
+          <Grid item xs={12} md={6}>
+            <ChartCard
+              title={`Daily Subscriptions (${selectedMonth}/${selectedYear})`}
+              description="Number of new subscriptions by day"
+            >
+              <Bar
+                data={dailySubscriptionsData}
+                options={integerChartOptions}
+              />
+            </ChartCard>
+          </Grid>
+
+          {/* 12. Monthly subscriptions */}
+          <Grid item xs={12} md={6}>
+            <ChartCard
+              title="Monthly Subscriptions"
+              description="Number of new subscriptions by month"
+            >
+              <Bar
+                data={monthlySubscriptionsData}
+                options={integerChartOptions}
+              />
+            </ChartCard>
+          </Grid>
+
+          {/* 13. Most active members */}
           <Grid item xs={12}>
             <Card mb={1}>
               <CardContent>
@@ -630,7 +795,9 @@ const Dashboard = () => {
                           </TableCell>
                           <TableCell align="center">{user.visits}</TableCell>
                           <TableCell align="right">
-                            {user.lastVisit ? new Date(user.lastVisit).toLocaleDateString() : '-'}
+                            {user.lastVisit
+                              ? new Date(user.lastVisit).toLocaleDateString()
+                              : "-"}
                           </TableCell>
                         </TableRow>
                       ))}
