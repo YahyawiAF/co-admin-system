@@ -307,3 +307,5 @@ export enum ExpenseType {
   MENSUEL = "MENSUEL",
   JOURNALIER = "JOURNALIER",
 }
+
+

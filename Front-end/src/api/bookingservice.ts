@@ -3,6 +3,7 @@ import { BookSeatsPayload, BookingResponse } from "src/types/shared";
 import { API_URL } from "../config/axios";
 export class BookingService {
   private api: AxiosInstance;
+  reducerPath: any;
 
   constructor(baseURL: string) {
     this.api = axios.create({

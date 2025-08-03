@@ -22,7 +22,7 @@ import {
 
 const pagesSection = [
   {
-    href: "/dashboard/landing",
+    href: "/dashboard/statistics",
     icon: Sliders,
     title: "Dashboard",
   },

@@ -13,6 +13,7 @@ import { bookingService } from "src/api/bookingservice";
 import { reclamationApi } from "src/api/reclamationApi";
 import { responseApi } from "src/api/reponseApi";
 
+
 // Configuration du store
 export const store = configureStore({
   reducer: {
@@ -29,6 +30,7 @@ export const store = configureStore({
     [facilityApi.reducerPath]: facilityApi.reducer,
     [reclamationApi.reducerPath]: reclamationApi.reducer,
     [responseApi.reducerPath]: responseApi.reducer,
+  
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -45,6 +47,7 @@ export const store = configureStore({
       facilityApi.middleware,
       reclamationApi.middleware,
       responseApi.middleware,
+   
     ),
 });
 

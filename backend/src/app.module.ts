@@ -25,6 +25,7 @@ import { BookingModule } from './proxy/book.module';
 import { ProxyModule } from './proxy/proxy.module';
 import { ReclamationModule } from './modules/reclamation/recl.module';
 import { ResponseModule } from './modules/reponse/rep.module';
+import { StatisticsModule } from './modules/statistics/StatisticsModule';
 
 @Module({
   imports: [
@@ -69,7 +70,8 @@ import { ResponseModule } from './modules/reponse/rep.module';
     BookingModule,
     ReclamationModule,
     ResponseModule,
-    ProxyModule
+    ProxyModule,
+    StatisticsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],
