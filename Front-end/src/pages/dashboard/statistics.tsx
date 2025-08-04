@@ -49,6 +49,8 @@ import {
   Paper,
   CircularProgress,
   Alert,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import { Helmet } from "react-helmet-async";
@@ -140,6 +142,7 @@ const Dashboard = () => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [tabValue, setTabValue] = useState(0);
 
   useEffect(() => {
     const loadData = async () => {
@@ -177,7 +180,7 @@ const Dashboard = () => {
           revenue,
           expenses,
           registrations,
-          dailyJournalRegistrations,
+          dailyJournalRegistrations: dailyJournalRegistrations,
           monthlyJournalRegistrations,
           dailySubscriptions,
           monthlySubscriptions,
@@ -195,6 +198,10 @@ const Dashboard = () => {
 
     loadData();
   }, [selectedMonth, selectedYear]);
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
 
   if (loading && !data) {
     return (
@@ -535,7 +542,6 @@ const Dashboard = () => {
         0
       ),
     },
-
     {
       name: `Monthly Subscriptions (${selectedMonth}/${selectedYear})`,
       value: data.monthlySubscriptions.reduce(
@@ -632,182 +638,175 @@ const Dashboard = () => {
             </Grid>
           ))}
         </Grid>
-        <Grid container spacing={3}>
-          {/* 1. Revenue history */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Revenue History (12 months)"
-              description="Total revenue evolution over the last 12 months"
-            >
-              <Bar data={revenueHistoryData} options={chartOptions} />
-            </ChartCard>
-          </Grid>
 
-          {/* 2. Expenses history */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Expenses History (12 months)"
-              description="Expenses evolution over the last 12 months"
-            >
-              <Line data={expensesHistoryData} options={chartOptions} />
-            </ChartCard>
-          </Grid>
+        {/* Ajout des onglets */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          <Tabs value={tabValue} onChange={handleTabChange}>
+            <Tab label="Financial" />
+            <Tab label="Subscriptions" />
+            <Tab label="Members" />
+          </Tabs>
+        </Box>
 
-          {/* 3. Net profit history */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Net Profit (12 months)"
-              description="Revenue minus expenses over the last 12 months"
-            >
-              <Bar data={netProfitHistoryData} options={chartOptions} />
-            </ChartCard>
-          </Grid>
+        {/* Contenu des onglets */}
+        {tabValue === 0 && (
+          <Grid container spacing={3}>
+            {/* Financial Tab */}
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Revenue History (12 months)"
+                description="Total revenue evolution over the last 12 months"
+              >
+                <Bar data={revenueHistoryData} options={chartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 4. Users history */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Users Evolution (12 months)"
-              description="Total users over time"
-            >
-              <Line data={usersHistoryData} options={integerChartOptions} />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Expenses History (12 months)"
+                description="Expenses evolution over the last 12 months"
+              >
+                <Line data={expensesHistoryData} options={chartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 5. Monthly revenue details */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title={`Revenue (${selectedMonth}/${selectedYear})`}
-              description="Revenue breakdown for selected month"
-            >
-              <Doughnut
-                data={monthlyRevenueData}
-                options={circleChartOptions}
-              />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title={`Revenue (${selectedMonth}/${selectedYear})`}
+                description="Revenue breakdown for selected month"
+              >
+                <Doughnut data={monthlyRevenueData} options={circleChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 6. Monthly expenses details */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title={`Expenses (${selectedMonth}/${selectedYear})`}
-              description="Expenses breakdown for selected month"
-            >
-              <Pie data={monthlyExpensesData} options={circleChartOptions} />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title={`Expenses (${selectedMonth}/${selectedYear})`}
+                description="Expenses breakdown for selected month"
+              >
+                <Pie data={monthlyExpensesData} options={circleChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 7. Registration history */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Registration History"
-              description="New registrations over the last 12 months"
-            >
-              <Line
-                data={registrationsHistoryData}
-                options={integerChartOptions}
-              />
-            </ChartCard>
+            <Grid item xs={12} md={12}>
+              <ChartCard
+                title="Net Profit (12 months)"
+                description="Revenue minus expenses over the last 12 months"
+              >
+                <Bar data={netProfitHistoryData} options={chartOptions} />
+              </ChartCard>
+            </Grid>
           </Grid>
+        )}
 
-          {/* 8. Memberships distribution */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title={`Memberships (${selectedMonth}/${selectedYear})`}
-              description="Membership type distribution"
-            >
-              <Pie data={membershipsData} options={circleChartOptions} />
-            </ChartCard>
+        {tabValue === 1 && (
+          <Grid container spacing={3}>
+            {/* Subscriptions Tab */}
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title={`Daily Subscriptions (${selectedMonth}/${selectedYear})`}
+                description="Number of new subscriptions by day"
+              >
+                <Bar data={dailySubscriptionsData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Monthly Subscriptions"
+                description="Number of new subscriptions by month"
+              >
+                <Bar data={monthlySubscriptionsData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
+
+            <Grid item xs={12} md={6} sx={{ mx: 'auto' }}>
+              <ChartCard
+                title="Memberships Distribution"
+                description="Membership type distribution"
+              >
+                <Pie data={membershipsData} options={circleChartOptions} />
+              </ChartCard>
+            </Grid>
           </Grid>
+        )}
 
-          {/* 9. Daily journal registrations */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title={`Daily Journal Registrations (${selectedMonth}/${selectedYear})`}
-              description="Number of members registered in journal by day"
-            >
-              <Bar
-                data={dailyJournalRegistrationsData}
-                options={integerChartOptions}
-              />
-            </ChartCard>
-          </Grid>
+        {tabValue === 2 && (
+          <Grid container spacing={3}>
+            {/* Members Tab */}
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Users Evolution (12 months)"
+                description="Total users over time"
+              >
+                <Line data={usersHistoryData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 10. Monthly journal registrations */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Monthly Journal Registrations"
-              description="Number of members registered in journal by month"
-            >
-              <Bar
-                data={monthlyJournalRegistrationsData}
-                options={integerChartOptions}
-              />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Registration History"
+                description="New registrations over the last 12 months"
+              >
+                <Line data={registrationsHistoryData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 11. Daily subscriptions */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title={`Daily Subscriptions (${selectedMonth}/${selectedYear})`}
-              description="Number of new subscriptions by day"
-            >
-              <Bar
-                data={dailySubscriptionsData}
-                options={integerChartOptions}
-              />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title={`Daily Journal Registrations (${selectedMonth}/${selectedYear})`}
+                description="Number of members registered in journal by day"
+              >
+                <Bar data={dailyJournalRegistrationsData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 12. Monthly subscriptions */}
-          <Grid item xs={12} md={6}>
-            <ChartCard
-              title="Monthly Subscriptions"
-              description="Number of new subscriptions by month"
-            >
-              <Bar
-                data={monthlySubscriptionsData}
-                options={integerChartOptions}
-              />
-            </ChartCard>
-          </Grid>
+            <Grid item xs={12} md={6}>
+              <ChartCard
+                title="Monthly Journal Registrations"
+                description="Number of members registered in journal by month"
+              >
+                <Bar data={monthlyJournalRegistrationsData} options={integerChartOptions} />
+              </ChartCard>
+            </Grid>
 
-          {/* 13. Most active members */}
-          <Grid item xs={12}>
-            <Card mb={1}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Most Active Members ({selectedMonth}/{selectedYear})
-                </Typography>
-                <TableContainer component={Paper}>
-                  <Table size="small" sx={tableOptions}>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell>Member</TableCell>
-                        <TableCell align="center">Visits</TableCell>
-                        <TableCell align="right">Last Visit</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {data.mostPresent.map((user, index) => (
-                        <TableRow key={index}>
-                          <TableCell component="th" scope="row">
-                            {user.firstName} {user.lastName}
-                          </TableCell>
-                          <TableCell align="center">{user.visits}</TableCell>
-                          <TableCell align="right">
-                            {user.lastVisit
-                              ? new Date(user.lastVisit).toLocaleDateString()
-                              : "-"}
-                          </TableCell>
+            <Grid item xs={12}>
+              <Card mb={1}>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom>
+                    Most Active Members ({selectedMonth}/{selectedYear})
+                  </Typography>
+                  <TableContainer component={Paper}>
+                    <Table size="small" sx={tableOptions}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Member</TableCell>
+                          <TableCell align="center">Visits</TableCell>
+                          <TableCell align="right">Last Visit</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-              </CardContent>
-            </Card>
+                      </TableHead>
+                      <TableBody>
+                        {data.mostPresent.map((user, index) => (
+                          <TableRow key={index}>
+                            <TableCell component="th" scope="row">
+                              {user.firstName} {user.lastName}
+                            </TableCell>
+                            <TableCell align="center">{user.visits}</TableCell>
+                            <TableCell align="right">
+                              {user.lastVisit
+                                ? new Date(user.lastVisit).toLocaleDateString()
+                                : "-"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-        </Grid>
+        )}
       </Box>
     </React.Fragment>
   );
