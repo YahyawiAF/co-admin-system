@@ -14,20 +14,28 @@ import * as bcrypt from 'bcrypt';
 import { ConfigService } from '@nestjs/config';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Role } from '@prisma/client';
-import { isEmail, isMobilePhone } from 'class-validator';
+import { isEmail } from 'class-validator';
+import * as twilio from 'twilio';
+import { parsePhoneNumber, isValidPhoneNumber } from 'libphonenumber-js';
 
 const roundsOfHashing = 10;
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly twilioClient: twilio.Twilio;
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
     private mailerService: MailerService,
-  ) {}
+  ) {
+    this.twilioClient = twilio(
+      this.configService.get<string>('TWILIO_ACCOUNT_SID'),
+      this.configService.get<string>('TWILIO_AUTH_TOKEN'),
+    );
+  }
 
   async signUp(
     identifier: string,
@@ -36,15 +44,22 @@ export class AuthService {
     role: Role,
   ): Promise<AuthEntity> {
     // Validate identifier format
-    if (!isEmail(identifier) && !isMobilePhone(identifier)) {
-      throw new BadRequestException('Please enter a valid email address or phone number');
-    }
+    let cleanIdentifier: string;
+    let isIdentifierEmail = isEmail(identifier);
 
-    // Clean the identifier
-    const isIdentifierEmail = isEmail(identifier);
-    const cleanIdentifier = isIdentifierEmail
-      ? identifier.toLowerCase().trim()
-      : identifier.replace(/\s+/g, '');
+    if (isIdentifierEmail) {
+      cleanIdentifier = identifier.toLowerCase().trim();
+    } else {
+      // Validate and format phone number
+      if (!isValidPhoneNumber(identifier)) {
+        throw new BadRequestException('Please enter a valid phone number');
+      }
+      const phoneNumber = parsePhoneNumber(identifier);
+      if (!phoneNumber || !phoneNumber.isValid()) {
+        throw new BadRequestException('Invalid phone number format');
+      }
+      cleanIdentifier = phoneNumber.format('E.164'); // e.g., +1234567890
+    }
 
     // Check password strength
     if (password.length < 8) {
@@ -130,15 +145,21 @@ export class AuthService {
 
   async login(identifier: string, password: string): Promise<AuthEntity> {
     // Validate identifier format
-    if (!isEmail(identifier) && !isMobilePhone(identifier)) {
-      throw new BadRequestException('Please enter a valid email address or phone number');
-    }
+    let cleanIdentifier: string;
+    let isIdentifierEmail = isEmail(identifier);
 
-    // Clean the identifier
-    const isIdentifierEmail = isEmail(identifier);
-    const cleanIdentifier = isIdentifierEmail
-      ? identifier.toLowerCase().trim()
-      : identifier.replace(/\s+/g, '');
+    if (isIdentifierEmail) {
+      cleanIdentifier = identifier.toLowerCase().trim();
+    } else {
+      if (!isValidPhoneNumber(identifier)) {
+        throw new BadRequestException('Please enter a valid phone number');
+      }
+      const phoneNumber = parsePhoneNumber(identifier);
+      if (!phoneNumber || !phoneNumber.isValid()) {
+        throw new BadRequestException('Invalid phone number format');
+      }
+      cleanIdentifier = phoneNumber.format('E.164');
+    }
 
     // Find user by email or phoneNumber
     const user = await this.prisma.user.findFirst({
@@ -228,13 +249,43 @@ export class AuthService {
     }
   }
 
-  async requestPasswordReset(email: string): Promise<void> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+ async requestPasswordReset(identifier: string): Promise<void> {
+  // Validate identifier format
+  let cleanIdentifier: string;
+  const isIdentifierEmail = isEmail(identifier);
 
-    if (!user) {
-      throw new NotFoundException('Utilisateur non trouvé');
+  if (isIdentifierEmail) {
+    cleanIdentifier = identifier.toLowerCase().trim();
+  } else {
+    if (!isValidPhoneNumber(identifier)) {
+      throw new BadRequestException('Please enter a valid phone number');
     }
+    const phoneNumber = parsePhoneNumber(identifier);
+    if (!phoneNumber || !phoneNumber.isValid()) {
+      throw new BadRequestException('Invalid phone number format');
+    }
+    cleanIdentifier = phoneNumber.format('E.164');
+  }
 
+  const user = await this.prisma.user.findFirst({
+    where: {
+      OR: [
+        { email: isIdentifierEmail ? cleanIdentifier : undefined },
+        { phoneNumber: !isIdentifierEmail ? cleanIdentifier : undefined },
+      ],
+    },
+  });
+
+  if (!user) {
+    throw new NotFoundException(
+      isIdentifierEmail
+        ? 'Utilisateur non trouvé avec cet email'
+        : 'Utilisateur non trouvé avec ce numéro de téléphone',
+    );
+  }
+
+  if (isIdentifierEmail) {
+    // Handle email-based password reset
     const resetToken = this.jwtService.sign(
       { userId: user.id, email: user.email },
       {
@@ -255,13 +306,108 @@ export class AuthService {
 
     const resetUrl = `${baseUrl}?token=${resetToken}&role=${user.role.toLowerCase()}`;
 
-    await this.mailerService.sendMail({
-      to: email,
-      subject: 'Demande de réinitialisation de mot de passe',
-      template: 'password-reset',
-      context: {
-        name: user.fullname,
-        resetUrl,
+    try {
+      await this.mailerService.sendMail({
+        to: user.email,
+        subject: 'Demande de réinitialisation de mot de passe',
+        template: 'password-reset',
+        context: {
+          name: user.fullname || 'Utilisateur',
+          resetUrl,
+        },
+      });
+      this.logger.log(`Password reset email sent to ${user.email}`);
+    } catch (error) {
+      this.logger.error(`Failed to send email to ${user.email}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Échec de l\'envoi de l\'email. Veuillez vérifier la configuration SMTP.');
+    }
+  } else {
+    // Handle phone-based password reset
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordCode: resetCode,
+        resetPasswordCodeExpires: expiresAt,
+      },
+    });
+
+    try {
+      await this.twilioClient.messages.create({
+        body: `Votre code de réinitialisation de mot de passe est : ${resetCode}. Il expire dans 15 minutes.`,
+        from: this.configService.get<string>('TWILIO_PHONE_NUMBER'),
+        to: cleanIdentifier,
+      });
+      this.logger.log(`SMS sent to ${cleanIdentifier} with reset code`);
+    } catch (error) {
+      this.logger.error(`Failed to send SMS to ${cleanIdentifier}: ${error.message}`, error.stack);
+      throw new InternalServerErrorException('Échec de l\'envoi du SMS. Veuillez vérifier le numéro de téléphone et réessayer.');
+    }
+  }
+}
+
+  async verifyResetCode(phoneNumber: string, code: string): Promise<void> {
+    if (!isValidPhoneNumber(phoneNumber)) {
+      throw new BadRequestException('Veuillez entrer un numéro de téléphone valide');
+    }
+
+    const cleanPhoneNumber = parsePhoneNumber(phoneNumber).format('E.164');
+
+    const user = await this.prisma.user.findUnique({
+      where: { phoneNumber: cleanPhoneNumber },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé avec ce numéro de téléphone');
+    }
+
+    if (!user.resetPasswordCode || !user.resetPasswordCodeExpires) {
+      throw new ForbiddenException('Aucun code de réinitialisation trouvé');
+    }
+
+    if (user.resetPasswordCode !== code) {
+      throw new ForbiddenException('Code de réinitialisation invalide');
+    }
+
+    if (new Date() > user.resetPasswordCodeExpires) {
+      throw new ForbiddenException('Code de réinitialisation expiré');
+    }
+
+    // Code is valid; clear the code and expiration
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetPasswordCode: null,
+        resetPasswordCodeExpires: null,
+      },
+    });
+  }
+
+  async resetPasswordWithPhone(phoneNumber: string, newPassword: string): Promise<void> {
+    if (!isValidPhoneNumber(phoneNumber)) {
+      throw new BadRequestException('Veuillez entrer un numéro de téléphone valide');
+    }
+
+    const cleanPhoneNumber = parsePhoneNumber(phoneNumber).format('E.164');
+
+    const user = await this.prisma.user.findUnique({
+      where: { phoneNumber: cleanPhoneNumber },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Utilisateur non trouvé avec ce numéro de téléphone');
+    }
+
+    const hashedPassword = await this.hashData(newPassword);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetPasswordCode: null,
+        resetPasswordCodeExpires: null,
       },
     });
   }
@@ -307,12 +453,12 @@ export class AuthService {
     };
 
     const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_ACCESS_SECRET,
+      secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
       expiresIn: '15m',
     });
 
     const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_REFRESH_SECRET,
+      secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       expiresIn: '7d',
     });
 

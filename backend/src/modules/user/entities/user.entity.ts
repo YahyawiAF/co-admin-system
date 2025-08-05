@@ -6,6 +6,8 @@ export class UserEntity implements User {
   constructor(partial: Partial<UserEntity>) {
     Object.assign(this, partial);
   }
+    resetPasswordCode: string;
+    resetPasswordCodeExpires: Date;
     memberId: string;
     accessToken: string;
 

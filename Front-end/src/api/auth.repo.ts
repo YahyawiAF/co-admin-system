@@ -3,107 +3,133 @@ import { API_URL } from "../config/axios"; // Assurez-vous que cette constante c
 import { Role, User } from "src/types/shared";
 
 interface LoginParams {
-  identifier: string; // Peut être email ou numéro de téléphone
+  identifier: string; // Email ou numéro de téléphone
   password: string;
 }
 
 interface SignUpParams {
-  identifier: string; // Peut être email ou numéro de téléphone
+  identifier: string; // Email ou numéro de téléphone
   password: string;
   fullname: string;
   role: Role;
 }
 
+interface ForgotPasswordParams {
+  identifier: string; // Email ou numéro de téléphone
+}
+
+interface ResetPasswordParams {
+  token: string;
+  newPassword: string;
+}
+
+interface VerifyResetCodeParams {
+  phoneNumber: string;
+  code: string;
+}
+
+interface ResetPasswordWithPhoneParams {
+  phoneNumber: string;
+  newPassword: string;
+}
+
 // Créez l'API pour l'authentification
 export const authServerApi = createApi({
-  reducerPath: "authApi",
-  baseQuery: fetchBaseQuery({ baseUrl: API_URL }),
-  tagTypes: ["authApi"],
+ reducerPath: "authApi",
+  baseQuery: fetchBaseQuery({ 
+    baseUrl: API_URL,
+    prepareHeaders: (headers) => {
+      const token = localStorage.getItem("accessToken") || sessionStorage.getItem("accessToken");
+      if (token) {
+        headers.set("Authorization", `Bearer ${token}`);
+      }
+      return headers;
+    },
+  }),
+  tagTypes: ["Auth"],
   endpoints: (builder) => ({
-    // Endpoint de login modifié
     login: builder.mutation<User, LoginParams>({
-      query: ({ identifier, password }) => ({
+      query: (credentials) => ({
         url: "auth/login",
         method: "POST",
-        body: { identifier, password }, // Utilisez identifier au lieu de email
+        body: credentials,
       }),
-      invalidatesTags: ["authApi"],
+      invalidatesTags: ["Auth"],
     }),
 
-    // Endpoint d'inscription modifié
     signUp: builder.mutation<User, SignUpParams>({
-      query: ({ identifier, password, fullname, role }) => ({
+      query: (userData) => ({
         url: "auth/signup",
         method: "POST",
-        body: { identifier, password, fullname, role },
+        body: userData,
       }),
-      invalidatesTags: ["authApi"],
+      invalidatesTags: ["Auth"],
     }),
 
-    // Endpoint pour rafraîchir les tokens
-    refreshTokens: builder.mutation<User, string>({
-      query: (refreshToken) => ({
+    refreshTokens: builder.mutation<User, void>({
+      query: () => ({
         url: "auth/refresh",
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${refreshToken}`,
-        },
+        credentials: "include",
       }),
-      invalidatesTags: ["authApi"],
     }),
 
-    // Endpoint pour la demande de réinitialisation de mot de passe
-    forgotPassword: builder.mutation<void, { email: string }>({
-      query: ({ email }) => ({
+    forgotPassword: builder.mutation<void, ForgotPasswordParams>({
+      query: ({ identifier }) => ({
         url: "auth/forgot-password",
         method: "POST",
-        body: { email },
+        body: { identifier },
       }),
     }),
-    getProtectedResource: builder.query<
-      { message: string; userId: string },
-      void
-    >({
-      query: () => ({
-        url: "auth/protected",
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken")}`, // Récupérez le token depuis le localStorage
-        },
+
+    verifyResetCode: builder.mutation<{ token: string }, VerifyResetCodeParams>({
+      query: ({ phoneNumber, code }) => ({
+        url: "auth/verify-reset-code",
+        method: "POST",
+        body: { phoneNumber, code },
       }),
     }),
-    // Endpoint pour la déconnexion
+
+    resetPassword: builder.mutation<void, ResetPasswordParams>({
+      query: ({ token, newPassword }) => ({
+        url: `auth/reset-password/${token}`,
+        method: "POST",
+        body: { newPassword },
+      }),
+    }),
+
+    resetPasswordWithPhone: builder.mutation<void, ResetPasswordWithPhoneParams>({
+      query: ({ phoneNumber, newPassword }) => ({
+        url: "auth/reset-password-phone",
+        method: "POST",
+        body: { phoneNumber, newPassword },
+      }),
+    }),
+
     logout: builder.mutation<void, void>({
       query: () => ({
         url: "auth/logout",
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${sessionStorage.getItem("accessToken")}`, // Récupérez le token depuis le localStorage
-        },
       }),
+      invalidatesTags: ["Auth"],
     }),
 
-    // Endpoint pour la réinitialisation du mot de passe
-    resetPassword: builder.mutation<
-      void,
-      { token: string; newPassword: string }
-    >({
-      query: ({ token, newPassword }) => ({
-        url: `auth/reset-password/${token}`, // Le token est maintenant dans le chemin
-        method: "POST",
-        body: { newPassword }, // Le nouveau mot de passe est dans le corps
-      }),
+    getProtectedResource: builder.query<{ message: string; userId: string }, void>({
+      query: () => "auth/protected",
+      providesTags: ["Auth"],
     }),
   }),
 });
 
-// Exportez les hooks générés
+// Export des hooks générés
 export const {
   useLoginMutation,
   useSignUpMutation,
   useRefreshTokensMutation,
   useForgotPasswordMutation,
+  useVerifyResetCodeMutation,
   useResetPasswordMutation,
-  useGetProtectedResourceQuery, // Nouveau hook pour la ressource protégée
-  useLogoutMutation, // Nouveau hook pour la déconnexion
+  useResetPasswordWithPhoneMutation,
+  useLogoutMutation,
+  useGetProtectedResourceQuery,
 } = authServerApi;

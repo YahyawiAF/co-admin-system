@@ -19,6 +19,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
 import { Role } from '@prisma/client';
+import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
 
 @Controller('auth')
 @ApiTags('auth')
@@ -52,10 +53,10 @@ export class AuthController {
   }
 
   @Post('forgot-password')
-  @ApiOkResponse({ description: 'Password reset email sent' })
+  @ApiOkResponse({ description: 'Password reset email or SMS sent' })
   async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
-    await this.authService.requestPasswordReset(forgotPasswordDto.email);
-    return { message: 'Password reset email sent' };
+    await this.authService.requestPasswordReset(forgotPasswordDto.identifier);
+    return { message: 'Password reset email or SMS sent' };
   }
 
   @Post('reset-password/:token')
@@ -65,6 +66,21 @@ export class AuthController {
     @Body() resetPasswordDto: ResetPasswordDto,
   ) {
     await this.authService.resetPassword(token, resetPasswordDto.newPassword);
+    return { message: 'Password reset successfully' };
+  }
+  @Post('verify-reset-code')
+  @ApiOkResponse({ description: 'Reset code verified successfully' })
+  async verifyResetCode(@Body() verifyResetCodeDto: VerifyResetCodeDto) {
+    await this.authService.verifyResetCode(
+      verifyResetCodeDto.phoneNumber,
+      verifyResetCodeDto.code,
+    );
+    return { message: 'Reset code verified successfully' };
+  }
+  @Post('reset-password-phone')
+  @ApiOkResponse({ description: 'Password reset successfully' })
+  async resetPasswordWithPhone(@Body() body: { phoneNumber: string; newPassword: string }) {
+    await this.authService.resetPasswordWithPhone(body.phoneNumber, body.newPassword);
     return { message: 'Password reset successfully' };
   }
 
@@ -88,3 +104,4 @@ export class AuthController {
     };
   }
 }
+

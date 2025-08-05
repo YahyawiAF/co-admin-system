@@ -23,6 +23,8 @@ model User {
   phoneNumber        String?   @unique
   img                String?   @db.Text
   Journals           Journal[]
+  resetPasswordCode        String?
+  resetPasswordCodeExpires DateTime? @db.Timestamp(6)
   member             Member?   @relation("UserToMember")
 
   @@map("users")

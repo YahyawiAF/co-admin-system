@@ -152,7 +152,7 @@ const SignInPage: React.FC = () => {
                     href="/client/forget-password/"
                     style={{ color: "black", fontSize: "14px" }}
                   >
-                    Forgot password? Use email address
+                    Forgot password?
                   </Link>
                 </div>
 
