@@ -11,59 +11,64 @@ export class MessagesService {
     private pusherService: PusherService
   ) {}
 
+  async create(createMessageDto: CreateMessageDto) {
+    try {
+      console.log('Received DTO:', {
+        ...createMessageDto,
+        imageBase64: createMessageDto.imageBase64 ? '...' : null
+      });
 
-// src/messages/messages.service.ts
-async create(createMessageDto: CreateMessageDto) {
-  try {
-    console.log('Received DTO:', {
-      ...createMessageDto,
-      imageBase64: createMessageDto.imageBase64 ? '...' : null
-    });
+      if (!createMessageDto.senderId) {
+        throw new Error('senderId is required');
+      }
 
-    if (!createMessageDto.senderId) {
-      throw new Error('senderId is required');
-    }
-
-    // Créez le message dans la base de données avec l'image complète
-    const newMessage = await this.prisma.message.create({
-      data: {
-        content: createMessageDto.content || null,
-        imageUrl: createMessageDto.imageBase64 || null,
-        senderId: createMessageDto.senderId
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            fullname: true,
-            img: true
+      // Create the message in the database with the full image
+      const newMessage = await this.prisma.message.create({
+        data: {
+          content: createMessageDto.content || null,
+          imageUrl: createMessageDto.imageBase64 || null,
+          senderId: createMessageDto.senderId
+        },
+        include: {
+          sender: {
+            select: {
+              id: true,
+              fullname: true,
+              img: true // Include img temporarily for the database response
+            }
           }
         }
-      }
-    });
+      });
 
-    console.log('Message created:', {
-      ...newMessage,
-      imageUrl: newMessage.imageUrl ? '...' : null
-    });
+      console.log('Message created:', {
+        ...newMessage,
+        imageUrl: newMessage.imageUrl ? '...' : null
+      });
 
-    // Créez une version légère du message pour Pusher (sans l'image complète)
-    const pusherMessage = {
-      ...newMessage,
-      imageUrl: newMessage.imageUrl ? 'HAS_IMAGE' : null,
-      // Ajoutez un indicateur que le client doit récupérer l'image séparément
-      requiresImageFetch: !!newMessage.imageUrl
-    };
+      // Create a lightweight version of the message for Pusher
+      const pusherMessage = {
+        id: newMessage.id,
+        content: newMessage.content,
+        imageUrl: newMessage.imageUrl ? 'HAS_IMAGE' : null,
+        senderId: newMessage.senderId,
+        createdAt: newMessage.createdAt,
+        sender: {
+          id: newMessage.sender.id,
+          fullname: newMessage.sender.fullname
+          // Explicitly exclude sender.img to reduce payload size
+        },
+        requiresImageFetch: !!newMessage.imageUrl
+      };
 
-    // Envoyez la version légère via Pusher
-    await this.pusherService.trigger('chat', 'new-message', pusherMessage);
+      // Send the lightweight version via Pusher
+      await this.pusherService.trigger('chat', 'new-message', pusherMessage);
 
-    return newMessage;
-  } catch (error) {
-    console.error('Error in create message:', error);
-    throw error;
+      return newMessage;
+    } catch (error) {
+      console.error('Error in create message:', error);
+      throw error;
+    }
   }
-}
 
   async findAll() {
     return this.prisma.message.findMany({
