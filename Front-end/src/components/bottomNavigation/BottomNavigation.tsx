@@ -6,6 +6,7 @@ import FeedbackIcon from "@mui/icons-material/Feedback";
 import Paper from "@mui/material/Paper";
 import React, { useEffect, useState } from "react";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import ChatIcon from "@mui/icons-material/Chat";
 
 export default function FixedBottomNavigation() {
   const [value, setValue] = useState(0);
@@ -19,10 +20,13 @@ export default function FixedBottomNavigation() {
       setValue(1);
     } else if (path.includes("/client/claims")) {
       setValue(2);
-    } else if (path.includes("/client/account")) {
-      setValue(3);
-    } else {
-      setValue(-1); // No tab selected
+    }else if (path.includes("/client/messages")) {
+      setValue(3); // Settings icon will show as active for messages page
+    }
+     else if (path.includes("/client/account")) {
+      setValue(4); // Chat icon will show as active for account page
+    }  else {
+      setValue(-1);
     }
   }, []);
 
@@ -34,9 +38,14 @@ export default function FixedBottomNavigation() {
       window.location.href = "/client/snacks";
     } else if (newValue === 2) {
       window.location.href = "/client/claims";
-    } else if (newValue === 3) {
+    }else if (newValue === 3) {
+      // Settings icon clicked - goes to messages
+      window.location.href = "/client/messages";
+    } 
+    else if (newValue === 4) {
+      // Chat icon clicked - goes to account
       window.location.href = "/client/account";
-    }
+    } 
   };
 
   return (
@@ -48,6 +57,7 @@ export default function FixedBottomNavigation() {
         <BottomNavigationAction label="Booking" icon={<CalendarMonthIcon />} />
         <BottomNavigationAction label="Snacks" icon={<FastfoodIcon />} />
         <BottomNavigationAction label="Claims" icon={<FeedbackIcon />} />
+        <BottomNavigationAction label="Chat" icon={<ChatIcon />} />
         <BottomNavigationAction label="Settings" icon={<AccountCircleIcon />} />
       </BottomNavigation>
     </Paper>

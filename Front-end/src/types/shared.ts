@@ -302,6 +302,17 @@ export interface ResponseEntity {
   reclamationId: string;
 
 }
+export interface Message {
+  id: string;
+  content?: string;
+  imageUrl?: string;
+  createdAt: string;
+  sender: {
+    id: string;
+    fullname?: string;
+    img?: string;
+  };
+}
 
 export enum ExpenseType {
   MENSUEL = "MENSUEL",

@@ -119,29 +119,56 @@ const SignUpPage: React.FC = () => {
                     type="tel"
                     name="identifier"
                     id="identifier"
-                    placeholder=" phone number "
+                    placeholder="phone number"
                     value={formData.identifier}
                     onChange={(e) => {
                       const inputValue = e.target.value;
-                      const numericValue = inputValue.replace(/[^0-9]/g, "");
-                      if (inputValue !== numericValue) {
-                        alert(
-                          "Please enter only numbers for the phone number."
-                        );
+
+                      // Si l'utilisateur essaie de supprimer le +216, on l'empêche
+                      if (inputValue.length < 4) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          identifier: "+216",
+                        }));
+                        return;
                       }
+
+                      // On s'assure que le +216 est toujours présent
+                      if (!inputValue.startsWith("+216")) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          identifier: "+216",
+                        }));
+                        return;
+                      }
+
+                      // On garde seulement les chiffres après le +216
+                      const numericPart = inputValue
+                        .substring(4)
+                        .replace(/[^0-9]/g, "");
+
+                      // On limite à 8 chiffres maximum après le +216
+                      const limitedNumericPart = numericPart.slice(0, 8);
+
                       setFormData((prev) => ({
                         ...prev,
-                        identifier: numericValue,
+                        identifier: "+216" + limitedNumericPart,
                       }));
                     }}
+                    onFocus={(e) => {
+                      // Si le champ est vide, on met +216 par défaut
+                      if (!formData.identifier) {
+                        setFormData((prev) => ({
+                          ...prev,
+                          identifier: "+216",
+                        }));
+                      }
+                    }}
                     className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                      formData.identifier &&
-                      formData.identifier !==
-                        formData.identifier.replace(/[^0-9]/g, "")
+                      formData.identifier.length !== 12
                         ? "border-red-500"
                         : "border-gray-300"
                     }`}
-                    pattern="[0-9]*"
                     required
                   />
                 </div>

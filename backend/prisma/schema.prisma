@@ -26,6 +26,7 @@ model User {
   resetPasswordCode        String?
   resetPasswordCodeExpires DateTime? @db.Timestamp(6)
   member             Member?   @relation("UserToMember")
+  messages           Message[]
 
   @@map("users")
 }
@@ -220,6 +221,16 @@ model Response {
   reclamation   Reclamation @relation(fields: [reclamationId], references: [id])
 
   @@map("responses")
+}
+model Message {
+  id        String   @id @default(uuid())
+  content   String?  
+  imageUrl  String?  
+  senderId  String
+  createdAt DateTime @default(now())
+  sender    User     @relation(fields: [senderId], references: [id])
+
+  @@map("messages")
 }
 
 
