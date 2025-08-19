@@ -36,7 +36,7 @@ function NavbarUserDropdown() {
   // Nouvelle fonction pour rediriger vers /dashboard/facility
   const handleProfileClick = () => {
     closeMenu(); // Ferme le menu
-    router.push("/dashboard/facility"); // Redirige vers la page souhaitée
+    router.push("/dashboard/profil"); // Redirige vers la page souhaitée
   };
 
   const handleSignOut = async () => {
@@ -96,7 +96,7 @@ function NavbarUserDropdown() {
         open={Boolean(anchorMenu)}
         onClose={closeMenu}
       >
-        <MenuItem onClick={handleProfileClick}>Facility Profil</MenuItem>
+        <MenuItem onClick={handleProfileClick}> Profil</MenuItem>
         <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
       </Menu>
     </React.Fragment>
