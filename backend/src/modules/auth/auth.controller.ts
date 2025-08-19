@@ -79,8 +79,13 @@ export class AuthController {
   }
   @Post('reset-password-phone')
   @ApiOkResponse({ description: 'Password reset successfully' })
-  async resetPasswordWithPhone(@Body() body: { phoneNumber: string; newPassword: string }) {
-    await this.authService.resetPasswordWithPhone(body.phoneNumber, body.newPassword);
+  async resetPasswordWithPhone(
+    @Body() body: { phoneNumber: string; newPassword: string },
+  ) {
+    await this.authService.resetPasswordWithPhone(
+      body.phoneNumber,
+      body.newPassword,
+    );
     return { message: 'Password reset successfully' };
   }
 
@@ -104,4 +109,3 @@ export class AuthController {
     };
   }
 }
-

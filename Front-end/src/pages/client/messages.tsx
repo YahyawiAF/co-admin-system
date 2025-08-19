@@ -38,6 +38,7 @@ import { signOut } from "src/redux/authSlice";
 import { useLogoutMutation } from "src/api/auth.repo";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 import FixedBottomNavigation from "src/components/bottomNavigation/BottomNavigation";
+import { useSnackbar } from "notistack";
 
 interface Message {
   id: string;
@@ -71,18 +72,23 @@ const Chat = () => {
     severity: "success" as "success" | "error" | "info" | "warning",
   });
   const [loadedImages, setLoadedImages] = useState<Record<string, boolean>>({});
+  const { enqueueSnackbar } = useSnackbar();
 
   const router = useRouter();
   const dispatch = useDispatch();
   const [logout] = useLogoutMutation();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastMessageId = useRef<string | null>(null);
 
   const currentUserId = sessionStorage.getItem("userID");
 
   // Initialisation des messages
   useEffect(() => {
     setMessages(initialMessages);
+    if (initialMessages.length > 0) {
+      lastMessageId.current = initialMessages[initialMessages.length - 1].id;
+    }
   }, [initialMessages]);
 
   // Configuration Pusher
@@ -91,11 +97,34 @@ const Chat = () => {
     const channel = pusher.subscribe("chat");
 
     channel.bind("new-message", (newMsg: Message) => {
-      console.log('New message received:', newMsg);
-      setMessages((prev) => [...prev, {
-        ...newMsg,
-        imageBase64: newMsg.imageBase64 || newMsg.imageUrl
-      }]);
+      // Ne pas traiter le message si c'est le dernier message déjà affiché
+      if (newMsg.id === lastMessageId.current) return;
+
+      console.log("New message received:", newMsg);
+
+      // Mettre à jour le dernier ID de message
+      lastMessageId.current = newMsg.id;
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          ...newMsg,
+          imageBase64: newMsg.imageBase64 || newMsg.imageUrl,
+        },
+      ]);
+
+      // Seulement afficher la notification si le message ne vient pas de moi
+      if (newMsg.sender.id !== currentUserId) {
+        enqueueSnackbar(`New message from ${newMsg.sender.fullname || "Someone"}`, {
+          variant: "info",
+          anchorOrigin: {
+            vertical: "top",
+            horizontal: "right",
+          },
+          autoHideDuration: 5000,
+        });
+      }
+
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 100);
@@ -106,7 +135,7 @@ const Chat = () => {
       channel.unsubscribe();
       pusher.disconnect();
     };
-  }, []);
+  }, [currentUserId, enqueueSnackbar]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -196,74 +225,75 @@ const Chat = () => {
     }
   };
 
-   const handleSendMessage = async () => {
-  if (!newMessage.trim() && !imagePreview) return;
-  if (!currentUserId) {
-    setSnackbar({
-      open: true,
-      message: "User not authenticated",
-      severity: "error",
-    });
-    return;
-  }
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && !imagePreview) return;
+    if (!currentUserId) {
+      setSnackbar({
+        open: true,
+        message: "User not authenticated",
+        severity: "error",
+      });
+      return;
+    }
 
-  try {
-    setIsUploading(true);
-    
-    // Créez un objet séparé pour l'image
-    const messageData: any = {
-      content: newMessage.trim(),
-      senderId: currentUserId,
-    };
+    try {
+      setIsUploading(true);
 
-    // Si imagePreview existe, vérifiez sa taille
-    if (imagePreview) {
-      if (imagePreview.length > 1000000) { // ~1MB
-        setSnackbar({
-          open: true,
-          message: "Image is too large. Please use a smaller image.",
-          severity: "warning",
-        });
-        return;
+      const messageData: any = {
+        content: newMessage.trim(),
+        senderId: currentUserId,
+      };
+
+      if (imagePreview) {
+        if (imagePreview.length > 1000000) {
+          setSnackbar({
+            open: true,
+            message: "Image is too large. Please use a smaller image.",
+            severity: "warning",
+          });
+          return;
+        }
+        messageData.imageBase64 = imagePreview;
       }
-      messageData.imageBase64 = imagePreview;
+
+      console.log("Sending message data:", {
+        ...messageData,
+        imageBase64: messageData.imageBase64 ? "..." : null,
+      });
+
+      const response = await sendMessage(messageData).unwrap();
+      console.log("Message sent response:", response);
+
+      // Stocker l'ID du message envoyé pour éviter la notification
+      lastMessageId.current = response.id;
+
+      setNewMessage("");
+      setImagePreview(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+
+      setSnackbar({
+        open: true,
+        message: "Message sent successfully",
+        severity: "success",
+      });
+    } catch (error: any) {
+      console.error("Failed to send message:", error);
+      let errorMessage = "Failed to send message";
+      if (error.data?.message) {
+        errorMessage = error.data.message;
+      } else if (error.error) {
+        errorMessage = error.error;
+      }
+
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: "error",
+      });
+    } finally {
+      setIsUploading(false);
     }
-
-    console.log('Sending message data:', {
-      ...messageData,
-      imageBase64: messageData.imageBase64 ? '...' : null
-    });
-
-    const response = await sendMessage(messageData).unwrap();
-    console.log('Message sent response:', response);
-
-    setNewMessage("");
-    setImagePreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
-    setSnackbar({
-      open: true,
-      message: "Message sent successfully",
-      severity: "success",
-    });
-  } catch (error: any) {
-    console.error("Failed to send message:", error);
-    let errorMessage = "Failed to send message";
-    if (error.data?.message) {
-      errorMessage = error.data.message;
-    } else if (error.error) {
-      errorMessage = error.error;
-    }
-    
-    setSnackbar({
-      open: true,
-      message: errorMessage,
-      severity: "error",
-    });
-  } finally {
-    setIsUploading(false);
-  }
-};
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) handleImageUpload(e);
