@@ -1,27 +1,15 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
-import axios, { AxiosInstance, AxiosError } from 'axios';
 import { BookingResponse } from './dtos/BookingResponseDto';
 import { BookSeatsDto } from './dtos/books.dtos';
 
 @Injectable()
 export class ProxyService {
   private readonly logger = new Logger(ProxyService.name);
-  private readonly axiosInstance: AxiosInstance;
+  private readonly useSeatsio = process.env.USE_SEATSIO === 'true';
 
-  constructor(private readonly prisma: PrismaService) {
-    this.axiosInstance = axios.create({
-      baseURL: 'https://api-sa.seatsio.net',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization:
-          'Basic ' +
-          Buffer.from(`${process.env.SEATSIO_SECRET_KEY}:`).toString('base64'),
-      },
-      timeout: 5000,
-    });
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   async bookSeats(data: BookSeatsDto): Promise<BookingResponse[]> {
     try {
@@ -40,15 +28,12 @@ export class ProxyService {
 
       // 3. Tout est OK, procéder à la réservation
       return await this.prisma.$transaction(async (prisma) => {
-        // 3a. Réserver dans Seatsio
-        const seatsioResponse = await this.bookSeatsInSeatsio(data);
+        // 3a. Enregistrer en base de données (remplace Seats.io)
+        const savedBookings = await this.saveBookingToDatabase(data, prisma);
 
-        // 3b. Enregistrer en base de données
-        await this.saveBookingToDatabase(data, prisma);
-
-        // Map Seatsio response to BookingResponse
-        return data.seats.map((seatId, index) => ({
-          ...seatsioResponse[index],
+        // 3b. Retourner la réponse formatée
+        return savedBookings.map(booking => ({
+          ...booking,
           success: true,
         }));
       });
@@ -89,18 +74,7 @@ export class ProxyService {
           await this.checkSeatsAvailability(data.eventKey, data.seats);
         }
 
-        // 4. Mettre à jour dans Seatsio si nécessaire
-        let seatsioResponse: BookingResponse[] | null = null;
-        if (data.seats || data.eventKey) {
-          seatsioResponse = await this.bookSeatsInSeatsio({
-            ...data,
-            seats: data.seats || existingBooking.seatId.split(','),
-            eventKey: data.eventKey || existingBooking.eventKey,
-            memberId: data.memberId || existingBooking.memberId,
-          } as BookSeatsDto);
-        }
-
-        // 5. Mettre à jour en base de données
+        // 4. Mettre à jour en base de données
         const updatedBooking = await prisma.seatBooking.update({
           where: { id: bookingId },
           data: {
@@ -134,15 +108,7 @@ export class ProxyService {
           throw new NotFoundException('Booking not found');
         }
 
-        // 2. Libérer les sièges dans Seatsio
-        await this.axiosInstance.post(
-          `/events/${booking.eventKey}/actions/release`,
-          {
-            objects: booking.seatId.split(','),
-          },
-        );
-
-        // 3. Supprimer la réservation en base
+        // 2. Supprimer la réservation en base (plus de libération Seats.io)
         await prisma.seatBooking.delete({
           where: { id: bookingId },
         });
@@ -191,32 +157,6 @@ export class ProxyService {
     }
   }
 
-  private async bookSeatsInSeatsio(
-    data: BookSeatsDto,
-  ): Promise<BookingResponse[]> {
-    const url = `/events/${data.eventKey}/actions/book`;
-    const payload = {
-      objects: data.seats,
-      orderId: `order-${Date.now()}`,
-    };
-
-    this.logger.debug(`Calling Seatsio: ${url}`, payload);
-
-    await this.axiosInstance.post(url, payload);
-
-    return data.seats.map((seatId) => ({
-      id: '', // Will be set in saveBookingToDatabase
-      eventKey: data.eventKey,
-      seatId,
-      memberId: data.memberId,
-      isBooked: true,
-      bookedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      success: true,
-    }));
-  }
-
   private async checkSeatsAvailability(
     eventKey: string,
     seats: string[],
@@ -239,9 +179,9 @@ export class ProxyService {
   private async saveBookingToDatabase(
     data: BookSeatsDto,
     prisma: Prisma.TransactionClient,
-  ): Promise<void> {
+  ): Promise<any[]> {
     try {
-      await Promise.all(
+      const bookings = await Promise.all(
         data.seats.map((seatId) =>
           prisma.seatBooking.create({
             data: {
@@ -254,7 +194,9 @@ export class ProxyService {
           }),
         ),
       );
+      
       this.logger.log(`Booking saved for member ${data.memberId}`);
+      return bookings;
     } catch (dbError) {
       this.logger.error('Database error', dbError.stack);
       throw new Error('Failed to save booking');

@@ -43,7 +43,7 @@ function DefaultContent() {
       <Grid justifyContent="space-between" container spacing={6}>
         <Grid item>
           <Typography variant="h3">
-            {t("Welcome back")}, Nick! {t("We've missed you")}.{" "}
+            {t("Welcome back")}.{" "}
           </Typography>
         </Grid>
       </Grid>

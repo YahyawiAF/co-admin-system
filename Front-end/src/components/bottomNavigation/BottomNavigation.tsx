@@ -15,7 +15,15 @@ export default function FixedBottomNavigation() {
   const { enqueueSnackbar } = useSnackbar();
   const [value, setValue] = useState(-1);
   const [unreadCount, setUnreadCount] = useState(0);
-  const currentUserId = sessionStorage.getItem("userID");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null); // Initialize as null
+
+  // Access sessionStorage only in the browser
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const userId = sessionStorage.getItem("userID");
+      setCurrentUserId(userId);
+    }
+  }, []);
 
   // Update `value` based on the current path
   useEffect(() => {
