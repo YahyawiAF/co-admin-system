@@ -1,6 +1,6 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
-import { Prisma, Response } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
@@ -21,7 +21,7 @@ export class ResponseService {
     try {
       const response = await this.prisma.response.create({
         data: createResponseDto,
-        include: {  reclamation: true },
+        include: { reclamation: true },
       });
       return new ResponseEntity(response);
     } catch (error) {
@@ -39,7 +39,7 @@ export class ResponseService {
    */
   async findAll(): Promise<ResponseEntity[]> {
     const responses = await this.prisma.response.findMany({
-      include: {  reclamation: true },
+      include: { reclamation: true },
     });
     return responses.map((response) => new ResponseEntity(response));
   }
@@ -74,7 +74,9 @@ export class ResponseService {
       { page },
     );
     return {
-      data: paginatedResult.data.map((response) => new ResponseEntity(response)),
+      data: paginatedResult.data.map(
+        (response) => new ResponseEntity(response),
+      ),
       meta: paginatedResult.meta,
     };
   }
@@ -113,7 +115,10 @@ export class ResponseService {
    * @param updateResponseDto - Data to update the response.
    * @returns The updated response.
    */
-  async update(id: string, updateResponseDto: UpdateResponseDto): Promise<ResponseEntity> {
+  async update(
+    id: string,
+    updateResponseDto: UpdateResponseDto,
+  ): Promise<ResponseEntity> {
     try {
       const response = await this.prisma.response.update({
         where: { id },
@@ -148,11 +153,12 @@ export class ResponseService {
       throw new GeneralException(
         HttpStatus.NOT_FOUND,
         ErrorCode.NOT_FOUND,
-        `Failed to fetch responses for reclamation ID ${reclamationId}: ${(error as Error).message}`,
+        `Failed to fetch responses for reclamation ID ${reclamationId}: ${
+          (error as Error).message
+        }`,
       );
     }
   }
-
 
   /**
    * Delete a response by ID.
@@ -163,7 +169,7 @@ export class ResponseService {
     try {
       const response = await this.prisma.response.delete({
         where: { id },
-        include: {  reclamation: true },
+        include: { reclamation: true },
       });
       return new ResponseEntity(response);
     } catch (error) {

@@ -440,12 +440,25 @@ const useCachedPricesQuery = () => {
   };
 };
 
+const abonnementSearchOptions = {
+  keys: [
+    "member.firstName",
+    "member.lastName",
+    "price.name",
+    "id",
+    "stayedPeriode",
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 2,
+};
+
 const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
   const theme = useTheme();
   const [timeFilter, setTimeFilter] = useState<"week" | "month" | "all">("all");
   const [statusFilter, setStatusFilter] = useState<
     "active" | "expired" | "all"
-  >("all");
+  >("active");
   const [search, setSearch] = useState("");
   const [order, setOrder] = useState<"asc" | "desc">("asc");
   const [orderBy, setOrderBy] = useState<string>("registredDate");
@@ -466,25 +479,13 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
     minMatchCharLength: 2,
   };
 
-  const abonnementSearchOptions = {
-    keys: [
-      "member.firstName",
-      "member.lastName",
-      "price.name",
-      "id",
-      "stayedPeriode",
-    ],
-    threshold: 0.4,
-    includeScore: true,
-    minMatchCharLength: 2,
-  };
-
   const {
     data: abonnementsData,
     isLoading,
     isError,
     refetch,
   } = useCachedAbonnementsQuery({});
+
   const { data: members = [] } = useCachedMembersQuery();
   const { data: prices = [] } = useCachedPricesQuery();
   const abonnementPrices = prices.filter(
@@ -1456,7 +1457,7 @@ const AbonnementComponent = ({ selectedDate }: AbonnementProps) => {
                                   price: undefined,
                                 };
                                 setEditAbonnement(abonnementToEdit);
-                                setShowDrawer(true); 
+                                setShowDrawer(true);
                               }}
                               size={isMobile ? "small" : "medium"}
                             >

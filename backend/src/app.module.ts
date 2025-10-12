@@ -19,8 +19,6 @@ import { SecurityMiddleware } from 'common/guards/securityMiddlewera';
 import { ExpensesModule } from './modules/expense/expense.module';
 import { ProductsModule } from './modules/product/product.module';
 import { FacilityModule } from './modules/facility/facility.module';
-import { BookingController } from './proxy/booking.controller';
-import { ProxyService } from './proxy/proxy.service';
 import { BookingModule } from './proxy/book.module';
 import { ProxyModule } from './proxy/proxy.module';
 import { ReclamationModule } from './modules/reclamation/recl.module';
@@ -31,7 +29,6 @@ import { MessagesModule } from './modules/messages/messages.module';
 
 @Module({
   imports: [
-    
     ScheduleModule.forRoot(),
     ConfigModule.forRoot(), // Charge les variables d'environnement
     EventEmitterModule.forRoot(),
@@ -76,7 +73,7 @@ import { MessagesModule } from './modules/messages/messages.module';
     ProxyModule,
     StatisticsModule,
     PusherModule,
-    MessagesModule
+    MessagesModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

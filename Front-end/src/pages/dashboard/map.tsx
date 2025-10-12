@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   Box,
   Paper,
@@ -550,7 +550,8 @@ const applyBookingFilters = (
   searchTerm: string,
   selectedDate: Date
 ): BookingWithMember[] => {
-  const filteredBookings = bookings.filter((booking) => {
+  console.log("bookings", bookings, selectedDate);
+  const filteredBookingsRes = bookings.filter((booking) => {
     return booking.subscriptionTypes.some((sub) => {
       if (sub.type === "Journal" && sub.journal?.registredTime) {
         const journalDate = new Date(sub.journal.registredTime);
@@ -573,10 +574,10 @@ const applyBookingFilters = (
   });
 
   if (!searchTerm || searchTerm.length < 2) {
-    return filteredBookings;
+    return filteredBookingsRes;
   }
 
-  const fuse = new Fuse(filteredBookings, bookingSearchOptions);
+  const fuse = new Fuse(filteredBookingsRes, bookingSearchOptions);
   const results = fuse.search(searchTerm);
   return results.map((result) => result.item);
 };
@@ -623,90 +624,95 @@ const SeatingChart: NextPage<SeatingChartProps> & {
   const { data: abonnements = { data: [] }, refetch: refetchAbonnements } =
     useGetAbonnementsQuery({});
 
-  useEffect(() => {
-    fetchBookings();
-    const interval = setInterval(checkExpiredBookings, 60000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    fetchBookings();
-    refetchJournals();
-  }, [selectedDate]);
-
-  useEffect(() => {
-    if (selectedSpace) {
-      const fetchBookings = async () => {
-        try {
-          const bookings = await bookingService.getAllBookings();
-          const updatedSpaces = JSON.parse(JSON.stringify(initialSpaces));
-          bookings.forEach((booking: BookingResponse) => {
-            const match = booking.seatId.match(/(\d+)-(\d+)/);
-            if (match) {
-              const tableId = parseInt(match[1], 10);
-              const chairId = parseInt(match[2], 10);
-              Object.values(updatedSpaces).forEach((space: any) => {
-                const table = space.tables.find((t: any) => t.id === tableId);
-                if (table) {
-                  const chair = table.chairs.find((c: any) => c.id === chairId);
-                  if (chair) chair.isAvailable = false;
-                }
-              });
-            }
-          });
-          setSpaces(updatedSpaces);
-          const totalSeats = Object.values(updatedSpaces).reduce(
-            (acc: number, space: any) => {
-              return (
-                acc +
-                space.tables.reduce(
-                  (tableAcc: number, table: any) =>
-                    tableAcc + table.chairs.length,
-                  0
-                )
-              );
-            },
-            0
+  const enrichBookingsWithMemberData = useCallback(
+    async (bookingsData: BookingResponse[]): Promise<BookingWithMember[]> => {
+      return Promise.all(
+        bookingsData.map(async (booking) => {
+          const member = members.find((m) => m.id === booking.memberId);
+          const journal = journals.data.find(
+            (j) =>
+              j.memberID === booking.memberId &&
+              j.registredTime &&
+              (!j.leaveTime || new Date(j.leaveTime) > new Date()) &&
+              new Date(j.registredTime).toDateString() ===
+                selectedDate.toDateString()
           );
-          setBookedSeats(bookings.length);
-          setAvailableSeats(totalSeats - bookings.length);
-        } catch (error) {
-          console.error("Failed to fetch bookings:", error);
-          setBookingError(
-            "Failed to load seat availability. Please try again."
+          const abonnement = abonnements.data.find(
+            (a) =>
+              a.memberID === booking.memberId &&
+              a.registredDate &&
+              (!a.leaveDate || new Date(a.leaveDate) > new Date())
           );
-        }
-      };
-      fetchBookings();
-    }
-  }, [selectedSpace]);
+          const subscriptionTypes = [];
+          if (journal) {
+            subscriptionTypes.push({ type: "Journal", journal });
+          }
+          if (abonnement) {
+            subscriptionTypes.push({ type: "Membership", abonnement });
+          }
+          return {
+            ...booking,
+            member,
+            journal,
+            abonnement,
+            fullName: member
+              ? `${member.firstName} ${member.lastName}`
+              : "Unknown",
+            subscriptionTypes,
+          };
+        })
+      );
+    },
+    [members, journals.data, abonnements.data, selectedDate]
+  );
+  const fetchBookingsWhenChangeSpace = useCallback(
+    async (allBookings: Array<any>) => {
+      try {
+        const updatedSpaces = JSON.parse(JSON.stringify(initialSpaces));
+        allBookings.forEach((booking: BookingResponse) => {
+          const match = booking.seatId.match(/(\d+)-(\d+)/);
+          if (match) {
+            const tableId = parseInt(match[1], 10);
+            const chairId = parseInt(match[2], 10);
+            Object.values(updatedSpaces).forEach((space: any) => {
+              const table = space.tables.find((t: any) => t.id === tableId);
+              if (table) {
+                const chair = table.chairs.find((c: any) => c.id === chairId);
+                if (chair) chair.isAvailable = false;
+              }
+            });
+          }
+        });
+        setSpaces(updatedSpaces);
+        const totalSeats = Object.values(updatedSpaces).reduce(
+          (acc: number, space: any) => {
+            return (
+              acc +
+              space.tables.reduce(
+                (tableAcc: number, table: any) =>
+                  tableAcc + table.chairs.length,
+                0
+              )
+            );
+          },
+          0
+        );
+        setBookedSeats(allBookings.length);
+        setAvailableSeats(totalSeats - allBookings.length);
+      } catch (error) {
+        console.error("Failed to fetch bookings:", error);
+        setBookingError("Failed to load seat availability. Please try again.");
+      }
+    },
+    []
+  );
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
     try {
       setIsLoading(true);
       const bookingsData = await bookingService.getAllBookings();
+      fetchBookingsWhenChangeSpace(bookingsData);
       const enrichedBookings = await enrichBookingsWithMemberData(bookingsData);
-      const filteredBookings = enrichedBookings.filter((booking) =>
-        booking.subscriptionTypes.some((sub) => {
-          if (sub.type === "Journal" && sub.journal?.registredTime) {
-            const journalDate = new Date(sub.journal.registredTime);
-            return (
-              journalDate.getFullYear() === selectedDate.getFullYear() &&
-              journalDate.getMonth() === selectedDate.getMonth() &&
-              journalDate.getDate() === selectedDate.getDate() &&
-              (!sub.journal.leaveTime ||
-                new Date(sub.journal.leaveTime) > new Date())
-            );
-          }
-          if (sub.type === "Membership" && sub.abonnement?.registredDate) {
-            return (
-              !sub.abonnement.leaveDate ||
-              new Date(sub.abonnement.leaveDate) > new Date()
-            );
-          }
-          return false;
-        })
-      );
       setBookings(enrichedBookings);
       const totalSeats = Object.values(initialSpaces).reduce(
         (acc: number, space: any) => {
@@ -720,57 +726,35 @@ const SeatingChart: NextPage<SeatingChartProps> & {
         },
         0
       );
-      setBookedSeats(filteredBookings.length);
-      setAvailableSeats(totalSeats - filteredBookings.length);
+      // Calculate stats based on all bookings, not filtered ones
+      setBookedSeats(enrichedBookings.length);
+      setAvailableSeats(totalSeats - enrichedBookings.length);
     } catch (error: any) {
       setBookingError(error.message);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [enrichBookingsWithMemberData, fetchBookingsWhenChangeSpace]);
 
-  const enrichBookingsWithMemberData = async (
-    bookingsData: BookingResponse[]
-  ): Promise<BookingWithMember[]> => {
-    return Promise.all(
-      bookingsData.map(async (booking) => {
-        const member = members.find((m) => m.id === booking.memberId);
-        const journal = journals.data.find(
-          (j) =>
-            j.memberID === booking.memberId &&
-            j.registredTime &&
-            (!j.leaveTime || new Date(j.leaveTime) > new Date()) &&
-            new Date(j.registredTime).toDateString() ===
-              selectedDate.toDateString()
-        );
-        const abonnement = abonnements.data.find(
-          (a) =>
-            a.memberID === booking.memberId &&
-            a.registredDate &&
-            (!a.leaveDate || new Date(a.leaveDate) > new Date())
-        );
-        const subscriptionTypes = [];
-        if (journal) {
-          subscriptionTypes.push({ type: "Journal", journal });
-        }
-        if (abonnement) {
-          subscriptionTypes.push({ type: "Membership", abonnement });
-        }
-        return {
-          ...booking,
-          member,
-          journal,
-          abonnement,
-          fullName: member
-            ? `${member.firstName} ${member.lastName}`
-            : "Unknown",
-          subscriptionTypes,
-        };
-      })
-    );
-  };
+  useEffect(() => {
+    // Only fetch bookings when we have the required data
+    if (
+      members.length > 0 ||
+      journals.data.length > 0 ||
+      abonnements.data.length > 0
+    ) {
+      fetchBookings();
+    }
+    refetchJournals();
+  }, [
+    fetchBookings,
+    refetchJournals,
+    members,
+    journals.data,
+    abonnements.data,
+  ]);
 
-  const checkExpiredBookings = async () => {
+  const checkExpiredBookings = useCallback(async () => {
     const now = new Date();
     for (const booking of bookings) {
       for (const sub of booking.subscriptionTypes) {
@@ -791,7 +775,14 @@ const SeatingChart: NextPage<SeatingChartProps> & {
       }
     }
     await fetchBookings();
-  };
+  }, [bookings, fetchBookings]);
+
+  useEffect(() => {
+    const interval = setInterval(checkExpiredBookings, 60000);
+    return () => clearInterval(interval);
+  }, [checkExpiredBookings]);
+
+  console.log("isLoading", isLoading);
 
   const calculateRemainingTime = (subscription: {
     type: string;
@@ -866,9 +857,10 @@ const SeatingChart: NextPage<SeatingChartProps> & {
       }
       setShowModal(true);
     },
-    [bookings]
+    [bookings, enrichBookingsWithMemberData]
   );
 
+  //Set booking member from this function
   const handleBookSeat = async () => {
     if (!currentSeat || !memberId) return;
 
@@ -885,10 +877,11 @@ const SeatingChart: NextPage<SeatingChartProps> & {
       if (modalMode === "update" && selectedBooking) {
         if (!selectedBooking.id) throw new Error("Invalid booking ID");
         await bookingService.deleteBooking(selectedBooking.id);
-        await bookingService.createBooking(payload);
+        const data = await bookingService.createBooking(payload);
+
         setBookingSuccess("Booking updated successfully!");
       } else {
-        await bookingService.createBooking(payload);
+        const data = await bookingService.createBooking(payload);
         setBookingSuccess("Booking created successfully!");
       }
 
@@ -963,11 +956,15 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     selectedDate
   );
 
-  const filteredBookings = applyBookingFilters(
-    bookings,
-    tableSearchTerm,
-    selectedDate
+  const filteredBookings = useMemo(
+    () => applyBookingFilters(bookings, tableSearchTerm, selectedDate),
+    [bookings, tableSearchTerm, selectedDate]
   );
+  console.log("filteredBookings", filteredBookings);
+  console.log("bookings", bookings);
+  console.log("members", members);
+  console.log("journals.data", journals.data);
+  console.log("abonnements.data", abonnements.data);
 
   const handleRefresh = async () => {
     await Promise.all([

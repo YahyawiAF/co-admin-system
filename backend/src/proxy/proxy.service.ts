@@ -32,7 +32,7 @@ export class ProxyService {
         const savedBookings = await this.saveBookingToDatabase(data, prisma);
 
         // 3b. Retourner la réponse formatée
-        return savedBookings.map(booking => ({
+        return savedBookings.map((booking) => ({
           ...booking,
           success: true,
         }));
@@ -194,7 +194,7 @@ export class ProxyService {
           }),
         ),
       );
-      
+
       this.logger.log(`Booking saved for member ${data.memberId}`);
       return bookings;
     } catch (dbError) {
