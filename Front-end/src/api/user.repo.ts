@@ -20,7 +20,8 @@ export const userServices = createApi({
       query: () => `users`,
       providesTags: ["users"],
     }),
-    getUserById: builder.query<User, string>({ // New endpoint
+    getUserById: builder.query<User, string>({
+      // New endpoint
       query: (id) => `users/${id}`,
       providesTags: ["users"],
     }),
@@ -51,6 +52,30 @@ export const userServices = createApi({
       }),
       invalidatesTags: ["users"],
     }),
+    updateUserRole: builder.mutation<User, { id: string; role: string }>({
+      query: ({ id, role }) => ({
+        url: `users/${id}/role`,
+        method: "PATCH",
+        body: { role },
+      }),
+      invalidatesTags: ["users"],
+    }),
+    getUsersByRole: builder.query<User[], string>({
+      query: (role) => `users/role/${role}`,
+      providesTags: ["users"],
+    }),
+    inviteUser: builder.mutation<User, { id: string; role: string }>({
+      query: ({ id, role }) => ({
+        url: `users/${id}/invite`,
+        method: "POST",
+        body: { role },
+      }),
+      invalidatesTags: ["users"],
+    }),
+    getAvailableRoles: builder.query<string[], void>({
+      query: () => "users/roles/available",
+      providesTags: ["users"],
+    }),
   }),
 });
 
@@ -58,5 +83,10 @@ export const {
   useCreateUserMutation,
   useUpdateUserMutation,
   useChangePasswordMutation,
-  useGetUserByIdQuery, 
+  useGetUserByIdQuery,
+  useUpdateUserRoleMutation,
+  useGetUsersByRoleQuery,
+  useInviteUserMutation,
+  useGetAvailableRolesQuery,
+  useGetUsersQuery,
 } = userServices;

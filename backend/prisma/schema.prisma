@@ -8,54 +8,56 @@ datasource db {
 }
 
 model User {
-  id                 String    @id @default(uuid())
-  isActive           Boolean   @default(false)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt          DateTime? @db.Timestamp(6)
-  email              String?   @unique @db.VarChar(256)
-  fullname           String?   @db.VarChar(256)
-  password           String?
-  refreshToken       String?
-  role               Role      @default(USER)
-  resetPasswordToken String?
-  accessToken        String?
-  phoneNumber        String?   @unique
-  img                String?   @db.Text
-  Journals           Journal[]
+  id                       String           @id @default(uuid())
+  isActive                 Boolean          @default(false)
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt @db.Timestamp(6)
+  deletedAt                DateTime?        @db.Timestamp(6)
+  email                    String?          @unique @db.VarChar(256)
+  fullname                 String?          @db.VarChar(256)
+  password                 String?
+  refreshToken             String?
+  role                     Role             @default(MEMBER)
+  resetPasswordToken       String?
+  accessToken              String?
+  phoneNumber              String?          @unique
+  img                      String?          @db.Text
+  Journals                 Journal[]
   resetPasswordCode        String?
-  resetPasswordCodeExpires DateTime? @db.Timestamp(6)
-  member             Member?   @relation("UserToMember")
-  messages           Message[]
+  resetPasswordCodeExpires DateTime?        @db.Timestamp(6)
+  member                   Member?          @relation("UserToMember")
+  messages                 Message[]
+  rolePermissions          RolePermission[]
 
   @@map("users")
 }
 
 model Member {
-  id            String        @id @default(uuid())
-  email         String?       @unique @db.VarChar(256)
-  firstName     String?       @db.VarChar(56)
-  lastName      String?       @db.VarChar(56)
+  id            String         @id @default(uuid())
+  email         String?        @unique @db.VarChar(256)
+  firstName     String?        @db.VarChar(56)
+  lastName      String?        @db.VarChar(56)
   bio           String?
-  credits       Float         @default(0)
-  plan          Subscription? @default(Journal)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt @db.Timestamp(6)
-  deletedAt     DateTime?     @db.Timestamp(6)
-  isActive      Boolean       @default(false)
+  credits       Float          @default(0)
+  plan          Subscription?  @default(Journal)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt @db.Timestamp(6)
+  deletedAt     DateTime?      @db.Timestamp(6)
+  isActive      Boolean        @default(false)
   functionality String?
-  phone         String?       @unique
-  userId        String?       @unique
-  user          User?         @relation("UserToMember", fields: [userId], references: [id])
+  phone         String?        @unique
+  userId        String?        @unique
+  user          User?          @relation("UserToMember", fields: [userId], references: [id])
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
   seatBookings  SeatBooking[]
-  Reclamations  Reclamation[] @relation("MemberReclamations")
+  Reclamations  Reclamation[]  @relation("MemberReclamations")
   dailyProducts DailyProduct[] @relation("MemberToDailyProduct")
 
   @@map("members")
 }
+
 model Price {
   id          String       @id @default(uuid())
   name        String
@@ -122,18 +124,20 @@ model Reservation {
 }
 
 model Product {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   name          String
   description   String?
-  purchasePrice Float    @map("prix_achat")
-  sellingPrice  Float    @map("prix_vente")
+  purchasePrice Float          @map("prix_achat")
+  sellingPrice  Float          @map("prix_vente")
   stock         Int
   img           String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   dailyProducts DailyProduct[]
+
   @@map("products")
 }
+
 model DailyProduct {
   id        String    @id @default(uuid())
   productId String
@@ -142,8 +146,8 @@ model DailyProduct {
   quantite  Int
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  memberId  String?   
-  member    Member?   @relation("MemberToDailyProduct", fields: [memberId], references: [id]) 
+  memberId  String?
+  member    Member?   @relation("MemberToDailyProduct", fields: [memberId], references: [id])
 }
 
 model Expense {
@@ -170,69 +174,71 @@ model DailyExpense {
 }
 
 model Facility {
-  id             String         @id @default(uuid())
+  id             String   @id @default(uuid())
   name           String
   numtel         String
   email          String
   adresse        String
   logo           String?
-  nbrPlaces      Int            @map("nbr_places")
-  socialNetworks Json           @map("social_networks") 
-  places         Json           @map("places")         
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  nbrPlaces      Int      @map("nbr_places")
+  socialNetworks Json     @map("social_networks")
+  places         Json     @map("places")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-@@map("facilities")
+  @@map("facilities")
 }
+
 model SeatBooking {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   eventKey  String
   seatId    String
-  isBooked  Boolean  @default(false)
+  isBooked  Boolean   @default(false)
   bookedAt  DateTime?
   memberId  String?
-  member    Member?  @relation(fields: [memberId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  member    Member?   @relation(fields: [memberId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([eventKey, seatId])
   @@map("seat_bookings")
 }
+
 model Reclamation {
-  id          String     @id @default(uuid())
-  title       String     @db.VarChar(256)
-  description String     @db.Text
+  id          String            @id @default(uuid())
+  title       String            @db.VarChar(256)
+  description String            @db.Text
   status      ReclamationStatus @default(PENDING)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt @db.Timestamp(6)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt @db.Timestamp(6)
   memberId    String
-  member      Member     @relation("MemberReclamations", fields: [memberId], references: [id])
+  member      Member            @relation("MemberReclamations", fields: [memberId], references: [id])
   responses   Response[]
 
   @@map("reclamations")
 }
 
 model Response {
-  id            String     @id @default(uuid())
-  content       String     @db.Text
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt @db.Timestamp(6)
+  id            String      @id @default(uuid())
+  content       String      @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt @db.Timestamp(6)
   reclamationId String
   reclamation   Reclamation @relation(fields: [reclamationId], references: [id])
 
   @@map("responses")
 }
+
 model Message {
   id        String   @id @default(uuid())
-  content   String?  
-  imageUrl  String?  
+  content   String?
+  imageUrl  String?
   senderId  String
   createdAt DateTime @default(now())
   sender    User     @relation(fields: [senderId], references: [id])
 
   @@map("messages")
 }
-
 
 enum ExpenseType {
   MENSUEL
@@ -245,16 +251,48 @@ enum PriceType {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   USER
+  MANAGER
+  STAFF
+  MEMBER
 }
 
 enum Subscription {
   Journal
   Membership
 }
+
 enum ReclamationStatus {
   PENDING
   IN_PROGRESS
   RESOLVED
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  name            String           @unique
+  description     String?
+  resource        String // e.g., 'users', 'members', 'abonnements'
+  action          String // e.g., 'create', 'read', 'update', 'delete'
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  userId       String?
+  user         User?      @relation(fields: [userId], references: [id])
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([role, permissionId, userId])
+  @@map("role_permissions")
 }

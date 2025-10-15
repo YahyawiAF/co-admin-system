@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
-
-type Role = "USER" | "ADMIN";
+import { Role } from "src/types/shared";
 
 interface RoleProtectedRouteProps {
   children: React.ReactNode;
@@ -17,13 +16,13 @@ const RoleProtectedRoute = ({
 
   useEffect(() => {
     const token = sessionStorage.getItem("accessToken");
-    const userRole = (sessionStorage.getItem("Role") as Role) || "USER";
+    const userRole = (sessionStorage.getItem("Role") as Role) || Role.MEMBER;
     const pathname = router.pathname;
 
     const validRoles = Array.isArray(allowedRoles) ? allowedRoles : [];
 
     if (!token) {
-      const loginPath = validRoles.includes("ADMIN")
+      const loginPath = validRoles.includes(Role.ADMIN) || validRoles.includes(Role.SUPER_ADMIN)
         ? "/auth/sign-in"
         : "/client/login";
       router.replace(loginPath);
@@ -31,13 +30,13 @@ const RoleProtectedRoute = ({
     }
 
     // Logique de redirection spécifique
-    if (userRole === "ADMIN" && pathname.startsWith("/client")) {
+    if ((userRole === Role.ADMIN || userRole === Role.SUPER_ADMIN) && pathname.startsWith("/client")) {
       router.replace("/");
       return;
     }
 
     if (
-      userRole === "USER" &&
+      userRole === Role.MEMBER &&
       (pathname.startsWith("/auth") || pathname.startsWith("/dashboard"))
     ) {
       router.replace("/client/account");

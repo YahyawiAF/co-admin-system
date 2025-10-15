@@ -26,6 +26,7 @@ import { ResponseModule } from './modules/reponse/rep.module';
 import { StatisticsModule } from './modules/statistics/StatisticsModule';
 import { PusherModule } from './modules/pusher/pusher.module';
 import { MessagesModule } from './modules/messages/messages.module';
+import { PermissionsModule } from './modules/permissions/permissions.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { MessagesModule } from './modules/messages/messages.module';
     StatisticsModule,
     PusherModule,
     MessagesModule,
+    PermissionsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

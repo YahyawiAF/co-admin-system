@@ -88,22 +88,22 @@ export class UsersController {
     return new UserEntity(await this.usersService.findOne(id));
   }
   @Patch('change-password')
-@UseGuards(JwtAuthGuard)
-@Roles([Role.ADMIN, Role.USER])
-@ApiBearerAuth()
-@ApiOkResponse({ type: UserEntity })
-async changePassword(
-  @Req() req,
-  @Body() changePasswordDto: ChangePasswordDto
-) {
-  const userId = req.user.userId; // Accéder à userId depuis le payload JWT
-  const updatedUser = await this.usersService.changePassword(
-    userId,
-    changePasswordDto.oldPassword,
-    changePasswordDto.newPassword
-  );
-  return new UserEntity(updatedUser);
-}
+  @UseGuards(JwtAuthGuard)
+  @Roles([Role.ADMIN, Role.USER])
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: UserEntity })
+  async changePassword(
+    @Req() req,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    const userId = req.user.userId; // Accéder à userId depuis le payload JWT
+    const updatedUser = await this.usersService.changePassword(
+      userId,
+      changePasswordDto.oldPassword,
+      changePasswordDto.newPassword,
+    );
+    return new UserEntity(updatedUser);
+  }
   @Patch(':id')
   @Roles([Role.ADMIN, Role.USER])
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -125,5 +125,54 @@ async changePassword(
     return new UserEntity(await this.usersService.remove(id));
   }
 
- 
+  @Patch(':id/role')
+  @Roles([Role.SUPER_ADMIN, Role.ADMIN])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: UserEntity })
+  async updateUserRole(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('role') role: Role,
+  ) {
+    return new UserEntity(await this.usersService.updateUserRole(id, role));
+  }
+
+  @Get('role/:role')
+  @Roles([Role.SUPER_ADMIN, Role.ADMIN])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: UserEntity, isArray: true })
+  async getUsersByRole(
+    @Param('role') role: Role,
+    @Query('page') page: number,
+    @Query('perPage') perPage: number,
+  ): Promise<PaginatedResult<AddUserDto>> {
+    const paginationData = await this.usersService.findByRole(role, {
+      perPage,
+      page,
+    });
+    const users = paginationData.data.map((user) => new UserEntity(user));
+    paginationData.data = users;
+    return paginationData;
+  }
+
+  @Post(':id/invite')
+  @Roles([Role.SUPER_ADMIN, Role.ADMIN])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: UserEntity })
+  async inviteUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('role') role: Role,
+  ) {
+    return new UserEntity(await this.usersService.inviteUser(id, role));
+  }
+
+  @Get('roles/available')
+  @Roles([Role.SUPER_ADMIN, Role.ADMIN])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @ApiBearerAuth()
+  async getAvailableRoles() {
+    return Object.values(Role);
+  }
 }

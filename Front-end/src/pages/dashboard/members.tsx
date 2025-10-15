@@ -28,7 +28,7 @@ import { spacing } from "@mui/system";
 
 import DashboardLayout from "../../layouts/Dashboard";
 
-import { Member, Subscription } from "../../types/shared";
+import { Member, Subscription, Role } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -107,7 +107,7 @@ const applyFilters = (members: Member[], filters: Filters): Member[] => {
 
 function EnhancedTable() {
   const [order, setOrder] = React.useState<"desc" | "asc">("asc");
-  const [orderBy, setOrderBy] = React.useState("calories");
+  const [orderBy, setOrderBy] = React.useState<keyof Member>("fullName");
   const [openDeletModal, setOpenDeletModal] = React.useState<boolean>(false);
   const [selected, setSelected] = React.useState<Array<string>>([]);
   const [memberSelected, setEditeMember] = React.useState<Member | null>(null);
@@ -124,7 +124,7 @@ function EnhancedTable() {
 
   const rows: Member[] = useMemo(() => members || [], [members]);
 
-  const handleRequestSort = (event: any, property: string) => {
+  const handleRequestSort = (event: React.MouseEvent<unknown>, property: keyof Member) => {
     const isAsc = orderBy === property && order === "asc";
     setOrder(isAsc ? "desc" : "asc");
     setOrderBy(property);
@@ -202,7 +202,7 @@ function EnhancedTable() {
 
   const handleSelectAllClick = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      const newSelecteds = filteredRows?.map((n: Member) => n.id);
+      const newSelecteds = filteredRows.map((n: Member) => n.id);
       setSelected(newSelecteds);
       return;
     }
@@ -405,7 +405,7 @@ function MembersPage() {
 MembersPage.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={[Role.ADMIN]}>{page}</RoleProtectedRoute>
     </DashboardLayout>
   );
 };

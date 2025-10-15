@@ -81,8 +81,11 @@ export interface Filters {
 }
 
 export enum Role {
+  SUPER_ADMIN = "SUPER_ADMIN",
   ADMIN = "ADMIN",
-  USER = "USER",
+  MANAGER = "MANAGER",
+  STAFF = "STAFF",
+  MEMBER = "MEMBER",
 }
 
 export enum Subscription {

@@ -8,12 +8,14 @@ import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
 import { AuthModule } from '../auth/auth.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
   imports: [
     EventsModule,
     TypedEventEmitterModule,
     forwardRef(() => AuthModule), // Use forwardRef() to resolve circular dependency
+    PermissionsModule,
     ConfigModule.forRoot(),
     JwtModule.register({
       secret: process.env.JWT_ACCESS_SECRET,

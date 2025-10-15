@@ -10,7 +10,7 @@ import {
 import { AddUserDto, CreateUserDto } from './dtos/create-user.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { TypedEventEmitter } from 'src/modules/event-emitter/typed-event-emitter.class';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import * as bcrypt from 'bcrypt';
 import { createPaginator } from 'prisma-pagination';
@@ -195,5 +195,83 @@ export class UsersService {
         updatedAt: true,
       },
     });
+  }
+
+  async updateUserRole(userId: string, role: Role) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { role },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        phoneNumber: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        img: true,
+      },
+    });
+  }
+
+  async findByRole(
+    role: Role,
+    { page, perPage = 20 }: { page?: number; perPage: number },
+  ): Promise<PaginatedResult<AddUserDto>> {
+    const paginate = createPaginator({ perPage });
+    return paginate(
+      this.prisma.user,
+      {
+        where: { role },
+        orderBy: { createdAt: 'desc' },
+      },
+      { page },
+    );
+  }
+
+  async inviteUser(userId: string, role: Role) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Update user role and activate account
+    const updatedUser = await this.prisma.user.update({
+      where: { id: userId },
+      data: { 
+        role,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        fullname: true,
+        email: true,
+        phoneNumber: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        img: true,
+      },
+    });
+
+    // Emit invitation event
+    this.eventEmitter.emit('user.invited', {
+      name: user.fullname,
+      email: user.email,
+      role: role,
+    });
+
+    return updatedUser;
   }
 }

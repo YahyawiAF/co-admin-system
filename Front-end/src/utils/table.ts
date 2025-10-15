@@ -13,10 +13,10 @@ export function descendingComparator<T extends { [key: string]: any }>(
 }
 
 export function stableSort<T>(
-  array: Array<T>,
+  array: T[],
   comparator: (a: T, b: T) => number
-) {
-  const stabilizedThis = array.map((el: T, index: number) => ({
+): T[] {
+  const stabilizedThis = array.map((el, index) => ({
     el,
     index,
   }));
@@ -28,13 +28,13 @@ export function stableSort<T>(
   return stabilizedThis.map((element) => element.el);
 }
 
-export function getComparator<T extends { [key: string]: any }>(
+export function getComparator<T extends Record<string, any>>(
   order: "desc" | "asc",
-  orderBy: string
-) {
+  orderBy: keyof T
+): (a: T, b: T) => number {
   return order === "desc"
-    ? (a: T, b: T) => descendingComparator(a, b, orderBy)
-    : (a: T, b: T) => -descendingComparator(a, b, orderBy);
+    ? (a: T, b: T) => descendingComparator(a, b, orderBy as string)
+    : (a: T, b: T) => -descendingComparator(a, b, orderBy as string);
 }
 
 export function isDateInCurrentWeek(dateString: string) {

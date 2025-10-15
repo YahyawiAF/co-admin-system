@@ -1,10 +1,10 @@
-export interface EnhancedTableHeadProps {
+export interface EnhancedTableHeadProps<T = any> {
   numSelected: number;
   order: "desc" | "asc";
-  orderBy: string;
+  orderBy: keyof T;
   rowCount: number;
-  onSelectAllClick: (e: any) => void;
-  onRequestSort: (e: any, property: string) => void;
+  onSelectAllClick: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onRequestSort: (e: React.MouseEvent<unknown>, property: keyof T) => void;
   headCells: Array<HeadCell>;
   isMobile?: boolean;
 }

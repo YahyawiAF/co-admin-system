@@ -495,53 +495,49 @@ const applyMemberFilters = (
   abonnements: Abonnement[],
   selectedDate: Date
 ): Member[] => {
-  const activeMembers = members.filter((member) => {
-    const hasJournal = journals.some((j) => {
-      if (j.memberID !== member.id || !j.registredTime) return false;
-      const journalDate = new Date(j.registredTime);
-      return (
-        journalDate.getFullYear() === selectedDate.getFullYear() &&
-        journalDate.getMonth() === selectedDate.getMonth() &&
-        journalDate.getDate() === selectedDate.getDate() &&
-        (!j.leaveTime || new Date(j.leaveTime) > new Date())
-      );
-    });
-    const hasAbonnement = abonnements.some(
-      (a) =>
-        a.memberID === member.id &&
-        a.registredDate &&
-        (!a.leaveDate || new Date(a.leaveDate) > new Date())
+  const today = new Date();
+  // Utility functions to simplify repeated checks
+  const isJournalActive = (journal: Journal) => {
+    if (!journal.registredTime) return false;
+    const date = new Date(journal.registredTime);
+
+    return (
+      date.getFullYear() === selectedDate.getFullYear() &&
+      date.getMonth() === selectedDate.getMonth() &&
+      date.getDate() === selectedDate.getDate() &&
+      (!journal.leaveTime || new Date(journal.leaveTime) < today)
     );
-    return hasJournal || hasAbonnement;
-  });
+  };
 
-  const enrichedMembers = activeMembers.map((member) => ({
-    ...member,
-    hasJournal: journals.some((j) => {
-      if (j.memberID !== member.id || !j.registredTime) return false;
-      const journalDate = new Date(j.registredTime);
-      return (
-        journalDate.getFullYear() === selectedDate.getFullYear() &&
-        journalDate.getMonth() === selectedDate.getMonth() &&
-        journalDate.getDate() === selectedDate.getDate() &&
-        (!j.leaveTime || new Date(j.leaveTime) > new Date())
-      );
-    }),
-    hasAbonnement: abonnements.some(
-      (a) =>
-        a.memberID === member.id &&
-        a.registredDate &&
-        (!a.leaveDate || new Date(a.leaveDate) > new Date())
-    ),
-  }));
+  const isAbonnementActive = (a: Abonnement) =>
+    a.registredDate && (!a.leaveDate || new Date(a.leaveDate) < today);
 
-  if (!searchTerm || searchTerm.length < 2) {
-    return enrichedMembers;
-  }
+  // Build lookup maps to make membership checks O(1)
+  const activeJournalMemberIds = new Set(
+    journals.filter(isJournalActive).map((j) => j.memberID)
+  );
+
+  const activeAbonnementMemberIds = new Set(
+    abonnements.filter(isAbonnementActive).map((a) => a.memberID)
+  );
+
+  // Combine filter + enrichment in one efficient loop
+  const enrichedMembers = members
+    .filter(
+      (m) =>
+        activeJournalMemberIds.has(m.id) || activeAbonnementMemberIds.has(m.id)
+    )
+    .map((m) => ({
+      ...m,
+      hasJournal: activeJournalMemberIds.has(m.id),
+      hasAbonnement: activeAbonnementMemberIds.has(m.id),
+    }));
+
+  // Optional Fuse.js fuzzy search
+  if (!searchTerm || searchTerm.trim().length < 2) return enrichedMembers;
 
   const fuse = new Fuse(enrichedMembers, memberSearchOptions);
-  const results = fuse.search(searchTerm);
-  return results.map((result) => result.item);
+  return fuse.search(searchTerm).map((r) => r.item);
 };
 
 // Apply filters for bookings
@@ -550,7 +546,6 @@ const applyBookingFilters = (
   searchTerm: string,
   selectedDate: Date
 ): BookingWithMember[] => {
-  console.log("bookings", bookings, selectedDate);
   const filteredBookingsRes = bookings.filter((booking) => {
     return booking.subscriptionTypes.some((sub) => {
       if (sub.type === "Journal" && sub.journal?.registredTime) {
@@ -782,8 +777,6 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     return () => clearInterval(interval);
   }, [checkExpiredBookings]);
 
-  console.log("isLoading", isLoading);
-
   const calculateRemainingTime = (subscription: {
     type: string;
     journal?: Journal;
@@ -960,11 +953,6 @@ const SeatingChart: NextPage<SeatingChartProps> & {
     () => applyBookingFilters(bookings, tableSearchTerm, selectedDate),
     [bookings, tableSearchTerm, selectedDate]
   );
-  console.log("filteredBookings", filteredBookings);
-  console.log("bookings", bookings);
-  console.log("members", members);
-  console.log("journals.data", journals.data);
-  console.log("abonnements.data", abonnements.data);
 
   const handleRefresh = async () => {
     await Promise.all([

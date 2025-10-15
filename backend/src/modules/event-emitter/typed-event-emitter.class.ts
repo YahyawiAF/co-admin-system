@@ -5,6 +5,7 @@ export interface EventPayloads {
   'user.welcome': { name: string; email: string };
   'user.reset-password': { name: string; email: string; link: string };
   'user.verify-email': { name: string; email: string; otp: string };
+  'user.invited': { name: string; email: string; role: string };
   'mail.notification': any;
 }
 @Injectable()
