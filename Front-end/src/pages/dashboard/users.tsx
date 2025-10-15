@@ -31,7 +31,7 @@ import {
   Alert,
   Snackbar,
 } from "@mui/material";
-import { Edit, Delete, Add, PersonAdd } from "@mui/icons-material";
+import { Edit, Delete, Add, PersonAdd, Security } from "@mui/icons-material";
 
 import { spacing } from "@mui/system";
 
@@ -41,6 +41,7 @@ import TableHeadAction from "../../components/Table/users/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
 import UserForm from "src/components/pages/dashboard/users/UserForm";
+import UserPermissionsDialog from "src/components/pages/dashboard/users/UserPermissionsDialog";
 
 import { stableSort, getComparator } from "src/utils/table";
 import { HeadCell } from "src/types/table";
@@ -122,6 +123,7 @@ function EnhancedTable() {
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
   const [openRoleDialog, setOpenRoleDialog] = useState(false);
   const [selectedRole, setSelectedRole] = useState<Role>(Role.MEMBER);
+  const [openPermissionsDialog, setOpenPermissionsDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -231,6 +233,11 @@ function EnhancedTable() {
     }
   };
 
+  const handleManagePermissions = (user: User) => {
+    setUserSelected(user);
+    setOpenPermissionsDialog(true);
+  };
+
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
   const emptyRows =
@@ -298,6 +305,16 @@ function EnhancedTable() {
               </Button>
             </DialogActions>
           </Dialog>
+
+          <UserPermissionsDialog
+            open={openPermissionsDialog}
+            user={userSelected}
+            onClose={() => {
+              setOpenPermissionsDialog(false);
+              setUserSelected(null);
+              refetch();
+            }}
+          />
 
           <Drawer open={open} handleClose={handleClose}>
             <SubPage title="Manage User">
@@ -447,6 +464,7 @@ function EnhancedTable() {
                                 e.stopPropagation();
                                 handleEdit(user);
                               }}
+                              title="Edit User"
                             >
                               <Edit />
                             </IconButton>
@@ -456,6 +474,7 @@ function EnhancedTable() {
                                 e.stopPropagation();
                                 handleRoleChange(user);
                               }}
+                              title="Change Role"
                             >
                               <PersonAdd />
                             </IconButton>
@@ -463,8 +482,20 @@ function EnhancedTable() {
                               size="small"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleManagePermissions(user);
+                              }}
+                              title="Manage Permissions"
+                              color="primary"
+                            >
+                              <Security />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 handleDelete(user);
                               }}
+                              title="Delete User"
                             >
                               <Delete />
                             </IconButton>

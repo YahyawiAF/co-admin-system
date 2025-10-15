@@ -67,6 +67,11 @@ const pagesSection = [
         icon: FileText,
         title: "Claims",
       },
+      {
+        href: "/dashboard/users",
+        icon: FileText,
+        title: "Permissions",
+      },
     ],
   },
 ] as SidebarItemsType[];

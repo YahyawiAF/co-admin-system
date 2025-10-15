@@ -13,6 +13,7 @@ import { bookingService } from "src/api/bookingservice";
 import { reclamationApi } from "src/api/reclamationApi";
 import { responseApi } from "src/api/reponseApi";
 import { messagesApi } from "src/api/messagesApi";
+import { permissionsServices } from "src/api/permissions.repo";
 
 
 // Configuration du store
@@ -32,7 +33,7 @@ export const store = configureStore({
     [reclamationApi.reducerPath]: reclamationApi.reducer,
     [responseApi.reducerPath]: responseApi.reducer,
     [messagesApi.reducerPath]: messagesApi.reducer,
-
+    [permissionsServices.reducerPath]: permissionsServices.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware().concat(
@@ -50,6 +51,7 @@ export const store = configureStore({
       reclamationApi.middleware,
       responseApi.middleware,
       messagesApi.middleware,
+      permissionsServices.middleware,
     ),
 });
 
