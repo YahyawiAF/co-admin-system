@@ -22,15 +22,19 @@ const RoleProtectedRoute = ({
     const validRoles = Array.isArray(allowedRoles) ? allowedRoles : [];
 
     if (!token) {
-      const loginPath = validRoles.includes(Role.ADMIN) || validRoles.includes(Role.SUPER_ADMIN)
-        ? "/auth/sign-in"
-        : "/client/login";
+      const loginPath =
+        validRoles.includes(Role.ADMIN) || validRoles.includes(Role.SUPER_ADMIN)
+          ? "/auth/sign-in"
+          : "/client/login";
       router.replace(loginPath);
       return;
     }
 
     // Logique de redirection spécifique
-    if ((userRole === Role.ADMIN || userRole === Role.SUPER_ADMIN) && pathname.startsWith("/client")) {
+    if (
+      (userRole === Role.ADMIN || userRole === Role.SUPER_ADMIN) &&
+      pathname.startsWith("/client")
+    ) {
       router.replace("/");
       return;
     }

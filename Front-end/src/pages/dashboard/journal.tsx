@@ -17,10 +17,11 @@ import {
   Tabs,
   Box,
   Button,
+  Typography,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import DashboardLayout from "../../layouts/Dashboard";
-import { DailyExpense, Journal, DailyProduct } from "../../types/shared";
+import { DailyExpense, Journal, DailyProduct, Role } from "../../types/shared";
 import TableHeadAction from "../../components/Table/members/TableHeader";
 import Drawer from "src/components/Drawer";
 import SubPage from "src/components/SubPage";
@@ -49,6 +50,12 @@ import JournalDetails from "src/components/pages/dashboard/journal/JournalDetail
 import UserForm from "src/components/pages/dashboard/members/UserForm";
 import { getHourDifference } from "src/utils/shared";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
+import { PermissionGuard } from "src/components/auth/PermissionGuard";
+import {
+  PermissionButton,
+  PermissionIconButton,
+} from "src/components/auth/PermissionButton";
+import { usePermissions } from "src/hooks/usePermissions";
 import Abonnement from "./abonnement";
 import { useGetExpensesQuery } from "src/api/expenseApi";
 import {
@@ -146,6 +153,19 @@ function JournalPage() {
   const [dailyExpenseOpen, setDailyExpenseOpen] = useState(false);
   const { data: expenses = [] } = useGetExpensesQuery();
   const [createDailyExpense] = useCreateDailyExpenseMutation();
+
+  // Permission checks for tabs and actions
+  const {
+    canRead,
+    canCreate,
+    canUpdate,
+    canDelete,
+    isLoading: permissionsLoading,
+  } = usePermissions();
+  const canViewJournal = canRead("journals");
+  const canViewMembership = canRead("abonnements");
+  const canViewReservations = canRead("facilities");
+  const canViewOverview = canRead("statistics");
   const [order, setOrder] = React.useState<"desc" | "asc">("asc");
   const [orderBy, setOrderBy] = React.useState("calories");
   const [openDeletModal, setOpenDeletModal] = React.useState<boolean>(false);
@@ -185,6 +205,30 @@ function JournalPage() {
 
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(0);
+
+  // Get available tabs based on permissions
+  const availableTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewJournal)
+      tabs.push({ index: 0, label: "Journal", resource: "journals" });
+    if (canViewMembership)
+      tabs.push({ index: 1, label: "Membership", resource: "abonnements" });
+    if (canViewReservations)
+      tabs.push({ index: 2, label: "Reservations", resource: "facilities" });
+    if (canViewOverview)
+      tabs.push({ index: 3, label: "Overview", resource: "statistics" });
+    return tabs;
+  }, [canViewJournal, canViewMembership, canViewReservations, canViewOverview]);
+
+  // Auto-select first available tab if current tab is not accessible
+  React.useEffect(() => {
+    if (!permissionsLoading && availableTabs.length > 0) {
+      const currentTabExists = availableTabs.some((tab) => tab.index === value);
+      if (!currentTabExists) {
+        setValue(availableTabs[0].index);
+      }
+    }
+  }, [availableTabs, value, permissionsLoading]);
 
   const {
     data: Journals,
@@ -458,24 +502,41 @@ function JournalPage() {
         >
           Current Day
         </Button>
-        <Button
+        <PermissionButton
+          resource="expenses"
+          action="create"
           variant="contained"
           onClick={handleDailyExpenseClick}
           sx={{ ml: 2 }}
         >
           Daily Expense
-        </Button>
+        </PermissionButton>
       </Box>
-      <Tabs
-        value={value}
-        onChange={handleChange}
-        aria-label="basic tabs example"
-      >
-        <LinkTab label="Journal" {...a11yProps(0)} />
-        <LinkTab label="Membership" {...a11yProps(1)} />
-        <LinkTab label="Reservations" {...a11yProps(2)} />
-        <LinkTab label="Overview" {...a11yProps(3)} />
-      </Tabs>
+      {permissionsLoading ? (
+        <Box display="flex" justifyContent="center" py={2}>
+          <Loader />
+        </Box>
+      ) : availableTabs.length > 0 ? (
+        <Tabs value={value} onChange={handleChange} aria-label="journal tabs">
+          {canViewJournal && <LinkTab label="Journal" {...a11yProps(0)} />}
+          {canViewMembership && (
+            <LinkTab label="Membership" {...a11yProps(1)} />
+          )}
+          {canViewReservations && (
+            <LinkTab label="Reservations" {...a11yProps(2)} />
+          )}
+          {canViewOverview && <LinkTab label="Overview" {...a11yProps(3)} />}
+        </Tabs>
+      ) : (
+        <Box p={4} textAlign="center">
+          <Typography variant="h6" color="text.secondary">
+            You don't have permission to view any journal sections.
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Contact your administrator to get access to journal features.
+          </Typography>
+        </Box>
+      )}
       <DailyExpenseModal
         open={dailyExpenseOpen}
         onClose={() => setDailyExpenseOpen(false)}
@@ -484,172 +545,196 @@ function JournalPage() {
         initialData={{ expenseId: "", date: format(today, "yyyy-MM-dd") }}
       />
       <Divider my={6} />
-      <TabPanel value={value} index={0} title={"List"}>
-        <Grid container spacing={6}>
-          <Grid item xs={12}>
-            <div>
-              <Modal
-                open={openDeletModal}
-                handleClose={() => setOpenDeletModal(false)}
-                handleAction={handleAction}
-                title={"Delete Journal"}
-                contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
-              />
-              <Drawer
-                open={open}
-                handleClose={() => {
-                  setOpen(false);
-                }}
-              >
-                <SubPage title="Manage member">
-                  <JournalForm
-                    handleClose={() => {
-                      setOpen(false);
-                      setEditeJournal(null);
-                    }}
-                    today={today}
-                    selectItem={editeJournal}
-                  />
-                </SubPage>
-              </Drawer>
-              <Paper>
-                <TableHeadAction
-                  handleClickOpen={handleClickOpen}
-                  onHandleSearch={onHandleSearch}
-                  search={filters.query}
-                  refetch={refetch}
+
+      {/* Journal Tab - Protected */}
+      <PermissionGuard resource="journals" action="read" hideOnDenied>
+        <TabPanel value={value} index={0} title={"List"}>
+          <Grid container spacing={6}>
+            <Grid item xs={12}>
+              <div>
+                <Modal
+                  open={openDeletModal}
+                  handleClose={() => setOpenDeletModal(false)}
+                  handleAction={handleAction}
+                  title={"Delete Journal"}
+                  contentText={`Are you sure you want to remove ${editeJournal?.fullName}`}
                 />
-                <TableContainer>
-                  <Table
-                    aria-labelledby="tableTitle"
-                    aria-label="enhanced table"
-                  >
-                    <EnhancedTableHead
-                      numSelected={selected.length}
-                      order={order}
-                      orderBy={orderBy}
-                      onSelectAllClick={handleSelectAllClick}
-                      onRequestSort={handleRequestSort}
-                      rowCount={filteredRows.length}
-                      headCells={headCells}
+                <Drawer
+                  open={open}
+                  handleClose={() => {
+                    setOpen(false);
+                  }}
+                >
+                  <SubPage title="Manage member">
+                    <JournalForm
+                      handleClose={() => {
+                        setOpen(false);
+                        setEditeJournal(null);
+                      }}
+                      today={today}
+                      selectItem={editeJournal}
                     />
-                    <TableBody>
-                      {stableSort(filteredRows, getComparator(order, orderBy))
-                        .slice(
-                          page * rowsPerPage,
-                          page * rowsPerPage + rowsPerPage
-                        )
-                        .map((row, index) => {
-                          const isItemSelected = isSelected(row.id);
-                          const labelId = `enhanced-table-checkbox-${index}`;
-                          const dleave = row.isPayed
-                            ? row.leaveTime ?? new Date()
-                            : new Date();
-                          const hoursDifference = row.isReservation
-                            ? "Reservation"
-                            : getHourDifference(row.registredTime, dleave);
-                          return (
-                            <TableRow
-                              hover
-                              onDoubleClick={() => handleEdite(row)}
-                              role="checkbox"
-                              aria-checked={isItemSelected}
-                              tabIndex={-1}
-                              key={row.id}
-                              selected={isItemSelected}
-                            >
-                              <TableCell padding="checkbox">
-                                <Checkbox
-                                  checked={isItemSelected}
-                                  inputProps={{ "aria-labelledby": labelId }}
-                                  onChange={(event) =>
-                                    handleCheckboxChange(event, row.id)
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell
-                                component="th"
-                                id={labelId}
-                                scope="row"
-                                padding="none"
+                  </SubPage>
+                </Drawer>
+                <Paper>
+                  <TableHeadAction
+                    handleClickOpen={
+                      canCreate("journals") ? handleClickOpen : undefined
+                    }
+                    onHandleSearch={onHandleSearch}
+                    search={filters.query}
+                    refetch={refetch}
+                  />
+                  <TableContainer>
+                    <Table
+                      aria-labelledby="tableTitle"
+                      aria-label="enhanced table"
+                    >
+                      <EnhancedTableHead
+                        numSelected={selected.length}
+                        order={order}
+                        orderBy={orderBy}
+                        onSelectAllClick={handleSelectAllClick}
+                        onRequestSort={handleRequestSort}
+                        rowCount={filteredRows.length}
+                        headCells={headCells}
+                      />
+                      <TableBody>
+                        {stableSort(filteredRows, getComparator(order, orderBy))
+                          .slice(
+                            page * rowsPerPage,
+                            page * rowsPerPage + rowsPerPage
+                          )
+                          .map((row, index) => {
+                            const isItemSelected = isSelected(row.id);
+                            const labelId = `enhanced-table-checkbox-${index}`;
+                            const dleave = row.isPayed
+                              ? row.leaveTime ?? new Date()
+                              : new Date();
+                            const hoursDifference = row.isReservation
+                              ? "Reservation"
+                              : getHourDifference(row.registredTime, dleave);
+                            return (
+                              <TableRow
+                                hover
+                                onDoubleClick={() => handleEdite(row)}
+                                role="checkbox"
+                                aria-checked={isItemSelected}
+                                tabIndex={-1}
+                                key={row.id}
+                                selected={isItemSelected}
                               >
-                                {row.members?.fullName}
-                              </TableCell>
-                              <TableCell>
-                                {format(
-                                  new Date(row.registredTime) as Date,
-                                  "HH:mm:ss"
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {row.payedAmount
-                                  ? row.payedAmount + " DT"
-                                  : 0 + " DT"}
-                              </TableCell>
-                              <TableCell>{hoursDifference}</TableCell>
-                              <TableCell>
-                                {row.isPayed ? <Done /> : null}
-                              </TableCell>
-                              <TableCell padding="none" align="right">
-                                <Box mr={2}>
-                                  <IconButton
-                                    onClick={() => handleEdite(row)}
-                                    aria-label="edit"
-                                    size="large"
-                                  >
-                                    <Edit />
-                                  </IconButton>
-                                  <IconButton
-                                    onClick={() => handleDelete(row)}
-                                    aria-label="delete"
-                                    size="large"
-                                  >
-                                    <Delete sx={{ color: red[400] }} />
-                                  </IconButton>
-                                </Box>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      {emptyRows > 0 && (
-                        <TableRow style={{ height: 53 * emptyRows }}>
-                          <TableCell colSpan={6} />
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <TablePagination
-                  rowsPerPageOptions={[50, 100, 200, 500]}
-                  component="div"
-                  count={filteredRows.length}
-                  rowsPerPage={rowsPerPage}
-                  page={page}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
-                />
-              </Paper>
-            </div>
+                                <TableCell padding="checkbox">
+                                  <Checkbox
+                                    checked={isItemSelected}
+                                    inputProps={{ "aria-labelledby": labelId }}
+                                    onChange={(event) =>
+                                      handleCheckboxChange(event, row.id)
+                                    }
+                                  />
+                                </TableCell>
+                                <TableCell
+                                  component="th"
+                                  id={labelId}
+                                  scope="row"
+                                  padding="none"
+                                >
+                                  {row.members?.fullName}
+                                </TableCell>
+                                <TableCell>
+                                  {format(
+                                    new Date(row.registredTime) as Date,
+                                    "HH:mm:ss"
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {row.payedAmount
+                                    ? row.payedAmount + " DT"
+                                    : 0 + " DT"}
+                                </TableCell>
+                                <TableCell>{hoursDifference}</TableCell>
+                                <TableCell>
+                                  {row.isPayed ? <Done /> : null}
+                                </TableCell>
+                                <TableCell padding="none" align="right">
+                                  <Box mr={2}>
+                                    <PermissionIconButton
+                                      resource="journals"
+                                      action="update"
+                                      onClick={() => handleEdite(row)}
+                                      aria-label="edit"
+                                      size="large"
+                                      tooltip="Edit Journal Entry"
+                                    >
+                                      <Edit />
+                                    </PermissionIconButton>
+                                    <PermissionIconButton
+                                      resource="journals"
+                                      action="delete"
+                                      onClick={() => handleDelete(row)}
+                                      aria-label="delete"
+                                      size="large"
+                                      tooltip="Delete Journal Entry"
+                                    >
+                                      <Delete sx={{ color: red[400] }} />
+                                    </PermissionIconButton>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        {emptyRows > 0 && (
+                          <TableRow style={{ height: 53 * emptyRows }}>
+                            <TableCell colSpan={6} />
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                  <TablePagination
+                    rowsPerPageOptions={[50, 100, 200, 500]}
+                    component="div"
+                    count={filteredRows.length}
+                    rowsPerPage={rowsPerPage}
+                    page={page}
+                    onPageChange={handleChangePage}
+                    onRowsPerPageChange={handleChangeRowsPerPage}
+                  />
+                </Paper>
+              </div>
+            </Grid>
           </Grid>
-        </Grid>
-      </TabPanel>
-      <TabPanel value={value} index={1} title={"Membership"}>
-        <Abonnement selectedDate={today} />
-      </TabPanel>
-      <TabPanel value={value} index={2} title={"Reservations"}>
-        <SeatingChart selectedDate={today} />
-      </TabPanel>
-      <TabPanel value={value} index={3} title={"Overview"}>
-        <JournalDetails
-          journals={rows}
-          isLoading={isLoading}
-          errorMemberReq={!!error}
-          dailyExpenses={filteredDailyExpenses}
-          dailyProducts={filteredDailyProducts}
-          expenses={expenses}
-          selectedDate={today}
-        />
-      </TabPanel>
+        </TabPanel>
+      </PermissionGuard>
+
+      {/* Membership Tab - Protected */}
+      <PermissionGuard resource="abonnements" action="read" hideOnDenied>
+        <TabPanel value={value} index={1} title={"Membership"}>
+          <Abonnement selectedDate={today} />
+        </TabPanel>
+      </PermissionGuard>
+
+      {/* Reservations Tab - Protected */}
+      <PermissionGuard resource="facilities" action="read" hideOnDenied>
+        <TabPanel value={value} index={2} title={"Reservations"}>
+          <SeatingChart selectedDate={today} />
+        </TabPanel>
+      </PermissionGuard>
+
+      {/* Overview Tab - Protected */}
+      <PermissionGuard resource="statistics" action="read" hideOnDenied>
+        <TabPanel value={value} index={3} title={"Overview"}>
+          <JournalDetails
+            journals={rows}
+            isLoading={isLoading}
+            errorMemberReq={!!error}
+            dailyExpenses={filteredDailyExpenses}
+            dailyProducts={filteredDailyProducts}
+            expenses={expenses}
+            selectedDate={today}
+          />
+        </TabPanel>
+      </PermissionGuard>
     </React.Fragment>
   );
 }
@@ -657,7 +742,9 @@ function JournalPage() {
 JournalPage.getLayout = function getLayout(page: ReactElement) {
   return (
     <DashboardLayout>
-      <RoleProtectedRoute allowedRoles={["ADMIN"]}>{page}</RoleProtectedRoute>
+      <RoleProtectedRoute allowedRoles={[Role.ADMIN]}>
+        {page}
+      </RoleProtectedRoute>
     </DashboardLayout>
   );
 };

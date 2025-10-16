@@ -175,19 +175,26 @@ const UserPermissionsDialog: React.FC<UserPermissionsDialogProps> = ({
     setError(null);
     setSuccess(null);
 
+    const currentlyHasPermission = localPermissions.has(permissionName);
+
+    // Optimistically update UI
+    if (currentlyHasPermission) {
+      setLocalPermissions((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(permissionName);
+        return newSet;
+      });
+    } else {
+      setLocalPermissions((prev) => new Set(prev).add(permissionName));
+    }
+
     try {
-      if (localPermissions.has(permissionName)) {
+      if (currentlyHasPermission) {
         // Remove permission
         await removePermission({
           userId: user.id,
           permissionId,
         }).unwrap();
-
-        setLocalPermissions((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(permissionName);
-          return newSet;
-        });
         setSuccess(`Permission removed: ${ACTION_LABELS[action]} ${resource}`);
       } else {
         // Assign permission
@@ -195,12 +202,25 @@ const UserPermissionsDialog: React.FC<UserPermissionsDialogProps> = ({
           userId: user.id,
           permissionId,
         }).unwrap();
-
-        setLocalPermissions((prev) => new Set(prev).add(permissionName));
         setSuccess(`Permission granted: ${ACTION_LABELS[action]} ${resource}`);
       }
     } catch (err: any) {
-      setError(err?.data?.message || "Failed to update permission");
+      // Revert on error
+      if (currentlyHasPermission) {
+        setLocalPermissions((prev) => new Set(prev).add(permissionName));
+      } else {
+        setLocalPermissions((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(permissionName);
+          return newSet;
+        });
+      }
+      setError(
+        err?.data?.message ||
+          err?.message ||
+          "Failed to update permission. You may need SUPER_ADMIN role."
+      );
+      console.error("Permission update error:", err);
     }
   };
 

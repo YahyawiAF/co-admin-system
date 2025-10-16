@@ -118,8 +118,8 @@ export class PermissionsService {
   async initializePermissions() {
     // Create all permissions
     const allPermissions = new Set<string>();
-    Object.values(this.defaultRolePermissions).forEach(permissions => {
-      permissions.forEach(perm => {
+    Object.values(this.defaultRolePermissions).forEach((permissions) => {
+      permissions.forEach((perm) => {
         allPermissions.add(`${perm.resource}:${perm.action}`);
       });
     });
@@ -139,7 +139,9 @@ export class PermissionsService {
     }
 
     // Assign default permissions to roles
-    for (const [role, permissions] of Object.entries(this.defaultRolePermissions)) {
+    for (const [role, permissions] of Object.entries(
+      this.defaultRolePermissions,
+    )) {
       for (const permission of permissions) {
         const permissionName = `${permission.resource}:${permission.action}`;
         const permissionRecord = await this.prisma.permission.findUnique({
@@ -194,18 +196,24 @@ export class PermissionsService {
     });
 
     // Get user-specific permissions
-    const userSpecificPermissions = user.rolePermissions.map(rp => rp.permission.name);
+    const userSpecificPermissions = user.rolePermissions.map(
+      (rp) => rp.permission.name,
+    );
 
     // Combine role and user-specific permissions
     const allPermissions = [
-      ...rolePermissions.map(rp => rp.permission.name),
+      ...rolePermissions.map((rp) => rp.permission.name),
       ...userSpecificPermissions,
     ];
 
     return [...new Set(allPermissions)]; // Remove duplicates
   }
 
-  async hasPermission(userId: string, resource: string, action: string): Promise<boolean> {
+  async hasPermission(
+    userId: string,
+    resource: string,
+    action: string,
+  ): Promise<boolean> {
     const permissions = await this.getUserPermissions(userId);
     const requiredPermission = `${resource}:${action}`;
     return permissions.includes(requiredPermission);
@@ -232,10 +240,7 @@ export class PermissionsService {
 
   async getAllPermissions() {
     return this.prisma.permission.findMany({
-      orderBy: [
-        { resource: 'asc' },
-        { action: 'asc' },
-      ],
+      orderBy: [{ resource: 'asc' }, { action: 'asc' }],
     });
   }
 
