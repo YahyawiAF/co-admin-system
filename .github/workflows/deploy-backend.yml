@@ -193,8 +193,7 @@ jobs:
               pm2 restart coadminapi
             else
               echo "coadminapi not found — starting for the first time..."
-              pm2 start dist/main.js --name coadminapi
-            fi
+              pm2 start dist/src/main.js --name coadminapi            fi
 
             echo "Saving PM2 configuration..."
 
