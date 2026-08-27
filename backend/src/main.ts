@@ -1,10 +1,14 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { ClassSerializerInterceptor, ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  // Profile / product photos are sent as data URLs; default 100kb is too small.
+  app.use(json({ limit: '15mb' }));
+  app.use(urlencoded({ extended: true, limit: '15mb' }));
 
   if (process.env.GLOBAL_PREFIX) {
     app.setGlobalPrefix(process.env.GLOBAL_PREFIX);

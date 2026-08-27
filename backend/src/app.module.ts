@@ -23,6 +23,12 @@ import { BookingController } from './proxy/booking.controller';
 import { ProxyService } from './proxy/proxy.service';
 import { BookingModule } from './proxy/book.module';
 import { ProxyModule } from './proxy/proxy.module';
+import { MobileModule } from './modules/mobile/mobile.module';
+import { OpsEventsModule } from './modules/ops-events/ops-events.module';
+import { CaisseModule } from './modules/caisse/caisse.module';
+import { GroupsModule } from './modules/groups/groups.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { SpaceEventsModule } from './modules/events/events.module';
 
 @Module({
   imports: [
@@ -66,6 +72,12 @@ import { ProxyModule } from './proxy/proxy.module';
     FacilityModule,
     BookingModule,
     ProxyModule,
+    MobileModule,
+    OpsEventsModule,
+    CaisseModule,
+    GroupsModule,
+    OrganizationsModule,
+    SpaceEventsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

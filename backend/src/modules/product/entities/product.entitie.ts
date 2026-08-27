@@ -8,7 +8,10 @@ export class ProductEntity {
   @ApiProperty({ description: 'UUID du produit' })
   id: string;
 
-  @ApiProperty({ example: 'Ordinateur portable', description: 'Nom du produit' })
+  @ApiProperty({
+    example: 'Ordinateur portable',
+    description: 'Nom du produit',
+  })
   name: string;
 
   @ApiProperty({
@@ -20,7 +23,7 @@ export class ProductEntity {
 
   @ApiProperty({
     example: 899.99,
-    description: 'Prix d\'achat du produit',
+    description: "Prix d'achat du produit",
   })
   purchasePrice: number;
 
@@ -38,7 +41,7 @@ export class ProductEntity {
 
   @ApiProperty({
     example: 'image.jpg',
-    description: 'URL de l\'image du produit',
+    description: "URL de l'image du produit",
     required: false,
   })
   img?: string;

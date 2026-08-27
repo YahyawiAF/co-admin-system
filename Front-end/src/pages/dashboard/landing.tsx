@@ -4,9 +4,11 @@ import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
 import { useTranslation } from "react-i18next";
 import {
+  Box,
   Grid,
   Divider as MuiDivider,
   Typography as MuiTypography,
+  Paper,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import { DollarSign, CreditCard, User } from "react-feather";
@@ -16,7 +18,6 @@ import DoughnutChart from "src/components/pages/charts/chartjs/DoughnutChart";
 import Stats from "../../components/pages/dashboard/landing/stats";
 import { useGetMembersQuery } from "src/api";
 import { useGetAbonnementsQuery } from "src/api/abonnement.repo";
-import ProtectedRoute from "src/components/auth/ProtectedRoute";
 import RoleProtectedRoute from "src/components/auth/ProtectedRoute";
 
 const Divider = styled(MuiDivider)(spacing);
@@ -24,22 +25,25 @@ const Typography = styled(MuiTypography)(spacing);
 
 function Default() {
   const { t } = useTranslation();
+  const appUrl =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const mobileUrl = `${appUrl}/m`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(mobileUrl)}`;
 
-  // Fetch members data
   const {
     data: members,
     isLoading: isLoadingMembers,
     error: errorMembers,
   } = useGetMembersQuery();
 
-  // Fetch abonnements data
   const {
     data: abonnementsData,
     isLoading: isLoadingAbonnements,
     error: errorAbonnements,
   } = useGetAbonnementsQuery({ search: "" });
 
-  // Calcul des membres abonnés
   const subscribedMembersCount = useMemo(() => {
     if (!abonnementsData?.data) return 0;
     const uniqueMemberIds = new Set(
@@ -48,7 +52,6 @@ function Default() {
     return uniqueMemberIds.size;
   }, [abonnementsData]);
 
-  // Calcul du cash total des abonnements
   const cashTotal = useMemo(() => {
     if (!abonnementsData?.data) return 0;
     return abonnementsData.data.reduce(
@@ -57,7 +60,6 @@ function Default() {
     );
   }, [abonnementsData]);
 
-  // Gestion des états de chargement et d'erreur
   if (isLoadingMembers || isLoadingAbonnements) return <p>Loading</p>;
   if (errorMembers || errorAbonnements) return <p>Error!</p>;
 
@@ -94,11 +96,27 @@ function Default() {
         </Grid>
       </Grid>
 
-      <Grid container spacing={4}>
-        <Grid display={"flex"} item xs={12} lg={6}>
+      <Grid container spacing={4} sx={{ mt: 1 }}>
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, textAlign: "center" }}>
+            <Typography variant="h6" gutterBottom>
+              Visitor QR (mobile check-in)
+            </Typography>
+            <Box
+              component="img"
+              src={qrSrc}
+              alt="QR code to /m"
+              sx={{ width: 200, height: 200, mx: "auto", display: "block" }}
+            />
+            <Typography variant="body2" sx={{ mt: 1, wordBreak: "break-all" }}>
+              {mobileUrl}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid display={"flex"} item xs={12} md={4}>
           <DoughnutChart />
         </Grid>
-        <Grid item xs={12} lg={6}>
+        <Grid item xs={12} md={4}>
           <LineChart />
         </Grid>
       </Grid>

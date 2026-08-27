@@ -146,8 +146,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     return results.map((result) => result.item);
   };
   const validationSchema: ZodType<Omit<Journal, "createdOn">> = z.object({
-    registredTime: z.union([z.string().optional(), z.date()]),
-    leaveTime: z.union([z.string().optional(), z.date().optional()]),
+    registredTime: z.union([z.string(), z.date()]).optional(),
+    leaveTime: z.union([z.string(), z.date()]).nullable().optional(),
     isPayed: z.boolean().optional(),
     payedAmount: z.number().optional(),
     memberID: z.string(),
@@ -168,19 +168,35 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     watch,
   } = methods;
 
-  const isPayed = watch("isPayed");
   const leaveTime = watch("leaveTime");
   const payedAmount = watch("payedAmount");
   const registredTime = watch("registredTime") as Date;
   const isReservation = watch("isReservation");
   const priceId = watch("priceId");
+  // Checkout = persisted leaveTime. Payment (isPayed) is independent.
+  const isCheckedOut = !!selectItem?.leaveTime;
 
   const createdByID = sessionStorage.getItem("userID");
 
   // Filtrer les prix pour n'afficher que ceux de type "journal"
   const journalPrices = React.useMemo(() => {
-    return pricesList?.filter((price) => price.type === "journal") || [];
-  }, [pricesList]);
+    const list =
+      pricesList?.filter(
+        (price) =>
+          price.type === "journal" ||
+          price.category === "JOURNEE" ||
+          price.category === "SALLE" ||
+          price.category === "OPEN_SPACE"
+      ) || [];
+    if (
+      selectItem?.price &&
+      selectItem.priceId &&
+      !list.some((p) => p.id === selectItem.priceId)
+    ) {
+      return [...list, selectItem.price];
+    }
+    return list;
+  }, [pricesList, selectItem]);
 
   const parseTimeToMinutes = (timeStr: string): number => {
     if (!timeStr) return 0;
@@ -271,7 +287,9 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   );
 
   React.useEffect(() => {
-    if (journalPrices && registredTime && leaveTime && !isPayed) {
+    // Don't overwrite the visitor's chosen pack when editing an existing journal
+    if (selectItem?.priceId) return;
+    if (journalPrices && registredTime && leaveTime && !isCheckedOut) {
       handleCalculateTimeAndPrice(registredTime, leaveTime);
     }
   }, [
@@ -280,7 +298,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
     journalPrices,
     setValue,
     handleCalculateTimeAndPrice,
-    isPayed,
+    isCheckedOut,
+    selectItem?.priceId,
   ]);
 
   const stayedDuration = React.useMemo(() => {
@@ -308,9 +327,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
         // Conserver la logique existante pour l'édition
         const updatedJournal: Partial<Journal> = {
           ...selectItem,
-          leaveTime: selectItem.isPayed
-            ? selectItem.leaveTime
-            : updateHoursAndMinutes(today),
+          // leaveTime null = still present; do not tie to isPayed
+          leaveTime: selectItem.leaveTime ?? null,
         };
         resetAsyn(updatedJournal);
         setMember(selectItem?.members ?? null);
@@ -332,10 +350,13 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
   const handlePriceSelect = (price: Price) => {
     setValue("priceId", price.id);
     setValue("payedAmount", price.price);
-    setValue(
-      "leaveTime",
-      addHours(new Date(registredTime), Number(price.timePeriod.end))
-    );
+    // Open session (en cours): keep leaveTime null — paid ≠ checkout
+    if (!(selectItem && !selectItem.leaveTime)) {
+      setValue(
+        "leaveTime",
+        addHours(new Date(registredTime), Number(price.timePeriod.end))
+      );
+    }
     setTarifAlert({ show: false, message: "" });
   };
   const defaultProps = React.useMemo(() => {
@@ -468,8 +489,8 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
                 name="registredTime"
                 label="Starting Date"
                 placeholder="Starting Date"
-                disabled={isPayed}
-                minTime={isReservation ? undefined : today} // Permet les dates futures si reservation
+                disabled={isCheckedOut}
+                minTime={isReservation ? undefined : today}
               />
             </Box>
 
@@ -485,7 +506,7 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               <RHCheckBox
                 defaultChecked={false}
                 name="isPayed"
-                label="Payment Status"
+                label="Payé (indépendant du check-out)"
               />
             </FormControl>
 
@@ -493,18 +514,34 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle1" sx={{ mb: 1 }}>
                   Select Rate
+                  {selectItem?.price?.name ||
+                  journalPrices?.find((p) => p.id === priceId)?.name ? (
+                    <Typography
+                      component="span"
+                      sx={{ ml: 1, color: "#1976d2", fontWeight: 600 }}
+                    >
+                      (
+                      {selectItem?.price?.name ||
+                        journalPrices?.find((p) => p.id === priceId)?.name}
+                      )
+                    </Typography>
+                  ) : null}
                 </Typography>
                 <Grid container spacing={2}>
                   {journalPrices
-                    ?.filter((jp) => (isPayed ? priceId === jp.id : true))
+                    ?.filter((jp) => {
+                      if (selectItem?.priceId && jp.id === selectItem.priceId)
+                        return true;
+                      if (priceId && jp.id === priceId) return true;
+                      return !isCheckedOut;
+                    })
                     .map((price) => (
                       <Grid item xs={6} key={price.id}>
                         <PriceCard
                           price={price}
                           isSelected={priceId === price.id}
                           onClick={() => {
-                            // setIsManualyUpdating(true);
-                            handlePriceSelect(price);
+                            if (!isCheckedOut) handlePriceSelect(price);
                           }}
                         />
                       </Grid>
@@ -524,10 +561,15 @@ const ShopFilterSidebar: FC<IShopFilterSidebar> = ({
             >
               <RHFDatePeakerField
                 name="leaveTime"
-                label="Leaving Date"
+                label={
+                  selectItem && !selectItem.leaveTime
+                    ? "Leaving Date (vide = encore présent)"
+                    : "Leaving Date (checkout)"
+                }
                 placeholder="Leaving Date"
-                disabled={isPayed}
+                disabled={isCheckedOut}
                 minTime={registredTime}
+                allowNull={!!(selectItem && !selectItem.leaveTime)}
               />
             </Box>
 

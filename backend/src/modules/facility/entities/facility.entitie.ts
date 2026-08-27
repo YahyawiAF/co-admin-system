@@ -20,15 +20,14 @@ export class FacilityEntity {
   @ApiProperty()
   adresse: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     example: 'https://example.com/logo.png',
-    required: false 
+    required: false,
   })
   logo?: string;
 
-  @ApiProperty({ 
-
-    description: 'Nombre total de places disponibles' 
+  @ApiProperty({
+    description: 'Nombre total de places disponibles',
   })
   nbrPlaces: number;
 
@@ -37,6 +36,15 @@ export class FacilityEntity {
 
   @ApiProperty()
   places: Record<string, number>;
+
+  @ApiProperty({
+    enum: ['ADMIN_ASSIGN', 'VISITOR_CHOOSE', 'AUTO_ASSIGN'],
+    required: false,
+  })
+  mobileSeatMode?: 'ADMIN_ASSIGN' | 'VISITOR_CHOOSE' | 'AUTO_ASSIGN';
+
+  @ApiProperty({ required: false })
+  receptionAway?: boolean;
 
   @ApiProperty()
   createdAt: Date;

@@ -39,45 +39,43 @@ export class CreateUserDto {
   role: Role;
 
   @ApiProperty({ required: false })
-  @IsPhoneNumber() 
-
+  @IsPhoneNumber()
   phoneNumber?: string;
 }
 
 export class updateUserDto {
-    @IsOptional()
-    @IsEmail()
-    @ApiProperty({ required: false })
-    public email?: string;
-  
-    @IsOptional()
-    @IsString()
-    @ApiProperty({ required: false })
-    public fullname?: string;
-  
-    @IsOptional()
-    @IsString()
-    @ApiProperty({ required: false })
-    password?: string;
-  
-    @IsOptional()
-    @IsString()
-    @ApiProperty({ required: false })
-    refreshToken?: string;
-  
-    @IsOptional()
-    @IsEnum(Role)
-    @ApiProperty({ required: false })
-    role?: Role;
-  
-    @IsOptional()
-    @Matches(/^\+?[1-9]\d{1,14}$/, {
-      message: 'Le numéro doit être au format international (ex: +212612345678)',
-    })
-    @ApiProperty({ required: false })
-    phoneNumber?: string;
-  }
-  
+  @IsOptional()
+  @IsEmail()
+  @ApiProperty({ required: false })
+  public email?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public fullname?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  refreshToken?: string;
+
+  @IsOptional()
+  @IsEnum(Role)
+  @ApiProperty({ required: false })
+  role?: Role;
+
+  @IsOptional()
+  @Matches(/^\+?[1-9]\d{1,14}$/, {
+    message: 'Le numéro doit être au format international (ex: +212612345678)',
+  })
+  @ApiProperty({ required: false })
+  phoneNumber?: string;
+}
 
 export class AddUserDto {
   @IsNotEmpty()

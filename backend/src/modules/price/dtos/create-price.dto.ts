@@ -1,6 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { PriceType } from '@prisma/client';
-import { IsNotEmpty, IsEnum, IsNumber, ValidateNested } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { BillingUnit, PriceCategory, PriceType } from '@prisma/client';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class TimeIntervalDto {
@@ -30,4 +38,39 @@ export class CreatePriceDto {
   @ApiProperty({ enum: PriceType, enumName: 'PriceType' })
   @IsEnum(PriceType)
   type: PriceType;
+
+  @ApiPropertyOptional({ enum: PriceCategory })
+  @IsOptional()
+  @IsEnum(PriceCategory)
+  category?: PriceCategory;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  durationHours?: number;
+
+  @ApiPropertyOptional({ enum: BillingUnit })
+  @IsOptional()
+  @IsEnum(BillingUnit)
+  billingUnit?: BillingUnit;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  periodDays?: number;
+
+  @ApiPropertyOptional({
+    description: 'Optional space this tarif is linked to',
+  })
+  @IsOptional()
+  @IsString()
+  spaceId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'When true, an active subscription of this tarif keeps a dedicated seat until the period ends',
+  })
+  @IsOptional()
+  @IsBoolean()
+  reserveSeat?: boolean;
 }

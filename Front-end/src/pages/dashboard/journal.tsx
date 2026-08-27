@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, ReactElement } from "react";
 import styled from "@emotion/styled";
 import { Helmet } from "react-helmet-async";
@@ -17,6 +17,7 @@ import {
   Tabs,
   Box,
   Button,
+  Typography,
 } from "@mui/material";
 import { spacing } from "@mui/system";
 import DashboardLayout from "../../layouts/Dashboard";
@@ -60,6 +61,10 @@ import DailyExpenseModal from "../../components/pages/dashboard/journal/dailyexp
 import Fuse from "fuse.js";
 import SeatingChart from "./map";
 import { MobileDatePicker } from "@mui/x-date-pickers";
+import QuickCheckInPanel from "src/components/pages/dashboard/journal/QuickCheckInPanel";
+import { useCheckoutSessionMutation } from "src/api/mobile.repo";
+import LogoutIcon from "@mui/icons-material/Logout";
+import { getRealtimeSocket } from "src/utils/adminSocket";
 
 const Divider = styled(MuiDivider)(spacing);
 const Paper = styled(MuiPaper)(spacing);
@@ -197,13 +202,53 @@ function JournalPage() {
     journalDate: today.toDateString(),
   });
 
+  useEffect(() => {
+    const s = getRealtimeSocket();
+    const refresh = () => refetch();
+    s.on("visit_request_resolved", refresh);
+    s.on("visitor_checkout", refresh);
+    s.on("table_updates", refresh);
+    return () => {
+      s.off("visit_request_resolved", refresh);
+      s.off("visitor_checkout", refresh);
+      s.off("table_updates", refresh);
+    };
+  }, [refetch]);
+
   const handleChange = (event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
   };
 
   const [deleteJournal] = useDeleteJournalMutation();
+  const [checkoutSession] = useCheckoutSessionMutation();
 
   const rows: Journal[] = useMemo(() => Journals?.data || [], [Journals]);
+
+  const presentMemberIds = useMemo(
+    () =>
+      rows
+        .filter((r) => !r.leaveTime)
+        .map((r) => r.memberID || r.members?.id)
+        .filter(Boolean) as string[],
+    [rows]
+  );
+
+  const presentCount = useMemo(
+    () => rows.filter((r) => !r.leaveTime).length,
+    [rows]
+  );
+
+  const handleCheckout = useCallback(
+    async (row: Journal) => {
+      try {
+        await checkoutSession({ id: row.id }).unwrap();
+        refetch();
+      } catch (e: any) {
+        alert(e?.data?.message || "Checkout failed");
+      }
+    },
+    [checkoutSession, refetch]
+  );
 
   const handleRequestSort = (event: any, property: string) => {
     const isAsc = orderBy === property && order === "asc";
@@ -487,6 +532,23 @@ function JournalPage() {
       <TabPanel value={value} index={0} title={"List"}>
         <Grid container spacing={6}>
           <Grid item xs={12}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                mb: 2,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="subtitle1">
+                Who&apos;s here now: <strong>{presentCount}</strong>
+              </Typography>
+            </Box>
+            <QuickCheckInPanel
+              onDone={() => refetch()}
+              presentMemberIds={presentMemberIds}
+            />
             <div>
               <Modal
                 open={openDeletModal}
@@ -542,8 +604,8 @@ function JournalPage() {
                         .map((row, index) => {
                           const isItemSelected = isSelected(row.id);
                           const labelId = `enhanced-table-checkbox-${index}`;
-                          const dleave = row.isPayed
-                            ? row.leaveTime ?? new Date()
+                          const dleave = row.leaveTime
+                            ? row.leaveTime
                             : new Date();
                           const hoursDifference = row.isReservation
                             ? "Reservation"
@@ -567,13 +629,31 @@ function JournalPage() {
                                   }
                                 />
                               </TableCell>
-                              <TableCell
-                                component="th"
-                                id={labelId}
-                                scope="row"
-                                padding="none"
-                              >
-                                {row.members?.fullName}
+                              <TableCell>
+                                {row.members?.firstName ||
+                                  row.members?.fullName ||
+                                  "—"}
+                                {row.members?.visitorNumber != null ? (
+                                  <Box
+                                    component="span"
+                                    sx={{
+                                      ml: 1,
+                                      color: "#1976d2",
+                                      fontWeight: 800,
+                                    }}
+                                  >
+                                    #{row.members.visitorNumber}
+                                  </Box>
+                                ) : null}
+                                {(row.price?.name || row.prices?.name) && (
+                                  <Typography
+                                    variant="caption"
+                                    display="block"
+                                    color="text.secondary"
+                                  >
+                                    {row.price?.name || row.prices?.name}
+                                  </Typography>
+                                )}
                               </TableCell>
                               <TableCell>
                                 {format(
@@ -592,6 +672,16 @@ function JournalPage() {
                               </TableCell>
                               <TableCell padding="none" align="right">
                                 <Box mr={2}>
+                                  {!row.leaveTime ? (
+                                    <IconButton
+                                      onClick={() => handleCheckout(row)}
+                                      aria-label="checkout"
+                                      size="large"
+                                      title="Check out"
+                                    >
+                                      <LogoutIcon color="primary" />
+                                    </IconButton>
+                                  ) : null}
                                   <IconButton
                                     onClick={() => handleEdite(row)}
                                     aria-label="edit"

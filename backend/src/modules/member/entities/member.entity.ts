@@ -25,11 +25,26 @@ export class MemberEntity implements Member {
   @ApiProperty({ description: 'Biography of the member', required: false })
   bio: string | null;
 
+  @ApiProperty({
+    description: 'Profile photo (data URL or http URL)',
+    required: false,
+  })
+  avatarUrl: string | null;
+
   @ApiProperty({ description: 'Credits associated with the member' })
   credits: number;
 
   @ApiProperty({ description: 'Phone of the member' })
-  phone: number;
+  phone: string | null;
+
+  @ApiProperty({
+    description: 'Password hash for mobile auth',
+    required: false,
+  })
+  passwordHash: string | null;
+
+  @ApiProperty({ description: 'Admin-only visitor number', required: false })
+  visitorNumber: number | null;
 
   @ApiProperty({
     description: 'Subscription plan of the member',
@@ -63,6 +78,33 @@ export class MemberEntity implements Member {
 
   @ApiProperty({ description: 'Indicates whether the member is active' })
   isActive: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  groupId: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  discountForfait: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  discountSalle: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  discountOpenSpace: number | null;
+
+  @ApiProperty({ required: false, type: [String] })
+  skills: string[];
+
+  @ApiProperty({ required: false, type: [String] })
+  services: string[];
+
+  @ApiProperty({ required: false, nullable: true })
+  linkedinUrl: string | null;
+
+  @ApiProperty({ required: false })
+  openToCollaboration: boolean;
+
+  @ApiProperty({ required: false })
+  showInDirectory: boolean;
 
   @ApiProperty({
     description:

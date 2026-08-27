@@ -1,10 +1,11 @@
 import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
-import { PriceEntity } from '@/modules/price/entities/price.entity'; // Importez l'entité PriceEntity
+import { PriceEntity } from '@/modules/price/entities/price.entity';
 import { UserEntity } from '@/modules/user/entities/user.entity';
 
 export class JournalEntity {
-  constructor({ members, price, createdBy, ...data }: Partial<JournalEntity>) {
+  constructor(partial: Partial<JournalEntity> & { prices?: any }) {
+    const { members, price, prices, createdBy, ...data } = partial as any;
     Object.assign(this, data);
     if (members) {
       this.members = new MemberEntity(members);
@@ -14,8 +15,13 @@ export class JournalEntity {
       this.createdBy = new UserEntity(createdBy);
     }
 
-    if (price) {
-      this.price = new PriceEntity(price);
+    // Prisma relation is `prices`; keep API field as `price`
+    const priceData = price || prices;
+    if (priceData) {
+      this.price = new PriceEntity(priceData);
+      if (!this.priceId && priceData.id) {
+        this.priceId = priceData.id;
+      }
     }
   }
 
@@ -44,10 +50,16 @@ export class JournalEntity {
   updatedAt: Date | null;
 
   @ApiProperty()
-  memberID: string;
+  memberID: string | null;
 
   @ApiProperty()
   isReservation: boolean;
+
+  @ApiProperty()
+  isAnonymous: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  guestName: string | null;
 
   @ApiProperty({ required: false, type: UserEntity })
   createdBy?: UserEntity;
@@ -56,8 +68,11 @@ export class JournalEntity {
   members?: MemberEntity;
 
   @ApiProperty({ required: false, type: PriceEntity })
-  price?: PriceEntity; // Ajoutez une référence à l'entité PriceEntity
+  price?: PriceEntity;
 
   @ApiProperty()
-  priceId: string; // Ajoutez une propriété priceId pour la relation
+  priceId: string;
+
+  @ApiProperty({ required: false, nullable: true })
+  groupVisitId?: string | null;
 }

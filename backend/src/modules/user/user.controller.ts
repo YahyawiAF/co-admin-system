@@ -88,22 +88,22 @@ export class UsersController {
     return new UserEntity(await this.usersService.findOne(id));
   }
   @Patch('change-password')
-@UseGuards(JwtAuthGuard)
-@Roles([Role.ADMIN, Role.USER])
-@ApiBearerAuth()
-@ApiOkResponse({ type: UserEntity })
-async changePassword(
-  @Req() req,
-  @Body() changePasswordDto: ChangePasswordDto
-) {
-  const userId = req.user.userId; // Accéder à userId depuis le payload JWT
-  const updatedUser = await this.usersService.changePassword(
-    userId,
-    changePasswordDto.oldPassword,
-    changePasswordDto.newPassword
-  );
-  return new UserEntity(updatedUser);
-}
+  @UseGuards(JwtAuthGuard)
+  @Roles([Role.ADMIN, Role.USER])
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: UserEntity })
+  async changePassword(
+    @Req() req,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    const userId = req.user.userId; // Accéder à userId depuis le payload JWT
+    const updatedUser = await this.usersService.changePassword(
+      userId,
+      changePasswordDto.oldPassword,
+      changePasswordDto.newPassword,
+    );
+    return new UserEntity(updatedUser);
+  }
   @Patch(':id')
   @Roles([Role.ADMIN, Role.USER])
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -124,6 +124,4 @@ async changePassword(
   async remove(@Param('id', ParseUUIDPipe) id: string) {
     return new UserEntity(await this.usersService.remove(id));
   }
-
- 
 }

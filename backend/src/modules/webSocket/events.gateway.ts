@@ -31,6 +31,26 @@ export class EventsGateway {
     this.server.sockets.emit('table_updates', data);
   }
 
+  sendVisitRequest(data: any) {
+    this.server.sockets.emit('visit_request', data);
+  }
+
+  sendVisitRequestResolved(data: any) {
+    this.server.sockets.emit('visit_request_resolved', data);
+  }
+
+  sendVisitorCheckout(data: any) {
+    this.server.sockets.emit('visitor_checkout', data);
+  }
+
+  sendProductOrder(data: any) {
+    this.server.sockets.emit('product_order', data);
+  }
+
+  sendStaffMessage(data: any) {
+    this.server.sockets.emit('staff_message', data);
+  }
+
   @SubscribeMessage('identity')
   async identity(@MessageBody() data: number): Promise<number> {
     return data;

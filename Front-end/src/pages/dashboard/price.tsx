@@ -4,8 +4,15 @@ import {
   useCreatePriceMutation,
   useUpdatePriceMutation,
   useDeletePriceMutation,
+  useSeedCollaboraHubMutation,
 } from "src/api/price.repo";
-import { Price, PriceType, TimeInterval } from "src/types/shared";
+import {
+  BillingUnit,
+  Price,
+  PriceCategory,
+  PriceType,
+  TimeInterval,
+} from "src/types/shared";
 import {
   Button,
   IconButton,
@@ -228,6 +235,8 @@ const PriceComponent = () => {
   const [createPrice] = useCreatePriceMutation();
   const [updatePrice] = useUpdatePriceMutation();
   const [deletePrice] = useDeletePriceMutation();
+  const [seedCollabora, { isLoading: seeding }] =
+    useSeedCollaboraHubMutation();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<PriceType | "all">("all");
@@ -435,6 +444,27 @@ const PriceComponent = () => {
       <Typography variant="h4" sx={{ mb: 2 }}>
         Rate Management
       </Typography>
+      <Box sx={{ mb: 2 }}>
+        <Button
+          variant="contained"
+          color="secondary"
+          disabled={seeding}
+          onClick={async () => {
+            try {
+              const res = await seedCollabora().unwrap();
+              alert(
+                `Collabora Hub tarifs: ${res.created} created, ${res.skipped} already present`
+              );
+              refetch();
+            } catch (e) {
+              console.error(e);
+              alert("Failed to seed tarifs");
+            }
+          }}
+        >
+          Load Collabora Hub tarifs
+        </Button>
+      </Box>
 
       <MainContainer>
         <Grid container spacing={2} alignItems="center" sx={{ mb: 2 }}>
@@ -736,6 +766,85 @@ const PriceComponent = () => {
           </Select>
           {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
         </FormControl>
+
+        <FormControl fullWidth>
+          <Select
+            displayEmpty
+            value={
+              (editPrice ? editPrice.category : newPrice.category) || ""
+            }
+            onChange={(e) => {
+              const category = (e.target.value || null) as PriceCategory | null;
+              editPrice
+                ? setEditPrice({ ...editPrice, category })
+                : setNewPrice({ ...newPrice, category });
+            }}
+          >
+            <MenuItem value="">Category (optional)</MenuItem>
+            {Object.values(PriceCategory).map((c) => (
+              <MenuItem key={c} value={c}>
+                {c}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth>
+          <Select
+            displayEmpty
+            value={
+              (editPrice ? editPrice.billingUnit : newPrice.billingUnit) || ""
+            }
+            onChange={(e) => {
+              const billingUnit = (e.target.value ||
+                null) as BillingUnit | null;
+              editPrice
+                ? setEditPrice({ ...editPrice, billingUnit })
+                : setNewPrice({ ...newPrice, billingUnit });
+            }}
+          >
+            <MenuItem value="">Billing unit</MenuItem>
+            {Object.values(BillingUnit).map((u) => (
+              <MenuItem key={u} value={u}>
+                {u}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <TextField
+          label="Duration (hours)"
+          fullWidth
+          type="number"
+          value={
+            editPrice
+              ? editPrice.durationHours ?? ""
+              : newPrice.durationHours ?? ""
+          }
+          onChange={(e) => {
+            const durationHours = e.target.value
+              ? Number(e.target.value)
+              : null;
+            editPrice
+              ? setEditPrice({ ...editPrice, durationHours })
+              : setNewPrice({ ...newPrice, durationHours });
+          }}
+        />
+
+        <TextField
+          label="Period days (subscriptions)"
+          fullWidth
+          type="number"
+          value={
+            editPrice ? editPrice.periodDays ?? "" : newPrice.periodDays ?? ""
+          }
+          onChange={(e) => {
+            const periodDays = e.target.value ? Number(e.target.value) : null;
+            editPrice
+              ? setEditPrice({ ...editPrice, periodDays })
+              : setNewPrice({ ...newPrice, periodDays });
+          }}
+        />
 
         <Box
           sx={{

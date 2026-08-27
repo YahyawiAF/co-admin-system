@@ -7,7 +7,6 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
- 
 } from 'class-validator';
 import { PaginatedResult } from 'prisma-pagination';
 
@@ -16,7 +15,6 @@ export class AddAbonnementDto {
   @IsString()
   @ApiProperty()
   public memberID: string;
-
 
   @IsNotEmpty()
   @IsString()
@@ -53,4 +51,19 @@ export class AddAbonnementDto {
   @IsNumber()
   @ApiProperty()
   public payedAmount: number;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public hoursQuota?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public hoursUsed?: number;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public reservedSeatLabel?: string | null;
 }

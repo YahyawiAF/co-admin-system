@@ -2,7 +2,7 @@ import { MemberEntity } from '@/modules/member/entities/member.entity';
 import { ApiProperty } from '@nestjs/swagger';
 import { PriceEntity } from '@/modules/price/entities/price.entity'; // Importez l'entité PriceEntity
 
-export class AbonnementEntity  {
+export class AbonnementEntity {
   constructor({ members, price, ...data }: Partial<AbonnementEntity>) {
     Object.assign(this, data);
     if (members) {
@@ -31,7 +31,6 @@ export class AbonnementEntity  {
   @ApiProperty()
   payedAmount: number;
 
-
   @ApiProperty()
   createdAt: Date | null;
 
@@ -48,8 +47,17 @@ export class AbonnementEntity  {
   members?: MemberEntity;
 
   @ApiProperty({ required: false, type: PriceEntity })
-  price?: PriceEntity; 
+  price?: PriceEntity;
 
   @ApiProperty()
-  priceId: string; 
+  priceId: string;
+
+  @ApiProperty({ required: false })
+  hoursQuota?: number | null;
+
+  @ApiProperty()
+  hoursUsed?: number;
+
+  @ApiProperty({ required: false })
+  reservedSeatLabel?: string | null;
 }

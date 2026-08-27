@@ -1,0 +1,17 @@
+-- CreateTable
+CREATE TABLE "space_walls" (
+    "id" TEXT NOT NULL,
+    "spaceId" TEXT NOT NULL,
+    "label" TEXT,
+    "x" DOUBLE PRECISION NOT NULL DEFAULT 40,
+    "y" DOUBLE PRECISION NOT NULL DEFAULT 40,
+    "width" DOUBLE PRECISION NOT NULL DEFAULT 160,
+    "height" DOUBLE PRECISION NOT NULL DEFAULT 12,
+    "rotation" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "space_walls_pkey" PRIMARY KEY ("id")
+);
+
+ALTER TABLE "space_walls" ADD CONSTRAINT "space_walls_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "spaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;

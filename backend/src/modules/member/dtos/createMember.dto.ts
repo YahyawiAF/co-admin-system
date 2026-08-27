@@ -34,14 +34,19 @@ export class AddMemberDto {
   public bio?: string;
 
   @IsOptional()
+  @IsString()
+  @ApiProperty({ description: 'Profile photo URL', required: false })
+  public avatarUrl?: string;
+
+  @IsOptional()
   @IsNumber()
   @ApiProperty({ description: 'Credits associated with the member' })
   public credits: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsString()
   @ApiProperty({ description: 'Phone associated with the member' })
-  public phone: number;
+  public phone?: string;
 
   @IsOptional()
   @IsString()
@@ -95,4 +100,24 @@ export class AddMemberDto {
   @IsBoolean()
   @ApiProperty({ description: 'Indicates whether the member is active' })
   public isActive: boolean;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public groupId?: string | null;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public discountForfait?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public discountSalle?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public discountOpenSpace?: number | null;
 }

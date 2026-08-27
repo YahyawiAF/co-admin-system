@@ -1,0 +1,18 @@
+{
+  "name": "co-admin-system",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:frontend-legacy\"",
+    "dev:backend": "cd backend && npm run start:dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:frontend-legacy": "cd Front-end && npm run dev"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@tabler/icons-react": "^3.35.0",
+    "socket.io-client": "^4.8.3"
+  }
+}

@@ -1,12 +1,11 @@
-// src/proxy/proxy.module.ts
 import { Module } from '@nestjs/common';
 import { ProxyService } from './proxy.service';
-import { PrismaService } from 'database/prisma.service';
 import { PrismaModule } from 'database/prisma.module';
+import { OpsEventsModule } from '../modules/ops-events/ops-events.module';
 
 @Module({
-  imports: [PrismaModule], // Importez le module
+  imports: [PrismaModule, OpsEventsModule],
   providers: [ProxyService],
-  exports: [ProxyService], // Exportez seulement ProxyService
+  exports: [ProxyService],
 })
 export class ProxyModule {}

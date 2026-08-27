@@ -62,6 +62,12 @@ export class MemberController {
     return await this.memberService.findAll();
   }
 
+  @Get(':id/insights')
+  @ApiBearerAuth()
+  async insights(@Param('id', ParseUUIDPipe) id: string) {
+    return this.memberService.insights(id);
+  }
+
   @Get(':id')
   // @Roles([Role.ADMIN, Role.USER])
   // @UseGuards(JwtAuthGuard, RolesGuard)

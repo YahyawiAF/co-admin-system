@@ -1,0 +1,48 @@
+"use client";
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
+import { format } from "date-fns";
+
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        staleTime: 30_000,
+        gcTime: 10 * 60_000,
+        refetchOnWindowFocus: false,
+        retry: 1,
+      },
+    },
+  });
+}
+
+let browserQueryClient: QueryClient | undefined;
+
+function getQueryClient() {
+  if (typeof window === "undefined") return makeQueryClient();
+  if (!browserQueryClient) browserQueryClient = makeQueryClient();
+  return browserQueryClient;
+}
+
+export function AppQueryProvider({ children }: { children: ReactNode }) {
+  const [client] = useState(getQueryClient);
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
+
+export const queryKeys = {
+  journal: (date: Date | string) =>
+    [
+      "journal",
+      typeof date === "string" ? date : format(date, "yyyy-MM-dd"),
+    ] as const,
+  members: ["members"] as const,
+  prices: ["prices"] as const,
+  facility: ["facility"] as const,
+  abonnements: ["abonnements"] as const,
+  visitRequestsPending: ["visit-requests", "pending"] as const,
+  productOrdersPending: ["product-orders", "pending"] as const,
+  groups: ["groups"] as const,
+  events: ["events"] as const,
+  organization: (slug: string) => ["organization", slug] as const,
+};

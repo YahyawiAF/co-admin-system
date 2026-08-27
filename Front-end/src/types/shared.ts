@@ -93,9 +93,38 @@ export enum PriceType {
   journal = "journal",
   abonnement = "abonnement",
 }
+
+export enum PriceCategory {
+  JOURNEE = "JOURNEE",
+  ABONNEMENT = "ABONNEMENT",
+  SALLE = "SALLE",
+  OPEN_SPACE = "OPEN_SPACE",
+}
+
+export enum BillingUnit {
+  PACK = "PACK",
+  HOURLY = "HOURLY",
+  PERIOD = "PERIOD",
+}
+
 export interface TimeInterval {
   start: string;
   end: string;
+}
+
+export interface Price {
+  id: string;
+  name: string;
+  price: number;
+  timePeriod: TimeInterval;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+  type: PriceType;
+  category?: PriceCategory | null;
+  durationHours?: number | null;
+  billingUnit?: BillingUnit | null;
+  periodDays?: number | null;
+  journals: Journal[];
 }
 
 export interface User {
@@ -125,6 +154,7 @@ export interface Member {
   bio?: string | null;
   credits: number;
   phone: string;
+  visitorNumber?: number | null;
   plan: Subscription;
   journals: Journal[];
   reservations: Reservation[];
@@ -134,17 +164,6 @@ export interface Member {
   isActive: boolean;
   fullName: string | null;
   fullNameWithEmail: string | null;
-}
-
-export interface Price {
-  id: string;
-  name: string;
-  price: number;
-  timePeriod: TimeInterval;
-  createdAt: Date | null;
-  updatedAt: Date | null;
-  type: PriceType;
-  journals: Journal[];
 }
 
 export interface Journal {

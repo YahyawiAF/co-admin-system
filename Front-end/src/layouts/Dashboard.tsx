@@ -13,6 +13,8 @@ import Navbar from "../components/navbar/Navbar";
 import dashboardItems from "../components/sidebar/dashboardItems";
 import Sidebar from "../components/sidebar/Sidebar";
 import Footer from "../components/Footer";
+import VisitRequestPopup from "../components/VisitRequestPopup";
+import CheckoutAlertPopup from "../components/CheckoutAlertPopup";
 
 const drawerWidth = 258;
 
@@ -98,6 +100,8 @@ const Dashboard: React.FC<DashboardType> = ({ children }) => {
           <Outlet />
         </MainContent>
         <Footer />
+        <VisitRequestPopup />
+        <CheckoutAlertPopup />
       </AppContent>
       {/* <Settings /> */}
     </Root>

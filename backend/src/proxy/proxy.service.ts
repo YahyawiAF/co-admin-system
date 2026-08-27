@@ -1,59 +1,68 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
-import axios, { AxiosInstance, AxiosError } from 'axios';
 import { BookingResponse } from './dtos/BookingResponseDto';
 import { BookSeatsDto } from './dtos/books.dtos';
+import { OpsEventsService } from '../modules/ops-events/ops-events.service';
 
+/** Local seat booking — no Seats.io. Persistence only in PostgreSQL. */
 @Injectable()
 export class ProxyService {
   private readonly logger = new Logger(ProxyService.name);
-  private readonly axiosInstance: AxiosInstance;
 
-  constructor(private readonly prisma: PrismaService) {
-    this.axiosInstance = axios.create({
-      baseURL: 'https://api-sa.seatsio.net',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization:
-          'Basic ' +
-          Buffer.from(`${process.env.SEATSIO_SECRET_KEY}:`).toString('base64'),
-      },
-      timeout: 5000,
-    });
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly opsEvents: OpsEventsService,
+  ) {}
 
   async bookSeats(data: BookSeatsDto): Promise<BookingResponse[]> {
     try {
-      // 1. Vérifier que le membre existe
       const memberExists = await this.prisma.member.findUnique({
         where: { id: data.memberId },
         select: { id: true },
       });
+      if (!memberExists) throw new Error('Member not found');
 
-      if (!memberExists) {
-        throw new Error('Member not found');
-      }
-
-      // 2. Vérifier la disponibilité des sièges
       await this.checkSeatsAvailability(data.eventKey, data.seats);
 
-      // 3. Tout est OK, procéder à la réservation
-      return await this.prisma.$transaction(async (prisma) => {
-        // 3a. Réserver dans Seatsio
-        const seatsioResponse = await this.bookSeatsInSeatsio(data);
-
-        // 3b. Enregistrer en base de données
-        await this.saveBookingToDatabase(data, prisma);
-
-        // Map Seatsio response to BookingResponse
-        return data.seats.map((seatId, index) => ({
-          ...seatsioResponse[index],
-          success: true,
-        }));
+      const seatMeta = await this.prisma.seat.findMany({
+        where: { label: { in: data.seats }, isActive: true },
       });
+      const overflowLabels = new Set(
+        seatMeta.filter((s) => s.isOverflow).map((s) => s.label),
+      );
+
+      return await this.prisma
+        .$transaction(async (prisma) => {
+          await this.saveBookingToDatabase(data, prisma);
+          const created = await prisma.seatBooking.findMany({
+            where: {
+              eventKey: data.eventKey,
+              seatId: { in: data.seats },
+              memberId: data.memberId,
+              isBooked: true,
+            },
+          });
+          return created.map((b) => ({ ...b, success: true }));
+        })
+        .then(async (created) => {
+          for (const seatId of data.seats) {
+            await this.opsEvents.record({
+              type: overflowLabels.has(seatId)
+                ? 'seat.overflow_used'
+                : 'seat.assigned',
+              memberId: data.memberId,
+              seatId,
+              meta: {
+                eventKey: data.eventKey,
+                isOverflow: overflowLabels.has(seatId),
+              },
+            });
+          }
+          return created;
+        });
     } catch (error) {
-      this.logger.error('Booking error', error.stack);
+      this.logger.error('Booking error', (error as Error).stack);
       throw error;
     }
   }
@@ -64,43 +73,25 @@ export class ProxyService {
   ): Promise<BookingResponse> {
     try {
       return await this.prisma.$transaction(async (prisma) => {
-        // 1. Vérifier que la réservation existe
         const existingBooking = await prisma.seatBooking.findUnique({
           where: { id: bookingId },
         });
-
         if (!existingBooking) {
           throw new NotFoundException('Booking not found');
         }
 
-        // 2. Vérifier que le membre existe si mis à jour
         if (data.memberId) {
           const memberExists = await prisma.member.findUnique({
             where: { id: data.memberId },
             select: { id: true },
           });
-          if (!memberExists) {
-            throw new Error('Member not found');
-          }
+          if (!memberExists) throw new Error('Member not found');
         }
 
-        // 3. Vérifier la disponibilité des nouveaux sièges si mis à jour
         if (data.seats && data.eventKey) {
           await this.checkSeatsAvailability(data.eventKey, data.seats);
         }
 
-        // 4. Mettre à jour dans Seatsio si nécessaire
-        let seatsioResponse: BookingResponse[] | null = null;
-        if (data.seats || data.eventKey) {
-          seatsioResponse = await this.bookSeatsInSeatsio({
-            ...data,
-            seats: data.seats || existingBooking.seatId.split(','),
-            eventKey: data.eventKey || existingBooking.eventKey,
-            memberId: data.memberId || existingBooking.memberId,
-          } as BookSeatsDto);
-        }
-
-        // 5. Mettre à jour en base de données
         const updatedBooking = await prisma.seatBooking.update({
           where: { id: bookingId },
           data: {
@@ -111,110 +102,47 @@ export class ProxyService {
           },
         });
 
-        return {
-          ...updatedBooking,
-          success: true,
-        };
+        return { ...updatedBooking, success: true };
       });
     } catch (error) {
-      this.logger.error('Update booking error', error.stack);
+      this.logger.error('Update booking error', (error as Error).stack);
       throw error;
     }
   }
 
   async deleteBooking(bookingId: string): Promise<void> {
     try {
-      await this.prisma.$transaction(async (prisma) => {
-        // 1. Vérifier que la réservation existe
-        const booking = await prisma.seatBooking.findUnique({
-          where: { id: bookingId },
-        });
-
-        if (!booking) {
-          throw new NotFoundException('Booking not found');
-        }
-
-        // 2. Libérer les sièges dans Seatsio
-        await this.axiosInstance.post(
-          `/events/${booking.eventKey}/actions/release`,
-          {
-            objects: booking.seatId.split(','),
-          },
-        );
-
-        // 3. Supprimer la réservation en base
-        await prisma.seatBooking.delete({
-          where: { id: bookingId },
-        });
-
-        this.logger.log(`Booking ${bookingId} deleted successfully`);
+      const booking = await this.prisma.seatBooking.findUnique({
+        where: { id: bookingId },
       });
+      if (!booking) throw new NotFoundException('Booking not found');
+      await this.prisma.seatBooking.delete({ where: { id: bookingId } });
+      await this.opsEvents.record({
+        type: 'seat.released',
+        memberId: booking.memberId,
+        seatId: booking.seatId,
+        meta: { eventKey: booking.eventKey },
+      });
+      this.logger.log(`Booking ${bookingId} deleted successfully`);
     } catch (error) {
-      this.logger.error('Delete booking error', error.stack);
+      this.logger.error('Delete booking error', (error as Error).stack);
       throw error;
     }
   }
 
   async getAllBookings(): Promise<BookingResponse[]> {
-    try {
-      const bookings = await this.prisma.seatBooking.findMany({
-        where: { isBooked: true },
-      });
-
-      return bookings.map((booking) => ({
-        ...booking,
-        success: true,
-      }));
-    } catch (error) {
-      this.logger.error('Get all bookings error', error.stack);
-      throw error;
-    }
+    const bookings = await this.prisma.seatBooking.findMany({
+      where: { isBooked: true },
+    });
+    return bookings.map((booking) => ({ ...booking, success: true }));
   }
 
   async getBookingById(bookingId: string): Promise<BookingResponse> {
-    try {
-      const booking = await this.prisma.seatBooking.findUnique({
-        where: { id: bookingId },
-      });
-
-      if (!booking) {
-        throw new NotFoundException('Booking not found');
-      }
-
-      return {
-        ...booking,
-        success: true,
-      };
-    } catch (error) {
-      this.logger.error('Get booking by ID error', error.stack);
-      throw error;
-    }
-  }
-
-  private async bookSeatsInSeatsio(
-    data: BookSeatsDto,
-  ): Promise<BookingResponse[]> {
-    const url = `/events/${data.eventKey}/actions/book`;
-    const payload = {
-      objects: data.seats,
-      orderId: `order-${Date.now()}`,
-    };
-
-    this.logger.debug(`Calling Seatsio: ${url}`, payload);
-
-    await this.axiosInstance.post(url, payload);
-
-    return data.seats.map((seatId) => ({
-      id: '', // Will be set in saveBookingToDatabase
-      eventKey: data.eventKey,
-      seatId,
-      memberId: data.memberId,
-      isBooked: true,
-      bookedAt: new Date(),
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      success: true,
-    }));
+    const booking = await this.prisma.seatBooking.findUnique({
+      where: { id: bookingId },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    return { ...booking, success: true };
   }
 
   private async checkSeatsAvailability(
@@ -229,7 +157,6 @@ export class ProxyService {
       },
       select: { seatId: true },
     });
-
     if (existingBookings.length > 0) {
       const bookedSeats = existingBookings.map((b) => b.seatId);
       throw new Error(`Seats already booked: ${bookedSeats.join(', ')}`);
@@ -240,24 +167,55 @@ export class ProxyService {
     data: BookSeatsDto,
     prisma: Prisma.TransactionClient,
   ): Promise<void> {
-    try {
-      await Promise.all(
-        data.seats.map((seatId) =>
-          prisma.seatBooking.create({
-            data: {
-              eventKey: data.eventKey,
-              seatId,
-              isBooked: true,
-              bookedAt: new Date(),
-              memberId: data.memberId,
-            },
-          }),
-        ),
-      );
-      this.logger.log(`Booking saved for member ${data.memberId}`);
-    } catch (dbError) {
-      this.logger.error('Database error', dbError.stack);
-      throw new Error('Failed to save booking');
-    }
+    await Promise.all(
+      data.seats.map((seatId) =>
+        prisma.seatBooking.create({
+          data: {
+            eventKey: data.eventKey,
+            seatId,
+            isBooked: true,
+            bookedAt: new Date(),
+            memberId: data.memberId,
+          },
+        }),
+      ),
+    );
+    await this.markPermanentIfPeriodSub(data.memberId, data.seats, prisma);
+  }
+
+  private async markPermanentIfPeriodSub(
+    memberId: string,
+    seats: string[],
+    prisma: Prisma.TransactionClient,
+  ) {
+    const now = new Date();
+    const sub = await prisma.abonnement.findFirst({
+      where: {
+        memberID: memberId,
+        registredDate: { lte: now },
+        OR: [{ leaveDate: null }, { leaveDate: { gte: now } }],
+      },
+      include: { price: true },
+      orderBy: { leaveDate: 'desc' },
+    });
+    if (!sub?.price) return;
+    const isHours = sub.price.billingUnit === 'HOURLY';
+    const isAbo =
+      sub.price.category === 'ABONNEMENT' || sub.price.type === 'abonnement';
+    if (!isAbo || isHours) return;
+    const label = seats[0];
+    if (!label) return;
+    await prisma.seatBooking.updateMany({
+      where: {
+        memberId,
+        seatId: { in: seats },
+        isBooked: true,
+      },
+      data: { isPermanent: true },
+    });
+    await prisma.abonnement.update({
+      where: { id: sub.id },
+      data: { reservedSeatLabel: label },
+    });
   }
 }

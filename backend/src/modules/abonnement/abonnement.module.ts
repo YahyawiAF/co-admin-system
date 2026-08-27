@@ -10,15 +10,17 @@ import { AbonnementController } from './abonnement.controller';
 import { AbonnementService } from './abonnement.service';
 
 @Module({
-  imports: [EventsModule, TypedEventEmitterModule,
-     ConfigModule.forRoot(),
-        JwtModule.register({
-          secret: process.env.JWT_ACCESS_SECRET,
-          signOptions: { expiresIn: '20m' },
-        }),
+  imports: [
+    EventsModule,
+    TypedEventEmitterModule,
+    ConfigModule.forRoot(),
+    JwtModule.register({
+      secret: process.env.JWT_ACCESS_SECRET,
+      signOptions: { expiresIn: '20m' },
+    }),
   ],
   controllers: [AbonnementController],
-  providers: [JwtAuthGuard,AbonnementService, PrismaService],
+  providers: [JwtAuthGuard, AbonnementService, PrismaService],
   exports: [AbonnementService],
 })
 export class AbonnementModule {}

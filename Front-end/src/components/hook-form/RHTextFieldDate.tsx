@@ -93,10 +93,12 @@ export const RHFTimePeakerField: FC<IRHFTimePeakerField> = ({
   );
 };
 
-type IRHFDatePeakerField = IRHFTextField & MobileDateTimePickerProps<Date>;
+type IRHFDatePeakerField = IRHFTextField &
+  MobileDateTimePickerProps<Date> & { allowNull?: boolean };
 export const RHFDatePeakerField: FC<IRHFDatePeakerField> = ({
   name,
   minDate,
+  allowNull,
   ...other
 }) => {
   const { control } = useFormContext();
@@ -109,15 +111,16 @@ export const RHFDatePeakerField: FC<IRHFDatePeakerField> = ({
         field: { value, onChange, ...field },
         fieldState: { error },
       }) => {
-        const date = value ? new Date(value) : new Date();
+        const date = value ? new Date(value) : allowNull ? null : new Date();
         return (
           <MobileDateTimePicker
             {...field}
             value={date}
-            onChange={(value) => onChange(value)}
+            onChange={(next) => onChange(next ?? null)}
             // minTime={minTime}
             minDate={minDate}
             slotProps={{
+              field: { clearable: !!allowNull },
               textField: {
                 fullWidth: true,
                 variant: "outlined",

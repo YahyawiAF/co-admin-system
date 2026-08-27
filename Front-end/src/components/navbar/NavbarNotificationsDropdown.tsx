@@ -1,7 +1,5 @@
-import React, { useRef, useState } from "react";
-import Link from "next/link";
+import React, { useEffect, useRef, useState } from "react";
 import styled from "@emotion/styled";
-
 import {
   Avatar as MuiAvatar,
   Badge,
@@ -13,15 +11,21 @@ import {
   ListItemAvatar,
   ListItemText,
   Popover as MuiPopover,
-  SvgIcon,
+  Stack,
   Tooltip,
   Typography,
 } from "@mui/material";
-import { Bell, Home, UserPlus, Server } from "react-feather";
+import { Bell, UserPlus } from "react-feather";
+import {
+  useApproveVisitRequestMutation,
+  useGetPendingVisitRequestsQuery,
+  useRejectVisitRequestMutation,
+} from "src/api/mobile.repo";
+import { getAdminSocket } from "src/utils/adminSocket";
 
 const Popover = styled(MuiPopover)`
   .MuiPaper-root {
-    width: 300px;
+    width: 360px;
     ${(props) => props.theme.shadows[1]};
     border: 1px solid ${(props) => props.theme.palette.divider};
   }
@@ -35,7 +39,7 @@ const Indicator = styled(Badge)`
 `;
 
 const Avatar = styled(MuiAvatar)`
-  background: ${(props) => props.theme.palette.primary.main};
+  background: #0d47a1;
 `;
 
 const NotificationHeader = styled(Box)`
@@ -43,98 +47,127 @@ const NotificationHeader = styled(Box)`
   border-bottom: 1px solid ${(props) => props.theme.palette.divider};
 `;
 
-interface NotificationProps {
-  title: string;
-  description: string;
-  Icon: React.ElementType;
-}
-
-function Notification({ title, description, Icon }: NotificationProps) {
-  return (
-    <ListItem component={Link} href="/" divider>
-      <ListItemAvatar>
-        <Avatar>
-          <SvgIcon fontSize="small">
-            <Icon />
-          </SvgIcon>
-        </Avatar>
-      </ListItemAvatar>
-      <ListItemText
-        primary={title}
-        primaryTypographyProps={{
-          variant: "subtitle2",
-          color: "textPrimary",
-        }}
-        secondary={description}
-      />
-    </ListItem>
-  );
-}
-
 function NavbarNotificationsDropdown() {
   const ref = useRef(null);
   const [isOpen, setOpen] = useState(false);
+  const { data: pending = [], refetch } = useGetPendingVisitRequestsQuery(
+    undefined,
+    { pollingInterval: 8000 }
+  );
+  const [approve, { isLoading: approving }] = useApproveVisitRequestMutation();
+  const [reject, { isLoading: rejecting }] = useRejectVisitRequestMutation();
 
-  const handleOpen = () => {
-    setOpen(true);
+  useEffect(() => {
+    const s = getAdminSocket();
+    const onRequest = () => refetch();
+    const onResolved = () => refetch();
+    s.on("visit_request", onRequest);
+    s.on("visit_request_resolved", onResolved);
+    return () => {
+      s.off("visit_request", onRequest);
+      s.off("visit_request_resolved", onResolved);
+    };
+  }, [refetch]);
+
+  const handleOpen = () => setOpen(true);
+  const handleClose = () => setOpen(false);
+
+  const handleApprove = async (id: string) => {
+    await approve(id).unwrap();
+    refetch();
   };
 
-  const handleClose = () => {
-    setOpen(false);
+  const handleReject = async (id: string) => {
+    await reject(id).unwrap();
+    refetch();
   };
+
+  const count = pending.length;
 
   return (
     <React.Fragment>
-      <Tooltip title="Notifications">
+      <Tooltip title="Visit requests">
         <IconButton color="inherit" ref={ref} onClick={handleOpen} size="large">
-          <Indicator badgeContent={7}>
+          <Indicator badgeContent={count || undefined}>
             <Bell />
           </Indicator>
         </IconButton>
       </Tooltip>
       <Popover
-        anchorOrigin={{
-          vertical: "bottom",
-          horizontal: "center",
-        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
         anchorEl={ref.current}
         onClose={handleClose}
         open={isOpen}
       >
         <NotificationHeader p={2}>
           <Typography variant="subtitle1" color="textPrimary">
-            7 New Notifications
+            {count
+              ? `${count} pending visit request${count > 1 ? "s" : ""}`
+              : "No pending requests"}
           </Typography>
         </NotificationHeader>
-        <React.Fragment>
-          <List disablePadding>
-            <Notification
-              title="Update complete"
-              description="Restart server to complete update."
-              Icon={Server}
-            />
-            <Notification
-              title="New connection"
-              description="Anna accepted your request."
-              Icon={UserPlus}
-            />
-            <Notification
-              title="Lorem ipsum"
-              description="Aliquam ex eros, imperdiet vulputate hendrerit et"
-              Icon={Bell}
-            />
-            <Notification
-              title="New login"
-              description="Login from 192.186.1.1."
-              Icon={Home}
-            />
-          </List>
-          <Box p={1} display="flex" justifyContent="center">
-            <Button component={Link} href="/" size="small">
-              Show all notifications
-            </Button>
-          </Box>
-        </React.Fragment>
+        <List disablePadding>
+          {pending.map((req) => {
+            const name =
+              [req.member?.firstName, req.member?.lastName]
+                .filter(Boolean)
+                .join(" ") || "Visiteur";
+            const phone = req.member?.phone || "";
+            const pack = req.price?.name || "Pack";
+            const amount = req.price?.price;
+            return (
+              <ListItem
+                key={req.id}
+                alignItems="flex-start"
+                divider
+                sx={{ flexDirection: "column", alignItems: "stretch", gap: 1 }}
+              >
+                <Box display="flex" gap={1.5} alignItems="center">
+                  <ListItemAvatar sx={{ minWidth: 40 }}>
+                    <Avatar>
+                      <UserPlus size={16} />
+                    </Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={`${name}${req.member?.visitorNumber != null || req.visitorNumber != null ? ` #${req.member?.visitorNumber ?? req.visitorNumber}` : ""} · ${phone}`}
+                    secondary={`${req.type === "DAY" ? "Visite du jour" : "Abonnement"} — ${pack}${amount != null ? ` (${amount} DT)` : ""}`}
+                    primaryTypographyProps={{
+                      variant: "subtitle2",
+                      color: "textPrimary",
+                    }}
+                  />
+                </Box>
+                <Stack direction="row" spacing={1} justifyContent="flex-end">
+                  <Button
+                    size="small"
+                    color="inherit"
+                    disabled={rejecting || approving}
+                    onClick={() => handleReject(req.id)}
+                  >
+                    Reject
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    disabled={approving || rejecting}
+                    onClick={() => handleApprove(req.id)}
+                    sx={{ bgcolor: "#0d47a1" }}
+                  >
+                    Confirm
+                  </Button>
+                </Stack>
+              </ListItem>
+            );
+          })}
+          {!pending.length ? (
+            <Box p={2}>
+              <Typography variant="body2" color="textSecondary">
+                When a visitor picks a pack on mobile, it appears here for
+                confirmation.
+              </Typography>
+            </Box>
+          ) : null}
+        </List>
       </Popover>
     </React.Fragment>
   );

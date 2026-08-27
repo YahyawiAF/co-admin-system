@@ -32,6 +32,7 @@ model Member {
   firstName     String?       @db.VarChar(56)
   lastName      String?       @db.VarChar(56)
   bio           String?
+  avatarUrl     String?
   credits       Float         @default(0)
   plan          Subscription? @default(Journal)
   createdAt     DateTime      @default(now())
@@ -39,27 +40,69 @@ model Member {
   deletedAt     DateTime?     @db.Timestamp(6)
   isActive      Boolean       @default(false)
   functionality String?
-  phone         Int?          @unique
+  phone         String?       @unique @db.VarChar(32)
+  passwordHash  String?
+  visitorNumber Int?          @unique
   userId        Int?
+  groupId       String?
+  group         MemberGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  discountForfait    Float?
+  discountSalle      Float?
+  discountOpenSpace  Float?
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
   seatBookings  SeatBooking[]
+  visitRequests VisitRequest[]
+  productOrders    DailyProduct[]
+  sentMessages     CommunityMessage[] @relation("MessageFrom")
+  receivedMessages CommunityMessage[] @relation("MessageTo")
+  staffMessages    StaffMessage[]
+  skills                 String[]  @default([])
+  services               String[]  @default([])
+  linkedinUrl            String?
+  openToCollaboration    Boolean   @default(false)
+  showInDirectory        Boolean   @default(false)
+  eventRegistrations     EventRegistration[]
 
+  @@index([groupId])
   @@map("members")
 }
 
-model Price {
-  id          String       @id @default(uuid())
-  name        String
-  price       Float
-  type        PriceType
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  timePeriod  Json
-  abonnements Abonnement[]
-  journals    Journal[]
+model MemberGroup {
+  id                 String   @id @default(uuid())
+  name               String
+  maxMembers         Int      @default(15)
+  discountForfait    Float    @default(0)
+  discountSalle      Float    @default(0)
+  discountOpenSpace  Float    @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  members            Member[]
 
+  @@map("member_groups")
+}
+
+model Price {
+  id             String         @id @default(uuid())
+  name           String
+  price          Float
+  type           PriceType
+  category       PriceCategory?
+  durationHours  Float?
+  billingUnit    BillingUnit?
+  periodDays     Int?
+  spaceId        String?
+  space          Space?         @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  reserveSeat    Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  timePeriod     Json
+  abonnements    Abonnement[]
+  journals       Journal[]
+  visitRequests  VisitRequest[]
+
+  @@index([spaceId])
   @@map("prices")
 }
 
@@ -73,12 +116,16 @@ model Journal {
   updatedAt       DateTime  @updatedAt @db.Timestamp(6)
   memberID        String?
   isReservation   Boolean   @default(false)
+  isAnonymous     Boolean   @default(false)
+  guestName       String?
   priceId         String?
   createdbyUserID String?
   createdBy       User?     @relation(fields: [createdbyUserID], references: [id])
   members         Member?   @relation(fields: [memberID], references: [id])
   prices          Price?    @relation(fields: [priceId], references: [id])
+  groupVisitId    String?
 
+  @@index([groupVisitId])
   @@map("journals")
 }
 
@@ -94,8 +141,11 @@ model Abonnement {
   memberID      String
   isReservation Boolean   @default(false)
   priceId       String
-  members       Member    @relation(fields: [memberID], references: [id])
-  price         Price     @relation(fields: [priceId], references: [id])
+  hoursQuota         Float?
+  hoursUsed          Float     @default(0)
+  reservedSeatLabel  String?
+  members            Member    @relation(fields: [memberID], references: [id])
+  price              Price     @relation(fields: [priceId], references: [id])
 
   @@map("abonnements")
 }
@@ -128,13 +178,21 @@ model Product {
   @@map("products")
 }
 model DailyProduct {
-  id        String    @id @default(uuid())
-  productId String
-  date      DateTime?
-  product   Product   @relation(fields: [productId], references: [id])
-  quantite  Int
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String             @id @default(uuid())
+  productId     String
+  date          DateTime?
+  product       Product            @relation(fields: [productId], references: [id])
+  quantite      Int
+  externalOrgId String?
+  externalRef   String?
+  memberId      String?
+  member        Member?            @relation(fields: [memberId], references: [id])
+  journalId     String?
+  status        ProductOrderStatus @default(CONFIRMED)
+  isPayed       Boolean            @default(false)
+  syncedAt      DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 }
 
 model Expense {
@@ -151,13 +209,33 @@ model Expense {
 }
 
 model DailyExpense {
-  id        String    @id @default(uuid())
-  expenseId String
-  Summary   String?
-  expense   Expense   @relation(fields: [expenseId], references: [id])
-  date      DateTime? // Just the day, like 2025-04-23
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id            String    @id @default(uuid())
+  expenseId     String
+  Summary       String?
+  expense       Expense   @relation(fields: [expenseId], references: [id])
+  date          DateTime?
+  externalOrgId String?
+  externalRef   String?
+  syncedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+enum MobileSeatMode {
+  ADMIN_ASSIGN // admin picks seat on approve; visitor sees map
+  VISITOR_CHOOSE // after approve, visitor picks seat on map
+  AUTO_ASSIGN // auto free seat; auto-approve when receptionAway
+}
+
+model Organization {
+  id          String     @id @default(uuid())
+  name        String
+  slug        String     @unique
+  logo        String?
+  createdAt   DateTime   @default(now())
+  facilities  Facility[]
+
+  @@map("organizations")
 }
 
 model Facility {
@@ -168,28 +246,228 @@ model Facility {
   adresse        String
   logo           String?
   nbrPlaces      Int            @map("nbr_places")
-  socialNetworks Json           @map("social_networks") 
-  places         Json           @map("places")         
+  socialNetworks Json           @map("social_networks")
+  places         Json           @map("places") // legacy JSON; prefer Space/Table/Seat
+  mobileSeatMode MobileSeatMode @default(ADMIN_ASSIGN)
+  receptionAway  Boolean        @default(false)
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
+  spaces         Space[]
+  events         Event[]
 
-@@map("facilities")
+  @@index([organizationId])
+  @@map("facilities")
 }
-model SeatBooking {
+
+model Space {
+  id             String          @id @default(uuid())
+  facilityId     String
+  facility       Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  name           String
+  category       PriceCategory?
+  floorPlanUrl   String?
+  sortOrder      Int             @default(0)
+  capacityNormal Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  tables         Table[]
+  seats          Seat[]
+  walls          SpaceWall[]
+  prices         Price[]
+
+  @@map("spaces")
+}
+
+model SpaceWall {
   id        String   @id @default(uuid())
-  eventKey  String
-  seatId    String
-  isBooked  Boolean  @default(false)
-  bookedAt  DateTime?
-  memberId  String?
-  member    Member?  @relation(fields: [memberId], references: [id])
+  spaceId   String
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  label     String?
+  x         Float    @default(40)
+  y         Float    @default(40)
+  width     Float    @default(160)
+  height    Float    @default(12)
+  rotation  Float    @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("space_walls")
+}
+
+model Table {
+  id        String   @id @default(uuid())
+  spaceId   String
+  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name      String
+  imageUrl  String?
+  x         Float    @default(40)
+  y         Float    @default(40)
+  width     Float    @default(120)
+  height    Float    @default(80)
+  rotation  Float    @default(0)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  seats     Seat[]
+
+  @@map("tables")
+}
+
+model Seat {
+  id         String  @id @default(uuid())
+  spaceId    String
+  space      Space   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  tableId    String?
+  table      Table?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  label      String // stable id for SeatBooking.seatId
+  offsetX    Float   @default(0)
+  offsetY    Float   @default(0)
+  isOverflow Boolean @default(false)
+  isActive   Boolean @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([spaceId, label])
+  @@map("seats")
+}
+
+model SeatBooking {
+  id        String    @id @default(uuid())
+  eventKey  String
+  seatId    String
+  isBooked    Boolean   @default(false)
+  isPermanent Boolean   @default(false)
+  bookedAt    DateTime?
+  memberId    String?
+  member    Member?   @relation(fields: [memberId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   @@unique([eventKey, seatId])
   @@map("seat_bookings")
 }
 
+model OpsEvent {
+  id         String   @id @default(uuid())
+  type       String
+  occurredAt DateTime @default(now())
+  memberId   String?
+  seatId     String?
+  journalId  String?
+  amount     Float?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([type, occurredAt])
+  @@index([occurredAt])
+  @@map("ops_events")
+}
+
+model CaisseSession {
+  id            String           @id @default(uuid())
+  date          DateTime         @db.Date
+  openedAt      DateTime         @default(now())
+  closedAt      DateTime?
+  openingFloat  Float            @default(0)
+  countedClose  Float?
+  expectedClose Float?
+  difference    Float?
+  notes         String?
+  externalOrgId String?
+  externalRef   String?
+  syncedAt      DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  movements     CaisseMovement[]
+  coffreEntries CoffreEntry[]
+
+  @@unique([date])
+  @@map("caisse_sessions")
+}
+
+model CoffreEntry {
+  id              String         @id @default(uuid())
+  date            DateTime       @db.Date
+  type            String // IN | OUT
+  amount          Float
+  label           String?
+  caisseSessionId String?
+  caisseSession   CaisseSession? @relation(fields: [caisseSessionId], references: [id], onDelete: SetNull)
+  createdAt       DateTime       @default(now())
+
+  @@index([date])
+  @@map("coffre_entries")
+}
+
+model CaisseMovement {
+  id               String        @id @default(uuid())
+  sessionId        String
+  session          CaisseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type             String // IN | OUT
+  amount           Float
+  label            String?
+  externalOrgId    String?
+  externalRef      String?
+  syncedAt         DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@map("caisse_movements")
+}
+
+model VisitRequest {
+  id        String             @id @default(uuid())
+  memberId  String
+  priceId   String
+  type      VisitRequestType
+  status    VisitRequestStatus @default(PENDING)
+  member    Member             @relation(fields: [memberId], references: [id])
+  price     Price              @relation(fields: [priceId], references: [id])
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@map("visit_requests")
+}
+
+model CommunityMessage {
+  id           String   @id @default(uuid())
+  fromMemberId String
+  toMemberId   String
+  text         String
+  fromMember   Member   @relation("MessageFrom", fields: [fromMemberId], references: [id], onDelete: Cascade)
+  toMember     Member   @relation("MessageTo", fields: [toMemberId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+
+  @@index([toMemberId, createdAt])
+  @@index([fromMemberId, createdAt])
+  @@map("community_messages")
+}
+
+model StaffMessage {
+  id         String    @id @default(uuid())
+  toMemberId String
+  toMember   Member    @relation(fields: [toMemberId], references: [id], onDelete: Cascade)
+  fromUserId String?
+  text       String
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([toMemberId, createdAt])
+  @@map("staff_messages")
+}
+
+enum VisitRequestType {
+  DAY
+  SUBSCRIPTION
+}
+
+enum VisitRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
 
 enum ExpenseType {
   MENSUEL
@@ -201,9 +479,88 @@ enum PriceType {
   abonnement
 }
 
+enum PriceCategory {
+  JOURNEE
+  ABONNEMENT
+  SALLE
+  OPEN_SPACE
+}
+
+enum BillingUnit {
+  PACK
+  HOURLY
+  PERIOD
+}
+
+enum ProductOrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 enum Role {
   ADMIN
   USER
+}
+
+enum EventKind {
+  WORKSHOP
+  NETWORKING
+  OTHER
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+}
+
+enum EventRegistrationStatus {
+  REGISTERED
+  CANCELLED
+  ATTENDED
+  NO_SHOW
+}
+
+model Event {
+  id           String              @id @default(uuid())
+  facilityId   String
+  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  kind         EventKind           @default(OTHER)
+  location     String?
+  startAt      DateTime
+  endAt        DateTime
+  capacity     Int?
+  status       EventStatus         @default(DRAFT)
+  coverImage   String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  registrations EventRegistration[]
+
+  @@index([facilityId, startAt])
+  @@index([status, startAt])
+  @@map("events")
+}
+
+model EventRegistration {
+  id               String                   @id @default(uuid())
+  eventId          String
+  event            Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  memberId         String
+  member           Member                   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  status           EventRegistrationStatus  @default(REGISTERED)
+  attendanceCode   String                   @unique
+  checkedInAt      DateTime?
+  feedbackRating   Int?
+  feedbackComment  String?
+  feedbackAt       DateTime?
+  createdAt        DateTime                 @default(now())
+
+  @@unique([eventId, memberId])
+  @@index([eventId, status])
+  @@map("event_registrations")
 }
 
 enum Subscription {

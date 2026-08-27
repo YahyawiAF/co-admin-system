@@ -7,13 +7,14 @@ import {
   IsNumber,
   IsBoolean,
   IsOptional,
+  ValidateIf,
 } from 'class-validator';
 
 export class AddJournalDto {
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
-  @ApiProperty()
-  public memberID: string;
+  @ApiProperty({ required: false })
+  public memberID?: string;
 
   @IsString()
   @ApiProperty()
@@ -29,11 +30,11 @@ export class AddJournalDto {
   @ApiProperty()
   public registredTime: Date;
 
-  @IsNotEmpty()
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== undefined)
   @IsDate()
   @Type(() => Date)
-  @IsOptional()
-  @ApiProperty()
+  @ApiProperty({ nullable: true, required: false })
   public leaveTime: Date | null;
 
   @IsNotEmpty()
@@ -50,4 +51,19 @@ export class AddJournalDto {
   @IsNumber()
   @ApiProperty()
   public payedAmount: number;
+
+  @IsOptional()
+  @IsBoolean()
+  @ApiProperty({ required: false })
+  public isAnonymous?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public guestName?: string;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public groupVisitId?: string;
 }

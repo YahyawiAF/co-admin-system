@@ -1,0 +1,198 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ==========================================
+      # 1. Get source code
+      # ==========================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==========================================
+      # 2. Setup Node
+      # ==========================================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # ==========================================
+      # 3. Install dependencies
+      # ==========================================
+      - name: Install dependencies
+        working-directory: server
+        run: npm ci
+
+      # ==========================================
+      # 4. Generate Prisma Client
+      # ==========================================
+      - name: Generate Prisma Client
+        working-directory: server
+        run: npx prisma generate
+
+      # ==========================================
+      # 5. Build backend
+      # ==========================================
+      - name: Build backend
+        working-directory: server
+        run: npm run build
+
+      # ==========================================
+      # 6. Remove development dependencies
+      # ==========================================
+      - name: Remove development dependencies
+        working-directory: server
+        run: npm prune --omit=dev
+
+      # ==========================================
+      # 7. Create deployment package
+      # ==========================================
+      - name: Create deployment package
+        run: |
+          rm -rf deploy
+          mkdir -p deploy/server
+
+          cp -r server/dist deploy/server/
+          cp -r server/node_modules deploy/server/
+          cp server/package.json deploy/server/
+          cp server/package-lock.json deploy/server/
+
+          if [ -d "server/prisma" ]; then
+            cp -r server/prisma deploy/server/
+          fi
+
+          echo "Deployment package:"
+          du -sh deploy/server
+          ls -lah deploy/server
+
+      # ==========================================
+      # 8. TEST SSH CONNECTION
+      # ==========================================
+      - name: Test VPS SSH connection
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 30s
+          command_timeout: 30s
+          script: |
+            echo "======================================"
+            echo "SSH connection successful!"
+            echo "======================================"
+            echo "Hostname:"
+            hostname
+            echo "User:"
+            whoami
+            echo "Server IP:"
+            hostname -I
+            echo "SSH test completed."
+
+      # ==========================================
+      # 9. Upload backend
+      # ==========================================
+      - name: Upload backend to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "deploy/server/*"
+          target: "/tmp/supply-chainpro-deploy"
+          strip_components: 2
+
+      # ==========================================
+      # 10. Deploy on VPS
+      # ==========================================
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 30s
+          command_timeout: 120s
+
+          script: |
+            set -e
+
+            echo "======================================"
+            echo "Starting backend deployment..."
+            echo "======================================"
+
+            APP_DIR="/var/www/supply-chainpro/server"
+            DEPLOY_DIR="/tmp/supply-chainpro-deploy"
+
+            echo "Creating application directory..."
+            mkdir -p "$APP_DIR"
+
+            echo "Checking uploaded files..."
+
+            if [ ! -d "$DEPLOY_DIR/dist" ]; then
+              echo "ERROR: dist directory not found!"
+              exit 1
+            fi
+
+            if [ ! -d "$DEPLOY_DIR/node_modules" ]; then
+              echo "ERROR: node_modules directory not found!"
+              exit 1
+            fi
+
+            echo "Upload verified."
+
+            echo "Removing old application files..."
+
+            rm -rf "$APP_DIR/dist"
+            rm -rf "$APP_DIR/node_modules"
+
+            echo "Installing new dist..."
+            cp -r "$DEPLOY_DIR/dist" "$APP_DIR/"
+
+            echo "Installing new node_modules..."
+            cp -r "$DEPLOY_DIR/node_modules" "$APP_DIR/"
+
+            echo "Installing package files..."
+            cp "$DEPLOY_DIR/package.json" "$APP_DIR/"
+            cp "$DEPLOY_DIR/package-lock.json" "$APP_DIR/"
+
+            if [ -d "$DEPLOY_DIR/prisma" ]; then
+              echo "Installing Prisma files..."
+
+              rm -rf "$APP_DIR/prisma"
+              cp -r "$DEPLOY_DIR/prisma" "$APP_DIR/"
+            fi
+
+            echo "Running Prisma migrations..."
+
+            cd "$APP_DIR"
+
+            npx prisma migrate deploy
+
+            echo "Restarting PM2..."
+
+            pm2 restart supplyapi || pm2 start dist/src/main.js --name supplyapi
+
+            echo "Saving PM2 configuration..."
+
+            pm2 save
+
+            echo "Cleaning temporary deployment..."
+
+            rm -rf "$DEPLOY_DIR"
+
+            echo "======================================"
+            echo "Deployment completed successfully!"
+            echo "======================================"

@@ -6,5 +6,6 @@ import { FacilityService } from './facility.service';
 @Module({
   controllers: [FacilityController],
   providers: [FacilityService, PrismaService],
+  exports: [FacilityService],
 })
 export class FacilityModule {}

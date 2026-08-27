@@ -7,7 +7,15 @@ import {
   IsEmail,
   IsPhoneNumber,
   IsObject,
+  IsBoolean,
+  IsEnum,
 } from 'class-validator';
+
+export enum MobileSeatModeDto {
+  ADMIN_ASSIGN = 'ADMIN_ASSIGN',
+  VISITOR_CHOOSE = 'VISITOR_CHOOSE',
+  AUTO_ASSIGN = 'AUTO_ASSIGN',
+}
 
 export class CreateFacilityDto {
   @ApiProperty({ required: true })
@@ -31,17 +39,16 @@ export class CreateFacilityDto {
   @IsString()
   adresse: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     example: 'https://example.com/logo.png',
-    required: false 
+    required: false,
   })
   @IsOptional()
   @IsString()
   logo?: string;
 
-  @ApiProperty({ 
-   
-    required: true 
+  @ApiProperty({
+    required: true,
   })
   @IsNotEmpty()
   @IsNumber()
@@ -50,19 +57,37 @@ export class CreateFacilityDto {
   @ApiProperty({
     example: {
       facebook: 'https://facebook.com/facility',
-      instagram: 'https://instagram.com/facility'
+      instagram: 'https://instagram.com/facility',
     },
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsObject()
   socialNetworks?: Record<string, string>;
 
   @ApiProperty({
-    
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsObject()
   places?: Record<string, number>;
+
+  @ApiProperty({
+    enum: MobileSeatModeDto,
+    required: false,
+    description:
+      'ADMIN_ASSIGN = admin picks seat; VISITOR_CHOOSE = visitor picks after confirm; AUTO_ASSIGN = auto seat (+ auto confirm when receptionAway)',
+  })
+  @IsOptional()
+  @IsEnum(MobileSeatModeDto)
+  mobileSeatMode?: MobileSeatModeDto;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'When true with AUTO_ASSIGN, visit requests auto-approve with a free seat',
+  })
+  @IsOptional()
+  @IsBoolean()
+  receptionAway?: boolean;
 }

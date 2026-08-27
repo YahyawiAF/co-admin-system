@@ -96,6 +96,26 @@ export class JournalController {
     );
   }
 
+  @Post(':id/link-member')
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: JournalEntity })
+  async linkMember(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { memberId: string },
+  ) {
+    return this.JournalService.linkMember(id, body.memberId);
+  }
+
+  @Post(':id/promote-member')
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: JournalEntity })
+  async promoteMember(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { firstName?: string; phone?: string; lastName?: string },
+  ) {
+    return this.JournalService.promoteMember(id, body);
+  }
+
   @Delete(':id')
   // @UseGuards(JwtAuthGuard)
   // @ApiBearerAuth()

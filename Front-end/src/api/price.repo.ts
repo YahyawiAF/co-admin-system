@@ -25,8 +25,12 @@ export const priceApi = createApi({
         body: {
           name: data.name,
           price: data.price,
-          timePeriod: data.timePeriod, // Format { start: string, end: string }
+          timePeriod: data.timePeriod,
           type: data.type,
+          category: data.category,
+          durationHours: data.durationHours,
+          billingUnit: data.billingUnit,
+          periodDays: data.periodDays,
         },
       }),
       invalidatesTags: ["Price"],
@@ -43,10 +47,7 @@ export const priceApi = createApi({
       query: ({ id, data }) => ({
         url: `prices/${id}`,
         method: "PUT",
-        body: {
-          ...data,
-          timePeriod: data.timePeriod, // Format { start: string, end: string }
-        },
+        body: data,
       }),
       invalidatesTags: ["Price"],
     }),
@@ -54,6 +55,16 @@ export const priceApi = createApi({
       query: (id) => ({
         url: `prices/${id}`,
         method: "DELETE",
+      }),
+      invalidatesTags: ["Price"],
+    }),
+    seedCollaboraHub: builder.mutation<
+      { created: number; skipped: number; prices: Price[] },
+      void
+    >({
+      query: () => ({
+        url: `prices/seed/collabora-hub`,
+        method: "POST",
       }),
       invalidatesTags: ["Price"],
     }),
@@ -66,6 +77,7 @@ export const {
   useCreatePriceMutation,
   useUpdatePriceMutation,
   useDeletePriceMutation,
+  useSeedCollaboraHubMutation,
 } = priceApi;
 
 export type { Price };

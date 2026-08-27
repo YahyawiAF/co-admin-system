@@ -18,11 +18,10 @@ export class AuthEntity {
   fullname: string;
 
   @ApiProperty()
-  phoneNumber: string; 
+  phoneNumber: string;
 
   @ApiProperty({ enum: Role, enumName: 'Role' })
   role: Role;
   @ApiProperty()
-  memberId?: string; 
-
+  memberId?: string;
 }
