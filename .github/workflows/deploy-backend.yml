@@ -24,56 +24,59 @@ jobs:
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: server/package-lock.json
+          cache-dependency-path: backend/package-lock.json
 
       # ==========================================
       # 3. Install dependencies
       # ==========================================
       - name: Install dependencies
-        working-directory: server
+        working-directory: backend
         run: npm ci
 
       # ==========================================
       # 4. Generate Prisma Client
       # ==========================================
       - name: Generate Prisma Client
-        working-directory: server
+        working-directory: backend
         run: npx prisma generate
 
       # ==========================================
       # 5. Build backend
       # ==========================================
       - name: Build backend
-        working-directory: server
+        working-directory: backend
         run: npm run build
 
       # ==========================================
       # 6. Remove development dependencies
       # ==========================================
       - name: Remove development dependencies
-        working-directory: server
-        run: npm prune --omit=dev
+        working-directory: backend
+        run: |
+          npm prune --omit=dev
+          # prisma CLI is a devDependency; keep it so migrate deploy works on the VPS
+          npm install prisma --omit=dev --no-save
 
       # ==========================================
-      # 7. Create deployment package
+      # 7. Create deployment package (compiled output only, no src)
       # ==========================================
       - name: Create deployment package
         run: |
           rm -rf deploy
-          mkdir -p deploy/server
+          mkdir -p deploy/backend
 
-          cp -r server/dist deploy/server/
-          cp -r server/node_modules deploy/server/
-          cp server/package.json deploy/server/
-          cp server/package-lock.json deploy/server/
+          cp -r backend/dist deploy/backend/
+          cp -r backend/node_modules deploy/backend/
+          cp backend/package.json deploy/backend/
+          cp backend/package-lock.json deploy/backend/
 
-          if [ -d "server/prisma" ]; then
-            cp -r server/prisma deploy/server/
+          if [ -d "backend/prisma" ]; then
+            cp -r backend/prisma deploy/backend/
           fi
 
-          echo "Deployment package:"
-          du -sh deploy/server
-          ls -lah deploy/server
+          echo "Deployment package (no source):"
+          du -sh deploy/backend
+          ls -lah deploy/backend
 
       # ==========================================
       # 8. TEST SSH CONNECTION
@@ -109,8 +112,8 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          source: "deploy/server/*"
-          target: "/tmp/supply-chainpro-deploy"
+          source: "deploy/backend/*"
+          target: "/tmp/cowadmin-deploy"
           strip_components: 2
 
       # ==========================================
@@ -124,17 +127,17 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
           timeout: 30s
-          command_timeout: 120s
+          command_timeout: 180s
 
           script: |
             set -e
 
             echo "======================================"
-            echo "Starting backend deployment..."
+            echo "Starting cowadmin backend deployment..."
             echo "======================================"
 
-            APP_DIR="/var/www/supply-chainpro/server"
-            DEPLOY_DIR="/tmp/supply-chainpro-deploy"
+            APP_DIR="/var/www/cowadmin/backend"
+            DEPLOY_DIR="/tmp/cowadmin-deploy"
 
             echo "Creating application directory..."
             mkdir -p "$APP_DIR"
@@ -181,9 +184,15 @@ jobs:
 
             npx prisma migrate deploy
 
-            echo "Restarting PM2..."
+            echo "Starting or restarting PM2 (coadminapi)..."
 
-            pm2 restart supplyapi || pm2 start dist/src/main.js --name supplyapi
+            if pm2 describe coadminapi > /dev/null 2>&1; then
+              echo "coadminapi already exists — restarting..."
+              pm2 restart coadminapi
+            else
+              echo "coadminapi not found — starting for the first time..."
+              pm2 start dist/main.js --name coadminapi
+            fi
 
             echo "Saving PM2 configuration..."
 
