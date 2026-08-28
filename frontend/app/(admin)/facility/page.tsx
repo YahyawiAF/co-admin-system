@@ -33,9 +33,9 @@ import {
 import { queryKeys } from "@/lib/query-client";
 import { BOOKING_EVENT_KEY } from "@/lib/facility-spaces";
 import { layoutSeatsOnTable, SEAT_LAYOUT_OPTIONS, type SeatLayoutMode } from "@/lib/seat-layout";
-import { FloorPlanCanvas, type EditTool } from "@/components/admin/FloorPlanCanvas";
+import { FloorPlanCanvas, type EditTool, FIXTURE_OPTIONS } from "@/components/admin/FloorPlanCanvas";
 import { ImageUpload } from "@/components/admin/ImageUpload";
-import { PriceCategory, type Space, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
+import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
 import { PRICE_CATEGORY_LABEL } from "@/lib/tarif-labels";
 import { isActiveVisit } from "@/lib/journal-utils";
 
@@ -57,10 +57,12 @@ export default function FacilityPage() {
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
   const [tool, setTool] = useState<EditTool>("select");
+  const [fixtureKind, setFixtureKind] = useState<FixtureKind>("ARMCHAIR");
   /** Space selected only for « Plan des places » (independent from Espaces tab). */
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
   const [selectedTable, setSelectedTable] = useState<SpaceTable | null>(null);
   const [selectedWall, setSelectedWall] = useState<SpaceWall | null>(null);
+  const [selectedFixture, setSelectedFixture] = useState<SpaceFixture | null>(null);
   const [selectedSeat, setSelectedSeat] = useState<SpaceSeat | null>(null);
   const [tableDraft, setTableDraft] = useState({
     name: "",
@@ -72,6 +74,12 @@ export default function FacilityPage() {
     label: "",
     width: 200,
     height: 12,
+    rotation: 0,
+  });
+  const [fixtureDraft, setFixtureDraft] = useState({
+    label: "",
+    width: 44,
+    height: 44,
     rotation: 0,
   });
   const [seatDraft, setSeatDraft] = useState({
@@ -185,6 +193,16 @@ export default function FacilityPage() {
       rotation: selectedWall.rotation,
     });
   }, [selectedWall]);
+
+  useEffect(() => {
+    if (!selectedFixture) return;
+    setFixtureDraft({
+      label: selectedFixture.label || "",
+      width: selectedFixture.width,
+      height: selectedFixture.height,
+      rotation: selectedFixture.rotation,
+    });
+  }, [selectedFixture]);
 
   useEffect(() => {
     if (!selectedSeat) return;
@@ -326,6 +344,21 @@ export default function FacilityPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const applyFixtureEdits = useMutation({
+    mutationFn: () =>
+      facilityApi.updateFixture(selectedFixture!.id, {
+        label: fixtureDraft.label.trim() || null,
+        width: Number(fixtureDraft.width),
+        height: Number(fixtureDraft.height),
+        rotation: Number(fixtureDraft.rotation),
+      }),
+    onSuccess: () => {
+      toast.success("Élément mis à jour");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const applySeatEdits = useMutation({
     mutationFn: () =>
       facilityApi.updateSeat(selectedSeat!.id, {
@@ -397,6 +430,12 @@ export default function FacilityPage() {
   const moveWall = useMutation({
     mutationFn: ({ id, x, y }: { id: string; x: number; y: number }) =>
       facilityApi.updateWall(id, { x, y }),
+    onSuccess: () => invalidate(),
+  });
+
+  const moveFixture = useMutation({
+    mutationFn: ({ id, x, y }: { id: string; x: number; y: number }) =>
+      facilityApi.updateFixture(id, { x, y }),
     onSuccess: () => invalidate(),
   });
 
@@ -473,6 +512,15 @@ export default function FacilityPage() {
           overflowCount: 0,
         });
         toast.success("Table ajoutée — placez les sièges avec l’outil Place");
+      } else if (placeTool === "fixture") {
+        await facilityApi.createFixture({
+          spaceId: activeSpace.id,
+          kind: fixtureKind,
+          label: FIXTURE_OPTIONS.find((f) => f.kind === fixtureKind)?.label,
+          x: x - 22,
+          y: y - 22,
+        });
+        toast.success("Élément ajouté");
       }
       invalidate();
     } catch (e) {
@@ -486,6 +534,7 @@ export default function FacilityPage() {
         eventKey: BOOKING_EVENT_KEY,
         seats: [seatId],
         memberId,
+        spaceId: activeSpace?.id,
       }),
     onSuccess: () => {
       toast.success("Place assignée");
@@ -545,7 +594,12 @@ export default function FacilityPage() {
     "collabora-hub";
 
   const bookingForSeat = (label: string) =>
-    bookings.find((b) => b.isBooked && b.seatId === label);
+    bookings.find(
+      (b) =>
+        b.isBooked &&
+        b.seatId === label &&
+        (!b.spaceId || !activeSpace || b.spaceId === activeSpace.id)
+    );
 
   return (
     <div className="space-y-6">
@@ -636,6 +690,7 @@ export default function FacilityPage() {
                   ["table", "Table"],
                   ["seat", "Place"],
                   ["wall", "Mur"],
+                  ["fixture", "Mobilier"],
                 ] as const
               ).map(([id, label]) => (
                 <Button
@@ -647,6 +702,23 @@ export default function FacilityPage() {
                   {label}
                 </Button>
               ))}
+              {tool === "fixture" ? (
+                <Select
+                  value={fixtureKind}
+                  onValueChange={(v) => setFixtureKind(v as FixtureKind)}
+                >
+                  <SelectTrigger className="h-8 w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FIXTURE_OPTIONS.map((f) => (
+                      <SelectItem key={f.kind} value={f.kind}>
+                        {f.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               {tool === "seat" ? (
                 <label className="ml-2 flex items-center gap-2 text-xs">
                   <input
@@ -659,12 +731,14 @@ export default function FacilityPage() {
               ) : null}
               <span className="text-xs text-muted-foreground">
                 {tool === "select"
-                  ? "Glissez tables, places et murs"
+                  ? "Glissez tables, places, murs et mobilier"
                   : tool === "seat"
                     ? "Cliquez sur le plan (ou sur une table) pour poser une place"
                     : tool === "wall"
                       ? "Cliquez pour poser un mur — redimensionnez dans le panneau"
-                      : "Cliquez pour poser une table vide, puis ajoutez des places"}
+                      : tool === "fixture"
+                        ? "Cliquez pour poser l’élément choisi"
+                        : "Cliquez pour poser une table vide, puis ajoutez des places"}
               </span>
             </div>
           ) : null}
@@ -684,18 +758,28 @@ export default function FacilityPage() {
               selectedTableId={liveSelectedTable?.id}
               selectedWallId={selectedWall?.id}
               selectedSeatId={selectedSeat?.id}
+              selectedFixtureId={selectedFixture?.id}
               onSelectTable={(t) => {
                 setSelectedTable(t);
                 setSelectedWall(null);
                 setSelectedSeat(null);
+                setSelectedFixture(null);
               }}
               onSelectWall={(w) => {
                 setSelectedWall(w);
                 setSelectedTable(null);
                 setSelectedSeat(null);
+                setSelectedFixture(null);
+              }}
+              onSelectFixture={(f) => {
+                setSelectedFixture(f);
+                setSelectedTable(null);
+                setSelectedWall(null);
+                setSelectedSeat(null);
               }}
               onMoveTable={updateTableLocal}
               onMoveWall={(id, x, y) => moveWall.mutate({ id, x, y })}
+              onMoveFixture={(id, x, y) => moveFixture.mutate({ id, x, y })}
               onMoveSeat={(id, offsetX, offsetY, tableId) =>
                 moveSeat.mutate({ id, offsetX, offsetY, tableId })
               }
@@ -705,6 +789,7 @@ export default function FacilityPage() {
                   setSelectedSeat(seat);
                   setSelectedTable(null);
                   setSelectedWall(null);
+                  setSelectedFixture(null);
                   return;
                 }
                 const b = bookingForSeat(seat.label);
@@ -1095,6 +1180,91 @@ export default function FacilityPage() {
                   }
                 >
                   Supprimer mur
+                </Button>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {editMode && selectedFixture ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">
+                  {FIXTURE_OPTIONS.find((f) => f.kind === selectedFixture.kind)
+                    ?.label || "Mobilier"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-3">
+                <div className="space-y-1">
+                  <Label>Libellé</Label>
+                  <Input
+                    value={fixtureDraft.label}
+                    onChange={(e) =>
+                      setFixtureDraft((d) => ({ ...d, label: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Largeur</Label>
+                  <Input
+                    type="number"
+                    className="w-24"
+                    value={fixtureDraft.width}
+                    onChange={(e) =>
+                      setFixtureDraft((d) => ({
+                        ...d,
+                        width: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Hauteur</Label>
+                  <Input
+                    type="number"
+                    className="w-24"
+                    value={fixtureDraft.height}
+                    onChange={(e) =>
+                      setFixtureDraft((d) => ({
+                        ...d,
+                        height: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Rotation °</Label>
+                  <Input
+                    type="number"
+                    className="w-24"
+                    value={fixtureDraft.rotation}
+                    onChange={(e) =>
+                      setFixtureDraft((d) => ({
+                        ...d,
+                        rotation: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <Button
+                  size="sm"
+                  className="self-end"
+                  disabled={applyFixtureEdits.isPending}
+                  onClick={() => applyFixtureEdits.mutate()}
+                >
+                  Appliquer
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="self-end"
+                  onClick={() =>
+                    facilityApi.deleteFixture(selectedFixture.id).then(() => {
+                      setSelectedFixture(null);
+                      invalidate();
+                    })
+                  }
+                >
+                  Supprimer
                 </Button>
               </CardContent>
             </Card>

@@ -66,4 +66,9 @@ export class AddAbonnementDto {
   @IsString()
   @ApiProperty({ required: false })
   public reservedSeatLabel?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
+  public reservedSeatSpaceId?: string | null;
 }

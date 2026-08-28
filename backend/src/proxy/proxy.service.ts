@@ -23,39 +23,44 @@ export class ProxyService {
       });
       if (!memberExists) throw new Error('Member not found');
 
-      await this.checkSeatsAvailability(data.eventKey, data.seats);
+      const seats = await this.resolveSeats(data.seats, data.spaceId);
+      await this.checkSeatsAvailability(
+        data.eventKey,
+        seats.map((s) => ({ spaceId: s.spaceId, seatId: s.label })),
+      );
 
-      const seatMeta = await this.prisma.seat.findMany({
-        where: { label: { in: data.seats }, isActive: true },
-      });
       const overflowLabels = new Set(
-        seatMeta.filter((s) => s.isOverflow).map((s) => s.label),
+        seats.filter((s) => s.isOverflow).map((s) => s.label),
       );
 
       return await this.prisma
         .$transaction(async (prisma) => {
-          await this.saveBookingToDatabase(data, prisma);
+          await this.saveBookingToDatabase(data, seats, prisma);
           const created = await prisma.seatBooking.findMany({
             where: {
               eventKey: data.eventKey,
-              seatId: { in: data.seats },
               memberId: data.memberId,
               isBooked: true,
+              OR: seats.map((s) => ({
+                spaceId: s.spaceId,
+                seatId: s.label,
+              })),
             },
           });
           return created.map((b) => ({ ...b, success: true }));
         })
         .then(async (created) => {
-          for (const seatId of data.seats) {
+          for (const seat of seats) {
             await this.opsEvents.record({
-              type: overflowLabels.has(seatId)
+              type: overflowLabels.has(seat.label)
                 ? 'seat.overflow_used'
                 : 'seat.assigned',
               memberId: data.memberId,
-              seatId,
+              seatId: seat.label,
               meta: {
                 eventKey: data.eventKey,
-                isOverflow: overflowLabels.has(seatId),
+                spaceId: seat.spaceId,
+                isOverflow: overflowLabels.has(seat.label),
               },
             });
           }
@@ -88,15 +93,23 @@ export class ProxyService {
           if (!memberExists) throw new Error('Member not found');
         }
 
+        let spaceId = data.spaceId || existingBooking.spaceId;
         if (data.seats && data.eventKey) {
-          await this.checkSeatsAvailability(data.eventKey, data.seats);
+          const seats = await this.resolveSeats(data.seats, spaceId);
+          spaceId = seats[0]?.spaceId || spaceId;
+          await this.checkSeatsAvailability(
+            data.eventKey,
+            seats.map((s) => ({ spaceId: s.spaceId, seatId: s.label })),
+            bookingId,
+          );
         }
 
         const updatedBooking = await prisma.seatBooking.update({
           where: { id: bookingId },
           data: {
             eventKey: data.eventKey,
-            seatId: data.seats?.join(','),
+            seatId: data.seats?.[0] ?? existingBooking.seatId,
+            spaceId,
             memberId: data.memberId,
             updatedAt: new Date(),
           },
@@ -121,7 +134,7 @@ export class ProxyService {
         type: 'seat.released',
         memberId: booking.memberId,
         seatId: booking.seatId,
-        meta: { eventKey: booking.eventKey },
+        meta: { eventKey: booking.eventKey, spaceId: booking.spaceId },
       });
       this.logger.log(`Booking ${bookingId} deleted successfully`);
     } catch (error) {
@@ -145,17 +158,52 @@ export class ProxyService {
     return { ...booking, success: true };
   }
 
+  private async resolveSeats(labels: string[], spaceId?: string) {
+    const seats = await this.prisma.seat.findMany({
+      where: {
+        label: { in: labels },
+        isActive: true,
+        ...(spaceId ? { spaceId } : {}),
+      },
+    });
+    const missing = labels.filter(
+      (label) => !seats.some((s) => s.label === label && (!spaceId || s.spaceId === spaceId)),
+    );
+    if (missing.length) {
+      throw new Error(`Places introuvables: ${missing.join(', ')}`);
+    }
+    if (!spaceId) {
+      for (const label of labels) {
+        const matches = seats.filter((s) => s.label === label);
+        if (matches.length > 1) {
+          throw new Error(
+            `La place « ${label} » existe dans plusieurs espaces — précisez spaceId`,
+          );
+        }
+      }
+    }
+    return labels.map((label) => {
+      const seat = seats.find(
+        (s) => s.label === label && (!spaceId || s.spaceId === spaceId),
+      );
+      if (!seat) throw new Error(`Place introuvable: ${label}`);
+      return seat;
+    });
+  }
+
   private async checkSeatsAvailability(
     eventKey: string,
-    seats: string[],
+    seats: { spaceId: string; seatId: string }[],
+    exceptBookingId?: string,
   ): Promise<void> {
     const existingBookings = await this.prisma.seatBooking.findMany({
       where: {
         eventKey,
-        seatId: { in: seats },
         isBooked: true,
+        ...(exceptBookingId ? { NOT: { id: exceptBookingId } } : {}),
+        OR: seats.map((s) => ({ spaceId: s.spaceId, seatId: s.seatId })),
       },
-      select: { seatId: true },
+      select: { seatId: true, spaceId: true },
     });
     if (existingBookings.length > 0) {
       const bookedSeats = existingBookings.map((b) => b.seatId);
@@ -165,14 +213,16 @@ export class ProxyService {
 
   private async saveBookingToDatabase(
     data: BookSeatsDto,
+    seats: { spaceId: string; label: string }[],
     prisma: Prisma.TransactionClient,
   ): Promise<void> {
     await Promise.all(
-      data.seats.map((seatId) =>
+      seats.map((seat) =>
         prisma.seatBooking.create({
           data: {
             eventKey: data.eventKey,
-            seatId,
+            seatId: seat.label,
+            spaceId: seat.spaceId,
             isBooked: true,
             bookedAt: new Date(),
             memberId: data.memberId,
@@ -180,12 +230,16 @@ export class ProxyService {
         }),
       ),
     );
-    await this.markPermanentIfPeriodSub(data.memberId, data.seats, prisma);
+    await this.markPermanentIfPeriodSub(
+      data.memberId,
+      seats,
+      prisma,
+    );
   }
 
   private async markPermanentIfPeriodSub(
     memberId: string,
-    seats: string[],
+    seats: { spaceId: string; label: string }[],
     prisma: Prisma.TransactionClient,
   ) {
     const now = new Date();
@@ -203,19 +257,22 @@ export class ProxyService {
     const isAbo =
       sub.price.category === 'ABONNEMENT' || sub.price.type === 'abonnement';
     if (!isAbo || isHours) return;
-    const label = seats[0];
-    if (!label) return;
+    const first = seats[0];
+    if (!first) return;
     await prisma.seatBooking.updateMany({
       where: {
         memberId,
-        seatId: { in: seats },
+        OR: seats.map((s) => ({ spaceId: s.spaceId, seatId: s.label })),
         isBooked: true,
       },
       data: { isPermanent: true },
     });
     await prisma.abonnement.update({
       where: { id: sub.id },
-      data: { reservedSeatLabel: label },
+      data: {
+        reservedSeatLabel: first.label,
+        reservedSeatSpaceId: first.spaceId,
+      },
     });
   }
 }

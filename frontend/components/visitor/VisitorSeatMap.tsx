@@ -80,7 +80,7 @@ export function VisitorSeatMap({
 
   const claim = useMutation({
     mutationFn: (seatLabel: string) =>
-      mobileApi.claimSeat(memberId, seatLabel),
+      mobileApi.claimSeat(memberId, seatLabel, spaceId || undefined),
     onSuccess: () => {
       toast.success("Place confirmée");
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
@@ -93,7 +93,11 @@ export function VisitorSeatMap({
   const onSelectSeat = (seat: SpaceSeat) => {
     if (!canPick) return;
     const taken = bookings.some(
-      (b) => b.isBooked && b.seatId === seat.label && b.memberId !== memberId
+      (b) =>
+        b.isBooked &&
+        b.seatId === seat.label &&
+        (!b.spaceId || b.spaceId === seat.spaceId) &&
+        b.memberId !== memberId
     );
     if (taken) {
       toast.error("Cette place est déjà prise");

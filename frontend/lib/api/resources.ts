@@ -11,6 +11,7 @@ import type {
   SpaceTable,
   SpaceSeat,
   SpaceWall,
+  SpaceFixture,
   OccupancyStats,
   CaisseSession,
   ProductOrder,
@@ -54,6 +55,7 @@ export type SeatBooking = {
   id: string;
   eventKey: string;
   seatId: string;
+  spaceId?: string;
   isBooked: boolean;
   isPermanent?: boolean;
   bookedAt?: string | null;
@@ -258,6 +260,24 @@ export const facilityApi = {
   deleteWall(id: string) {
     return http.delete(`/facilities/walls/${id}`);
   },
+  createFixture(data: {
+    spaceId: string;
+    kind: string;
+    label?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    rotation?: number;
+  }) {
+    return http.post<SpaceFixture>("/facilities/fixtures", data);
+  },
+  updateFixture(id: string, data: Partial<SpaceFixture>) {
+    return http.patch<SpaceFixture>(`/facilities/fixtures/${id}`, data);
+  },
+  deleteFixture(id: string) {
+    return http.delete(`/facilities/fixtures/${id}`);
+  },
 };
 
 export const caisseApi = {
@@ -384,7 +404,12 @@ export const bookingApi = {
   list() {
     return http.get<SeatBooking[]>("/booking");
   },
-  create(data: { eventKey: string; seats: string[]; memberId: string }) {
+  create(data: {
+    eventKey: string;
+    seats: string[];
+    memberId: string;
+    spaceId?: string;
+  }) {
     return http.post<SeatBooking[]>("/booking", data);
   },
   remove(id: string) {
@@ -398,7 +423,7 @@ export const visitRequestsApi = {
       "/mobile/admin/visit-requests?status=PENDING"
     );
   },
-  approve(id: string, data?: { seatLabel?: string }) {
+  approve(id: string, data?: { seatLabel?: string; spaceId?: string }) {
     return http.patch<{ request: VisitRequest; result: unknown }>(
       `/mobile/admin/visit-requests/${id}/approve`,
       data || {}
@@ -441,6 +466,8 @@ export const mobileApi = {
     memberId?: string;
     fromSeatLabel?: string;
     toSeatLabel: string;
+    fromSpaceId?: string;
+    toSpaceId?: string;
   }) {
     return http.post("/mobile/admin/move-seat", data);
   },
@@ -522,10 +549,10 @@ export const mobileApi = {
       seatSettings: MobileSeatSettings;
     }>(`/mobile/floor-plan${q}`, { skipAuth: true });
   },
-  claimSeat(memberId: string, seatLabel: string) {
+  claimSeat(memberId: string, seatLabel: string, spaceId?: string) {
     return http.post<{ seat: SeatAssignmentInfo | null }>(
       "/mobile/session/claim-seat",
-      { memberId, seatLabel },
+      { memberId, seatLabel, spaceId },
       { skipAuth: true }
     );
   },
@@ -625,6 +652,10 @@ export const mobileApi = {
   },
   pendingOrders() {
     return http.get<ProductOrder[]>("/mobile/admin/orders/pending");
+  },
+  adminOrders(date?: string) {
+    const q = date ? `?date=${date}` : "";
+    return http.get<ProductOrder[]>(`/mobile/admin/orders${q}`);
   },
   confirmOrder(id: string) {
     return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/confirm`, {});

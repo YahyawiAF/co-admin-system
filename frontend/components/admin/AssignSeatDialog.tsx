@@ -65,10 +65,12 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
   const bookedBySeat = useMemo(() => {
     const map = new Map<string, (typeof bookings)[0]>();
     for (const b of bookings) {
-      if (b.isBooked) map.set(b.seatId, b);
+      if (!b.isBooked) continue;
+      if (b.spaceId && spaceId && b.spaceId !== spaceId) continue;
+      map.set(b.seatId, b);
     }
     return map;
-  }, [bookings]);
+  }, [bookings, spaceId]);
 
   const currentBooking = useMemo(() => {
     if (!member?.id) return null;
@@ -78,6 +80,10 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
   useEffect(() => {
     if (!open || !currentBooking) return;
     setSeatLabel(currentBooking.seatId);
+    if (currentBooking.spaceId) {
+      setSpaceId(currentBooking.spaceId);
+      return;
+    }
     for (const space of spaces) {
       const all = [
         ...(space.seats || []),
@@ -122,7 +128,9 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
         return mobileApi.moveSeat({
           memberId: member?.id,
           fromSeatLabel: currentBooking.seatId,
+          fromSpaceId: currentBooking.spaceId,
           toSeatLabel: nextLabel,
+          toSpaceId: activeSpace?.id,
         });
       }
       if (!member?.id) throw new Error("Membre manquant");
@@ -134,6 +142,7 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
         eventKey: BOOKING_EVENT_KEY,
         seats: [nextLabel],
         memberId: member.id,
+        spaceId: activeSpace?.id,
       });
     },
     onSuccess: () => {

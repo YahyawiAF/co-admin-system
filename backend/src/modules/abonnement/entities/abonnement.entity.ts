@@ -60,4 +60,7 @@ export class AbonnementEntity {
 
   @ApiProperty({ required: false })
   reservedSeatLabel?: string | null;
+
+  @ApiProperty({ required: false })
+  reservedSeatSpaceId?: string | null;
 }

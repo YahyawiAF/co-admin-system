@@ -77,7 +77,9 @@ export function RelocateSeatDialog({
         await mobileApi.moveSeat({
           memberId: occ.memberId || undefined,
           fromSeatLabel: occ.seatLabel,
+          fromSpaceId: spaceId || undefined,
           toSeatLabel: to,
+          toSpaceId: spaceId || undefined,
         });
       }
     },
@@ -94,7 +96,12 @@ export function RelocateSeatDialog({
 
   const pickSeat = (seat: SpaceSeat) => {
     if (!activeFrom) return;
-    const booked = bookings.find((b) => b.isBooked && b.seatId === seat.label);
+    const booked = bookings.find(
+      (b) =>
+        b.isBooked &&
+        b.seatId === seat.label &&
+        (!b.spaceId || !activeSpace || b.spaceId === activeSpace.id)
+    );
     if (booked) {
       toast.error("Cette place est déjà prise");
       return;

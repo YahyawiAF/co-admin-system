@@ -23,6 +23,7 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "": "Accueil",
   "/session": "Session",
   "/cafe": "Café & boutique",
+  "/cafe/commandes": "Mes commandes",
   "/history": "Historique",
   "/profile": "Profil",
   "/community": "Communauté",

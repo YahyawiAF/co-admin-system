@@ -107,7 +107,12 @@ export function CheckInOccupancyStep({
   }, [activeSpace, occupyMode, seatLabel, seatLabels]);
 
   const pickSeat = (seat: SpaceSeat) => {
-    const taken = bookings.find((b) => b.isBooked && b.seatId === seat.label);
+    const taken = bookings.find(
+      (b) =>
+        b.isBooked &&
+        b.seatId === seat.label &&
+        (!b.spaceId || !activeSpace || b.spaceId === activeSpace.id)
+    );
     if (taken) {
       toast.error("Cette place est déjà prise");
       return;

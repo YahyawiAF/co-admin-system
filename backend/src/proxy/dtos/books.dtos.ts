@@ -1,4 +1,4 @@
-import { IsArray, IsString, IsNotEmpty } from 'class-validator';
+import { IsArray, IsString, IsNotEmpty, IsOptional } from 'class-validator';
 
 export class BookSeatsDto {
   @IsString()
@@ -13,4 +13,8 @@ export class BookSeatsDto {
   @IsString()
   @IsNotEmpty()
   memberId: string;
+
+  @IsOptional()
+  @IsString()
+  spaceId?: string;
 }

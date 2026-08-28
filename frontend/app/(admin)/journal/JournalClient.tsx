@@ -81,6 +81,7 @@ import { ReservationPanel } from "@/components/admin/ReservationPanel";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
+import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
   bookingApi,
@@ -851,7 +852,8 @@ export default function JournalClient() {
         </div>
       </div>
 
-      <Card>
+      <div className="flex items-start gap-4">
+        <Card className="min-w-0 flex-1">
         <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -1219,7 +1221,9 @@ export default function JournalClient() {
             </Table>
           )}
         </CardContent>
-      </Card>
+        </Card>
+        <JournalCommandesRail date={selectedDate} />
+      </div>
 
       {selectedIds.size > 0 ? (
         <div className="fixed bottom-4 left-1/2 z-40 flex w-[min(920px,calc(100%-2rem))] -translate-x-1/2 flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-lg">

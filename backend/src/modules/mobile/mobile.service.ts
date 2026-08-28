@@ -83,7 +83,12 @@ export class MobileService {
         await this.prisma.seatBooking.delete({ where: { id: booking.id } });
         continue;
       }
-      if (sub.reservedSeatLabel && sub.reservedSeatLabel !== booking.seatId) {
+      if (
+        sub.reservedSeatLabel &&
+        (sub.reservedSeatLabel !== booking.seatId ||
+          (sub.reservedSeatSpaceId &&
+            sub.reservedSeatSpaceId !== booking.spaceId))
+      ) {
         await this.prisma.seatBooking.delete({ where: { id: booking.id } });
       }
     }
@@ -185,23 +190,47 @@ export class MobileService {
     return { percent: percent || 0, groupName: member.group.name };
   }
 
-  private async seatOccupants(labels: string[]) {
+  private seatBookKey(spaceId: string, label: string) {
+    return `${spaceId}:${label}`;
+  }
+
+  private async resolveSeatRow(seatLabel: string, spaceId?: string) {
+    const seats = await this.prisma.seat.findMany({
+      where: {
+        label: seatLabel,
+        isActive: true,
+        ...(spaceId ? { spaceId } : {}),
+      },
+      include: { table: true, space: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    return seats[0] || null;
+  }
+
+  private async seatOccupants(labels: string[], spaceId?: string) {
     if (!labels.length) return [];
     const taken = await this.prisma.seatBooking.findMany({
       where: {
         eventKey: 'collabora-hub',
         isBooked: true,
         seatId: { in: labels },
+        ...(spaceId ? { spaceId } : {}),
       },
       include: { member: true },
     });
     if (!taken.length) return [];
     const seats = await this.prisma.seat.findMany({
-      where: { label: { in: taken.map((t) => t.seatId) }, isActive: true },
+      where: {
+        isActive: true,
+        OR: taken.map((t) => ({ label: t.seatId, spaceId: t.spaceId })),
+      },
       include: { space: true },
     });
-    const spaceByLabel = new Map(
-      seats.map((s) => [s.label, s.space?.name || null]),
+    const spaceByKey = new Map(
+      seats.map((s) => [
+        this.seatBookKey(s.spaceId, s.label),
+        s.space?.name || null,
+      ]),
     );
     return taken.map((t) => ({
       memberId: t.memberId,
@@ -211,15 +240,16 @@ export class MobileService {
           'Visiteur'
         : 'Visiteur',
       seatLabel: t.seatId,
-      spaceName: spaceByLabel.get(t.seatId) || null,
+      spaceName: spaceByKey.get(this.seatBookKey(t.spaceId, t.seatId)) || null,
     }));
   }
 
   private async throwOccupied(
     message: string,
     labels: string[],
+    spaceId?: string,
   ): Promise<never> {
-    const occupants = await this.seatOccupants(labels);
+    const occupants = await this.seatOccupants(labels, spaceId);
     throw new ConflictException({ message, occupants });
   }
 
@@ -735,7 +765,9 @@ export class MobileService {
   }
 
   /** First free non-overflow seat (stable order), then overflow if needed. */
-  async pickFreeSeatLabel(allowOverflow = true): Promise<string | null> {
+  async pickFreeSeat(
+    allowOverflow = true,
+  ): Promise<{ label: string; spaceId: string } | null> {
     const seats = await this.prisma.seat.findMany({
       where: { isActive: true },
       include: { space: { select: { sortOrder: true, name: true } } },
@@ -747,14 +779,25 @@ export class MobileService {
     });
     const bookings = await this.prisma.seatBooking.findMany({
       where: { isBooked: true, eventKey: 'collabora-hub' },
-      select: { seatId: true },
+      select: { seatId: true, spaceId: true },
     });
-    const booked = new Set(bookings.map((b) => b.seatId));
-    const normal = seats.find((s) => !s.isOverflow && !booked.has(s.label));
-    if (normal) return normal.label;
+    const booked = new Set(
+      bookings.map((b) => this.seatBookKey(b.spaceId, b.seatId)),
+    );
+    const isFree = (s: (typeof seats)[number]) =>
+      !booked.has(this.seatBookKey(s.spaceId, s.label));
+    const normal = seats.find((s) => !s.isOverflow && isFree(s));
+    if (normal) return { label: normal.label, spaceId: normal.spaceId };
     if (!allowOverflow) return null;
-    const overflow = seats.find((s) => s.isOverflow && !booked.has(s.label));
-    return overflow?.label || null;
+    const overflow = seats.find((s) => s.isOverflow && isFree(s));
+    return overflow
+      ? { label: overflow.label, spaceId: overflow.spaceId }
+      : null;
+  }
+
+  async pickFreeSeatLabel(allowOverflow = true): Promise<string | null> {
+    const seat = await this.pickFreeSeat(allowOverflow);
+    return seat?.label || null;
   }
 
   async getFloorPlanForVisitor(orgSlug?: string) {
@@ -776,6 +819,7 @@ export class MobileService {
                 },
                 seats: { where: { isActive: true } },
                 walls: true,
+                fixtures: true,
               },
             },
           },
@@ -800,7 +844,7 @@ export class MobileService {
     };
   }
 
-  async claimSeat(memberId: string, seatLabel: string) {
+  async claimSeat(memberId: string, seatLabel: string, spaceId?: string) {
     const settings = await this.getSeatSettings();
     if (settings.mobileSeatMode !== MobileSeatMode.VISITOR_CHOOSE) {
       throw new BadRequestException(
@@ -827,12 +871,13 @@ export class MobileService {
     if (existing) {
       throw new ConflictException('Une place est déjà assignée');
     }
-    await this.bookSeatForMember(memberId, seatLabel.trim());
+    await this.bookSeatForMember(memberId, seatLabel.trim(), { spaceId });
     const seat = await this.resolveSeatForMember(memberId);
     this.eventsGateway.sendTableUpdates({
       type: 'seat_claimed',
       memberId,
       seatLabel: seatLabel.trim(),
+      spaceId,
     });
     return { seat };
   }
@@ -1150,6 +1195,7 @@ export class MobileService {
           price.billingUnit === BillingUnit.HOURLY ? price.durationHours : null,
         hoursUsed: 0,
         reservedSeatLabel: dto.reservedSeatLabel?.trim() || null,
+        reservedSeatSpaceId: dto.reservedSeatSpaceId || null,
       },
       include: { price: true, members: true },
     });
@@ -1165,6 +1211,7 @@ export class MobileService {
     ) {
       await this.bookSeatForMember(dto.memberId, dto.reservedSeatLabel.trim(), {
         permanent: true,
+        spaceId: dto.reservedSeatSpaceId,
       });
     }
 
@@ -1350,9 +1397,10 @@ export class MobileService {
         if (dto.bookForMemberId) {
           await this.bookSeatForMember(dto.bookForMemberId, seat, {
             keepExisting: true,
+            spaceId: dto.spaceId,
           });
         } else {
-          await this.bookAnonymousSeat(seat);
+          await this.bookAnonymousSeat(seat, dto.spaceId);
         }
       }
     } catch (err) {
@@ -1386,7 +1434,11 @@ export class MobileService {
     });
     if (!booking) return null;
     const seat = await this.prisma.seat.findFirst({
-      where: { label: booking.seatId, isActive: true },
+      where: {
+        label: booking.seatId,
+        spaceId: booking.spaceId,
+        isActive: true,
+      },
       include: {
         table: true,
         space: true,
@@ -1397,6 +1449,7 @@ export class MobileService {
         seatLabel: booking.seatId,
         tableName: null as string | null,
         spaceName: null as string | null,
+        spaceId: booking.spaceId,
         isOverflow: false,
       };
     }
@@ -1404,6 +1457,7 @@ export class MobileService {
       seatLabel: seat.label,
       tableName: seat.table?.name || null,
       spaceName: seat.space?.name || null,
+      spaceId: seat.spaceId,
       isOverflow: seat.isOverflow,
     };
   }
@@ -1411,12 +1465,19 @@ export class MobileService {
   async bookSeatForMember(
     memberId: string,
     seatLabel: string,
-    opts?: { permanent?: boolean; keepExisting?: boolean },
+    opts?: { permanent?: boolean; keepExisting?: boolean; spaceId?: string },
   ) {
+    const seat = await this.resolveSeatRow(seatLabel, opts?.spaceId);
+    if (!seat) throw new NotFoundException('Place introuvable');
+    const spaceId = seat.spaceId;
     const permanent = !!opts?.permanent;
     const existing = await this.prisma.seatBooking.findUnique({
       where: {
-        eventKey_seatId: { eventKey: 'collabora-hub', seatId: seatLabel },
+        eventKey_spaceId_seatId: {
+          eventKey: 'collabora-hub',
+          spaceId,
+          seatId: seatLabel,
+        },
       },
     });
     if (
@@ -1424,7 +1485,7 @@ export class MobileService {
       existing.memberId &&
       existing.memberId !== memberId
     ) {
-      await this.throwOccupied('Cette place est déjà prise', [seatLabel]);
+      await this.throwOccupied('Cette place est déjà prise', [seatLabel], spaceId);
     }
     if (!opts?.keepExisting) {
       await this.prisma.seatBooking.deleteMany({
@@ -1433,17 +1494,22 @@ export class MobileService {
           isBooked: true,
           eventKey: 'collabora-hub',
           ...(permanent ? {} : { isPermanent: false }),
-          NOT: { seatId: seatLabel },
+          NOT: { spaceId, seatId: seatLabel },
         },
       });
     }
     return this.prisma.seatBooking.upsert({
       where: {
-        eventKey_seatId: { eventKey: 'collabora-hub', seatId: seatLabel },
+        eventKey_spaceId_seatId: {
+          eventKey: 'collabora-hub',
+          spaceId,
+          seatId: seatLabel,
+        },
       },
       create: {
         eventKey: 'collabora-hub',
         seatId: seatLabel,
+        spaceId,
         isBooked: true,
         isPermanent: permanent,
         bookedAt: new Date(),
@@ -1458,21 +1524,29 @@ export class MobileService {
     });
   }
 
-  async bookAnonymousSeat(seatLabel: string) {
+  async bookAnonymousSeat(seatLabel: string, spaceId?: string) {
+    const seat = await this.resolveSeatRow(seatLabel, spaceId);
+    if (!seat) throw new NotFoundException('Place introuvable');
     const existing = await this.prisma.seatBooking.findFirst({
       where: {
         eventKey: 'collabora-hub',
         seatId: seatLabel,
+        spaceId: seat.spaceId,
         isBooked: true,
       },
     });
     if (existing) {
-      await this.throwOccupied('Cette place est déjà prise', [seatLabel]);
+      await this.throwOccupied(
+        'Cette place est déjà prise',
+        [seatLabel],
+        seat.spaceId,
+      );
     }
     return this.prisma.seatBooking.create({
       data: {
         eventKey: 'collabora-hub',
         seatId: seatLabel,
+        spaceId: seat.spaceId,
         isBooked: true,
         bookedAt: new Date(),
         memberId: null,
@@ -1506,6 +1580,7 @@ export class MobileService {
       for (let i = 0; i < unique.length; i++) {
         await this.bookSeatForMember(memberId, unique[i], {
           keepExisting: i > 0,
+          spaceId: opts?.spaceId,
         });
       }
       return;
@@ -1547,12 +1622,11 @@ export class MobileService {
       });
       if (!table) throw new BadRequestException('Table introuvable');
       const seats = table.seats.filter((seat) => !seat.isOverflow);
-      const labels = seats.map((seat) => seat.label);
-      if (!labels.length) {
+      if (!seats.length) {
         throw new BadRequestException(`Aucune place sur ${table.name}`);
       }
-      await this.bookSeatLabels(memberId, labels, table.name);
-      return { booked: labels.length, label: table.name };
+      await this.bookSeatRows(memberId, seats, table.name);
+      return { booked: seats.length, label: table.name };
     }
     if (opts.spaceId) {
       target = spaces.filter((s) => s.id === opts.spaceId);
@@ -1581,14 +1655,14 @@ export class MobileService {
       return;
     }
 
-    const labels = target.flatMap((s) =>
-      s.seats.filter((seat) => !seat.isOverflow).map((seat) => seat.label),
+    const seats = target.flatMap((s) =>
+      s.seats.filter((seat) => !seat.isOverflow),
     );
-    if (!labels.length) {
+    if (!seats.length) {
       throw new BadRequestException(`Aucune place à réserver (${label})`);
     }
-    await this.bookSeatLabels(memberId, labels, label);
-    return { booked: labels.length, label };
+    await this.bookSeatRows(memberId, seats, label);
+    return { booked: seats.length, label };
   }
 
   async moveSeat(dto: MoveSeatDto) {
@@ -1598,15 +1672,23 @@ export class MobileService {
       throw new BadRequestException('memberId ou fromSeatLabel requis');
     }
 
+    const destSeat = await this.resolveSeatRow(toLabel, dto.toSpaceId);
+    if (!destSeat) throw new NotFoundException('Place cible introuvable');
+
     const dest = await this.prisma.seatBooking.findFirst({
       where: {
         eventKey: 'collabora-hub',
         seatId: toLabel,
+        spaceId: destSeat.spaceId,
         isBooked: true,
       },
     });
     if (dest) {
-      await this.throwOccupied('La place cible est déjà prise', [toLabel]);
+      await this.throwOccupied(
+        'La place cible est déjà prise',
+        [toLabel],
+        destSeat.spaceId,
+      );
     }
 
     let booking = dto.fromSeatLabel
@@ -1615,6 +1697,7 @@ export class MobileService {
             eventKey: 'collabora-hub',
             seatId: dto.fromSeatLabel.trim(),
             isBooked: true,
+            ...(dto.fromSpaceId ? { spaceId: dto.fromSpaceId } : {}),
           },
         })
       : null;
@@ -1640,28 +1723,34 @@ export class MobileService {
 
     const updated = await this.prisma.seatBooking.update({
       where: { id: booking.id },
-      data: { seatId: toLabel, bookedAt: new Date() },
+      data: {
+        seatId: toLabel,
+        spaceId: destSeat.spaceId,
+        bookedAt: new Date(),
+      },
     });
     this.eventsGateway.sendTableUpdates({
       type: 'seat_moved',
       memberId: booking.memberId,
       fromSeatLabel: booking.seatId,
       toSeatLabel: toLabel,
+      fromSpaceId: booking.spaceId,
+      toSpaceId: destSeat.spaceId,
     });
     return updated;
   }
 
-  private async bookSeatLabels(
+  private async bookSeatRows(
     memberId: string,
-    labels: string[],
+    seats: { label: string; spaceId: string }[],
     label: string,
   ) {
     const taken = await this.prisma.seatBooking.findMany({
       where: {
         eventKey: 'collabora-hub',
         isBooked: true,
-        seatId: { in: labels },
         NOT: { memberId },
+        OR: seats.map((s) => ({ spaceId: s.spaceId, seatId: s.label })),
       },
     });
     if (taken.length) {
@@ -1679,9 +1768,10 @@ export class MobileService {
       },
     });
     await this.prisma.seatBooking.createMany({
-      data: labels.map((seatId) => ({
+      data: seats.map((s) => ({
         eventKey: 'collabora-hub',
-        seatId,
+        seatId: s.label,
+        spaceId: s.spaceId,
         isBooked: true,
         bookedAt: new Date(),
         memberId,
@@ -1758,6 +1848,7 @@ export class MobileService {
     ) {
       await this.bookSeatForMember(memberId, sub.reservedSeatLabel, {
         permanent: true,
+        spaceId: sub.reservedSeatSpaceId || undefined,
       });
     }
 
@@ -2025,7 +2116,7 @@ export class MobileService {
     return request;
   }
 
-  async approveVisitRequest(id: string, seatLabel?: string) {
+  async approveVisitRequest(id: string, seatLabel?: string, spaceId?: string) {
     const request = await this.getVisitRequest(id);
     if (request.status !== VisitRequestStatus.PENDING) {
       throw new ConflictException('Request already resolved');
@@ -2033,6 +2124,7 @@ export class MobileService {
 
     const settings = await this.getSeatSettings();
     let assignedLabel = seatLabel?.trim() || null;
+    let assignedSpaceId = spaceId || undefined;
     const requestKind = this.subscriptionKind(request.price);
     const hoursSub =
       request.type === VisitRequestType.SUBSCRIPTION &&
@@ -2052,6 +2144,7 @@ export class MobileService {
       }
     } else if (skipSeat) {
       assignedLabel = null;
+      assignedSpaceId = undefined;
     } else if (settings.mobileSeatMode === MobileSeatMode.ADMIN_ASSIGN) {
       if (!assignedLabel) {
         throw new BadRequestException(
@@ -2060,13 +2153,20 @@ export class MobileService {
       }
     } else if (settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN) {
       if (!assignedLabel) {
-        assignedLabel = await this.pickFreeSeatLabel(true);
+        const free = await this.pickFreeSeat(true);
+        assignedLabel = free?.label || null;
+        assignedSpaceId = free?.spaceId;
       }
       if (!assignedLabel) {
         throw new BadRequestException('Aucune place libre disponible');
       }
     } else {
       assignedLabel = assignedLabel || null;
+    }
+
+    if (assignedLabel && !assignedSpaceId) {
+      assignedSpaceId =
+        (await this.resolveSeatRow(assignedLabel))?.spaceId || undefined;
     }
 
     let result: unknown;
@@ -2082,6 +2182,9 @@ export class MobileService {
         isPayed: true,
         reservedSeatLabel: wantsDedicatedSeat
           ? assignedLabel || undefined
+          : undefined,
+        reservedSeatSpaceId: wantsDedicatedSeat
+          ? assignedSpaceId
           : undefined,
       });
     }
@@ -2099,6 +2202,7 @@ export class MobileService {
       } else {
         await this.bookSeatForMember(request.memberId, assignedLabel, {
           permanent: wantsDedicatedSeat,
+          spaceId: assignedSpaceId,
         });
       }
     }
@@ -2621,6 +2725,33 @@ export class MobileService {
         forfaitName: session?.prices?.name || null,
       };
     });
+  }
+
+  async listAdminOrders(date?: string) {
+    const day = date ? new Date(date) : new Date();
+    if (Number.isNaN(day.getTime())) {
+      throw new BadRequestException('Date invalide');
+    }
+    const rows = await this.prisma.dailyProduct.findMany({
+      where: {
+        date: { gte: startOfDay(day), lt: endOfDay(day) },
+        status: { not: ProductOrderStatus.CANCELLED },
+      },
+      include: { product: true, member: true },
+      orderBy: [{ isPayed: 'asc' }, { createdAt: 'desc' }],
+      take: 300,
+    });
+    return rows.map((r) => ({
+      ...this.mapOrder(r),
+      memberId: r.memberId || r.externalRef,
+      memberName:
+        [r.member?.firstName, r.member?.lastName].filter(Boolean).join(' ') ||
+        r.member?.firstName ||
+        'Visiteur',
+      visitorNumber: r.member?.visitorNumber || null,
+      phone: r.member?.phone || null,
+      avatarUrl: r.member?.avatarUrl || null,
+    }));
   }
 
   async listTodayOrders(memberId: string) {

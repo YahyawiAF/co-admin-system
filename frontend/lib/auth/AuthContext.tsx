@@ -24,6 +24,11 @@ type AuthContextValue = {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (identifier: string, password: string) => Promise<void>;
+  signup: (data: {
+    identifier: string;
+    password: string;
+    fullname: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -90,6 +95,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [persistUser]
   );
 
+  const signup = useCallback(
+    async (data: {
+      identifier: string;
+      password: string;
+      fullname: string;
+    }) => {
+      const next = await authApi.signup(data);
+      persistUser(next);
+    },
+    [persistUser]
+  );
+
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
@@ -107,9 +124,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       isAuthenticated: !!user && !!authApi.getStoredToken(),
       login,
+      signup,
       logout,
     }),
-    [user, isLoading, login, logout]
+    [user, isLoading, login, signup, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

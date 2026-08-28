@@ -9,6 +9,17 @@ export const authApi = {
       { skipAuth: true }
     );
   },
+  signup(data: {
+    identifier: string;
+    password: string;
+    fullname: string;
+  }) {
+    return http.post<User>(
+      "/auth/signup",
+      { ...data, role: "ADMIN" },
+      { skipAuth: true }
+    );
+  },
   async refresh(refreshToken: string) {
     const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
       method: "GET",

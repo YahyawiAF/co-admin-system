@@ -136,10 +136,12 @@ export function VisitRequestBell() {
   const bookedBySeat = useMemo(() => {
     const map = new Map<string, (typeof bookings)[0]>();
     for (const b of bookings) {
-      if (b.isBooked) map.set(b.seatId, b);
+      if (!b.isBooked) continue;
+      if (b.spaceId && spaceId && b.spaceId !== spaceId) continue;
+      map.set(b.seatId, b);
     }
     return map;
-  }, [bookings]);
+  }, [bookings, spaceId]);
 
   const isFull = occupancy?.isFull ?? false;
   const showOverflow = isFull || allowOverflow;
@@ -201,7 +203,11 @@ export function VisitRequestBell() {
     }: {
       id: string;
       seatLabel?: string;
-    }) => visitRequestsApi.approve(id, seat ? { seatLabel: seat } : undefined),
+    }) =>
+      visitRequestsApi.approve(
+        id,
+        seat ? { seatLabel: seat, spaceId: spaceId || undefined } : undefined
+      ),
     onSuccess: (_d, vars) => {
       toast.success(
         vars.seatLabel

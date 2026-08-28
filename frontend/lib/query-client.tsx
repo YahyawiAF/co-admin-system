@@ -42,6 +42,7 @@ export const queryKeys = {
   abonnements: ["abonnements"] as const,
   visitRequestsPending: ["visit-requests", "pending"] as const,
   productOrdersPending: ["product-orders", "pending"] as const,
+  adminOrders: (date: string) => ["product-orders", "admin", date] as const,
   groups: ["groups"] as const,
   events: ["events"] as const,
   organization: (slug: string) => ["organization", slug] as const,

@@ -128,6 +128,11 @@ export class MobileController {
     return this.mobileService.listOrders(memberId);
   }
 
+  @Get('admin/orders')
+  adminOrders(@Query('date') date?: string) {
+    return this.mobileService.listAdminOrders(date);
+  }
+
   @Get('admin/orders/pending')
   pendingOrders() {
     return this.mobileService.listPendingOrders();
@@ -191,7 +196,11 @@ export class MobileController {
 
   @Post('session/claim-seat')
   claimSeat(@Body() dto: ClaimSeatDto) {
-    return this.mobileService.claimSeat(dto.memberId, dto.seatLabel);
+    return this.mobileService.claimSeat(
+      dto.memberId,
+      dto.seatLabel,
+      dto.spaceId,
+    );
   }
 
   @Patch('session/:id/checkout')
@@ -255,9 +264,13 @@ export class MobileController {
   @Patch('admin/visit-requests/:id/approve')
   approveVisitRequest(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body?: { seatLabel?: string },
+    @Body() body?: { seatLabel?: string; spaceId?: string },
   ) {
-    return this.mobileService.approveVisitRequest(id, body?.seatLabel);
+    return this.mobileService.approveVisitRequest(
+      id,
+      body?.seatLabel,
+      body?.spaceId,
+    );
   }
 
   @Patch('admin/visit-requests/:id/reject')

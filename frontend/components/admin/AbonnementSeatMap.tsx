@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   selectedLabel?: string | null;
-  onSelect?: (label: string | null) => void;
+  selectedSpaceId?: string | null;
+  onSelect?: (label: string | null, spaceId?: string | null) => void;
   currentMemberId?: string | null;
   highlightLabels?: string[];
   className?: string;
@@ -20,6 +21,7 @@ type Props = {
 
 export function AbonnementSeatMap({
   selectedLabel,
+  selectedSpaceId,
   onSelect,
   currentMemberId,
   highlightLabels = [],
@@ -44,6 +46,10 @@ export function AbonnementSeatMap({
       return;
     }
     const matchLabel = selectedLabel || highlightLabels[0];
+    if (selectedSpaceId && spaces.some((s) => s.id === selectedSpaceId)) {
+      setSpaceId(selectedSpaceId);
+      return;
+    }
     if (matchLabel) {
       for (const space of spaces) {
         const all = [
@@ -64,10 +70,12 @@ export function AbonnementSeatMap({
   const bookedBySeat = useMemo(() => {
     const map = new Map<string, (typeof bookings)[0]>();
     for (const b of bookings) {
-      if (b.isBooked) map.set(b.seatId, b);
+      if (!b.isBooked) continue;
+      if (b.spaceId && spaceId && b.spaceId !== spaceId) continue;
+      map.set(b.seatId, b);
     }
     return map;
-  }, [bookings]);
+  }, [bookings, spaceId]);
 
   const activeSpace = spaces.find((s) => s.id === spaceId) || spaces[0] || null;
 
@@ -103,7 +111,7 @@ export function AbonnementSeatMap({
       toast.error("Cette place est déjà prise");
       return;
     }
-    onSelect(seat.label === selectedLabel ? null : seat.label);
+    onSelect(seat.label === selectedLabel ? null : seat.label, spaceId);
   };
 
   return (

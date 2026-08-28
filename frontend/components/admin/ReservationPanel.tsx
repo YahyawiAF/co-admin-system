@@ -246,6 +246,7 @@ export function ReservationPanel({ journalDate, onDone }: Props) {
             eventKey: BOOKING_EVENT_KEY,
             seats: labels,
             memberId,
+            spaceId: occupy.spaceId,
           });
         } else if (occupy.spaceId || occupy.reserveKind || occupy.tableId) {
           await mobileApi.bookSpace({

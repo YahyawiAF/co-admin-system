@@ -13,6 +13,7 @@ import {
   Package,
   Banknote,
   Calendar,
+  Coffee,
   LogOut,
   Menu,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const NAV = [
   { href: "/tarifs", label: "Tarifs", icon: Tags },
   { href: "/facility", label: "Facility / Map", icon: Building2 },
   { href: "/events", label: "Événements", icon: Calendar },
+  { href: "/commandes", label: "Commandes", icon: Coffee },
   { href: "/products", label: "Products", icon: Package },
 ];
 

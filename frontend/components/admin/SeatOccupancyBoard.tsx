@@ -149,7 +149,7 @@ export function SeatOccupancyBoard({
       for (const t of space.tables || []) {
         for (const seat of t.seats || []) {
           if (!seat.isActive) continue;
-          map.set(seat.label, {
+          map.set(`${space.id}:${seat.label}`, {
             spaceId: space.id,
             spaceName: space.name,
             tableName: t.name,
@@ -160,7 +160,7 @@ export function SeatOccupancyBoard({
       }
       for (const seat of space.seats || []) {
         if (!seat.isActive || seat.tableId) continue;
-        map.set(seat.label, {
+        map.set(`${space.id}:${seat.label}`, {
           spaceId: space.id,
           spaceName: space.name,
           tableName: null,
@@ -186,7 +186,9 @@ export function SeatOccupancyBoard({
   useEffect(() => {
     if (!open || !focusSeatLabel) return;
     setSelectedSeatLabel(focusSeatLabel);
-    const meta = seatMeta.get(focusSeatLabel);
+    const meta =
+      [...seatMeta.values()].find((m) => m.seat.label === focusSeatLabel) ||
+      null;
     if (meta?.spaceId) setSpaceId(meta.spaceId);
   }, [open, focusSeatLabel, seatMeta]);
 
@@ -205,7 +207,9 @@ export function SeatOccupancyBoard({
         if (journal) usedAnonymous.add(journal.id);
       }
       if (!journal) continue;
-      const meta = seatMeta.get(b.seatId);
+      const meta = seatMeta.get(
+        b.spaceId ? `${b.spaceId}:${b.seatId}` : b.seatId
+      );
       list.push({
         seatLabel: b.seatId,
         spaceId: meta?.spaceId || "",
@@ -275,7 +279,9 @@ export function SeatOccupancyBoard({
     const byId = new Map(all.map((s) => [s.id, s]));
     const unique = [...byId.values()];
     const booked = new Set(
-      bookings.filter((b) => b.isBooked).map((b) => b.seatId)
+      bookings
+        .filter((b) => b.isBooked && (!b.spaceId || b.spaceId === activeSpace.id))
+        .map((b) => b.seatId)
     );
     const free = unique.filter((s) => !booked.has(s.label)).length;
     return { free, total: unique.length };

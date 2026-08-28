@@ -75,6 +75,7 @@ const schema = z.object({
   payedAmount: z.coerce.number().min(0),
   hoursUsed: z.coerce.number().min(0).optional(),
   reservedSeatLabel: z.string().optional(),
+  reservedSeatSpaceId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -149,6 +150,7 @@ function AbonnementsInner() {
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
   const [moving, setMoving] = useState<Abonnement | null>(null);
   const [moveSeat, setMoveSeat] = useState<string | null>(null);
+  const [moveSpaceId, setMoveSpaceId] = useState<string | null>(null);
   const [ending, setEnding] = useState<Abonnement | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
 
@@ -283,6 +285,7 @@ function AbonnementsInner() {
       payedAmount: 0,
       hoursUsed: 0,
       reservedSeatLabel: "",
+      reservedSeatSpaceId: "",
     },
   });
 
@@ -307,6 +310,7 @@ function AbonnementsInner() {
       payedAmount: 0,
       hoursUsed: 0,
       reservedSeatLabel: "",
+      reservedSeatSpaceId: "",
     });
     setOpen(true);
   };
@@ -322,6 +326,7 @@ function AbonnementsInner() {
       payedAmount: a.payedAmount,
       hoursUsed: a.hoursUsed || 0,
       reservedSeatLabel: a.reservedSeatLabel || "",
+      reservedSeatSpaceId: a.reservedSeatSpaceId || "",
     });
     setOpen(true);
   };
@@ -359,6 +364,7 @@ function AbonnementsInner() {
           price?.billingUnit === "HOURLY" ? price.durationHours : null,
         hoursUsed: v.hoursUsed || 0,
         reservedSeatLabel: v.reservedSeatLabel?.trim() || null,
+        reservedSeatSpaceId: v.reservedSeatSpaceId?.trim() || null,
       };
       return editing
         ? abonnementsApi.update(editing.id, payload)
@@ -396,7 +402,10 @@ function AbonnementsInner() {
 
   const clearSeat = useMutation({
     mutationFn: (a: Abonnement) =>
-      abonnementsApi.update(a.id, { reservedSeatLabel: "" }),
+      abonnementsApi.update(a.id, {
+        reservedSeatLabel: "",
+        reservedSeatSpaceId: "",
+      }),
     onSuccess: () => {
       toast.success("Place libérée");
       invalidateAbo();
@@ -409,6 +418,7 @@ function AbonnementsInner() {
       if (!moving) throw new Error("Aucun abonnement");
       return abonnementsApi.update(moving.id, {
         reservedSeatLabel: moveSeat || "",
+        reservedSeatSpaceId: moveSpaceId || "",
       });
     },
     onSuccess: () => {
@@ -426,7 +436,10 @@ function AbonnementsInner() {
     mutationFn: async () => {
       const targets = rows.filter((a) => isActiveSub(a) && a.reservedSeatLabel);
       for (const a of targets) {
-        await abonnementsApi.update(a.id, { reservedSeatLabel: "" });
+        await abonnementsApi.update(a.id, {
+          reservedSeatLabel: "",
+          reservedSeatSpaceId: "",
+        });
       }
       return targets.length;
     },
@@ -598,10 +611,12 @@ function AbonnementsInner() {
                     </Label>
                     <AbonnementSeatMap
                       selectedLabel={reservedSeatLabel || null}
+                      selectedSpaceId={form.watch("reservedSeatSpaceId") || null}
                       currentMemberId={form.watch("memberID") || null}
-                      onSelect={(label) =>
-                        form.setValue("reservedSeatLabel", label || "")
-                      }
+                      onSelect={(label, sid) => {
+                        form.setValue("reservedSeatLabel", label || "");
+                        form.setValue("reservedSeatSpaceId", sid || "");
+                      }}
                     />
                   </div>
                 ) : selectedPrice ? (
@@ -894,8 +909,12 @@ function AbonnementsInner() {
           </p>
           <AbonnementSeatMap
             selectedLabel={moveSeat}
+            selectedSpaceId={moveSpaceId}
             currentMemberId={moving?.memberID || null}
-            onSelect={(label) => setMoveSeat(label)}
+            onSelect={(label, sid) => {
+              setMoveSeat(label);
+              setMoveSpaceId(sid || null);
+            }}
           />
           <DialogFooter>
             <Button

@@ -155,6 +155,7 @@ export interface Abonnement {
   hoursQuota?: number | null;
   hoursUsed?: number | null;
   reservedSeatLabel?: string | null;
+  reservedSeatSpaceId?: string | null;
   kind?: "HOURS_POOL" | "SEMI_DAY" | "FULL_DAY" | null;
   daysRemaining?: number | null;
   hoursRemaining?: number | null;
@@ -234,6 +235,27 @@ export interface SpaceWall {
   rotation: number;
 }
 
+export type FixtureKind =
+  | "ARMCHAIR"
+  | "TV"
+  | "TRIANGLE"
+  | "CIRCLE"
+  | "DOOR"
+  | "TOILET"
+  | "KITCHEN";
+
+export interface SpaceFixture {
+  id: string;
+  spaceId: string;
+  kind: FixtureKind;
+  label?: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+}
+
 export interface Space {
   id: string;
   facilityId: string;
@@ -245,6 +267,7 @@ export interface Space {
   tables?: SpaceTable[];
   seats?: SpaceSeat[];
   walls?: SpaceWall[];
+  fixtures?: SpaceFixture[];
 }
 
 export interface OccupancyStats {

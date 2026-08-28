@@ -185,6 +185,48 @@ export class FacilityController {
     return this.facilityService.deleteWall(id);
   }
 
+  @Post('fixtures')
+  createFixture(
+    @Body()
+    body: {
+      spaceId: string;
+      kind: string;
+      label?: string;
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+      rotation?: number;
+    },
+  ) {
+    return this.facilityService.createFixture({
+      ...body,
+      kind: body.kind as import('@prisma/client').FixtureKind,
+    });
+  }
+
+  @Patch('fixtures/:id')
+  updateFixture(
+    @Param('id') id: string,
+    @Body()
+    body: Partial<{
+      kind: import('@prisma/client').FixtureKind;
+      label: string | null;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    }>,
+  ) {
+    return this.facilityService.updateFixture(id, body);
+  }
+
+  @Delete('fixtures/:id')
+  deleteFixture(@Param('id') id: string) {
+    return this.facilityService.deleteFixture(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.facilityService.findOne(id);

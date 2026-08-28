@@ -19,15 +19,22 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-const schema = z.object({
-  identifier: z.string().min(1, "Email ou téléphone requis"),
-  password: z.string().min(1, "Mot de passe requis"),
-});
+const schema = z
+  .object({
+    fullname: z.string().min(2, "Nom complet requis"),
+    identifier: z.string().min(1, "Email ou téléphone requis"),
+    password: z.string().min(8, "Au moins 8 caractères"),
+    confirmPassword: z.string().min(1, "Confirmez le mot de passe"),
+  })
+  .refine((v) => v.password === v.confirmPassword, {
+    message: "Les mots de passe ne correspondent pas",
+    path: ["confirmPassword"],
+  });
 
 type FormValues = z.infer<typeof schema>;
 
-export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+export default function SignupPage() {
+  const { signup, isAuthenticated } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const {
@@ -36,7 +43,12 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { identifier: "", password: "" },
+    defaultValues: {
+      fullname: "",
+      identifier: "",
+      password: "",
+      confirmPassword: "",
+    },
   });
 
   useEffect(() => {
@@ -46,10 +58,14 @@ export default function LoginPage() {
   const onSubmit = async (values: FormValues) => {
     setError(null);
     try {
-      await login(values.identifier, values.password);
+      await signup({
+        identifier: values.identifier,
+        password: values.password,
+        fullname: values.fullname,
+      });
       router.replace("/dashboard");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Connexion échouée");
+      setError(e instanceof Error ? e.message : "Inscription échouée");
     }
   };
 
@@ -60,7 +76,7 @@ export default function LoginPage() {
           <p className="text-xs font-semibold uppercase tracking-widest text-primary">
             Collabora Hub
           </p>
-          <CardTitle className="text-2xl">Connexion admin</CardTitle>
+          <CardTitle className="text-2xl">Créer un compte admin</CardTitle>
           <CardDescription>
             Accès à l&apos;accueil et au tableau de bord
           </CardDescription>
@@ -72,6 +88,19 @@ export default function LoginPage() {
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="fullname">Nom complet</Label>
+              <Input
+                id="fullname"
+                autoComplete="name"
+                {...register("fullname")}
+              />
+              {errors.fullname ? (
+                <p className="text-sm text-destructive">
+                  {errors.fullname.message}
+                </p>
+              ) : null}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="identifier">Email ou téléphone</Label>
               <Input
@@ -90,7 +119,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 {...register("password")}
               />
               {errors.password ? (
@@ -99,13 +128,27 @@ export default function LoginPage() {
                 </p>
               ) : null}
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                {...register("confirmPassword")}
+              />
+              {errors.confirmPassword ? (
+                <p className="text-sm text-destructive">
+                  {errors.confirmPassword.message}
+                </p>
+              ) : null}
+            </div>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Connexion…" : "Se connecter"}
+              {isSubmitting ? "Création…" : "Créer le compte"}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              Pas encore de compte ?{" "}
-              <Link href="/signup" className="font-medium text-primary hover:underline">
-                Créer un compte
+              Déjà un compte ?{" "}
+              <Link href="/login" className="font-medium text-primary hover:underline">
+                Se connecter
               </Link>
             </p>
           </form>

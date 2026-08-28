@@ -142,6 +142,11 @@ export class StartSubscriptionDto {
   @IsOptional()
   @IsString()
   reservedSeatLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  reservedSeatSpaceId?: string;
 }
 
 export class CheckoutSessionDto {
@@ -282,6 +287,11 @@ export class ClaimSeatDto {
   @IsString()
   @IsNotEmpty()
   seatLabel: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  spaceId?: string;
 }
 
 export class UpdateMobileProfileDto {
@@ -432,4 +442,14 @@ export class MoveSeatDto {
   @IsString()
   @IsNotEmpty()
   toSeatLabel: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  fromSpaceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  toSpaceId?: string;
 }

@@ -39,7 +39,7 @@ export class AuthController {
       signUpDto.identifier,
       signUpDto.password,
       signUpDto.fullname,
-      signUpDto.role,
+      signUpDto.role ?? Role.ADMIN,
     );
   }
 

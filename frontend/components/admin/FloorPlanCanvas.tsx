@@ -2,10 +2,28 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import type { Space, SpaceSeat, SpaceTable, SpaceWall } from "@/lib/types";
+import type {
+  Space,
+  SpaceSeat,
+  SpaceTable,
+  SpaceWall,
+  SpaceFixture,
+  FixtureKind,
+} from "@/lib/types";
 import type { SeatBooking } from "@/lib/api/resources";
+import { bookedLabelsForSpace } from "@/lib/seat-booking";
 
-export type EditTool = "select" | "seat" | "wall" | "table";
+export type EditTool = "select" | "seat" | "wall" | "table" | "fixture";
+
+export const FIXTURE_OPTIONS: { kind: FixtureKind; label: string }[] = [
+  { kind: "ARMCHAIR", label: "Fauteuil" },
+  { kind: "TV", label: "TV" },
+  { kind: "TRIANGLE", label: "Triangle" },
+  { kind: "CIRCLE", label: "Cercle" },
+  { kind: "DOOR", label: "Porte" },
+  { kind: "TOILET", label: "Toilettes" },
+  { kind: "KITCHEN", label: "Cuisine" },
+];
 
 type Props = {
   space: Space;
@@ -21,16 +39,19 @@ type Props = {
     tableId: string | null
   ) => void;
   onMoveWall?: (wallId: string, x: number, y: number) => void;
+  onMoveFixture?: (fixtureId: string, x: number, y: number) => void;
   onSelectTable?: (table: SpaceTable) => void;
   onSelectWall?: (wall: SpaceWall) => void;
+  onSelectFixture?: (fixture: SpaceFixture) => void;
   onCanvasPlace?: (tool: EditTool, x: number, y: number, tableId?: string) => void;
   selectedTableId?: string | null;
   selectedWallId?: string | null;
   selectedSeatId?: string | null;
   selectedSeatIds?: string[];
+  selectedFixtureId?: string | null;
 };
 
-type DragKind = "table" | "seat" | "wall";
+type DragKind = "table" | "seat" | "wall" | "fixture";
 
 export function FloorPlanCanvas({
   space,
@@ -41,17 +62,18 @@ export function FloorPlanCanvas({
   onMoveTable,
   onMoveSeat,
   onMoveWall,
+  onMoveFixture,
   onSelectTable,
   onSelectWall,
+  onSelectFixture,
   onCanvasPlace,
   selectedTableId,
   selectedWallId,
   selectedSeatId,
   selectedSeatIds,
+  selectedFixtureId,
 }: Props) {
-  const booked = new Set(
-    bookings.filter((b) => b.isBooked).map((b) => b.seatId)
-  );
+  const booked = bookedLabelsForSpace(bookings, space.id);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [localPos, setLocalPos] = useState<
     Record<string, { x: number; y: number }>
@@ -69,6 +91,7 @@ export function FloorPlanCanvas({
 
   const tables = space.tables || [];
   const walls = space.walls || [];
+  const fixtures = space.fixtures || [];
   const looseSeats = (space.seats || []).filter((s) => !s.tableId);
 
   useEffect(() => {
@@ -113,6 +136,7 @@ export function FloorPlanCanvas({
     if (p && drag.moved) {
       if (drag.kind === "table") onMoveTable?.(drag.id, p.x, p.y);
       if (drag.kind === "wall") onMoveWall?.(drag.id, p.x, p.y);
+      if (drag.kind === "fixture") onMoveFixture?.(drag.id, p.x, p.y);
       if (drag.kind === "seat") {
         const over = findTableAt(p.x + 14, p.y + 14);
         if (over) {
@@ -167,7 +191,7 @@ export function FloorPlanCanvas({
             editMode &&
             !wasDragging &&
             placeDownRef.current &&
-            (tool === "seat" || tool === "wall" || tool === "table")
+            (tool === "seat" || tool === "wall" || tool === "table" || tool === "fixture")
           ) {
             const dist = Math.hypot(
               e.clientX - placeDownRef.current.x,
@@ -231,6 +255,49 @@ export function FloorPlanCanvas({
                   {wall.label}
                 </span>
               ) : null}
+            </div>
+          );
+        })}
+
+        {fixtures.map((fixture) => {
+          const pos = posOf(fixture.id, fixture.x, fixture.y);
+          return (
+            <div
+              key={fixture.id}
+              data-floor-item
+              className={cn(
+                "absolute z-[6] flex items-center justify-center rounded-md border border-slate-300 bg-white/90 shadow-sm",
+                selectedFixtureId === fixture.id && "ring-2 ring-primary",
+                editMode && tool === "select" && "cursor-grab"
+              )}
+              style={{
+                left: pos.x,
+                top: pos.y,
+                width: fixture.width,
+                height: fixture.height,
+                transform: `rotate(${fixture.rotation || 0}deg)`,
+              }}
+              title={fixture.label || fixture.kind}
+              onPointerDown={(e) => {
+                if (!editMode || tool !== "select") return;
+                e.preventDefault();
+                e.stopPropagation();
+                (e.currentTarget as HTMLElement).setPointerCapture?.(
+                  e.pointerId
+                );
+                dragRef.current = {
+                  kind: "fixture",
+                  id: fixture.id,
+                  startX: e.clientX,
+                  startY: e.clientY,
+                  origX: pos.x,
+                  origY: pos.y,
+                  moved: false,
+                };
+                onSelectFixture?.(fixture);
+              }}
+            >
+              <FixtureGlyph kind={fixture.kind} />
             </div>
           );
         })}
@@ -433,5 +500,61 @@ function SeatChip({
     >
       {seat.isOverflow ? "X" : seat.label.split("-").pop()}
     </button>
+  );
+}
+
+function FixtureGlyph({ kind }: { kind: FixtureKind }) {
+  const cls = "h-[70%] w-[70%] text-slate-700";
+  if (kind === "TV") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <rect x="3" y="5" width="18" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  if (kind === "ARMCHAIR") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <rect x="6" y="8" width="12" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M4 12v5h2M20 12v5h-2M8 16v3h8v-3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  if (kind === "TRIANGLE") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <path d="M12 4l9 16H3z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  if (kind === "CIRCLE") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  if (kind === "DOOR") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <rect x="6" y="3" width="12" height="18" rx="1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="15" cy="12" r="1" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (kind === "TOILET") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <rect x="8" y="3" width="8" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M7 9h10v5a5 5 0 01-10 0z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+      <rect x="3" y="7" width="18" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M7 7V5h4v2M15 11h4M3 13h6" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
   );
 }

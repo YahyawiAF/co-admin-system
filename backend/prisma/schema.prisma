@@ -144,6 +144,7 @@ model Abonnement {
   hoursQuota         Float?
   hoursUsed          Float     @default(0)
   reservedSeatLabel  String?
+  reservedSeatSpaceId String?
   members            Member    @relation(fields: [memberID], references: [id])
   price              Price     @relation(fields: [priceId], references: [id])
 
@@ -275,6 +276,8 @@ model Space {
   tables         Table[]
   seats          Seat[]
   walls          SpaceWall[]
+  fixtures       SpaceFixture[]
+  bookings       SeatBooking[]
   prices         Price[]
 
   @@map("spaces")
@@ -294,6 +297,34 @@ model SpaceWall {
   updatedAt DateTime @updatedAt
 
   @@map("space_walls")
+}
+
+enum FixtureKind {
+  ARMCHAIR
+  TV
+  TRIANGLE
+  CIRCLE
+  DOOR
+  TOILET
+  KITCHEN
+}
+
+model SpaceFixture {
+  id        String      @id @default(uuid())
+  spaceId   String
+  space     Space       @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  kind      FixtureKind
+  label     String?
+  x         Float       @default(40)
+  y         Float       @default(40)
+  width     Float       @default(48)
+  height    Float       @default(48)
+  rotation  Float       @default(0)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([spaceId])
+  @@map("space_fixtures")
 }
 
 model Table {
@@ -337,6 +368,8 @@ model SeatBooking {
   id        String    @id @default(uuid())
   eventKey  String
   seatId    String
+  spaceId   String
+  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   isBooked    Boolean   @default(false)
   isPermanent Boolean   @default(false)
   bookedAt    DateTime?
@@ -345,7 +378,8 @@ model SeatBooking {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  @@unique([eventKey, seatId])
+  @@unique([eventKey, spaceId, seatId])
+  @@index([spaceId])
   @@map("seat_bookings")
 }
 

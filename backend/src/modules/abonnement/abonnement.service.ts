@@ -65,6 +65,8 @@ export class AbonnementService {
           hoursQuota,
           hoursUsed: createAbonnementDto.hoursUsed ?? 0,
           reservedSeatLabel: createAbonnementDto.reservedSeatLabel || null,
+          reservedSeatSpaceId:
+            createAbonnementDto.reservedSeatSpaceId || null,
         },
         include: {
           members: true,
@@ -76,6 +78,7 @@ export class AbonnementService {
         created.reservedSeatLabel,
         existingPrice,
         created.leaveDate,
+        created.reservedSeatSpaceId,
       );
       return created;
     } catch (error) {
@@ -179,13 +182,17 @@ export class AbonnementService {
         }
       }
 
-      const { reservedSeatLabel, ...rest } = updateAbonnementDto;
+      const { reservedSeatLabel, reservedSeatSpaceId, ...rest } =
+        updateAbonnementDto;
       const updated = await this.prisma.abonnement.update({
         where: { id },
         data: {
           ...rest,
           ...(reservedSeatLabel !== undefined
             ? { reservedSeatLabel: reservedSeatLabel?.trim() || null }
+            : {}),
+          ...(reservedSeatSpaceId !== undefined
+            ? { reservedSeatSpaceId: reservedSeatSpaceId || null }
             : {}),
         },
         include: {
@@ -198,6 +205,7 @@ export class AbonnementService {
         updated.reservedSeatLabel,
         updated.price,
         updated.leaveDate,
+        updated.reservedSeatSpaceId,
       );
       await this.refreshMemberPlan(updated.memberID);
       return updated;
@@ -315,6 +323,7 @@ export class AbonnementService {
       reserveSeat?: boolean | null;
     } | null,
     leaveDate?: Date | null,
+    spaceId?: string | null,
   ) {
     const expired = !!leaveDate && new Date(leaveDate) <= new Date();
     const label = seatLabel?.trim() || '';
@@ -322,10 +331,20 @@ export class AbonnementService {
       await this.releasePermanentSeat(memberId);
       return;
     }
+    const seat = await this.prisma.seat.findFirst({
+      where: {
+        label,
+        isActive: true,
+        ...(spaceId ? { spaceId } : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!seat) return;
     const taken = await this.prisma.seatBooking.findFirst({
       where: {
         eventKey: 'collabora-hub',
         seatId: label,
+        spaceId: seat.spaceId,
         isBooked: true,
         NOT: { memberId },
       },
@@ -336,16 +355,21 @@ export class AbonnementService {
         memberId,
         isBooked: true,
         eventKey: 'collabora-hub',
-        NOT: { seatId: label },
+        NOT: { seatId: label, spaceId: seat.spaceId },
       },
     });
     await this.prisma.seatBooking.upsert({
       where: {
-        eventKey_seatId: { eventKey: 'collabora-hub', seatId: label },
+        eventKey_spaceId_seatId: {
+          eventKey: 'collabora-hub',
+          spaceId: seat.spaceId,
+          seatId: label,
+        },
       },
       create: {
         eventKey: 'collabora-hub',
         seatId: label,
+        spaceId: seat.spaceId,
         isBooked: true,
         isPermanent: true,
         bookedAt: new Date(),

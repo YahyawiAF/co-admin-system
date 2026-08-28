@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, PriceCategory } from '@prisma/client';
+import { Prisma, PriceCategory, FixtureKind } from '@prisma/client';
 import { startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { FacilityEntity } from './entities/facility.entitie';
@@ -310,6 +310,7 @@ export class FacilityService {
         },
         seats: { where: { isActive: true }, orderBy: { label: 'asc' } },
         walls: { orderBy: { createdAt: 'asc' } },
+        fixtures: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -587,6 +588,51 @@ export class FacilityService {
     return { ok: true };
   }
 
+  async createFixture(data: {
+    spaceId: string;
+    kind: FixtureKind;
+    label?: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    rotation?: number;
+  }) {
+    const defaults = fixtureDefaults(data.kind);
+    return this.prisma.spaceFixture.create({
+      data: {
+        spaceId: data.spaceId,
+        kind: data.kind,
+        label: data.label,
+        x: data.x ?? 80,
+        y: data.y ?? 80,
+        width: data.width ?? defaults.width,
+        height: data.height ?? defaults.height,
+        rotation: data.rotation ?? 0,
+      },
+    });
+  }
+
+  async updateFixture(
+    id: string,
+    data: Partial<{
+      kind: FixtureKind;
+      label: string | null;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      rotation: number;
+    }>,
+  ) {
+    return this.prisma.spaceFixture.update({ where: { id }, data });
+  }
+
+  async deleteFixture(id: string) {
+    await this.prisma.spaceFixture.delete({ where: { id } });
+    return { ok: true };
+  }
+
   async occupancy() {
     await this.prisma.seatBooking.deleteMany({
       where: {
@@ -601,15 +647,19 @@ export class FacilityService {
     const bookings = await this.prisma.seatBooking.findMany({
       where: { isBooked: true, eventKey: 'collabora-hub' },
     });
-    const booked = new Set(bookings.map((b) => b.seatId));
+    const booked = new Set(
+      bookings.map((b) => `${b.spaceId}:${b.seatId}`),
+    );
     const normal = seats.filter((s) => !s.isOverflow);
     const overflow = seats.filter((s) => s.isOverflow);
+    const occupied = (s: (typeof seats)[number]) =>
+      booked.has(`${s.spaceId}:${s.label}`);
     return {
       normalCapacity: normal.length,
-      normalOccupied: normal.filter((s) => booked.has(s.label)).length,
+      normalOccupied: normal.filter(occupied).length,
       overflowCapacity: overflow.length,
-      overflowOccupied: overflow.filter((s) => booked.has(s.label)).length,
-      isFull: normal.length > 0 && normal.every((s) => booked.has(s.label)),
+      overflowOccupied: overflow.filter(occupied).length,
+      isFull: normal.length > 0 && normal.every(occupied),
     };
   }
 
@@ -641,5 +691,18 @@ export class FacilityService {
         data: { capacityNormal: sp.seats.length },
       });
     }
+  }
+}
+
+function fixtureDefaults(kind: FixtureKind): { width: number; height: number } {
+  switch (kind) {
+    case FixtureKind.TV:
+      return { width: 56, height: 28 };
+    case FixtureKind.DOOR:
+      return { width: 40, height: 12 };
+    case FixtureKind.KITCHEN:
+      return { width: 64, height: 40 };
+    default:
+      return { width: 44, height: 44 };
   }
 }
