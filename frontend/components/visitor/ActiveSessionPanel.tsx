@@ -44,8 +44,6 @@ export type ActiveSession = Journal & {
   subscriptionKind?: "HOURS_POOL" | "SEMI_DAY" | "FULL_DAY" | null;
   hoursQuota?: number | null;
   hoursUsed?: number | null;
-  prices?: { name?: string };
-  price?: { name?: string };
 };
 
 type Props = {
