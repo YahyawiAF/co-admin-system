@@ -78,9 +78,12 @@ fi
 
 REMOTE_TMP="/tmp/cowadmin-tarif-seatmap"
 echo "==> Uploading to ${VPS_USER}@${VPS_HOST}:${REMOTE_TMP}"
-ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "mkdir -p $REMOTE_TMP"
+ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "mkdir -p $REMOTE_TMP $VPS_APP_DIR/scripts/data"
 scp "${SCP_OPTS[@]}" "$SCRIPT" "${VPS_USER}@${VPS_HOST}:${REMOTE_TMP}/tarif-seatmap.cjs"
 scp "${SCP_OPTS[@]}" "$SNAPSHOT" "${VPS_USER}@${VPS_HOST}:${REMOTE_TMP}/tarif-seatmap-snapshot.json"
+# also install under the app so next time you can run: node scripts/tarif-seatmap.cjs …
+scp "${SCP_OPTS[@]}" "$SCRIPT" "${VPS_USER}@${VPS_HOST}:${VPS_APP_DIR}/scripts/tarif-seatmap.cjs"
+scp "${SCP_OPTS[@]}" "$SNAPSHOT" "${VPS_USER}@${VPS_HOST}:${VPS_APP_DIR}/scripts/data/tarif-seatmap-snapshot.json"
 
 IMPORT_EXTRA=""
 if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -97,7 +100,11 @@ if [[ ! -d node_modules/@prisma/client ]]; then
   echo "Prisma client missing in $VPS_APP_DIR — deploy the backend first."
   exit 1
 fi
-node $(printf '%q' "$REMOTE_TMP/tarif-seatmap.cjs") import $IMPORT_EXTRA $(printf '%q' "$REMOTE_TMP/tarif-seatmap-snapshot.json")
+# Must run from APP_DIR so node_modules/@prisma/client resolves
+node scripts/tarif-seatmap.cjs import $IMPORT_EXTRA scripts/data/tarif-seatmap-snapshot.json
 REMOTE
 
 echo "Done."
+echo "On the VPS next time:"
+echo "  cd $VPS_APP_DIR && node scripts/tarif-seatmap.cjs seed-admin"
+echo "  cd $VPS_APP_DIR && node scripts/tarif-seatmap.cjs import scripts/data/tarif-seatmap-snapshot.json"

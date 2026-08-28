@@ -83,6 +83,13 @@ jobs:
             cp -r backend/prisma deploy/backend/
           fi
 
+          if [ -d "backend/scripts" ]; then
+            mkdir -p deploy/backend/scripts
+            cp backend/scripts/*.cjs deploy/backend/scripts/ 2>/dev/null || true
+            cp backend/scripts/*.sh deploy/backend/scripts/ 2>/dev/null || true
+            cp backend/scripts/*.example deploy/backend/scripts/ 2>/dev/null || true
+          fi
+
           echo "Deployment package:"
           du -sh deploy/backend
           ls -lah deploy/backend
@@ -193,6 +200,12 @@ jobs:
 
               rm -rf "$APP_DIR/prisma"
               cp -r "$DEPLOY_DIR/prisma" "$APP_DIR/"
+            fi
+
+            if [ -d "$DEPLOY_DIR/scripts" ]; then
+              echo "Installing scripts..."
+              mkdir -p "$APP_DIR/scripts"
+              cp -r "$DEPLOY_DIR/scripts/." "$APP_DIR/scripts/"
             fi
 
             echo "Running Prisma migrations..."
