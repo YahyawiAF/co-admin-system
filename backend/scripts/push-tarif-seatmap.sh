@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Dump local tarifs + seat map, then apply them on the VPS Postgres.
+# Also upserts bootstrap admin abdelftt@gmail.com (ADMIN).
 #
 # Setup once (copy and fill):
 #   cp backend/scripts/push-tarif-seatmap.env.example backend/scripts/push-tarif-seatmap.env

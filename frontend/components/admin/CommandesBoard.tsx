@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { mobileApi, type ProductOrder } from "@/lib/api/resources";
+import { mobileApi } from "@/lib/api/resources";
+import type { ProductOrder } from "@/lib/types";
 import { queryKeys } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,7 @@ function OrderCard({
         "rounded-xl border px-4 py-3",
         tone === "unpaid"
           ? "border-rose-200 bg-rose-50/80"
-          : "border-emerald-200 bg-emerald-50/70"
+          : "border-emerald-200 bg-emerald-50/70",
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

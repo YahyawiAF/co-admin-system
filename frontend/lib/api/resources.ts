@@ -83,7 +83,11 @@ export type DailyExpense = {
 };
 
 export const journalApi = {
-  list(params: { perPage?: number; page?: number; journalDate: Date | string }) {
+  list(params: {
+    perPage?: number;
+    page?: number;
+    journalDate: Date | string;
+  }) {
     const journalDate =
       typeof params.journalDate === "string"
         ? params.journalDate
@@ -109,7 +113,7 @@ export const journalApi = {
   },
   promoteMember(
     id: string,
-    data: { firstName?: string; phone?: string; lastName?: string }
+    data: { firstName?: string; phone?: string; lastName?: string },
   ) {
     return http.post<Journal>(`/journal/${id}/promote-member`, data);
   },
@@ -169,7 +173,7 @@ export const pricesApi = {
   },
   seedCollaboraHub() {
     return http.post<{ created: number; skipped: number; prices: Price[] }>(
-      "/prices/seed/collabora-hub"
+      "/prices/seed/collabora-hub",
     );
   },
 };
@@ -187,7 +191,7 @@ export const facilityApi = {
   layout(facilityId?: string) {
     const q = facilityId ? `?facilityId=${facilityId}` : "";
     return http.get<{ facility: Facility | null; spaces: Space[] }>(
-      `/facilities/layout${q}`
+      `/facilities/layout${q}`,
     );
   },
   occupancy() {
@@ -218,7 +222,7 @@ export const facilityApi = {
   }) {
     return http.post<SpaceTable & { seats: SpaceSeat[] }>(
       "/facilities/tables",
-      data
+      data,
     );
   },
   updateTable(id: string, data: Partial<SpaceTable>) {
@@ -282,18 +286,15 @@ export const facilityApi = {
 
 export const caisseApi = {
   summary(date: Date | string) {
-    const d =
-      typeof date === "string" ? date : format(date, "yyyy-MM-dd");
+    const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
     return http.get<DayFinanceSummary>(`/caisse/summary?date=${d}`);
   },
   open(date: Date | string, openingFloat = 0) {
-    const d =
-      typeof date === "string" ? date : format(date, "yyyy-MM-dd");
+    const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
     return http.post<CaisseSession>("/caisse/open", { date: d, openingFloat });
   },
   close(date: Date | string, countedClose: number, notes?: string) {
-    const d =
-      typeof date === "string" ? date : format(date, "yyyy-MM-dd");
+    const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
     return http.post<CaisseSession>("/caisse/close", {
       date: d,
       countedClose,
@@ -302,13 +303,13 @@ export const caisseApi = {
   },
   addMovement(
     sessionId: string,
-    data: { type: "IN" | "OUT"; amount: number; label?: string }
+    data: { type: "IN" | "OUT"; amount: number; label?: string },
   ) {
     return http.post(`/caisse/${sessionId}/movements`, data);
   },
   month(year: number, month: number) {
     return http.get<MonthFinanceSummary>(
-      `/caisse/month?year=${year}&month=${month}`
+      `/caisse/month?year=${year}&month=${month}`,
     );
   },
   coffre() {
@@ -323,8 +324,7 @@ export const caisseApi = {
     return http.post<CoffreSummary>("/caisse/coffre", data);
   },
   erpPayloadPreview(date: Date | string) {
-    const d =
-      typeof date === "string" ? date : format(date, "yyyy-MM-dd");
+    const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
     return http.get(`/caisse/erp-payload-preview?date=${d}`);
   },
 };
@@ -356,7 +356,7 @@ export const dailyExpensesApi = {
 export const abonnementsApi = {
   list() {
     return http.get<Abonnement[] | PaginatedResponse<Abonnement>>(
-      "/abonnements"
+      "/abonnements",
     );
   },
   create(data: Partial<Abonnement>) {
@@ -420,18 +420,18 @@ export const bookingApi = {
 export const visitRequestsApi = {
   pending() {
     return http.get<VisitRequest[]>(
-      "/mobile/admin/visit-requests?status=PENDING"
+      "/mobile/admin/visit-requests?status=PENDING",
     );
   },
   approve(id: string, data?: { seatLabel?: string; spaceId?: string }) {
     return http.patch<{ request: VisitRequest; result: unknown }>(
       `/mobile/admin/visit-requests/${id}/approve`,
-      data || {}
+      data || {},
     );
   },
   reject(id: string) {
     return http.patch<VisitRequest>(
-      `/mobile/admin/visit-requests/${id}/reject`
+      `/mobile/admin/visit-requests/${id}/reject`,
     );
   },
 };
@@ -486,7 +486,7 @@ export const mobileApi = {
     return http.post<{ member: Member; accessToken: string }>(
       "/mobile/auth/register",
       data,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   quickRegister(data: {
@@ -498,14 +498,14 @@ export const mobileApi = {
     return http.post<{ member: Member; accessToken: string }>(
       "/mobile/auth/quick-register",
       data,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   login(data: { phone: string; password?: string }) {
     return http.post<{ member: Member; accessToken: string }>(
       "/mobile/auth/login",
       data,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   status(memberId: string) {
@@ -553,7 +553,7 @@ export const mobileApi = {
     return http.post<{ seat: SeatAssignmentInfo | null }>(
       "/mobile/session/claim-seat",
       { memberId, seatLabel, spaceId },
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   tarifs() {
@@ -578,7 +578,7 @@ export const mobileApi = {
     return http.patch<VisitRequest>(
       `/mobile/visit-request/${id}/cancel`,
       { memberId },
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   getVisitRequest(id: string) {
@@ -642,7 +642,7 @@ export const mobileApi = {
     return http.patch<ProductOrder>(
       `/mobile/order/${id}/cancel`,
       { memberId },
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   orders(memberId: string) {
@@ -666,10 +666,10 @@ export const mobileApi = {
     });
   },
   payMemberDayOrders(memberId: string, isPayed: boolean) {
-    return http.patch<ProductOrder[]>(
-      "/mobile/admin/orders/pay-member-day",
-      { memberId, isPayed }
-    );
+    return http.patch<ProductOrder[]>("/mobile/admin/orders/pay-member-day", {
+      memberId,
+      isPayed,
+    });
   },
   visitorDay(memberId: string) {
     return http.get<{
@@ -686,7 +686,11 @@ export const mobileApi = {
     }>(`/mobile/admin/visitor-day/${memberId}`);
   },
   scanIn(memberId: string) {
-    return http.post("/mobile/session/scan-in", { memberId }, { skipAuth: true });
+    return http.post(
+      "/mobile/session/scan-in",
+      { memberId },
+      { skipAuth: true },
+    );
   },
   inbox(memberId: string) {
     return http.get<
@@ -716,20 +720,24 @@ export const mobileApi = {
   }) {
     return http.post("/mobile/messages", data, { skipAuth: true });
   },
-  sendStaffMessage(data: { memberId: string; text: string; fromUserId?: string }) {
+  sendStaffMessage(data: {
+    memberId: string;
+    text: string;
+    fromUserId?: string;
+  }) {
     return http.post<StaffMessage>("/mobile/admin/staff-message", data);
   },
   staffMessages(memberId: string, unreadOnly = false) {
     return http.get<StaffMessage[]>(
       `/mobile/staff-messages/${memberId}${unreadOnly ? "?unread=1" : ""}`,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   markStaffMessageRead(id: string) {
     return http.patch<StaffMessage>(
       `/mobile/staff-messages/${id}/read`,
       {},
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
 };
@@ -741,7 +749,7 @@ export const organizationsApi = {
   bySlug(slug: string) {
     return http.get<Organization>(
       `/organizations/${encodeURIComponent(slug)}`,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
 };
@@ -802,7 +810,7 @@ export const eventsApi = {
       capacity?: number | null;
       status?: EventStatus;
       coverImage?: string;
-    }
+    },
   ) {
     return http.patch<SpaceEvent>(`/events/${id}`, data);
   },
@@ -815,7 +823,7 @@ export const eventsApi = {
   list(org: string, when: "upcoming" | "past" = "upcoming") {
     return http.get<SpaceEvent[]>(
       `/mobile/events?org=${encodeURIComponent(org)}&when=${when}`,
-      { skipAuth: true }
+      { skipAuth: true },
     );
   },
   get(id: string, memberId?: string) {
@@ -825,9 +833,13 @@ export const eventsApi = {
     });
   },
   register(id: string, memberId: string) {
-    return http.post(`/mobile/events/${id}/register`, { memberId }, {
-      skipAuth: true,
-    });
+    return http.post(
+      `/mobile/events/${id}/register`,
+      { memberId },
+      {
+        skipAuth: true,
+      },
+    );
   },
   unregister(id: string, memberId: string) {
     return http.delete(`/mobile/events/${id}/register?memberId=${memberId}`, {
@@ -844,7 +856,7 @@ export const eventsApi = {
   },
   feedback(
     id: string,
-    data: { memberId: string; rating: number; comment?: string }
+    data: { memberId: string; rating: number; comment?: string },
   ) {
     return http.post(`/mobile/events/${id}/feedback`, data, {
       skipAuth: true,

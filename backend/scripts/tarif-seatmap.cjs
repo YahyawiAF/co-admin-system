@@ -6,11 +6,20 @@
  * Usage (from backend/):
  *   node scripts/tarif-seatmap.cjs dump [outfile.json]
  *   node scripts/tarif-seatmap.cjs import [infile.json]
- *   node scripts/tarif-seatmap.cjs import --dry-run [infile.json]
+ *   node scripts/tarif-seatmap.cjs seed-admin
+ * Import also upserts bootstrap admin abdelftt@gmail.com.
  */
 const fs = require("fs");
 const path = require("path");
-const { PrismaClient } = require("@prisma/client");
+const { PrismaClient, Role } = require("@prisma/client");
+const bcrypt = require("bcrypt");
+
+const BOOTSTRAP_ADMIN = {
+  email: "abdelftt@gmail.com",
+  password: "test123!",
+  fullname: "Abdelfettah",
+  role: Role.ADMIN,
+};
 
 function loadEnvFile(file) {
   if (!fs.existsSync(file)) return;
@@ -542,13 +551,51 @@ async function importSnapshot(prisma, snapshot) {
     await upsertPrice(prisma, price, spaceId, existingPrices, dryRun);
   }
 
+  await seedAdmin(prisma, dryRun);
   log(dryRun ? "Dry run finished." : "Import finished.");
 }
 
+async function seedAdmin(prisma, dry) {
+  const email = BOOTSTRAP_ADMIN.email.toLowerCase().trim();
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (dry) {
+    log(
+      existing
+        ? `  admin ${email} already exists (would reset password + ADMIN)`
+        : `  admin ${email} would be created`
+    );
+    return;
+  }
+  const password = await bcrypt.hash(BOOTSTRAP_ADMIN.password, 10);
+  if (existing) {
+    await prisma.user.update({
+      where: { id: existing.id },
+      data: {
+        password,
+        fullname: BOOTSTRAP_ADMIN.fullname,
+        role: BOOTSTRAP_ADMIN.role,
+        isActive: true,
+      },
+    });
+    log(`  admin ${email} updated (ADMIN, password reset)`);
+    return;
+  }
+  await prisma.user.create({
+    data: {
+      email,
+      password,
+      fullname: BOOTSTRAP_ADMIN.fullname,
+      role: BOOTSTRAP_ADMIN.role,
+      isActive: true,
+    },
+  });
+  log(`  admin ${email} created`);
+}
+
 async function main() {
-  if (!cmd || !["dump", "import"].includes(cmd)) {
+  if (!cmd || !["dump", "import", "seed-admin"].includes(cmd)) {
     console.error(
-      "Usage: node scripts/tarif-seatmap.cjs dump|import [--dry-run] [file.json]"
+      "Usage: node scripts/tarif-seatmap.cjs dump|import|seed-admin [--dry-run] [file.json]"
     );
     process.exit(1);
   }
@@ -560,6 +607,8 @@ async function main() {
   try {
     if (cmd === "dump") {
       await dump(prisma);
+    } else if (cmd === "seed-admin") {
+      await seedAdmin(prisma, dryRun);
     } else {
       if (!fs.existsSync(snapshotFile)) {
         console.error(`Snapshot not found: ${snapshotFile}`);
