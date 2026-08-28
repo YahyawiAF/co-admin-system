@@ -24,6 +24,9 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "migrate:dev": "npm run --workspace=server migrate:dev",
     "generate": "prisma generate",
+    "tarif:dump": "node scripts/tarif-seatmap.cjs dump",
+    "tarif:import": "node scripts/tarif-seatmap.cjs import",
+    "tarif:push": "bash scripts/push-tarif-seatmap.sh",
     "generate-mock-data": "node --experimental-modules MockDataGenerator.mjs generate",
     "clear-mock-data": "node --experimental-modules MockDataGenerator.mjs clear"
   },

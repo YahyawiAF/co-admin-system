@@ -1,3 +1,5 @@
 
 .codegpt
 /node_modules
+backend/scripts/data/
+backend/scripts/push-tarif-seatmap.env

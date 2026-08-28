@@ -401,3 +401,5 @@ dist
 
 .codegpt
 .vercel
+scripts/data/
+scripts/push-tarif-seatmap.env
