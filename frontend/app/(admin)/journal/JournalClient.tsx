@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import {
   Table,
   TableBody,
@@ -328,6 +329,9 @@ export default function JournalClient() {
     (occupancy?.normalCapacity ?? capacity) - (occupancy?.normalOccupied ?? present)
   );
   const overflowOcc = occupancy?.overflowOccupied ?? 0;
+  const occupied = occupancy?.normalOccupied ?? present;
+  const occupancyPct =
+    capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
 
   const selectedRows = useMemo(
     () => filtered.filter((r) => selectedIds.has(r.id)),
@@ -648,6 +652,7 @@ export default function JournalClient() {
             }}
             focusSeatLabel={focusSeatLabel}
           />
+          <JournalCommandesRail date={selectedDate} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="lg">
@@ -745,14 +750,6 @@ export default function JournalClient() {
           { label: "Réservations", value: String(reservations) },
           { label: "Revenu du jour", value: `${revenue.toFixed(1)} DT` },
           { label: "Impayés", value: String(unpaid) },
-          { label: "Places libres", value: capacity ? String(free) : "—" },
-          {
-            label: "Overflow",
-            value:
-              occupancy?.overflowCapacity != null
-                ? `${overflowOcc}/${occupancy.overflowCapacity}`
-                : "—",
-          },
         ].map((k) => (
           <Card key={k.label}>
             <CardHeader className="pb-2">
@@ -765,6 +762,49 @@ export default function JournalClient() {
             </CardContent>
           </Card>
         ))}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Places libres
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="text-2xl font-bold">
+              {capacity ? String(free) : "—"}
+            </div>
+            {capacity ? (
+              <>
+                <Progress
+                  value={occupancyPct}
+                  className={
+                    occupancyPct >= 100
+                      ? "[&>div]:bg-destructive"
+                      : occupancyPct >= 80
+                        ? "[&>div]:bg-amber-500"
+                        : undefined
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  {occupied}/{capacity} occupées · {occupancyPct}%
+                </p>
+              </>
+            ) : null}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Overflow
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {occupancy?.overflowCapacity != null
+                ? `${overflowOcc}/${occupancy.overflowCapacity}`
+                : "—"}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="space-y-3">
@@ -852,8 +892,7 @@ export default function JournalClient() {
         </div>
       </div>
 
-      <div className="flex items-start gap-4">
-        <Card className="min-w-0 flex-1">
+      <Card>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-2 p-4">
@@ -1221,9 +1260,7 @@ export default function JournalClient() {
             </Table>
           )}
         </CardContent>
-        </Card>
-        <JournalCommandesRail date={selectedDate} />
-      </div>
+      </Card>
 
       {selectedIds.size > 0 ? (
         <div className="fixed bottom-4 left-1/2 z-40 flex w-[min(920px,calc(100%-2rem))] -translate-x-1/2 flex-wrap items-center justify-between gap-3 rounded-xl border bg-card px-4 py-3 shadow-lg">
