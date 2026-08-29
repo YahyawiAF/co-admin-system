@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { mobileApi } from "@/lib/api/resources";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
 import { formatDurationHm } from "@/lib/journal-utils";
+import { usePageVisible } from "@/lib/hooks/use-page-visible";
 import type {
   Journal,
   MobileSeatMode,
@@ -58,11 +59,13 @@ export function ActiveSessionPanel({
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
+  const visible = usePageVisible();
 
   useEffect(() => {
+    if (!visible) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [visible]);
 
   const subKind = session.subscriptionKind || subscriptionKind || null;
   const isHoursPool = subKind === "HOURS_POOL";

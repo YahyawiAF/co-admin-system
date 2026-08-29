@@ -12,6 +12,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { cn } from "@/lib/utils";
 import type { StaffMessage } from "@/lib/types";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 type Props = {
   memberId: string;
@@ -24,12 +25,14 @@ export function AdminStaffChat({ memberId, className, compact }: Props) {
   const { socket } = useRealtime();
   const [draft, setDraft] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
+  const poll = useVisibleInterval(20_000);
 
   const { data: thread = [] } = useQuery({
     queryKey: ["staff-thread", memberId],
     queryFn: () => mobileApi.staffMessages(memberId, false),
     enabled: !!memberId,
-    refetchInterval: 6000,
+    staleTime: 10_000,
+    refetchInterval: poll,
   });
 
   useEffect(() => {

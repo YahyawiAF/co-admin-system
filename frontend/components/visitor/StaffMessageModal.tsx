@@ -18,6 +18,7 @@ import type { StaffMessage } from "@/lib/types";
 import { unlockVisitorAudio } from "@/lib/visitor-notify";
 import { useOrg } from "@/lib/org";
 import { useRouter } from "next/navigation";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 /** Popup for new staff→visitor messages (no duplicate sound/OS notify — push handles background). */
 export function StaffMessageModal() {
@@ -27,6 +28,7 @@ export function StaffMessageModal() {
   const { socket } = useRealtime();
   const [memberId, setMemberId] = useState<string | null>(null);
   const [current, setCurrent] = useState<StaffMessage | null>(null);
+  const poll = useVisibleInterval(30_000);
 
   useEffect(() => {
     setMemberId(loadVisitorCache()?.memberId || sessionStorage.getItem("memberId"));
@@ -36,7 +38,8 @@ export function StaffMessageModal() {
     queryKey: ["staff-messages", memberId],
     queryFn: () => mobileApi.staffMessages(memberId!, true),
     enabled: !!memberId,
-    refetchInterval: 8000,
+    staleTime: 20_000,
+    refetchInterval: poll,
   });
 
   useEffect(() => {

@@ -18,6 +18,12 @@ import { mobileApi } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
+import {
+  readLocalCache,
+  writeLocalCache,
+} from "@/lib/visitor-local-cache";
 
 const TITLE_BY_SUFFIX: Record<string, string> = {
   "": "Accueil",
@@ -40,23 +46,31 @@ export function MobileHeader() {
   const { memberId, onboarded } = useVisitorSession();
   const base = `/m/${slug}`;
   const suffix = pathname === base || pathname === `${base}/` ? "" : pathname.slice(base.length);
+  const inboxInterval = useVisibleInterval(45_000);
 
-  const { data: status } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
-    enabled: !!memberId,
-    refetchInterval: 8000,
-  });
+  const { data: status } = useMobileStatus();
   const { data: inbox = [] } = useQuery({
     queryKey: ["mobile-inbox", memberId],
-    queryFn: () => mobileApi.inbox(memberId!),
+    queryFn: async () => {
+      const data = await mobileApi.inbox(memberId!);
+      writeLocalCache("inbox", data, memberId);
+      return data;
+    },
     enabled: !!memberId && onboarded,
-    refetchInterval: 12_000,
+    staleTime: 30_000,
+    refetchInterval: inboxInterval,
+    placeholderData: () =>
+      memberId ? readLocalCache("inbox", memberId) ?? undefined : undefined,
   });
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug],
-    queryFn: () => mobileApi.floorPlan(slug),
-    staleTime: 60_000,
+    queryFn: async () => {
+      const data = await mobileApi.floorPlan(slug);
+      writeLocalCache("floor-plan", data, slug);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: () => readLocalCache("floor-plan", slug) ?? undefined,
   });
 
   const title =

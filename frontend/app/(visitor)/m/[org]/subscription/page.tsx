@@ -1,28 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import { format, differenceInCalendarDays } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { mobileApi } from "@/lib/api/resources";
-import { loadVisitorCache } from "@/lib/visitorCache";
 import { useOrg } from "@/lib/org";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 
 export default function SubscriptionPage() {
   const { href } = useOrg();
-  const [memberId, setMemberId] = useState<string | null>(null);
-  useEffect(() => {
-    setMemberId(loadVisitorCache()?.memberId || sessionStorage.getItem("memberId"));
-  }, []);
-
-  const { data } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
-    enabled: !!memberId,
-    refetchInterval: 5000,
-  });
+  const { data } = useMobileStatus();
 
   const sub = data?.subscription as
     | (NonNullable<typeof data>["subscription"] & {
@@ -47,7 +34,9 @@ export default function SubscriptionPage() {
         <h1 className="text-2xl font-bold">Abonnement</h1>
         <p className="mb-4 mt-2 text-slate-500">Aucun abonnement actif.</p>
         <Button asChild>
-          <Link href={href("/choose?mode=subscription")}>Choisir un abonnement</Link>
+          <Link href={href("/choose?mode=subscription")}>
+            Choisir un abonnement
+          </Link>
         </Button>
       </div>
     );
@@ -103,7 +92,9 @@ export default function SubscriptionPage() {
       </p>
       <Button asChild className="mt-6 h-12 w-full">
         <Link href={href()}>
-          {hasSession ? "Voir ma session à l’accueil" : "Pointer depuis l’accueil"}
+          {hasSession
+            ? "Voir ma session à l’accueil"
+            : "Pointer depuis l’accueil"}
         </Link>
       </Button>
     </div>

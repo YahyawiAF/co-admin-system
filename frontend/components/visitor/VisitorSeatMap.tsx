@@ -9,6 +9,7 @@ import { FloorPlanCanvas } from "@/components/admin/FloorPlanCanvas";
 import { mobileApi, type SeatBooking } from "@/lib/api/resources";
 import type { MobileSeatMode, Space, SpaceSeat } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 type Props = {
   memberId: string;
@@ -30,6 +31,7 @@ export function VisitorSeatMap({
   const queryClient = useQueryClient();
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
+  const poll = useVisibleInterval(canPick ? 20_000 : 60_000);
 
   const { data, isLoading } = useQuery({
     queryKey: ["mobile-floor-plan"],
@@ -40,7 +42,8 @@ export function VisitorSeatMap({
           : null;
       return mobileApi.floorPlan(org || undefined);
     },
-    refetchInterval: canPick ? 10_000 : 30_000,
+    staleTime: 60_000,
+    refetchInterval: poll,
   });
 
   const spaces = (data?.spaces || []) as Space[];

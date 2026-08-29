@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { AdminStaffChat } from "@/components/visitor/AdminStaffChat";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 function nameOf(m?: Member | null) {
   return (
@@ -37,6 +38,8 @@ function CommunityInner() {
   const [adminChat, setAdminChat] = useState(false);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"inbox" | "people">("inbox");
+  const inboxPoll = useVisibleInterval(45_000);
+  const threadPoll = useVisibleInterval(peer ? 20_000 : false);
 
   useEffect(() => {
     if (peerId === "admin") setAdminChat(true);
@@ -69,18 +72,20 @@ function CommunityInner() {
     queryKey: ["mobile-inbox", memberId],
     queryFn: () => mobileApi.inbox(memberId!),
     enabled: !!memberId,
-    refetchInterval: 8000,
+    staleTime: 30_000,
+    refetchInterval: inboxPoll,
   });
   const { data: people = [] } = useQuery({
     queryKey: ["mobile-community", memberId],
     queryFn: () => mobileApi.community(memberId!),
     enabled: !!memberId,
+    staleTime: 5 * 60_000,
   });
   const { data: thread = [] } = useQuery({
     queryKey: ["mobile-thread", memberId, peer?.id],
     queryFn: () => mobileApi.thread(memberId!, peer!.id),
     enabled: !!memberId && !!peer?.id,
-    refetchInterval: peer ? 4000 : false,
+    refetchInterval: threadPoll,
   });
 
   useEffect(() => {

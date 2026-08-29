@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell,
   BellRing,
@@ -19,8 +19,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { loadVisitorCache } from "@/lib/visitorCache";
-import { mobileApi } from "@/lib/api/resources";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import {
   enableVisitorNotifications,
@@ -35,6 +33,8 @@ import {
 } from "@/lib/visitor-notify";
 import { useOrg } from "@/lib/org";
 import { useRouter } from "next/navigation";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { useVisitorSession } from "@/lib/visitor-session";
 
 type CoffeeReady = {
   productName: string;
@@ -68,7 +68,7 @@ export function VisitorAlerts() {
   const { socket } = useRealtime();
   const { href } = useOrg();
   const router = useRouter();
-  const [memberId, setMemberId] = useState<string | null>(null);
+  const { memberId } = useVisitorSession();
   const [optIn, setOptIn] = useState(false);
   const [needInstall, setNeedInstall] = useState(false);
   const [coffee, setCoffee] = useState<CoffeeReady | null>(null);
@@ -79,9 +79,6 @@ export function VisitorAlerts() {
   const warnedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    setMemberId(
-      loadVisitorCache()?.memberId || sessionStorage.getItem("memberId")
-    );
     setOptIn(isNotifyOptIn());
     setNeedInstall(isIosDevice() && !isStandalonePwa());
   }, []);
@@ -91,12 +88,7 @@ export function VisitorAlerts() {
     void ensurePushSubscription(memberId);
   }, [memberId, optIn]);
 
-  const { data: status } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
-    enabled: !!memberId,
-    refetchInterval: 4000,
-  });
+  const { data: status } = useMobileStatus();
 
   useEffect(() => {
     const session = status?.session as

@@ -13,6 +13,10 @@ import { cn } from "@/lib/utils";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import Link from "next/link";
+import {
+  readLocalCache,
+  writeLocalCache,
+} from "@/lib/visitor-local-cache";
 
 function isCoffee(name: string, desc?: string | null) {
   const t = `${name} ${desc || ""}`.toLowerCase();
@@ -65,12 +69,19 @@ export default function CafePage() {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["mobile-products"],
-    queryFn: () => mobileApi.products(),
+    queryFn: async () => {
+      const data = await mobileApi.products();
+      writeLocalCache("products", data);
+      return data;
+    },
+    staleTime: 60_000,
+    placeholderData: () => readLocalCache("products") ?? undefined,
   });
   const { data: orders = [] } = useQuery({
     queryKey: ["mobile-orders", memberId],
     queryFn: () => mobileApi.orders(memberId!),
     enabled: !!memberId,
+    staleTime: 20_000,
   });
 
   const filtered = useMemo(() => {

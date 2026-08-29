@@ -21,6 +21,11 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
 import { AdminStaffChat } from "@/components/visitor/AdminStaffChat";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import {
+  readLocalCache,
+  writeLocalCache,
+} from "@/lib/visitor-local-cache";
 
 export default function MobileHomePage() {
   const router = useRouter();
@@ -29,16 +34,16 @@ export default function MobileHomePage() {
   const [staffOpen, setStaffOpen] = useState(false);
   const [wifiOpen, setWifiOpen] = useState(false);
 
-  const { data: status, refetch } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
-    enabled: !!memberId && onboarded,
-    refetchInterval: 4000,
-  });
+  const { data: status, refetch } = useMobileStatus();
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug],
-    queryFn: () => mobileApi.floorPlan(slug),
-    staleTime: 60_000,
+    queryFn: async () => {
+      const data = await mobileApi.floorPlan(slug);
+      writeLocalCache("floor-plan", data, slug);
+      return data;
+    },
+    staleTime: 5 * 60_000,
+    placeholderData: () => readLocalCache("floor-plan", slug) ?? undefined,
   });
 
   const cancel = useMutation({

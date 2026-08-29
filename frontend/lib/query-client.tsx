@@ -9,9 +9,15 @@ function makeQueryClient() {
     defaultOptions: {
       queries: {
         staleTime: 30_000,
-        gcTime: 10 * 60_000,
+        gcTime: 30 * 60_000,
         refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
         retry: 1,
+        networkMode: "offlineFirst",
+      },
+      mutations: {
+        networkMode: "online",
+        retry: 0,
       },
     },
   });

@@ -1,10 +1,74 @@
-/* Collabora Hub visitor push — keep scope at site root for iOS PWA */
+/* Collabora Hub visitor SW — push + light offline shell cache */
+const SHELL_CACHE = "collabora-shell-v1";
+const SHELL_URLS = ["/", "/m", "/collabora-icon.svg", "/manifest.webmanifest"];
+
 self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(
+    caches
+      .open(SHELL_CACHE)
+      .then((cache) => cache.addAll(SHELL_URLS).catch(() => undefined))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((k) => k.startsWith("collabora-shell-") && k !== SHELL_CACHE)
+            .map((k) => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+  if (url.origin !== self.location.origin) return;
+  // Never cache API
+  if (url.pathname.startsWith("/api") || url.pathname.includes("/mobile/")) {
+    return;
+  }
+  // Network-first for navigations / HTML; cache fallback when offline
+  if (req.mode === "navigate" || req.destination === "document") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+          return res;
+        })
+        .catch(() =>
+          caches.match(req).then((cached) => cached || caches.match("/m"))
+        )
+    );
+    return;
+  }
+  // Cache-first for static icons/manifest
+  if (
+    url.pathname.endsWith(".svg") ||
+    url.pathname.endsWith(".webmanifest") ||
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".ico")
+  ) {
+    event.respondWith(
+      caches.match(req).then(
+        (cached) =>
+          cached ||
+          fetch(req).then((res) => {
+            const copy = res.clone();
+            caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+            return res;
+          })
+      )
+    );
+  }
 });
 
 self.addEventListener("push", (event) => {
@@ -40,14 +104,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/m";
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      for (const client of clients) {
-        if ("focus" in client) {
-          client.navigate?.(url);
-          return client.focus();
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((clients) => {
+        for (const client of clients) {
+          if ("focus" in client) {
+            client.navigate?.(url);
+            return client.focus();
+          }
         }
-      }
-      if (self.clients.openWindow) return self.clients.openWindow(url);
-    })
+        if (self.clients.openWindow) return self.clients.openWindow(url);
+      })
   );
 });

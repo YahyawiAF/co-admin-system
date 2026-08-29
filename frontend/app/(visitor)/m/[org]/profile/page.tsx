@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Camera,
@@ -34,6 +34,7 @@ import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -55,10 +56,9 @@ export default function ProfilePage() {
     showInDirectory: true,
   });
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
+  const { data, isLoading } = useMobileStatus({
     enabled: !!memberId && onboarded,
+    intervalMs: false,
   });
 
   const member = data?.member;

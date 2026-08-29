@@ -17,6 +17,8 @@ import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 function ChooseInner() {
   const router = useRouter();
@@ -28,6 +30,7 @@ function ChooseInner() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const { socket } = useRealtime();
+  const pendingPoll = useVisibleInterval(pendingId ? 8_000 : false);
 
   useEffect(() => {
     const cached = loadVisitorCache();
@@ -47,23 +50,22 @@ function ChooseInner() {
     }
   }, [sessionMemberId]);
 
-  const { data: status, refetch } = useQuery({
-    queryKey: ["mobile-status", memberId],
-    queryFn: () => mobileApi.status(memberId!),
+  const { data: status, refetch } = useMobileStatus({
     enabled: !!memberId,
-    refetchInterval: pendingId ? 2000 : 8000,
+    intervalMs: pendingId ? 10_000 : 20_000,
   });
 
   const { data: tarifs = [] } = useQuery({
     queryKey: ["mobile-tarifs"],
     queryFn: () => mobileApi.tarifs(),
+    staleTime: 5 * 60_000,
   });
 
   const { data: pendingRequest } = useQuery({
     queryKey: ["visit-request", pendingId],
     queryFn: () => mobileApi.getVisitRequest(pendingId!),
     enabled: !!pendingId,
-    refetchInterval: pendingId ? 3000 : false,
+    refetchInterval: pendingPoll,
   });
 
   useEffect(() => {
