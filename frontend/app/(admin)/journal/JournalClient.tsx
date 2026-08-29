@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,6 @@ import { fr } from "date-fns/locale";
 import Fuse from "fuse.js";
 import {
   AlarmClock,
-  CalendarClock,
   ChevronLeft,
   ChevronRight,
   LogIn,
@@ -33,10 +32,6 @@ import {
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  playNotifySound,
-  unlockVisitorAudio,
-} from "@/lib/visitor-notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -82,12 +77,14 @@ import { cn } from "@/lib/utils";
 import { QuickCheckInPanel } from "@/components/admin/QuickCheckInPanel";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { ReservationPanel } from "@/components/admin/ReservationPanel";
+import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
+  abonnementsApi,
   bookingApi,
   dailyProductsApi,
   facilityApi,
@@ -115,7 +112,12 @@ import {
   buildDayWhatsAppText,
   openDayPrintView,
 } from "@/lib/journal-export";
-import type { Journal, Member } from "@/lib/types";
+import type { Abonnement, Journal, Member } from "@/lib/types";
+import {
+  activeSubByMember,
+  daysLeft,
+} from "@/lib/subscription-utils";
+import { useJournalAlertsDataEffect, useJournalAlerts } from "@/lib/journal-alerts-context";
 import {
   Dialog,
   DialogContent,
@@ -167,7 +169,6 @@ export default function JournalClient() {
     phone: "",
   });
   const [now, setNow] = useState(Date.now());
-  const warnedEndingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
@@ -218,6 +219,21 @@ export default function JournalClient() {
     queryKey: queryKeys.members,
     queryFn: () => membersApi.list(),
   });
+  const { data: abonnementsRaw } = useQuery({
+    queryKey: queryKeys.abonnements,
+    queryFn: () => abonnementsApi.list(),
+    refetchInterval: 60_000,
+  });
+  const abonnements = useMemo((): Abonnement[] => {
+    if (!abonnementsRaw) return [];
+    return Array.isArray(abonnementsRaw)
+      ? abonnementsRaw
+      : abonnementsRaw.data || [];
+  }, [abonnementsRaw]);
+  const subByMember = useMemo(
+    () => activeSubByMember(abonnements),
+    [abonnements],
+  );
   const allMembers = useMemo(
     () => (Array.isArray(membersRaw) ? membersRaw : []) as Member[],
     [membersRaw]
@@ -256,25 +272,7 @@ export default function JournalClient() {
     return map;
   }, [dailyProducts, selectedDate]);
 
-  const rows = data?.data ?? [];
-
-  // Beep when a present visit has ≤ 5 minutes left (once per journal row)
-  useEffect(() => {
-    const FIVE_MIN = 5 * 60_000;
-    for (const row of rows) {
-      if (!isActiveVisit(row)) continue;
-      const rem = remainingMs(row, now);
-      if (rem == null || rem <= 0 || rem > FIVE_MIN) continue;
-      if (warnedEndingRef.current.has(row.id)) continue;
-      warnedEndingRef.current.add(row.id);
-      void unlockVisitorAudio().then(() => playNotifySound("alert"));
-      const m = memberOf(row);
-      toast.warning(
-        `${m?.firstName || visitorLabel(row)} — moins de 5 min restantes`,
-        { duration: 8000 }
-      );
-    }
-  }, [rows, now]);
+  const rows = useMemo(() => data?.data ?? [], [data?.data]);
 
   const presentMemberIds = useMemo(
     () => rows.filter(isActiveVisit).map((r) => r.memberID || ""),
@@ -286,8 +284,26 @@ export default function JournalClient() {
     [tomorrowPage]
   );
 
-  const showTomorrowAlert =
-    !isSameDay(selectedDate, tomorrow) && tomorrowReservations.length > 0;
+  const { actionsRef } = useJournalAlerts();
+
+  const alertsData = useMemo(
+    () => ({
+      rows,
+      subByMember,
+      tomorrowReservations,
+      now,
+    }),
+    [rows, subByMember, tomorrowReservations, now],
+  );
+
+  actionsRef.current = {
+    onFocusRow: (row: Journal) => setEditRow(row),
+    onFilterOverstay: () => setQuickFilter("overstay"),
+    onFilterLeavingSoon: () => setQuickFilter("leaving_soon"),
+    onViewTomorrow: () => setDate(tomorrow),
+  };
+
+  useJournalAlertsDataEffect(alertsData);
 
   const overstayCount = useMemo(
     () => rows.filter((r) => isOverstay(r, now)).length,
@@ -629,8 +645,8 @@ export default function JournalClient() {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
           <div className="mt-1 flex items-center gap-2">
             <Button
@@ -659,7 +675,7 @@ export default function JournalClient() {
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
           <SeatOccupancyBoard
             date={selectedDate}
             open={occupancyOpen}
@@ -737,33 +753,7 @@ export default function JournalClient() {
         </div>
       </div>
 
-      {showTomorrowAlert ? (
-        <Alert className="border-violet-300 bg-violet-50 dark:bg-violet-950/30">
-          <CalendarClock className="h-4 w-4 text-violet-700" />
-          <AlertTitle className="text-violet-900 dark:text-violet-100">
-            {tomorrowReservations.length} réservation
-            {tomorrowReservations.length !== 1 ? "s" : ""} demain
-          </AlertTitle>
-          <AlertDescription className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              {tomorrowReservations
-                .slice(0, 4)
-                .map((r) => memberOf(r)?.firstName || "Visiteur")
-                .join(", ")}
-              {tomorrowReservations.length > 4
-                ? ` +${tomorrowReservations.length - 4}`
-                : ""}
-            </span>
-            <Button
-              variant="link"
-              className="h-auto p-0 text-violet-800"
-              onClick={() => setDate(tomorrow)}
-            >
-              Voir le journal de demain →
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
+      <JournalAlertStrip />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         {[
@@ -1030,6 +1020,25 @@ export default function JournalClient() {
                                   Abonné
                                 </Badge>
                               ) : null}
+                              {(() => {
+                                const mid = row.memberID || m?.id;
+                                if (!mid) return null;
+                                const sub = subByMember.get(mid);
+                                if (!sub) return null;
+                                const left = daysLeft(sub);
+                                if (left == null || left < 0 || left > 7)
+                                  return null;
+                                return (
+                                  <Badge
+                                    variant={
+                                      left <= 3 ? "destructive" : "secondary"
+                                    }
+                                    className="h-5 text-[10px]"
+                                  >
+                                    Abo {left === 0 ? "J" : `J-${left}`}
+                                  </Badge>
+                                );
+                              })()}
                               {groupOf(row)?.name ? (
                                 <Badge variant="outline" className="h-5 text-[10px]">
                                   {groupOf(row)!.name}

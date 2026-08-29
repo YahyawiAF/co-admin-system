@@ -26,7 +26,9 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { VisitRequestBell } from "@/components/admin/VisitRequestBell";
 import { ProductOrderBell } from "@/components/admin/ProductOrderBell";
 import { StaffInboxBell } from "@/components/admin/StaffInboxBell";
+import { JournalAlertNavBell } from "@/components/admin/JournalAlertCenter";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
+import { JournalAlertsProvider } from "@/lib/journal-alerts-context";
 import { useState, type ReactNode } from "react";
 
 const NAV = [
@@ -102,6 +104,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const brand = organization?.name || "Co-Admin";
 
   return (
+    <JournalAlertsProvider>
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-60 shrink-0 border-r bg-card md:flex md:flex-col">
         <div className="flex h-14 items-center border-b px-4">
@@ -158,6 +161,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Sheet>
           <div className="flex-1" />
           <SeatOccupancyBoard variant="icon" />
+          <JournalAlertNavBell />
           <StaffInboxBell />
           <ProductOrderBell />
           <VisitRequestBell />
@@ -165,5 +169,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
     </div>
+    </JournalAlertsProvider>
   );
 }

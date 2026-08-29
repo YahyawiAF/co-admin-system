@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Copy, KeyRound, Send } from "lucide-react";
+import Link from "next/link";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -24,6 +25,7 @@ import { visitorMobileUrl } from "@/components/admin/VisitorQrCard";
 import { membersApi, mobileApi, organizationsApi } from "@/lib/api/resources";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { subscriptionExpiryLabel } from "@/lib/subscription-utils";
 
 function StaffAdminThread({ memberId }: { memberId: string }) {
   const { data: thread = [] } = useQuery({
@@ -394,6 +396,20 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     (data?.member as Member & { pinHash?: string | null })?.pinHash
   );
 
+  const subscriptionSplit = useMemo(() => {
+    const subs = [...(data?.subscriptions || [])].sort(
+      (a, b) =>
+        new Date(b.registredDate).getTime() -
+        new Date(a.registredDate).getTime(),
+    );
+    const isActive = (s: (typeof subs)[0]) =>
+      !s.leaveDate ||
+      new Date(s.leaveDate) >= new Date(new Date().toDateString());
+    const current = subs.find(isActive) || null;
+    const history = subs.filter((s) => s.id !== current?.id);
+    return { current, history };
+  }, [data?.subscriptions]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
@@ -524,6 +540,79 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                 </TabsContent>
 
                 <TabsContent value="history" className="space-y-3">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold uppercase text-muted-foreground">
+                        Abonnements
+                      </p>
+                      {member?.id ? (
+                        <Link
+                          href={`/abonnements?memberId=${member.id}`}
+                          className="text-xs text-primary underline"
+                        >
+                          Gérer
+                        </Link>
+                      ) : null}
+                    </div>
+                    {subscriptionSplit.current ? (
+                      <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-sm dark:border-violet-900 dark:bg-violet-950/20">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-semibold">
+                              {subscriptionSplit.current.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {format(
+                                new Date(subscriptionSplit.current.registredDate),
+                                "dd MMM yyyy",
+                                { locale: fr },
+                              )}
+                              {subscriptionSplit.current.leaveDate
+                                ? ` → ${format(
+                                    new Date(subscriptionSplit.current.leaveDate),
+                                    "dd MMM yyyy",
+                                    { locale: fr },
+                                  )}`
+                                : ""}
+                            </p>
+                          </div>
+                          <Badge className="bg-violet-600 hover:bg-violet-600">
+                            Actuel
+                          </Badge>
+                        </div>
+                        {subscriptionSplit.current.leaveDate ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {subscriptionExpiryLabel(
+                              differenceInCalendarDays(
+                                new Date(subscriptionSplit.current.leaveDate),
+                                new Date(),
+                              ),
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Aucun abonnement actif.
+                      </p>
+                    )}
+                    {subscriptionSplit.history.length > 0 ? (
+                      <div className="max-h-32 space-y-1 overflow-y-auto rounded-lg border border-dashed p-2">
+                        {subscriptionSplit.history.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex justify-between text-xs text-muted-foreground"
+                          >
+                            <span>
+                              {s.name} ·{" "}
+                              {format(new Date(s.registredDate), "dd/MM/yy")}
+                            </span>
+                            <span>{s.payedAmount} DT</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                   <p className="text-xs font-semibold uppercase text-muted-foreground">
                     Visites
                   </p>

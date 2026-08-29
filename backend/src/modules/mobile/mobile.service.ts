@@ -1486,7 +1486,7 @@ export class MobileService {
 
     const now = new Date();
     const periodDays = price.periodDays || 30;
-    const leaveDate = addDays(now, periodDays);
+    const leaveDate = addDays(now, periodDays - 1);
 
     const abonnement = await this.prisma.abonnement.create({
       data: {

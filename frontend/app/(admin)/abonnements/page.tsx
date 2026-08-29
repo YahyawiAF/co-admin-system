@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { differenceInCalendarDays, format } from "date-fns";
+import { format } from "date-fns";
 import { Pencil, MapPin, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -65,6 +71,14 @@ import {
 import { cn } from "@/lib/utils";
 import { AbonnementSeatMap } from "@/components/admin/AbonnementSeatMap";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
+import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
+import {
+  daysLeft,
+  hoursLeft,
+  isActiveSub,
+  leaveDateFromPeriodStart,
+  subKind,
+} from "@/lib/subscription-utils";
 
 const schema = z.object({
   memberID: z.string().min(1),
@@ -86,37 +100,6 @@ function asList(
   if (!data) return [];
   if (Array.isArray(data)) return data;
   return data.data || [];
-}
-
-function daysLeft(a: Abonnement) {
-  if (!a.leaveDate) return null;
-  return differenceInCalendarDays(new Date(a.leaveDate), new Date());
-}
-
-function isActiveSub(a: Abonnement) {
-  if (a.price?.billingUnit === "HOURLY") {
-    const quota = a.hoursQuota || a.price.durationHours || 0;
-    if ((a.hoursUsed || 0) >= quota) return false;
-  }
-  if (!a.leaveDate) return true;
-  return new Date(a.leaveDate) >= new Date(new Date().toDateString());
-}
-
-function subKind(a: Abonnement) {
-  const p = a.price;
-  if (!p) return "other";
-  if (p.billingUnit === "HOURLY") return "hours_pool";
-  if ((p.durationHours || 0) <= 6) return "semi_day";
-  if ((p.durationHours || 0) >= 12) return "full_day";
-  return "other";
-}
-
-function hoursLeft(a: Abonnement) {
-  if (a.price?.billingUnit !== "HOURLY") return null;
-  return Math.max(
-    0,
-    (a.hoursQuota || a.price.durationHours || 0) - (a.hoursUsed || 0),
-  );
 }
 
 type AboQuickFilter =
@@ -145,9 +128,11 @@ function AbonnementsInner() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Abonnement | null>(null);
   const [search, setSearch] = useState("");
-  const [quickFilter, setQuickFilter] = useState<AboQuickFilter>("all");
+  const [quickFilter, setQuickFilter] = useState<AboQuickFilter>("active");
+  const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
+  const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
   const [moving, setMoving] = useState<Abonnement | null>(null);
   const [moveSeat, setMoveSeat] = useState<string | null>(null);
   const [moveSpaceId, setMoveSpaceId] = useState<string | null>(null);
@@ -295,8 +280,7 @@ function AbonnementsInner() {
     if (!p) return;
     form.setValue("payedAmount", p.price);
     const start = new Date(startStr || form.getValues("registredDate"));
-    const leave = new Date(start);
-    leave.setDate(leave.getDate() + (p.periodDays || 30));
+    const leave = leaveDateFromPeriodStart(start, p.periodDays || 30);
     form.setValue("leaveDate", format(leave, "yyyy-MM-dd"));
   };
 
@@ -334,10 +318,14 @@ function AbonnementsInner() {
 
   useEffect(() => {
     if (!focusMember || !rows.length) return;
-    const match = rows.find((r) => r.memberID === focusMember);
-    if (match) openEdit(match);
+    setDetailMemberId(focusMember);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMember, rows.length]);
+
+  const detailMember = useMemo(
+    () => members.find((m) => m.id === detailMemberId) || null,
+    [members, detailMemberId],
+  );
 
   const save = useMutation({
     mutationFn: (v: FormValues) => {
@@ -348,11 +336,7 @@ function AbonnementsInner() {
       const start = new Date(v.registredDate);
       const leave = v.leaveDate
         ? new Date(v.leaveDate)
-        : (() => {
-            const d = new Date(start);
-            d.setDate(d.getDate() + (price?.periodDays || 30));
-            return d;
-          })();
+        : leaveDateFromPeriodStart(start, price?.periodDays || 30);
       const payload = {
         memberID: v.memberID,
         priceId: v.priceId,
@@ -483,9 +467,13 @@ function AbonnementsInner() {
             open={occupancyOpen}
             onOpenChange={(o) => {
               setOccupancyOpen(o);
-              if (!o) setFocusSeatLabel(null);
+              if (!o) {
+                setFocusSeatLabel(null);
+                setFocusSpaceId(null);
+              }
             }}
             focusSeatLabel={focusSeatLabel}
+            focusSpaceId={focusSpaceId}
           />
           <Button
             variant="outline"
@@ -727,15 +715,23 @@ function AbonnementsInner() {
                 filtered.map((a) => {
                   const left = daysLeft(a);
                   const hLeft = hoursLeft(a);
+                  const active = isActiveSub(a);
                   return (
                     <TableRow
                       key={a.id}
                       className={cn(
                         focusMember === a.memberID && "bg-primary/5",
+                        !active && "text-muted-foreground opacity-70",
                       )}
                     >
                       <TableCell>
-                        {a.members?.firstName || a.memberID.slice(0, 8)}
+                        <button
+                          type="button"
+                          className="font-medium text-left hover:underline"
+                          onClick={() => setDetailMemberId(a.memberID)}
+                        >
+                          {a.members?.firstName || a.memberID.slice(0, 8)}
+                        </button>
                       </TableCell>
                       <TableCell>
                         {a.price?.name || a.priceId.slice(0, 8)}
@@ -977,6 +973,60 @@ function AbonnementsInner() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Sheet
+        open={!!detailMemberId}
+        onOpenChange={(o) => {
+          if (!o) setDetailMemberId(null);
+        }}
+      >
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>
+              {detailMember?.firstName || "Membre"} — abonnements
+            </SheetTitle>
+          </SheetHeader>
+          {detailMemberId ? (
+            <div className="mt-4 space-y-4">
+              <SubscriptionMemberPanel
+                memberId={detailMemberId}
+                memberName={detailMember?.firstName || "Membre"}
+                abonnements={rows}
+                onEdit={(a) => {
+                  setDetailMemberId(null);
+                  openEdit(a);
+                }}
+                onViewSeat={(label, spaceId) => {
+                  setFocusSeatLabel(label);
+                  setFocusSpaceId(spaceId || null);
+                  setOccupancyOpen(true);
+                }}
+              />
+              <Button
+                className="w-full"
+                onClick={() => {
+                  setDetailMemberId(null);
+                  setEditing(null);
+                  form.reset({
+                    memberID: detailMemberId,
+                    priceId: "",
+                    registredDate: format(new Date(), "yyyy-MM-dd"),
+                    leaveDate: "",
+                    isPayed: true,
+                    payedAmount: 0,
+                    hoursUsed: 0,
+                    reservedSeatLabel: "",
+                    reservedSeatSpaceId: "",
+                  });
+                  setOpen(true);
+                }}
+              >
+                Nouvel abonnement
+              </Button>
+            </div>
+          ) : null}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

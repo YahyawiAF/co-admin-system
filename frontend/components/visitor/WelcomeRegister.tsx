@@ -123,21 +123,24 @@ export function WelcomeRegister() {
         </p>
         <h1 className="mt-1 text-2xl font-bold">Chez {org.name}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Connexion avec téléphone + PIN, ou créez un profil (PIN obligatoire).
+          Première visite ? Créez votre profil en quelques secondes.
         </p>
         <div className="mt-5 space-y-2">
           <Button
             className="h-12 w-full rounded-full"
-            onClick={() => setMode("login")}
+            onClick={() => setMode("signup")}
           >
-            Connexion (téléphone + PIN)
+            Créer mon profil
           </Button>
+          <p className="pt-2 text-center text-xs font-medium uppercase tracking-wide text-slate-400">
+            Déjà inscrit ?
+          </p>
           <Button
             variant="outline"
             className="h-12 w-full rounded-full"
-            onClick={() => setMode("signup")}
+            onClick={() => setMode("login")}
           >
-            Nouveau visiteur
+            Connexion (téléphone + PIN)
           </Button>
           <Button
             variant="ghost"
@@ -288,15 +291,23 @@ export function WelcomeRegister() {
             Se connecter
           </Button>
           <p className="text-center text-xs text-slate-500">
-            PIN oublié ? Demandez un lien ou un code à l&apos;accueil, ou{" "}
+            Première visite ?{" "}
+            <button
+              type="button"
+              className="font-medium text-primary"
+              onClick={() => setMode("signup")}
+            >
+              Créer un profil
+            </button>
+            {" · "}
+            PIN oublié ?{" "}
             <button
               type="button"
               className="font-medium text-primary"
               onClick={() => setMode("code")}
             >
-              entrez un code ici
+              Code récupération
             </button>
-            .
           </p>
         </div>
       </div>

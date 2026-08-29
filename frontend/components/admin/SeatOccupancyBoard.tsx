@@ -15,9 +15,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FloorPlanCanvas } from "@/components/admin/FloorPlanCanvas";
-import { bookingApi, facilityApi, journalApi } from "@/lib/api/resources";
+import { bookingApi, facilityApi, journalApi, abonnementsApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
-import type { Journal, Space, SpaceSeat } from "@/lib/types";
+import type { Abonnement, Journal, Space, SpaceSeat } from "@/lib/types";
 import {
   expectedEndMs,
   isActiveVisit,
@@ -28,6 +28,14 @@ import {
   groupOf,
 } from "@/lib/journal-utils";
 import { cn } from "@/lib/utils";
+import {
+  activeSubByMember,
+  daysLeft,
+  isActiveSub,
+  subscriptionExpiryLabel,
+  subscriptionForSeat,
+} from "@/lib/subscription-utils";
+import { subscriptionSummaryLine } from "@/components/admin/SubscriptionMemberPanel";
 
 function formatRemain(ms: number | null) {
   if (ms == null) return "—";
@@ -119,6 +127,24 @@ export function SeatOccupancyBoard({
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });
+  const { data: abonnementsRaw } = useQuery({
+    queryKey: queryKeys.abonnements,
+    queryFn: () => abonnementsApi.list(),
+    enabled: open,
+    refetchInterval: open ? 30_000 : false,
+  });
+
+  const abonnements: Abonnement[] = useMemo(() => {
+    if (!abonnementsRaw) return [];
+    return Array.isArray(abonnementsRaw)
+      ? abonnementsRaw
+      : abonnementsRaw.data || [];
+  }, [abonnementsRaw]);
+
+  const subByMember = useMemo(
+    () => activeSubByMember(abonnements),
+    [abonnements],
+  );
 
   const spaces = layout?.spaces || [];
   const journals = journalPage?.data || [];
@@ -273,6 +299,21 @@ export function SeatOccupancyBoard({
     ) ||
     rows.find((r) => r.seatLabel === selectedSeatLabel) ||
     null;
+
+  const selectedSeatSubscription = useMemo(() => {
+    if (!selectedSeatLabel) return null;
+    return subscriptionForSeat(abonnements, selectedSeatLabel, spaceId);
+  }, [abonnements, selectedSeatLabel, spaceId]);
+
+  const reservedInSpace = useMemo(() => {
+    if (!spaceId) return [];
+    return abonnements.filter(
+      (a) =>
+        isActiveSub(a) &&
+        a.reservedSeatLabel &&
+        (!a.reservedSeatSpaceId || a.reservedSeatSpaceId === spaceId),
+    );
+  }, [abonnements, spaceId]);
 
   const selectedSeatId = useMemo(() => {
     if (!selectedSeatLabel || !activeSpace) return null;
@@ -461,6 +502,17 @@ export function SeatOccupancyBoard({
                 spaceRows.map((row, i) => {
                   const price = priceOf(row.journal);
                   const end = expectedEndMs(row.journal);
+                  const memberSub = row.journal.memberID
+                    ? subByMember.get(row.journal.memberID)
+                    : null;
+                  const seatSub = subscriptionForSeat(
+                    abonnements,
+                    row.seatLabel,
+                    row.spaceId,
+                  );
+                  const subLine =
+                    subscriptionSummaryLine(memberSub || seatSub) ||
+                    subscriptionSummaryLine(seatSub);
                   const selected =
                     selectedSeatLabel === row.seatLabel &&
                     (!spaceId || !row.spaceId || row.spaceId === spaceId);
@@ -519,6 +571,11 @@ export function SeatOccupancyBoard({
                             {row.journal.payedAmount ?? price?.price ?? 0} DT
                             {row.journal.isPayed ? " · payé" : " · impayé"}
                           </div>
+                          {subLine ? (
+                            <div className="mt-0.5 text-xs text-violet-700 dark:text-violet-300">
+                              Abo : {subLine}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="shrink-0 text-right">
                           <div
@@ -611,6 +668,39 @@ export function SeatOccupancyBoard({
                     </span>
                   </p>
                 </div>
+                {(selectedRow.journal.memberID
+                  ? subByMember.get(selectedRow.journal.memberID)
+                  : null) || selectedSeatSubscription ? (
+                  <div className="mt-3 rounded-md border border-violet-200 bg-violet-50/50 p-2 dark:border-violet-900 dark:bg-violet-950/20">
+                    <p className="text-[10px] font-semibold uppercase text-violet-800 dark:text-violet-300">
+                      Abonnement
+                    </p>
+                    {(() => {
+                      const sub =
+                        (selectedRow.journal.memberID
+                          ? subByMember.get(selectedRow.journal.memberID)
+                          : null) || selectedSeatSubscription;
+                      if (!sub) return null;
+                      const left = daysLeft(sub);
+                      return (
+                        <div className="mt-1 text-xs">
+                          <p className="font-medium text-foreground">
+                            {sub.members?.firstName || "Membre"} —{" "}
+                            {sub.price?.name || "Abonnement"}
+                          </p>
+                          <p className="text-muted-foreground">
+                            {sub.reservedSeatLabel
+                              ? `Place réservée ${sub.reservedSeatLabel}`
+                              : "Sans place dédiée"}
+                            {left != null
+                              ? ` · ${subscriptionExpiryLabel(left)}`
+                              : ""}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : null}
                 <Button
                   size="sm"
                   className="mt-3"
@@ -620,6 +710,25 @@ export function SeatOccupancyBoard({
                   Déplacer vers une autre place
                 </Button>
               </div>
+            ) : selectedSeatSubscription ? (
+              <div className="rounded-lg border bg-card p-3 text-sm">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
+                  Place réservée (abonnement)
+                </p>
+                <p className="mt-1 font-bold">
+                  {selectedSeatSubscription.members?.firstName || "Membre"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {subscriptionSummaryLine(selectedSeatSubscription)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Absent du journal aujourd&apos;hui
+                </p>
+              </div>
+            ) : selectedSeatLabel ? (
+              <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                Place {selectedSeatLabel} — libre
+              </div>
             ) : null}
 
             {anonymousPresent.length > 0 ? (
@@ -627,6 +736,32 @@ export function SeatOccupancyBoard({
                 {anonymousPresent.length} anonyme(s) présent(s) sans place —
                 assignez depuis le journal après liaison membre.
               </p>
+            ) : null}
+            {reservedInSpace.length > 0 ? (
+              <div className="rounded-lg border bg-muted/20 p-2">
+                <p className="text-[10px] font-semibold uppercase text-muted-foreground">
+                  Réservations abonnement ({reservedInSpace.length})
+                </p>
+                <div className="mt-1 max-h-24 space-y-1 overflow-y-auto">
+                  {reservedInSpace.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="flex w-full items-center justify-between rounded px-1 py-0.5 text-left text-xs hover:bg-muted/50"
+                      onClick={() => {
+                        setSelectedSeatLabel(a.reservedSeatLabel || null);
+                      }}
+                    >
+                      <span>
+                        {a.members?.firstName || "—"} · {a.reservedSeatLabel}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {subscriptionExpiryLabel(daysLeft(a))}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
             </>
             )}

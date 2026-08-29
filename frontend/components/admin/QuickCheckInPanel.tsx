@@ -46,11 +46,19 @@ type Props = {
 
 type Mode = "existing" | "new" | "anonymous";
 
+type RecentCheckIn = {
+  id: string;
+  label: string;
+  at: string;
+};
+
 export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState("visitor");
   const [mode, setMode] = useState<Mode>("existing");
+  const [closeAfterCheckIn, setCloseAfterCheckIn] = useState(false);
+  const [recentCheckIns, setRecentCheckIns] = useState<RecentCheckIn[]>([]);
   const [search, setSearch] = useState("");
   const [member, setMember] = useState<Member | null>(null);
   const [priceId, setPriceId] = useState("");
@@ -242,17 +250,36 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
       });
     },
     onSuccess: () => {
+      const label =
+        mode === "anonymous"
+          ? guestName.trim() || "Anonyme"
+          : mode === "new"
+            ? newName.trim() || newPhone
+            : member?.firstName || "Membre";
+      setRecentCheckIns((prev) =>
+        [
+          {
+            id: `${Date.now()}`,
+            label,
+            at: new Date().toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          },
+          ...prev,
+        ].slice(0, 8),
+      );
       toast.success(
         mode === "anonymous"
           ? "Visiteur anonyme enregistré"
-          : "Check-in effectué"
+          : `${label} — check-in OK`,
       );
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
       reset();
-      setOpen(false);
+      if (closeAfterCheckIn) setOpen(false);
       onDone?.();
     },
     onError: (e: Error & { occupants?: SeatOccupant[] }) => {
@@ -276,12 +303,20 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     mode === "anonymous" ||
     (mode === "existing" ? !!member : !!newPhone);
 
+  const aboFastPath =
+    mode === "existing" &&
+    !!member &&
+    (hoursPoolMember || (periodMember && !priceId));
+
   return (
     <Dialog
       open={open}
       onOpenChange={(v) => {
         setOpen(v);
-        if (!v) reset();
+        if (!v) {
+          reset();
+          setRecentCheckIns([]);
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -292,9 +327,22 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
           <DialogHeader>
             <DialogTitle className="text-xl">Check-in</DialogTitle>
             <DialogDescription>
-              Visiteur, tarif, puis occupation (place, groupe ou espace entier).
+              Visiteur, tarif, puis occupation. Utilisez « Valider & suivant »
+              pour enchaîner plusieurs arrivées.
             </DialogDescription>
           </DialogHeader>
+          {recentCheckIns.length > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                File récente :
+              </span>
+              {recentCheckIns.map((r) => (
+                <Badge key={r.id} variant="secondary" className="text-[10px]">
+                  {r.label} · {r.at}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <Tabs
@@ -346,6 +394,27 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                     onChange={(e) => setSearch(e.target.value)}
                     autoFocus
                   />
+                  {aboFastPath && member ? (
+                    <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
+                      <p className="text-sm font-medium">
+                        {member.firstName}
+                        {member.visitorNumber ? ` #${member.visitorNumber}` : ""}
+                        {" — "}
+                        {hoursPoolMember ? "abonnement heures" : "abonnement période"}
+                      </p>
+                      <Button
+                        type="button"
+                        className="mt-2 w-full"
+                        disabled={checkIn.isPending}
+                        onClick={() => {
+                          setCloseAfterCheckIn(false);
+                          checkIn.mutate();
+                        }}
+                      >
+                        {checkIn.isPending ? "Pointage…" : "Pointer maintenant"}
+                      </Button>
+                    </div>
+                  ) : null}
                   <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-1">
                     {filteredMembers.map((m) => (
                       <button
@@ -513,24 +582,39 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
           </div>
         </Tabs>
 
-        <DialogFooter className="gap-2 border-t px-6 py-4 sm:gap-0">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Annuler
+        <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Fermer
           </Button>
-          <Button
-            disabled={!canSubmit || checkIn.isPending}
-            onClick={() => checkIn.mutate()}
-          >
-            {checkIn.isPending
-              ? "Check-in…"
-              : hoursPoolMember || (periodMember && !priceId)
-                ? "Pointer"
-                : selectedPack && isHourlyVisitTarif(selectedPack)
-                  ? selectedPack.durationHours || Number(hours) > 0
-                    ? `Check-in · ${(selectedPack.price * (Number(hours) || selectedPack.durationHours || 1)).toFixed(1)} DT`
-                    : "Check-in · compteur"
-                  : "Confirmer"}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={!canSubmit || checkIn.isPending}
+              onClick={() => {
+                setCloseAfterCheckIn(true);
+                checkIn.mutate();
+              }}
+            >
+              Valider & fermer
+            </Button>
+            <Button
+              disabled={!canSubmit || checkIn.isPending}
+              onClick={() => {
+                setCloseAfterCheckIn(false);
+                checkIn.mutate();
+              }}
+            >
+              {checkIn.isPending
+                ? "Check-in…"
+                : hoursPoolMember || (periodMember && !priceId)
+                  ? "Pointer & suivant"
+                  : selectedPack && isHourlyVisitTarif(selectedPack)
+                    ? selectedPack.durationHours || Number(hours) > 0
+                      ? `Valider & suivant · ${(selectedPack.price * (Number(hours) || selectedPack.durationHours || 1)).toFixed(1)} DT`
+                      : "Valider & suivant"
+                    : "Valider & suivant"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
