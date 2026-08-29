@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { VisitRequestBell } from "@/components/admin/VisitRequestBell";
 import { ProductOrderBell } from "@/components/admin/ProductOrderBell";
+import { StaffInboxBell } from "@/components/admin/StaffInboxBell";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { useState, type ReactNode } from "react";
 
@@ -126,6 +127,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Sheet>
           <div className="flex-1" />
           <SeatOccupancyBoard variant="icon" />
+          <StaffInboxBell />
           <ProductOrderBell />
           <VisitRequestBell />
         </header>

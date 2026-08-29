@@ -143,35 +143,64 @@ async function subscribePush(memberId: string): Promise<boolean> {
   const vapid =
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
     (await fetchVapidKey());
-  if (!vapid) return false;
+  if (!vapid) {
+    console.warn("[push] missing VAPID public key");
+    return false;
+  }
 
   const reg = await registerServiceWorker();
-  if (!reg) return false;
+  if (!reg) {
+    console.warn("[push] service worker registration failed");
+    return false;
+  }
   await navigator.serviceWorker.ready;
 
   let sub = await reg.pushManager.getSubscription();
-  if (!sub) {
-    sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapid),
-    });
+  if (sub) {
+    // Re-post existing subscription so server always has it after redeploy
+  } else {
+    try {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapid),
+      });
+    } catch (e) {
+      console.warn("[push] subscribe failed", e);
+      return false;
+    }
   }
 
   const json = sub.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
 
-  const api = process.env.NEXT_PUBLIC_API_URL || "";
-  const res = await fetch(`${api}/mobile/push/subscribe`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      memberId,
-      endpoint: json.endpoint,
-      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
-      userAgent: navigator.userAgent,
-    }),
-  });
-  return res.ok;
+  const api = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+  try {
+    const res = await fetch(`${api}/mobile/push/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        memberId,
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+        userAgent: navigator.userAgent,
+      }),
+    });
+    if (!res.ok) {
+      console.warn("[push] server subscribe failed", await res.text());
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn("[push] network error", e);
+    return false;
+  }
+}
+
+export async function ensurePushSubscription(memberId?: string | null) {
+  if (!memberId || !isNotifyOptIn()) return false;
+  if (typeof Notification === "undefined") return false;
+  if (Notification.permission !== "granted") return false;
+  return subscribePush(memberId);
 }
 
 async function fetchVapidKey(): Promise<string | null> {
@@ -207,7 +236,8 @@ export async function enableVisitorNotifications(
       return { ok: unlocked, needInstall };
     }
     if (memberId) {
-      await subscribePush(memberId);
+      const pushed = await subscribePush(memberId);
+      return { ok: pushed || true, needInstall };
     }
     return { ok: true, needInstall };
   } catch {

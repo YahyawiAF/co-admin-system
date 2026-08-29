@@ -61,6 +61,8 @@ export class FacilityController {
       sortOrder: number;
       capacityNormal: number;
       category: PriceCategory;
+      wifiSsid: string | null;
+      wifiPassword: string | null;
     }>,
   ) {
     return this.facilityService.updateSpace(id, body);

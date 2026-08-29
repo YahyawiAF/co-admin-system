@@ -30,10 +30,8 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title || "Collabora Hub", {
       body: data.body || "",
       tag: data.tag || "collabora",
-      icon: "/collabora-icon.svg",
-      badge: "/collabora-icon.svg",
       data: { url: data.url || "/m" },
-      renotify: true,
+      vibrate: [120, 60, 120],
     })
   );
 });

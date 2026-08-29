@@ -293,6 +293,8 @@ model Space {
   floorPlanUrl   String?
   sortOrder      Int             @default(0)
   capacityNormal Int             @default(0)
+  wifiSsid       String?
+  wifiPassword   String?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
   tables         Table[]
@@ -502,16 +504,23 @@ model CommunityMessage {
 }
 
 model StaffMessage {
-  id         String    @id @default(uuid())
+  id         String                @id @default(uuid())
   toMemberId String
-  toMember   Member    @relation(fields: [toMemberId], references: [id], onDelete: Cascade)
+  toMember   Member                @relation(fields: [toMemberId], references: [id], onDelete: Cascade)
   fromUserId String?
+  direction  StaffMessageDirection @default(TO_MEMBER)
   text       String
   readAt     DateTime?
-  createdAt  DateTime  @default(now())
+  createdAt  DateTime              @default(now())
 
   @@index([toMemberId, createdAt])
+  @@index([direction, readAt])
   @@map("staff_messages")
+}
+
+enum StaffMessageDirection {
+  TO_MEMBER
+  TO_STAFF
 }
 
 enum VisitRequestType {

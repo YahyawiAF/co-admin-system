@@ -142,6 +142,8 @@ export type SeatAssignmentInfo = {
   spaceName?: string | null;
   spaceId?: string | null;
   isOverflow?: boolean;
+  wifiSsid?: string | null;
+  wifiPassword?: string | null;
 };
 
 export interface Abonnement {
@@ -268,6 +270,8 @@ export interface Space {
   floorPlanUrl?: string | null;
   sortOrder: number;
   capacityNormal: number;
+  wifiSsid?: string | null;
+  wifiPassword?: string | null;
   tables?: SpaceTable[];
   seats?: SpaceSeat[];
   walls?: SpaceWall[];
@@ -399,6 +403,11 @@ export interface StaffMessage {
   createdAt: string;
   readAt?: string | null;
   from?: string;
+  direction?: "TO_MEMBER" | "TO_STAFF";
+  memberName?: string | null;
+  visitorNumber?: number | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface MemberInsights {

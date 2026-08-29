@@ -54,6 +54,84 @@ const emptyTableForm = (): TableFormState => ({
   overflowCount: 1,
 });
 
+function SpaceWifiEditor({
+  space,
+  onSave,
+  saving,
+}: {
+  space: Space;
+  onSave: (data: { wifiSsid: string | null; wifiPassword: string | null }) => void;
+  saving?: boolean;
+}) {
+  const [ssid, setSsid] = useState(space.wifiSsid || "");
+  const [password, setPassword] = useState(space.wifiPassword || "");
+
+  useEffect(() => {
+    setSsid(space.wifiSsid || "");
+    setPassword(space.wifiPassword || "");
+  }, [space.id, space.wifiSsid, space.wifiPassword]);
+
+  const dirty =
+    ssid.trim() !== (space.wifiSsid || "") ||
+    password.trim() !== (space.wifiPassword || "");
+
+  return (
+    <div className="rounded-lg border p-3 space-y-3">
+      <p className="text-sm font-medium">Wi‑Fi de l’espace</p>
+      <p className="text-xs text-muted-foreground">
+        Affiché au visiteur après confirmation de sa place. Modifiez puis
+        enregistrez.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label>Nom du réseau (SSID)</Label>
+          <Input
+            value={ssid}
+            onChange={(e) => setSsid(e.target.value)}
+            placeholder="Collabora-Guest"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>Mot de passe</Label>
+          <Input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Mot de passe Wi‑Fi"
+          />
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          disabled={saving || !dirty}
+          onClick={() =>
+            onSave({
+              wifiSsid: ssid.trim() || null,
+              wifiPassword: password.trim() || null,
+            })
+          }
+        >
+          Enregistrer Wi‑Fi
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={saving || (!ssid && !password && !space.wifiSsid && !space.wifiPassword)}
+          onClick={() => {
+            setSsid("");
+            setPassword("");
+            onSave({ wifiSsid: null, wifiPassword: null });
+          }}
+        >
+          Effacer
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function FacilityPage() {
   const queryClient = useQueryClient();
   const [editMode, setEditMode] = useState(false);
@@ -1589,6 +1667,14 @@ export default function FacilityPage() {
                           id: space.id,
                           data: { floorPlanUrl: url },
                         })
+                      }
+                    />
+
+                    <SpaceWifiEditor
+                      space={space}
+                      saving={updateSpace.isPending}
+                      onSave={(data) =>
+                        updateSpace.mutate({ id: space.id, data })
                       }
                     />
 

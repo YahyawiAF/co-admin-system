@@ -1567,12 +1567,17 @@ export class MobileService {
       },
     });
     if (!seat) {
+      const space = booking.spaceId
+        ? await this.prisma.space.findUnique({ where: { id: booking.spaceId } })
+        : null;
       return {
         seatLabel: booking.seatId,
         tableName: null as string | null,
-        spaceName: null as string | null,
+        spaceName: space?.name || null,
         spaceId: booking.spaceId,
         isOverflow: false,
+        wifiSsid: space?.wifiSsid || null,
+        wifiPassword: space?.wifiPassword || null,
       };
     }
     return {
@@ -1581,6 +1586,8 @@ export class MobileService {
       spaceName: seat.space?.name || null,
       spaceId: seat.spaceId,
       isOverflow: seat.isOverflow,
+      wifiSsid: seat.space?.wifiSsid || null,
+      wifiPassword: seat.space?.wifiPassword || null,
     };
   }
 
@@ -3152,14 +3159,17 @@ export class MobileService {
       data: {
         toMemberId: dto.memberId,
         fromUserId: dto.fromUserId || null,
+        direction: 'TO_MEMBER',
         text,
       },
     });
     const payload = {
       id: created.id,
       memberId: dto.memberId,
+      toMemberId: dto.memberId,
       text: created.text,
       createdAt: created.createdAt,
+      direction: 'TO_MEMBER' as const,
       from: 'Accueil',
     };
     this.eventsGateway.sendStaffMessage(payload);
@@ -3167,6 +3177,7 @@ export class MobileService {
       type: 'staff_message',
       memberId: dto.memberId,
       messageId: created.id,
+      direction: 'TO_MEMBER',
     });
     void this.pushService.sendToMember(dto.memberId, {
       title: 'Message de l’accueil',
@@ -3177,15 +3188,114 @@ export class MobileService {
     return created;
   }
 
+  async sendVisitorToStaff(dto: { memberId: string; text: string }) {
+    const text = (dto.text || '').trim();
+    if (!text) throw new BadRequestException('Message vide');
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const created = await this.prisma.staffMessage.create({
+      data: {
+        toMemberId: dto.memberId,
+        direction: 'TO_STAFF',
+        text,
+      },
+    });
+    const payload = {
+      id: created.id,
+      memberId: dto.memberId,
+      toMemberId: dto.memberId,
+      text: created.text,
+      createdAt: created.createdAt,
+      direction: 'TO_STAFF' as const,
+      from: member.firstName || 'Visiteur',
+      memberName:
+        [member.firstName, member.lastName].filter(Boolean).join(' ') ||
+        member.firstName ||
+        'Visiteur',
+      visitorNumber: member.visitorNumber,
+      phone: member.phone,
+      avatarUrl: member.avatarUrl,
+    };
+    this.eventsGateway.sendStaffMessage(payload);
+    this.eventsGateway.sendTableUpdates({
+      type: 'staff_message',
+      memberId: dto.memberId,
+      messageId: created.id,
+      direction: 'TO_STAFF',
+    });
+    return created;
+  }
+
   async listStaffMessages(memberId: string, unreadOnly = false) {
     return this.prisma.staffMessage.findMany({
       where: {
         toMemberId: memberId,
-        ...(unreadOnly ? { readAt: null } : {}),
+        ...(unreadOnly
+          ? { readAt: null, direction: 'TO_MEMBER' }
+          : {}),
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 100,
+    });
+  }
+
+  async listStaffInbox() {
+    const unread = await this.prisma.staffMessage.findMany({
+      where: { direction: 'TO_STAFF', readAt: null },
+      include: {
+        toMember: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            phone: true,
+            visitorNumber: true,
+            avatarUrl: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
       take: 40,
     });
+    return unread.map((m) => ({
+      id: m.id,
+      memberId: m.toMemberId,
+      text: m.text,
+      createdAt: m.createdAt,
+      direction: m.direction,
+      memberName:
+        [m.toMember.firstName, m.toMember.lastName].filter(Boolean).join(' ') ||
+        m.toMember.firstName ||
+        'Visiteur',
+      visitorNumber: m.toMember.visitorNumber,
+      phone: m.toMember.phone,
+      avatarUrl: m.toMember.avatarUrl,
+    }));
+  }
+
+  async markStaffThreadRead(memberId: string, as: 'member' | 'staff') {
+    if (as === 'member') {
+      await this.prisma.staffMessage.updateMany({
+        where: {
+          toMemberId: memberId,
+          direction: 'TO_MEMBER',
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
+    } else {
+      await this.prisma.staffMessage.updateMany({
+        where: {
+          toMemberId: memberId,
+          direction: 'TO_STAFF',
+          readAt: null,
+        },
+        data: { readAt: new Date() },
+      });
+    }
+    return { ok: true };
   }
 
   getVapidPublicKey() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Send } from "lucide-react";
@@ -20,6 +20,48 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { membersApi, mobileApi } from "@/lib/api/resources";
 import type { Member } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+function StaffAdminThread({ memberId }: { memberId: string }) {
+  const { data: thread = [] } = useQuery({
+    queryKey: ["staff-thread-admin", memberId],
+    queryFn: () => mobileApi.staffMessages(memberId, false),
+    refetchInterval: 5000,
+  });
+  return (
+    <div className="max-h-48 space-y-2 overflow-y-auto rounded-lg border bg-muted/20 p-2">
+      {!thread.length ? (
+        <p className="py-4 text-center text-xs text-muted-foreground">
+          Aucun message encore
+        </p>
+      ) : (
+        thread.map((m) => {
+          const fromStaff = m.direction !== "TO_STAFF";
+          return (
+            <div
+              key={m.id}
+              className={cn(fromStaff ? "text-right" : "text-left")}
+            >
+              <div
+                className={cn(
+                  "inline-block max-w-[90%] rounded-2xl px-2.5 py-1.5 text-xs",
+                  fromStaff
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-white shadow-sm"
+                )}
+              >
+                <p className="whitespace-pre-wrap">{m.text}</p>
+                <p className="mt-0.5 opacity-70">
+                  {format(new Date(m.createdAt), "dd MMM HH:mm", { locale: fr })}
+                </p>
+              </div>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
 
 type Props = {
   member: Member | null;
@@ -28,6 +70,7 @@ type Props = {
 };
 
 export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
+  const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["member-insights", member?.id],
@@ -41,6 +84,9 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     onSuccess: () => {
       toast.success("Message envoyé sur mobile");
       setMessage("");
+      void queryClient.invalidateQueries({
+        queryKey: ["staff-thread-admin", member!.id],
+      });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -205,11 +251,12 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                 </TabsContent>
 
                 <TabsContent value="message" className="space-y-3">
+                  <StaffAdminThread memberId={member!.id} />
                   <p className="text-sm text-muted-foreground">
-                    Le visiteur verra ce message en popup sur son téléphone.
+                    Répondez ici — le visiteur reçoit une notification.
                   </p>
                   <Textarea
-                    rows={4}
+                    rows={3}
                     placeholder="Ex. Votre place est prête, bienvenue !"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
@@ -220,7 +267,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                     onClick={() => send.mutate()}
                   >
                     <Send className="mr-2 h-4 w-4" />
-                    Envoyer sur mobile
+                    Envoyer
                   </Button>
                 </TabsContent>
               </Tabs>

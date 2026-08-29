@@ -15,10 +15,15 @@ import { loadVisitorCache } from "@/lib/visitorCache";
 import { mobileApi } from "@/lib/api/resources";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import type { StaffMessage } from "@/lib/types";
-import { showVisitorNotification, unlockVisitorAudio } from "@/lib/visitor-notify";
+import { unlockVisitorAudio } from "@/lib/visitor-notify";
+import { useOrg } from "@/lib/org";
+import { useRouter } from "next/navigation";
 
+/** Popup for new staff→visitor messages (no duplicate sound/OS notify — push handles background). */
 export function StaffMessageModal() {
   const queryClient = useQueryClient();
+  const { href } = useOrg();
+  const router = useRouter();
   const { socket } = useRealtime();
   const [memberId, setMemberId] = useState<string | null>(null);
   const [current, setCurrent] = useState<StaffMessage | null>(null);
@@ -35,22 +40,17 @@ export function StaffMessageModal() {
   });
 
   useEffect(() => {
-    if (!current && unread.length) {
-      setCurrent(unread[0]);
-      showVisitorNotification({
-        title: "Message de l’accueil",
-        body: unread[0].text,
-        tag: `staff-${unread[0].id}`,
-        sound: "message",
-      });
-    }
+    if (!current && unread.length) setCurrent(unread[0]);
   }, [unread, current]);
 
   useEffect(() => {
     if (!socket || !memberId) return;
     const onMsg = (payload: StaffMessage) => {
+      if (payload.direction === "TO_STAFF") return;
       if (payload.memberId && payload.memberId !== memberId) return;
+      if (payload.toMemberId && payload.toMemberId !== memberId) return;
       queryClient.invalidateQueries({ queryKey: ["staff-messages", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["staff-thread", memberId] });
       setCurrent(payload);
     };
     socket.on("staff_message", onMsg);
@@ -65,6 +65,7 @@ export function StaffMessageModal() {
       const rest = unread.filter((m) => m.id !== current?.id);
       setCurrent(rest[0] || null);
       queryClient.invalidateQueries({ queryKey: ["staff-messages", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["staff-thread", memberId] });
     },
   });
 
@@ -80,7 +81,7 @@ export function StaffMessageModal() {
         <p className="whitespace-pre-wrap text-base leading-relaxed">
           {current?.text}
         </p>
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-col">
           <Button
             className="h-11 w-full"
             disabled={ack.isPending || !current}
@@ -90,6 +91,16 @@ export function StaffMessageModal() {
             }}
           >
             OK, compris
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 w-full"
+            onClick={() => {
+              ack.mutate();
+              router.push(href("/community?peer=admin"));
+            }}
+          >
+            Voir la conversation
           </Button>
         </DialogFooter>
       </DialogContent>

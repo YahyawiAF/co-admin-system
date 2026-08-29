@@ -24,6 +24,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import {
   enableVisitorNotifications,
+  ensurePushSubscription,
   hasSessionWarned,
   isIosDevice,
   isNotifyOptIn,
@@ -84,6 +85,11 @@ export function VisitorAlerts() {
     setOptIn(isNotifyOptIn());
     setNeedInstall(isIosDevice() && !isStandalonePwa());
   }, []);
+
+  useEffect(() => {
+    if (!memberId || !optIn) return;
+    void ensurePushSubscription(memberId);
+  }, [memberId, optIn]);
 
   const { data: status } = useQuery({
     queryKey: ["mobile-status", memberId],
@@ -197,6 +203,16 @@ export function VisitorAlerts() {
           status: payload.status,
           type: payload.type,
         });
+        if (payload.status === "APPROVED") {
+          // Allow Wi‑Fi modal to show after seat assignment
+          try {
+            Object.keys(sessionStorage)
+              .filter((k) => k.startsWith("wifi-seen:"))
+              .forEach((k) => sessionStorage.removeItem(k));
+          } catch {
+            /* ignore */
+          }
+        }
         showVisitorNotification({
           title:
             payload.status === "APPROVED"
@@ -235,14 +251,27 @@ export function VisitorAlerts() {
       });
     };
 
-    const onStaff = (payload: { memberId?: string; text?: string }) => {
+    const onStaff = (payload: {
+      memberId?: string;
+      toMemberId?: string;
+      direction?: string;
+      text?: string;
+    }) => {
+      if (payload.direction === "TO_STAFF") return;
       if (payload.memberId && payload.memberId !== memberId) return;
-      showVisitorNotification({
-        title: "Message de l’accueil",
-        body: payload.text || "Nouveau message de l’équipe.",
-        tag: "staff-message",
-        sound: "message",
-      });
+      if (payload.toMemberId && payload.toMemberId !== memberId) return;
+      queryClient.invalidateQueries({ queryKey: ["staff-thread", memberId] });
+      queryClient.invalidateQueries({ queryKey: ["staff-messages", memberId] });
+      // In-app modal handles foreground; avoid double sound/OS popup.
+      // Background delivery is via Web Push only.
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+        showVisitorNotification({
+          title: "Message de l’accueil",
+          body: payload.text || "Nouveau message de l’équipe.",
+          tag: "staff-message",
+          sound: "message",
+        });
+      }
     };
 
     socket.on("product_order", onProductOrder);

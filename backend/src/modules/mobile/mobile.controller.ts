@@ -296,6 +296,29 @@ export class MobileController {
     return this.mobileService.sendStaffMessage(dto);
   }
 
+  @Post('staff-message')
+  sendVisitorStaffMessage(
+    @Body() body: { memberId: string; text: string },
+  ) {
+    return this.mobileService.sendVisitorToStaff(body);
+  }
+
+  @Get('admin/staff-inbox')
+  staffInbox() {
+    return this.mobileService.listStaffInbox();
+  }
+
+  @Patch('staff-thread/:memberId/read')
+  markStaffThreadRead(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Body() body: { as?: 'member' | 'staff' },
+  ) {
+    return this.mobileService.markStaffThreadRead(
+      memberId,
+      body.as === 'staff' ? 'staff' : 'member',
+    );
+  }
+
   @Get('staff-messages/:memberId')
   listStaffMessages(
     @Param('memberId', ParseUUIDPipe) memberId: string,

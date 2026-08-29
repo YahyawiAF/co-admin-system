@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Search, Send } from "lucide-react";
+import { Building2, Search, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
+import { AdminStaffChat } from "@/components/visitor/AdminStaffChat";
 
 function nameOf(m?: Member | null) {
   return (
@@ -33,8 +34,13 @@ function CommunityInner() {
   const peerId = searchParams.get("peer");
   const [q, setQ] = useState("");
   const [peer, setPeer] = useState<Member | null>(null);
+  const [adminChat, setAdminChat] = useState(false);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"inbox" | "people">("inbox");
+
+  useEffect(() => {
+    if (peerId === "admin") setAdminChat(true);
+  }, [peerId]);
 
   useEffect(() => {
     if (!socket || !memberId) return;
@@ -48,9 +54,14 @@ function CommunityInner() {
       queryClient.invalidateQueries({ queryKey: ["mobile-inbox"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-thread"] });
     };
+    const onStaff = () => {
+      queryClient.invalidateQueries({ queryKey: ["staff-thread", memberId] });
+    };
     socket.on("community_message", onMsg);
+    socket.on("staff_message", onStaff);
     return () => {
       socket.off("community_message", onMsg);
+      socket.off("staff_message", onStaff);
     };
   }, [socket, memberId, queryClient]);
 
@@ -118,6 +129,21 @@ function CommunityInner() {
       <p className="text-sm text-slate-500">
         Connectez-vous pour voir la communauté.
       </p>
+    );
+  }
+
+  if (adminChat && memberId) {
+    return (
+      <div className="space-y-3">
+        <button
+          type="button"
+          className="text-sm font-medium text-primary"
+          onClick={() => setAdminChat(false)}
+        >
+          ← Messages
+        </button>
+        <AdminStaffChat memberId={memberId} />
+      </div>
     );
   }
 
@@ -234,9 +260,24 @@ function CommunityInner() {
 
       {tab === "inbox" ? (
         <div className="overflow-hidden rounded-2xl bg-white">
+          <button
+            type="button"
+            className="flex w-full items-start gap-3 border-b px-4 py-3 text-left"
+            onClick={() => setAdminChat(true)}
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-800 text-white">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold">Administration</p>
+              <p className="truncate text-sm text-slate-500">
+                Écrire à l’accueil · conversation enregistrée
+              </p>
+            </div>
+          </button>
           {filteredInbox.length === 0 ? (
             <p className="p-6 text-center text-sm text-slate-500">
-              Pas encore de conversation. Ouvrez Annuaire.
+              Pas encore de conversation membre. Ouvrez Annuaire.
             </p>
           ) : (
             filteredInbox.map((t, i) => (

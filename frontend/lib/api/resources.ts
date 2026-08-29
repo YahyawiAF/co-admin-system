@@ -731,10 +731,25 @@ export const mobileApi = {
   }) {
     return http.post<StaffMessage>("/mobile/admin/staff-message", data);
   },
+  sendVisitorStaffMessage(data: { memberId: string; text: string }) {
+    return http.post<StaffMessage>("/mobile/staff-message", data, {
+      skipAuth: true,
+    });
+  },
   staffMessages(memberId: string, unreadOnly = false) {
     return http.get<StaffMessage[]>(
       `/mobile/staff-messages/${memberId}${unreadOnly ? "?unread=1" : ""}`,
       { skipAuth: true },
+    );
+  },
+  staffInbox() {
+    return http.get<StaffMessage[]>("/mobile/admin/staff-inbox");
+  },
+  markStaffThreadRead(memberId: string, as: "member" | "staff" = "member") {
+    return http.patch<{ ok: boolean }>(
+      `/mobile/staff-thread/${memberId}/read`,
+      { as },
+      { skipAuth: as === "member" },
     );
   },
   markStaffMessageRead(id: string) {

@@ -368,6 +368,8 @@ export class FacilityService {
       sortOrder: number;
       capacityNormal: number;
       category: PriceCategory;
+      wifiSsid: string | null;
+      wifiPassword: string | null;
     }>,
   ) {
     const space = await this.prisma.space.update({
