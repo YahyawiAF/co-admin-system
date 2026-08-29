@@ -87,4 +87,11 @@ export class CreatePriceDto {
   @IsOptional()
   @IsNumber()
   reserveSeatToHour?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'If false, tarif is hidden from visitor/admin pickers',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

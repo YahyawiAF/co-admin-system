@@ -61,4 +61,7 @@ export class PriceEntity {
 
   @ApiPropertyOptional()
   reserveSeatToHour?: number | null;
+
+  @ApiPropertyOptional({ description: 'If false, tarif is hidden from pickers' })
+  isActive?: boolean;
 }

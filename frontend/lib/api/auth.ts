@@ -16,7 +16,7 @@ export const authApi = {
   }) {
     return http.post<User>(
       "/auth/signup",
-      { ...data, role: "ADMIN" },
+      { ...data, role: "USER" },
       { skipAuth: true }
     );
   },

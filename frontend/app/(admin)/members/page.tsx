@@ -66,6 +66,7 @@ export default function MembersPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
+  const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
 
   const { data: membersRaw = [], isLoading } = useQuery({
     queryKey: queryKeys.members,
@@ -134,9 +135,11 @@ export default function MembersPage() {
   }, [abos, aboState]);
 
   const seatByMember = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { seatId: string; spaceId?: string | null }>();
     for (const b of bookings) {
-      if (b.isBooked && b.memberId) map.set(b.memberId, b.seatId);
+      if (b.isBooked && b.memberId) {
+        map.set(b.memberId, { seatId: b.seatId, spaceId: b.spaceId });
+      }
     }
     return map;
   }, [bookings]);
@@ -193,9 +196,13 @@ export default function MembersPage() {
           open={occupancyOpen}
           onOpenChange={(o) => {
             setOccupancyOpen(o);
-            if (!o) setFocusSeatLabel(null);
+            if (!o) {
+              setFocusSeatLabel(null);
+              setFocusSpaceId(null);
+            }
           }}
           focusSeatLabel={focusSeatLabel}
+          focusSpaceId={focusSpaceId}
         />
       </div>
 
@@ -302,7 +309,7 @@ export default function MembersPage() {
                       {(() => {
                         const live = seatByMember.get(m.id);
                         const reserved = reservedByMember.get(m.id);
-                        const seat = live || reserved;
+                        const seat = live?.seatId || reserved;
                         if (!seat) {
                           return (
                             <Button
@@ -311,6 +318,7 @@ export default function MembersPage() {
                               className="h-7 px-2 text-xs text-muted-foreground"
                               onClick={() => {
                                 setFocusSeatLabel(null);
+                                setFocusSpaceId(null);
                                 setOccupancyOpen(true);
                               }}
                             >
@@ -326,6 +334,7 @@ export default function MembersPage() {
                             title="Voir sur le plan"
                             onClick={() => {
                               setFocusSeatLabel(seat);
+                              setFocusSpaceId(live?.spaceId || null);
                               setOccupancyOpen(true);
                             }}
                           >

@@ -25,7 +25,7 @@ function isCoffee(name: string, desc?: string | null) {
 
 export default function CafePage() {
   const queryClient = useQueryClient();
-  const { href } = useOrg();
+  const { href, slug } = useOrg();
   const { socket } = useRealtime();
   const [memberId, setMemberId] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -33,10 +33,8 @@ export default function CafePage() {
   const [qty, setQty] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    setMemberId(
-      loadVisitorCache()?.memberId || sessionStorage.getItem("memberId")
-    );
-  }, []);
+    setMemberId(loadVisitorCache(slug)?.memberId || null);
+  }, [slug]);
 
   useEffect(() => {
     if (!socket) return;
@@ -48,7 +46,7 @@ export default function CafePage() {
       }
     };
     const refreshStock = () => {
-      queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-products", slug] });
     };
     socket.on("product_order", refreshOrders);
     socket.on("product_order_confirmed", refreshOrders);
@@ -65,17 +63,17 @@ export default function CafePage() {
       socket.off("product_updated", refreshStock);
       socket.off("table_updates");
     };
-  }, [socket, memberId, queryClient]);
+  }, [socket, memberId, queryClient, slug]);
 
   const { data: products = [], isLoading } = useQuery({
-    queryKey: ["mobile-products"],
+    queryKey: ["mobile-products", slug],
     queryFn: async () => {
-      const data = await mobileApi.products();
-      writeLocalCache("products", data);
+      const data = await mobileApi.products(slug);
+      writeLocalCache("products", data, slug);
       return data;
     },
     staleTime: 60_000,
-    placeholderData: () => readLocalCache("products") ?? undefined,
+    placeholderData: () => readLocalCache("products", slug) ?? undefined,
   });
   const { data: orders = [] } = useQuery({
     queryKey: ["mobile-orders", memberId],

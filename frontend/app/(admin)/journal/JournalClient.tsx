@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +33,10 @@ import {
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  playNotifySound,
+  unlockVisitorAudio,
+} from "@/lib/visitor-notify";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -153,6 +157,7 @@ export default function JournalClient() {
   const [seatRow, setSeatRow] = useState<Journal | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
+  const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
   const [identityRow, setIdentityRow] = useState<Journal | null>(null);
   const [identityMode, setIdentityMode] = useState<"link" | "create">("link");
   const [detailMember, setDetailMember] = useState<Member | null>(null);
@@ -162,9 +167,10 @@ export default function JournalClient() {
     phone: "",
   });
   const [now, setNow] = useState(Date.now());
+  const warnedEndingRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
+    const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
   }, []);
 
@@ -218,12 +224,20 @@ export default function JournalClient() {
   );
 
   const seatByMember = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { seatId: string; spaceId?: string | null }>();
     for (const b of bookings) {
-      if (b.isBooked && b.memberId) map.set(b.memberId, b.seatId);
+      if (b.isBooked && b.memberId) {
+        map.set(b.memberId, { seatId: b.seatId, spaceId: b.spaceId });
+      }
     }
     return map;
   }, [bookings]);
+
+  const seatLabelsByMember = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const [id, v] of seatByMember) map.set(id, v.seatId);
+    return map;
+  }, [seatByMember]);
 
   /** Coffee orders for journal day: memberId -> { qty, allPaid } */
   const coffeeByMember = useMemo(() => {
@@ -243,6 +257,24 @@ export default function JournalClient() {
   }, [dailyProducts, selectedDate]);
 
   const rows = data?.data ?? [];
+
+  // Beep when a present visit has ≤ 5 minutes left (once per journal row)
+  useEffect(() => {
+    const FIVE_MIN = 5 * 60_000;
+    for (const row of rows) {
+      if (!isActiveVisit(row)) continue;
+      const rem = remainingMs(row, now);
+      if (rem == null || rem <= 0 || rem > FIVE_MIN) continue;
+      if (warnedEndingRef.current.has(row.id)) continue;
+      warnedEndingRef.current.add(row.id);
+      void unlockVisitorAudio().then(() => playNotifySound("alert"));
+      const m = memberOf(row);
+      toast.warning(
+        `${m?.firstName || visitorLabel(row)} — moins de 5 min restantes`,
+        { duration: 8000 }
+      );
+    }
+  }, [rows, now]);
 
   const presentMemberIds = useMemo(
     () => rows.filter(isActiveVisit).map((r) => r.memberID || ""),
@@ -468,7 +500,7 @@ export default function JournalClient() {
   });
 
   const exportWhatsApp = async () => {
-    const text = buildDayWhatsAppText(selectedDate, rows, seatByMember);
+    const text = buildDayWhatsAppText(selectedDate, rows, seatLabelsByMember);
     try {
       await navigator.clipboard.writeText(text);
       toast.success("Liste copiée — collez dans WhatsApp");
@@ -481,7 +513,7 @@ export default function JournalClient() {
 
   const exportPrint = () => {
     try {
-      openDayPrintView(selectedDate, rows, seatByMember);
+      openDayPrintView(selectedDate, rows, seatLabelsByMember);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Export impossible");
     }
@@ -633,9 +665,13 @@ export default function JournalClient() {
             open={occupancyOpen}
             onOpenChange={(o) => {
               setOccupancyOpen(o);
-              if (!o) setFocusSeatLabel(null);
+              if (!o) {
+                setFocusSeatLabel(null);
+                setFocusSpaceId(null);
+              }
             }}
             focusSeatLabel={focusSeatLabel}
+            focusSpaceId={focusSpaceId}
           />
           <JournalCommandesRail date={selectedDate} />
           <DropdownMenu>
@@ -945,10 +981,11 @@ export default function JournalClient() {
                   const status = visitStatus(row);
                   const rem = remainingLabel(row);
                   const selected = selectedIds.has(row.id);
-                  const seat =
+                  const seatInfo =
                     (m?.id && seatByMember.get(m.id)) ||
                     (row.memberID && seatByMember.get(row.memberID)) ||
                     null;
+                  const seat = seatInfo?.seatId || null;
                   return (
                     <TableRow
                       key={row.id}
@@ -1055,6 +1092,7 @@ export default function JournalClient() {
                               }
                               if (seat) {
                                 setFocusSeatLabel(seat);
+                                setFocusSpaceId(seatInfo?.spaceId || null);
                                 setOccupancyOpen(true);
                                 return;
                               }

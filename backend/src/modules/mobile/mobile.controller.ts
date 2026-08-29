@@ -52,7 +52,7 @@ export class MobileController {
   }
 
   @Post('auth/pin-login')
-  pinLogin(@Body() body: { phone: string; pin: string }) {
+  pinLogin(@Body() body: { phone: string; pin: string; orgSlug?: string }) {
     return this.mobileService.loginWithPin(body);
   }
 
@@ -63,7 +63,12 @@ export class MobileController {
 
   @Post('auth/magic-consume')
   magicConsume(
-    @Body() body: { token?: string; shortCode?: string; phone?: string },
+    @Body() body: {
+      token?: string;
+      shortCode?: string;
+      phone?: string;
+      orgSlug?: string;
+    },
   ) {
     return this.mobileService.consumeLoginToken(body);
   }
@@ -79,8 +84,9 @@ export class MobileController {
   }
 
   @Get('tarifs')
-  tarifs() {
-    return this.priceService.findAll();
+  tarifs(@Query('org') org?: string) {
+    // Only active tarifs for visitors / check-in pickers
+    return this.priceService.findAll(undefined, { activeOnly: true });
   }
 
   @Get('seat-settings')
@@ -120,8 +126,8 @@ export class MobileController {
   }
 
   @Get('products')
-  products() {
-    return this.mobileService.listProducts();
+  products(@Query('org') org?: string) {
+    return this.mobileService.listProducts(org);
   }
 
   @Post('order')

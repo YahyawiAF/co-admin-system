@@ -49,6 +49,7 @@ export class JournalController {
     @Query('page') page: number,
     @Query('perPage') perPage: number,
     @Query('journalDate') journalDate: string,
+    @Query('organizationId') organizationId?: string,
   ): Promise<PaginatedResult<AddJournalDto>> {
     const date = new Date(journalDate);
 
@@ -61,6 +62,9 @@ export class JournalController {
         gte: startOfTheDay,
         lt: endOfTheDay,
       },
+      ...(organizationId
+        ? { members: { organizationId } }
+        : {}),
     };
     return await this.JournalService.findMany({ perPage, page, where });
   }
@@ -70,9 +74,11 @@ export class JournalController {
   //@UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: JournalEntity, isArray: true })
-  async findAll(): Promise<Array<UpdateJournalDto>> {
-    const journals = await this.JournalService.findAll();
-    return journals.map((journal) => new JournalEntity(journal));
+  async findAll(
+    @Query('organizationId') organizationId?: string,
+  ): Promise<Array<UpdateJournalDto>> {
+    const journals = await this.JournalService.findAll(organizationId);
+    return journals.map((journal) => new JournalEntity(journal as any));
   }
 
   @Get(':id')

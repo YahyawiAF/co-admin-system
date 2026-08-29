@@ -36,6 +36,11 @@ export class MobileRegisterDto {
   })
   @IsBoolean()
   requirePassword: boolean;
+
+  @ApiPropertyOptional({ description: 'Organization slug for tenant isolation' })
+  @IsOptional()
+  @IsString()
+  orgSlug?: string;
 }
 
 export class QuickRegisterDto {
@@ -70,6 +75,11 @@ export class MobileLoginDto {
   @IsOptional()
   @IsString()
   password?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  orgSlug?: string;
 }
 
 export class StartDaySessionDto {

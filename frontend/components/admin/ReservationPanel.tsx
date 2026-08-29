@@ -113,6 +113,7 @@ export function ReservationPanel({ journalDate, onDone }: Props) {
     );
     const ids = new Set(spaces.map((s) => s.id));
     return prices.filter((p) => {
+      if (p.isActive === false) return false;
       if (!isJournalPack(p)) return false;
       const cat = p.category || "JOURNEE";
       if (cat === "ABONNEMENT") return false;

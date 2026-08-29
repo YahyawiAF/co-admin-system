@@ -27,6 +27,45 @@ export class AuthService {
     private mailerService: MailerService,
   ) {}
 
+  private async membershipsForUser(userId: string) {
+    return this.prisma.organizationMembership.findMany({
+      where: { userId },
+      include: {
+        organization: {
+          select: { id: true, name: true, slug: true, isActive: true },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  private async authPayload(user: {
+    id: string;
+    email: string | null;
+    phoneNumber: string | null;
+    fullname: string | null;
+    role: Role;
+  }) {
+    const tokens = await this.getTokens(user.id, user.email, user.role);
+    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    const memberships = await this.membershipsForUser(user.id);
+    return {
+      ...tokens,
+      id: user.id,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      fullname: user.fullname,
+      role: user.role,
+      organizations: memberships.map((m) => ({
+        id: m.organization.id,
+        name: m.organization.name,
+        slug: m.organization.slug,
+        isActive: m.organization.isActive,
+        membershipRole: m.role,
+      })),
+    };
+  }
+
   /**
    * Inscription d'un nouvel utilisateur
    */
@@ -56,6 +95,17 @@ export class AuthService {
       );
     }
 
+    // Public signup cannot self-elevate to platform roles
+    const safeRole =
+      role === Role.SUPER_ADMIN ||
+      role === Role.ORG_ADMIN ||
+      role === Role.FACILITY_ADMIN ||
+      role === Role.ADMIN
+        ? Role.USER
+        : role === Role.USER
+          ? Role.USER
+          : Role.USER;
+
     // Check if identifier already exists
     const existingUser = await this.prisma.user.findFirst({
       where: {
@@ -84,21 +134,11 @@ export class AuthService {
           phoneNumber: !isIdentifierEmail ? cleanIdentifier : null,
           password: hashedPassword,
           fullname: fullname.trim(),
-          role,
+          role: safeRole,
         },
       });
 
-      const tokens = await this.getTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
-
-      return {
-        ...tokens,
-        id: user.id,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        fullname: user.fullname,
-        role: user.role,
-      };
+      return this.authPayload(user) as any;
     } catch (error) {
       this.logger.error(`Signup failed: ${error.message}`);
       throw new InternalServerErrorException(
@@ -150,22 +190,12 @@ export class AuthService {
     }
 
     try {
-      const tokens = await this.getTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
-
+      const payload = await this.authPayload(user);
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { accessToken: tokens.accessToken },
+        data: { accessToken: payload.accessToken },
       });
-
-      return {
-        ...tokens,
-        id: user.id,
-        email: user.email,
-        fullname: user.fullname,
-        phoneNumber: user.phoneNumber,
-        role: user.role,
-      };
+      return payload as any;
     } catch (error) {
       this.logger.error(`Login failed: ${error.message}`);
       throw new InternalServerErrorException(

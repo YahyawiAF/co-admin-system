@@ -387,22 +387,36 @@ export class MobileService {
     );
   }
 
-  private async findMemberByPhone(phone: string) {
+  private async findMemberByPhone(phone: string, organizationId: string) {
     const variants = this.phoneLookupVariants(phone);
     return this.prisma.member.findFirst({
-      where: { phone: { in: variants } },
+      where: {
+        organizationId,
+        phone: { in: variants },
+      },
     });
+  }
+
+  async resolveOrganizationBySlug(orgSlug?: string) {
+    if (!orgSlug) {
+      throw new BadRequestException('Organisation (orgSlug) requise');
+    }
+    const org = await this.prisma.organization.findUnique({
+      where: { slug: orgSlug },
+      include: {
+        facilities: { orderBy: { createdAt: 'asc' }, take: 1 },
+      },
+    });
+    if (!org) throw new NotFoundException('Organisation introuvable');
+    if (!org.isActive) {
+      throw new BadRequestException('Cette organisation est désactivée');
+    }
+    return org;
   }
 
   async resolveFacilityBySlug(orgSlug?: string) {
     if (orgSlug) {
-      const org = await this.prisma.organization.findUnique({
-        where: { slug: orgSlug },
-        include: {
-          facilities: { orderBy: { createdAt: 'asc' }, take: 1 },
-        },
-      });
-      if (!org) throw new NotFoundException('Organisation introuvable');
+      const org = await this.resolveOrganizationBySlug(orgSlug);
       const facility = org.facilities[0];
       if (!facility) {
         throw new NotFoundException('Aucun espace pour cette organisation');
@@ -431,9 +445,9 @@ export class MobileService {
     return `Visite ${dd}/${mm}/${yyyy}`;
   }
 
-  private async nextVisitorNumber(): Promise<number> {
+  private async nextVisitorNumber(organizationId: string): Promise<number> {
     const last = await this.prisma.member.findFirst({
-      where: { visitorNumber: { not: null } },
+      where: { organizationId, visitorNumber: { not: null } },
       orderBy: { visitorNumber: 'desc' },
       select: { visitorNumber: true },
     });
@@ -443,6 +457,7 @@ export class MobileService {
   private async ensureVisitorIdentity(
     member: {
       id: string;
+      organizationId: string;
       firstName: string | null;
       visitorNumber: number | null;
       plan: Subscription | null;
@@ -457,7 +472,9 @@ export class MobileService {
     } = {};
 
     if (member.visitorNumber == null) {
-      updates.visitorNumber = await this.nextVisitorNumber();
+      updates.visitorNumber = await this.nextVisitorNumber(
+        member.organizationId,
+      );
     }
 
     // Non-subscribers keep a "Visite dd/mm/yyyy" label unless they set a real name after subscribe
@@ -481,6 +498,9 @@ export class MobileService {
   }
 
   async register(dto: MobileRegisterDto) {
+    const org = await this.resolveOrganizationBySlug(
+      (dto as { orgSlug?: string }).orgSlug,
+    );
     const phone = this.normalizePhone(dto.phone);
     if (!phone) {
       throw new BadRequestException('Phone number is required');
@@ -491,7 +511,7 @@ export class MobileService {
       );
     }
 
-    const existing = await this.prisma.member.findUnique({ where: { phone } });
+    const existing = await this.findMemberByPhone(phone, org.id);
     if (existing) {
       if (dto.password) {
         if (!existing.passwordHash) {
@@ -530,13 +550,14 @@ export class MobileService {
       ? await bcrypt.hash(dto.password, roundsOfHashing)
       : null;
 
-    const visitorNumber = await this.nextVisitorNumber();
+    const visitorNumber = await this.nextVisitorNumber(org.id);
     const firstName = dto.requirePassword
       ? dto.firstName || null
       : dto.firstName || this.todayVisitLabel();
 
     const member = await this.prisma.member.create({
       data: {
+        organizationId: org.id,
         phone,
         passwordHash,
         firstName,
@@ -556,6 +577,7 @@ export class MobileService {
   }
 
   async quickRegister(dto: QuickRegisterDto) {
+    const org = await this.resolveOrganizationBySlug(dto.orgSlug);
     await this.resolveFacilityBySlug(dto.orgSlug);
     const firstName = (dto.firstName || '').trim();
     const lastName = (dto.lastName || '').trim();
@@ -563,7 +585,7 @@ export class MobileService {
       throw new BadRequestException('Nom et prénom obligatoires');
     }
     const phone = this.parseTunisiaPhone(dto.phone);
-    let member = await this.findMemberByPhone(phone);
+    let member = await this.findMemberByPhone(phone, org.id);
     if (member) {
       member = await this.prisma.member.update({
         where: { id: member.id },
@@ -573,7 +595,7 @@ export class MobileService {
           phone,
           visitorNumber:
             member.visitorNumber == null
-              ? await this.nextVisitorNumber()
+              ? await this.nextVisitorNumber(org.id)
               : undefined,
           isActive: true,
         },
@@ -581,10 +603,11 @@ export class MobileService {
     } else {
       member = await this.prisma.member.create({
         data: {
+          organizationId: org.id,
           phone,
           firstName,
           lastName,
-          visitorNumber: await this.nextVisitorNumber(),
+          visitorNumber: await this.nextVisitorNumber(org.id),
           credits: 0,
           isActive: true,
           plan: Subscription.Journal,
@@ -598,10 +621,10 @@ export class MobileService {
   }
 
   async login(dto: MobileLoginDto) {
+    const orgSlug = (dto as { orgSlug?: string }).orgSlug;
+    const org = await this.resolveOrganizationBySlug(orgSlug);
     const phone = this.normalizePhone(dto.phone);
-    const member =
-      (await this.findMemberByPhone(dto.phone)) ||
-      (await this.prisma.member.findUnique({ where: { phone } }));
+    const member = await this.findMemberByPhone(dto.phone, org.id);
     if (!member) {
       throw new NotFoundException('Member not found');
     }
@@ -696,13 +719,14 @@ export class MobileService {
     return { member: this.sanitizeMember(updated as any), accessToken };
   }
 
-  async loginWithPin(dto: { phone: string; pin: string }) {
+  async loginWithPin(dto: { phone: string; pin: string; orgSlug?: string }) {
     const pin = (dto.pin || '').trim();
     if (!/^\d{4}$/.test(pin)) {
       throw new BadRequestException('Le code PIN doit contenir 4 chiffres');
     }
+    const org = await this.resolveOrganizationBySlug(dto.orgSlug);
     const phone = this.parseTunisiaPhone(dto.phone);
-    const member = await this.findMemberByPhone(phone);
+    const member = await this.findMemberByPhone(phone, org.id);
     if (!member) throw new NotFoundException('Numéro inconnu');
     if (!member.pinHash) {
       throw new BadRequestException(
@@ -744,6 +768,7 @@ export class MobileService {
     token?: string;
     shortCode?: string;
     phone?: string;
+    orgSlug?: string;
   }) {
     const now = new Date();
     let row:
@@ -761,6 +786,12 @@ export class MobileService {
         where: { tokenHash: this.hashToken(dto.token.trim()) },
         include: { member: true },
       });
+      if (dto.orgSlug && row?.member) {
+        const org = await this.resolveOrganizationBySlug(dto.orgSlug);
+        if (row.member.organizationId !== org.id) {
+          throw new UnauthorizedException('Lien invalide pour cette organisation');
+        }
+      }
     } else if (dto.shortCode) {
       const code = dto.shortCode.trim();
       if (!/^\d{6}$/.test(code)) {
@@ -769,8 +800,9 @@ export class MobileService {
       if (!dto.phone) {
         throw new BadRequestException('Téléphone requis avec le code');
       }
+      const org = await this.resolveOrganizationBySlug(dto.orgSlug);
       const phone = this.parseTunisiaPhone(dto.phone);
-      const member = await this.findMemberByPhone(phone);
+      const member = await this.findMemberByPhone(phone, org.id);
       if (!member) throw new NotFoundException('Numéro inconnu');
       row = await this.prisma.memberLoginToken.findFirst({
         where: {
@@ -1238,10 +1270,22 @@ export class MobileService {
     };
   }
 
-  async resumeByPhone(phoneRaw: string) {
+  async resumeByPhone(phoneRaw: string, orgSlug?: string) {
     const phone = this.normalizePhone(phoneRaw || '');
     if (!phone) throw new BadRequestException('Phone is required');
-    const member = await this.prisma.member.findUnique({ where: { phone } });
+    let organizationId: string | undefined;
+    if (orgSlug) {
+      const org = await this.resolveOrganizationBySlug(orgSlug);
+      organizationId = org.id;
+    } else {
+      const org = await this.prisma.organization.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      organizationId = org?.id;
+    }
+    if (!organizationId) throw new NotFoundException('Organisation introuvable');
+    const member = await this.findMemberByPhone(phone, organizationId);
     if (!member) throw new NotFoundException('Member not found');
     const accessToken = await this.signMemberToken(member.id, member.phone);
     const status = await this.getStatus(member.id);
@@ -1500,12 +1544,21 @@ export class MobileService {
       if (!dto.phone) {
         throw new BadRequestException('memberId or phone is required');
       }
+      const facility = await this.prisma.facility.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { organizationId: true },
+      });
+      const organizationId = facility?.organizationId;
+      if (!organizationId) {
+        throw new BadRequestException('Aucune organisation configurée');
+      }
       const phone = this.normalizePhone(dto.phone);
-      let member = await this.prisma.member.findUnique({ where: { phone } });
+      let member = await this.findMemberByPhone(phone, organizationId);
       if (!member) {
-        const visitorNumber = await this.nextVisitorNumber();
+        const visitorNumber = await this.nextVisitorNumber(organizationId);
         member = await this.prisma.member.create({
           data: {
+            organizationId,
             phone,
             firstName: dto.firstName || this.todayVisitLabel(),
             visitorNumber,
@@ -2692,10 +2745,19 @@ export class MobileService {
   }
 
   async listCommunity(excludeMemberId?: string) {
+    let organizationId: string | undefined;
+    if (excludeMemberId) {
+      const self = await this.prisma.member.findUnique({
+        where: { id: excludeMemberId },
+        select: { organizationId: true },
+      });
+      organizationId = self?.organizationId;
+    }
     const members = await this.prisma.member.findMany({
       where: {
         deletedAt: null,
         showInDirectory: true,
+        ...(organizationId ? { organizationId } : {}),
         ...(excludeMemberId ? { id: { not: excludeMemberId } } : {}),
       },
       orderBy: { createdAt: 'desc' },
@@ -2704,8 +2766,14 @@ export class MobileService {
     return members.map((m) => this.sanitizeMember(m as any));
   }
 
-  async listProducts() {
+  async listProducts(orgSlug?: string) {
+    let organizationId: string | undefined;
+    if (orgSlug) {
+      const org = await this.resolveOrganizationBySlug(orgSlug);
+      organizationId = org.id;
+    }
     const products = await this.prisma.product.findMany({
+      where: organizationId ? { organizationId } : undefined,
       orderBy: { name: 'asc' },
     });
     return products.map((p) => ({

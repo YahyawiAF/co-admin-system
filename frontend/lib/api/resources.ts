@@ -1,4 +1,5 @@
 import { http } from "./httpClient";
+import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type {
   Journal,
   Member,
@@ -40,7 +41,8 @@ export type Product = {
   purchasePrice: number;
   sellingPrice: number;
   stock: number;
-  img?: string;
+  img?: string | null;
+  organizationId?: string | null;
 };
 
 export type Expense = {
@@ -97,7 +99,9 @@ export const journalApi = {
       page: String(params.page ?? 1),
       journalDate,
     });
-    return http.get<PaginatedResponse<Journal>>(`/journal?${q}`);
+    return http.get<PaginatedResponse<Journal>>(
+      withOrgQuery(`/journal?${q}`),
+    );
   },
   create(data: Partial<Journal>) {
     return http.post<Journal>("/journal", data);
@@ -121,10 +125,14 @@ export const journalApi = {
 
 export const membersApi = {
   list() {
-    return http.get<Member[]>("/members/all");
+    return http.get<Member[]>(withOrgQuery("/members/all"));
   },
   create(data: Partial<Member> & { password?: string }) {
-    return http.post<Member>("/members", data);
+    return http.post<Member>("/members", {
+      ...data,
+      organizationId:
+        data.organizationId || getAdminOrganizationId() || undefined,
+    });
   },
   update(id: string, data: Partial<Member>) {
     return http.patch<Member>(`/members/${id}`, data);
@@ -139,10 +147,13 @@ export const membersApi = {
 
 export const groupsApi = {
   list() {
-    return http.get<MemberGroup[]>("/groups");
+    return http.get<MemberGroup[]>(withOrgQuery("/groups"));
   },
   create(data: Partial<MemberGroup>) {
-    return http.post<MemberGroup>("/groups", data);
+    return http.post<MemberGroup>("/groups", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
   },
   update(id: string, data: Partial<MemberGroup>) {
     return http.patch<MemberGroup>(`/groups/${id}`, data);
@@ -160,10 +171,13 @@ export const groupsApi = {
 
 export const pricesApi = {
   list() {
-    return http.get<Price[]>("/prices");
+    return http.get<Price[]>(withOrgQuery("/prices"));
   },
   create(data: Partial<Price>) {
-    return http.post<Price>("/prices", data);
+    return http.post<Price>("/prices", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
   },
   update(id: string, data: Partial<Price>) {
     return http.put<Price>(`/prices/${id}`, data);
@@ -372,10 +386,14 @@ export const abonnementsApi = {
 
 export const productsApi = {
   list() {
-    return http.get<Product[]>("/products");
+    return http.get<Product[]>(withOrgQuery("/products"));
   },
   create(data: Partial<Product>) {
-    return http.post<Product>("/products", data);
+    return http.post<Product>("/products", {
+      ...data,
+      organizationId:
+        data.organizationId || getAdminOrganizationId() || undefined,
+    });
   },
   update(id: string, data: Partial<Product>) {
     return http.patch<Product>(`/products/${id}`, data);
@@ -501,14 +519,14 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
-  login(data: { phone: string; password?: string }) {
+  login(data: { phone: string; password?: string; orgSlug?: string }) {
     return http.post<{ member: Member; accessToken: string }>(
       "/mobile/auth/login",
       data,
       { skipAuth: true },
     );
   },
-  pinLogin(data: { phone: string; pin: string }) {
+  pinLogin(data: { phone: string; pin: string; orgSlug: string }) {
     return http.post<{ member: Member; accessToken: string }>(
       "/mobile/auth/pin-login",
       data,
@@ -526,6 +544,7 @@ export const mobileApi = {
     token?: string;
     shortCode?: string;
     phone?: string;
+    orgSlug?: string;
   }) {
     return http.post<{
       member: Member;
@@ -652,7 +671,8 @@ export const mobileApi = {
     const q = memberId ? `?memberId=${memberId}` : "";
     return http.get<Member[]>(`/mobile/community${q}`, { skipAuth: true });
   },
-  products() {
+  products(orgSlug?: string) {
+    const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
     return http.get<
       Array<{
         id: string;
@@ -662,7 +682,7 @@ export const mobileApi = {
         stock: number;
         img?: string | null;
       }>
-    >("/mobile/products", { skipAuth: true });
+    >(`/mobile/products${q}`, { skipAuth: true });
   },
   order(data: { memberId: string; productId: string; quantity?: number }) {
     return http.post<ProductOrder>("/mobile/order", data, { skipAuth: true });
@@ -798,6 +818,9 @@ export const organizationsApi = {
   list() {
     return http.get<Organization[]>("/organizations", { skipAuth: true });
   },
+  listCrm() {
+    return http.get<Organization[]>("/organizations/crm");
+  },
   bySlug(slug: string) {
     return http.get<Organization>(
       `/organizations/${encodeURIComponent(slug)}`,
@@ -824,6 +847,15 @@ export const organizationsApi = {
     }>,
   ) {
     return http.patch<Organization>(`/organizations/${id}`, data);
+  },
+  setActivation(
+    id: string,
+    data: { isActive: boolean; notes?: string | null },
+  ) {
+    return http.patch<Organization>(
+      `/organizations/${id}/activation`,
+      data,
+    );
   },
 };
 

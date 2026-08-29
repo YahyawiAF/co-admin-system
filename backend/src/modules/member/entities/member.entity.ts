@@ -10,6 +10,9 @@ export class MemberEntity implements Member {
   @ApiProperty({ description: 'Unique identifier for the member' })
   id: string;
 
+  @ApiProperty({ description: 'Organization this member belongs to' })
+  organizationId: string;
+
   @ApiProperty({ description: 'Email of the member', required: false })
   email: string | null;
 

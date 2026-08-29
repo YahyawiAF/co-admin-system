@@ -14,8 +14,9 @@ import {
 export class GroupsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list() {
+  list(organizationId?: string) {
     return this.prisma.memberGroup.findMany({
+      where: organizationId ? { organizationId } : undefined,
       include: {
         members: {
           select: {
@@ -52,9 +53,19 @@ export class GroupsService {
     return group;
   }
 
-  create(dto: CreateMemberGroupDto) {
+  async create(dto: CreateMemberGroupDto) {
+    let organizationId = (dto as { organizationId?: string }).organizationId;
+    if (!organizationId) {
+      const org = await this.prisma.organization.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (!org) throw new BadRequestException('Aucune organisation configurée');
+      organizationId = org.id;
+    }
     return this.prisma.memberGroup.create({
       data: {
+        organizationId,
         name: dto.name.trim(),
         maxMembers: dto.maxMembers ?? 15,
         discountForfait: dto.discountForfait ?? 0,

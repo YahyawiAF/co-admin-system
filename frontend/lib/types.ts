@@ -1,4 +1,7 @@
 export enum Role {
+  SUPER_ADMIN = "SUPER_ADMIN",
+  ORG_ADMIN = "ORG_ADMIN",
+  FACILITY_ADMIN = "FACILITY_ADMIN",
   ADMIN = "ADMIN",
   USER = "USER",
 }
@@ -40,10 +43,18 @@ export interface User {
   refreshToken?: string | null;
   role: Role;
   phoneNumber?: string | null;
+  organizations?: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    isActive: boolean;
+    membershipRole: Role;
+  }>;
 }
 
 export interface Member {
   id: string;
+  organizationId?: string;
   email?: string | null;
   firstName?: string | null;
   lastName?: string | null;
@@ -106,6 +117,7 @@ export interface Price {
   reserveSeat?: boolean;
   reserveSeatFromHour?: number | null;
   reserveSeatToHour?: number | null;
+  isActive?: boolean;
 }
 
 export interface Journal {
@@ -469,6 +481,12 @@ export interface Organization {
   logo?: string | null;
   facebookUrl?: string | null;
   instagramUrl?: string | null;
+  isActive?: boolean;
+  activatedAt?: string | null;
+  notes?: string | null;
+  createdAt?: string | null;
+  memberCount?: number;
+  facilityCount?: number;
   facility?: { id: string; name: string; logo?: string | null } | null;
 }
 

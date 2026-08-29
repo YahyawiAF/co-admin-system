@@ -8,6 +8,7 @@ import {
   Delete,
   HttpCode,
   HttpStatus,
+  Query,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -44,8 +45,8 @@ export class ProductsController {
     description: 'List of all products',
     type: [ProductEntity],
   })
-  async findAll() {
-    return this.productsService.findAll();
+  async findAll(@Query('organizationId') organizationId?: string) {
+    return this.productsService.findAll(organizationId);
   }
 
   @Get(':id')

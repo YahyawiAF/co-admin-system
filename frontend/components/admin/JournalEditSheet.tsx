@@ -160,7 +160,7 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
   });
 
   const journalPacks = prices.filter(
-    (p) => isJournalPack(p) || p.id === priceId
+    (p) => (p.isActive !== false && isJournalPack(p)) || p.id === priceId
   );
 
   return (

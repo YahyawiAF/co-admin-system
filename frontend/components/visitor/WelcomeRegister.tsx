@@ -92,7 +92,7 @@ export function WelcomeRegister() {
 
   const pinLogin = useMutation({
     mutationFn: () =>
-      mobileApi.pinLogin({ phone: phone || "", pin: loginPin }),
+      mobileApi.pinLogin({ phone: phone || "", pin: loginPin, orgSlug: slug }),
     onSuccess: (res) => finish(res.member, res.accessToken),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -102,6 +102,7 @@ export function WelcomeRegister() {
       mobileApi.consumeMagicLogin({
         shortCode,
         phone: phone || "",
+        orgSlug: slug,
       }),
     onSuccess: (res) => {
       setDraft({ member: res.member, accessToken: res.accessToken });

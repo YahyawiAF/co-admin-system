@@ -183,6 +183,7 @@ export class PriceService {
     reserveSeat?: boolean;
     reserveSeatFromHour?: number | null;
     reserveSeatToHour?: number | null;
+    isActive?: boolean;
     createdAt: Date;
     updatedAt: Date;
     space?: { id: string; name: string } | null;
@@ -194,6 +195,7 @@ export class PriceService {
       reserveSeat: !!price.reserveSeat,
       reserveSeatFromHour: price.reserveSeatFromHour ?? null,
       reserveSeatToHour: price.reserveSeatToHour ?? null,
+      isActive: price.isActive !== false,
       timePeriod: price.timePeriod as { start: string; end: string },
     });
   }
@@ -212,6 +214,7 @@ export class PriceService {
       reserveSeat,
       reserveSeatFromHour,
       reserveSeatToHour,
+      isActive,
     } = createPriceDto;
 
     if (!name || price === undefined || !timePeriod || !type) {
@@ -231,6 +234,7 @@ export class PriceService {
         durationHours,
         billingUnit,
         periodDays,
+        isActive: isActive !== false,
         reserveSeat: !!reserveSeat,
         reserveSeatFromHour:
           reserveSeat && reserveSeatFromHour != null
@@ -241,6 +245,16 @@ export class PriceService {
             ? Number(reserveSeatToHour)
             : null,
         ...(spaceId ? { space: { connect: { id: spaceId } } } : {}),
+        ...((createPriceDto as { organizationId?: string }).organizationId
+          ? {
+              organization: {
+                connect: {
+                  id: (createPriceDto as { organizationId?: string })
+                    .organizationId!,
+                },
+              },
+            }
+          : {}),
       },
       include: { space: { select: { id: true, name: true } } },
     });
@@ -248,8 +262,15 @@ export class PriceService {
     return this.toEntity(priceEntity);
   }
 
-  async findAll(): Promise<PriceEntity[]> {
+  async findAll(
+    organizationId?: string,
+    opts?: { activeOnly?: boolean },
+  ): Promise<PriceEntity[]> {
     const prices = await this.prisma.price.findMany({
+      where: {
+        ...(organizationId ? { organizationId } : {}),
+        ...(opts?.activeOnly ? { isActive: true } : {}),
+      },
       orderBy: [{ category: 'asc' }, { price: 'asc' }],
       include: { space: { select: { id: true, name: true } } },
     });

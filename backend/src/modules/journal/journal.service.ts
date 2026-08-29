@@ -1,11 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { UpdateJournalDto } from './dtos/updateJournal.dto';
 import { Journal, Prisma, Subscription } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { AddJournalDto } from './dtos/createJournal.dto';
-import { HttpStatus } from '@nestjs/common';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { JournalEntity } from './entities/journal.entity';
 import { endOfDay, startOfDay } from 'date-fns';
@@ -98,8 +97,17 @@ export class JournalService {
     return this.prisma.journal.findMany();
   }
 
-  findAll() {
-    return this.prisma.journal.findMany();
+  findAll(organizationId?: string) {
+    return this.prisma.journal.findMany({
+      where: organizationId
+        ? { members: { organizationId } }
+        : undefined,
+      include: {
+        members: { include: { group: true } },
+        createdBy: true,
+        prices: true,
+      },
+    });
   }
 
   async findMany({
@@ -179,8 +187,45 @@ export class JournalService {
     }
   }
 
-  remove(id: string) {
-    return this.prisma.journal.delete({ where: { id } });
+  async remove(id: string) {
+    const journal = await this.prisma.journal.findUnique({ where: { id } });
+    if (!journal) {
+      throw new GeneralException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        'Journal not found',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (journal.memberID) {
+        await tx.seatBooking.deleteMany({
+          where: {
+            memberId: journal.memberID,
+            isBooked: true,
+            isPermanent: false,
+          },
+        });
+      } else {
+        const anonBookings = await tx.seatBooking.findMany({
+          where: {
+            isBooked: true,
+            isPermanent: false,
+            memberId: null,
+          },
+        });
+        const guest = journal.guestName || '';
+        const ids = anonBookings
+          .filter((b) => guest.includes(b.seatId))
+          .map((b) => b.id);
+        if (ids.length) {
+          await tx.seatBooking.deleteMany({ where: { id: { in: ids } } });
+        }
+      }
+      await tx.journal.delete({ where: { id } });
+    });
+
+    return { id, deleted: true };
   }
 
   /** Attach an existing member to an anonymous (or member-less) journal. */
@@ -255,17 +300,28 @@ export class JournalService {
     }
 
     const phone = data.phone?.replace(/\D/g, '') || null;
+    const org = await this.prisma.organization.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (!org) {
+      throw new BadRequestException('Aucune organisation configurée');
+    }
     let member = phone
-      ? await this.prisma.member.findUnique({ where: { phone } })
+      ? await this.prisma.member.findFirst({
+          where: { organizationId: org.id, phone },
+        })
       : null;
 
     if (!member) {
       const max = await this.prisma.member.aggregate({
+        where: { organizationId: org.id },
         _max: { visitorNumber: true },
       });
       const visitorNumber = (max._max.visitorNumber || 0) + 1;
       member = await this.prisma.member.create({
         data: {
+          organizationId: org.id,
           phone: phone || undefined,
           firstName:
             data.firstName?.trim() ||

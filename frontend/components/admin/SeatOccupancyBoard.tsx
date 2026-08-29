@@ -62,6 +62,8 @@ type Props = {
   onOpenChange?: (open: boolean) => void;
   /** Seat label to select when opening. */
   focusSeatLabel?: string | null;
+  /** Space that owns the focused seat (required when labels collide across spaces). */
+  focusSpaceId?: string | null;
 };
 
 export function SeatOccupancyBoard({
@@ -71,6 +73,7 @@ export function SeatOccupancyBoard({
   open: openProp,
   onOpenChange,
   focusSeatLabel,
+  focusSpaceId,
 }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const controlled = openProp !== undefined;
@@ -189,11 +192,31 @@ export function SeatOccupancyBoard({
   useEffect(() => {
     if (!open || !focusSeatLabel) return;
     setSelectedSeatLabel(focusSeatLabel);
+    if (focusSpaceId && spaces.some((s) => s.id === focusSpaceId)) {
+      setSpaceId(focusSpaceId);
+      return;
+    }
+    // Prefer booking that matches this label + known space; else first booking match
+    const booking =
+      bookings.find(
+        (b) =>
+          b.isBooked &&
+          b.seatId === focusSeatLabel &&
+          (!focusSpaceId || b.spaceId === focusSpaceId)
+      ) ||
+      bookings.find((b) => b.isBooked && b.seatId === focusSeatLabel);
+    if (booking?.spaceId) {
+      setSpaceId(booking.spaceId);
+      return;
+    }
     const meta =
-      [...seatMeta.values()].find((m) => m.seat.label === focusSeatLabel) ||
-      null;
+      [...seatMeta.values()].find(
+        (m) =>
+          m.seat.label === focusSeatLabel &&
+          (!focusSpaceId || m.spaceId === focusSpaceId)
+      ) || null;
     if (meta?.spaceId) setSpaceId(meta.spaceId);
-  }, [open, focusSeatLabel, seatMeta]);
+  }, [open, focusSeatLabel, focusSpaceId, seatMeta, bookings, spaces]);
 
   const rows: OccupancyRow[] = useMemo(() => {
     const list: OccupancyRow[] = [];
@@ -243,33 +266,48 @@ export function SeatOccupancyBoard({
   );
 
   const selectedRow =
-    rows.find((r) => r.seatLabel === selectedSeatLabel) || null;
+    rows.find(
+      (r) =>
+        r.seatLabel === selectedSeatLabel &&
+        (!spaceId || !r.spaceId || r.spaceId === spaceId)
+    ) ||
+    rows.find((r) => r.seatLabel === selectedSeatLabel) ||
+    null;
 
   const selectedSeatId = useMemo(() => {
-    if (!selectedSeatLabel) return null;
-    // Prefer active space, then any space (label unique per facility)
-    const pools = activeSpace
-      ? [activeSpace, ...spaces.filter((s) => s.id !== activeSpace.id)]
-      : spaces;
-    for (const space of pools) {
-      const all = [
-        ...(space.seats || []),
-        ...(space.tables || []).flatMap((t) => t.seats || []),
-      ];
-      const found = all.find((s) => s.label === selectedSeatLabel);
-      if (found) return found.id;
-    }
-    return null;
-  }, [selectedSeatLabel, activeSpace, spaces]);
+    if (!selectedSeatLabel || !activeSpace) return null;
+    const all = [
+      ...(activeSpace.seats || []),
+      ...(activeSpace.tables || []).flatMap((t) => t.seats || []),
+    ];
+    return all.find((s) => s.label === selectedSeatLabel)?.id || null;
+  }, [selectedSeatLabel, activeSpace]);
 
   // Keep map on the space that owns the selected seat
   useEffect(() => {
     if (!selectedSeatLabel) return;
-    const meta = seatMeta.get(selectedSeatLabel);
-    if (meta?.spaceId && meta.spaceId !== spaceId) {
-      setSpaceId(meta.spaceId);
+    if (focusSpaceId && selectedSeatLabel === focusSeatLabel) {
+      if (focusSpaceId !== spaceId) setSpaceId(focusSpaceId);
+      return;
     }
-  }, [selectedSeatLabel, seatMeta, spaceId]);
+    const keyed = spaceId
+      ? seatMeta.get(`${spaceId}:${selectedSeatLabel}`)
+      : null;
+    if (keyed?.spaceId) return;
+    const fromBooking = bookings.find(
+      (b) => b.isBooked && b.seatId === selectedSeatLabel && b.spaceId
+    );
+    if (fromBooking?.spaceId && fromBooking.spaceId !== spaceId) {
+      setSpaceId(fromBooking.spaceId);
+    }
+  }, [
+    selectedSeatLabel,
+    seatMeta,
+    spaceId,
+    bookings,
+    focusSpaceId,
+    focusSeatLabel,
+  ]);
 
   const freeInSpace = useMemo(() => {
     if (!activeSpace) return { free: 0, total: 0 };
@@ -423,7 +461,9 @@ export function SeatOccupancyBoard({
                 spaceRows.map((row, i) => {
                   const price = priceOf(row.journal);
                   const end = expectedEndMs(row.journal);
-                  const selected = selectedSeatLabel === row.seatLabel;
+                  const selected =
+                    selectedSeatLabel === row.seatLabel &&
+                    (!spaceId || !row.spaceId || row.spaceId === spaceId);
                   return (
                     <button
                       key={`${row.seatLabel}-${row.journal.id}`}

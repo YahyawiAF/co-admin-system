@@ -49,8 +49,13 @@ export class MemberController {
   async findMany(
     @Query('page') page: number,
     @Query('perPage') perPage: number,
+    @Query('organizationId') organizationId?: string,
   ): Promise<PaginatedResult<MemberEntity>> {
-    return await this.memberService.findMany({ page, perPage });
+    return await this.memberService.findMany({
+      page,
+      perPage,
+      where: organizationId ? { organizationId } : undefined,
+    });
   }
 
   @Get('all')
@@ -58,8 +63,10 @@ export class MemberController {
   // @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: MemberEntity, isArray: true })
-  async findAll(): Promise<MemberEntity[]> {
-    return await this.memberService.findAll();
+  async findAll(
+    @Query('organizationId') organizationId?: string,
+  ): Promise<MemberEntity[]> {
+    return await this.memberService.findAll(organizationId);
   }
 
   @Get(':id/insights')

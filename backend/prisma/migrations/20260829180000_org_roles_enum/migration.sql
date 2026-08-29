@@ -1,0 +1,4 @@
+-- Must be committed before new Role values are used as defaults
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'SUPER_ADMIN';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'ORG_ADMIN';
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'FACILITY_ADMIN';

@@ -16,9 +16,11 @@ import {
   Coffee,
   LogOut,
   Menu,
+  Globe2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { useAdminOrg } from "@/lib/admin-org-context";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { VisitRequestBell } from "@/components/admin/VisitRequestBell";
@@ -44,10 +46,23 @@ const NAV = [
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { isSuperAdmin } = useAdminOrg();
   const groupsTab = searchParams.get("tab") === "groups";
+  const items = [
+    ...NAV,
+    ...(isSuperAdmin
+      ? [
+          {
+            href: "/platform/organizations",
+            label: "Organisations",
+            icon: Globe2,
+          },
+        ]
+      : []),
+  ];
   return (
     <nav className="flex flex-col gap-1 p-3">
-      {NAV.map((item) => {
+      {items.map((item) => {
         const [path] = item.href.split("?");
         const isGroupsLink = item.href.includes("tab=groups");
         const onMembers =
@@ -81,20 +96,36 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { organization, organizations, organizationId, setOrganizationId } =
+    useAdminOrg();
   const [open, setOpen] = useState(false);
+  const brand = organization?.name || "Co-Admin";
 
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-60 shrink-0 border-r bg-card md:flex md:flex-col">
         <div className="flex h-14 items-center border-b px-4">
-          <span className="text-sm font-bold tracking-wide text-primary">
-            Collabora Hub
+          <span className="truncate text-sm font-bold tracking-wide text-primary">
+            {brand}
           </span>
         </div>
         <div className="flex-1 overflow-y-auto">
           <NavLinks />
         </div>
         <div className="border-t p-3">
+          {organizations.length > 1 ? (
+            <select
+              className="mb-2 w-full rounded-md border bg-background px-2 py-1.5 text-xs"
+              value={organizationId || ""}
+              onChange={(e) => setOrganizationId(e.target.value || null)}
+            >
+              {organizations.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <p className="truncate px-2 text-xs text-muted-foreground">
             {user?.fullname || user?.email}
           </p>
@@ -120,7 +151,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
               <div className="flex h-14 items-center border-b px-4 font-bold text-primary">
-                Collabora Hub
+                {brand}
               </div>
               <NavLinks onNavigate={() => setOpen(false)} />
             </SheetContent>

@@ -6,6 +6,7 @@ import {
   Param,
   Put,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { PriceService } from './price.service';
 import { CreatePriceDto } from './dtos/create-price.dto';
@@ -26,8 +27,13 @@ export class PriceController {
   }
 
   @Get()
-  async findAll() {
-    return this.priceService.findAll();
+  async findAll(
+    @Query('organizationId') organizationId?: string,
+    @Query('activeOnly') activeOnly?: string,
+  ) {
+    return this.priceService.findAll(organizationId, {
+      activeOnly: activeOnly === '1' || activeOnly === 'true',
+    });
   }
 
   @Get(':id')

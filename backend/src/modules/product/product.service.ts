@@ -22,15 +22,26 @@ export class ProductsService {
   }
 
   async create(createProductDto: CreateProductDto): Promise<ProductEntity> {
+    let organizationId = (createProductDto as { organizationId?: string })
+      .organizationId;
+    if (!organizationId) {
+      const org = await this.prisma.organization.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      organizationId = org?.id;
+    }
     const created = await this.prisma.product.create({
-      data: createProductDto,
+      data: { ...createProductDto, organizationId },
     });
     this.emitStock(created);
     return new ProductEntity(created);
   }
 
-  async findAll(): Promise<ProductEntity[]> {
-    const products = await this.prisma.product.findMany();
+  async findAll(organizationId?: string): Promise<ProductEntity[]> {
+    const products = await this.prisma.product.findMany({
+      where: organizationId ? { organizationId } : undefined,
+    });
     return products.map((product) => new ProductEntity(product));
   }
 

@@ -49,8 +49,20 @@ export class MemberService {
       if (addMemberDto.groupId) {
         await this.assertCanJoinGroup(addMemberDto.groupId);
       }
+      let organizationId = (addMemberDto as { organizationId?: string })
+        .organizationId;
+      if (!organizationId) {
+        const org = await this.prisma.organization.findFirst({
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        });
+        if (!org) {
+          throw new BadRequestException('Aucune organisation configurée');
+        }
+        organizationId = org.id;
+      }
       const member = await this.prisma.member.create({
-        data: addMemberDto,
+        data: { ...addMemberDto, organizationId },
         include: { group: true },
       });
       return new MemberEntity(member);
@@ -67,8 +79,9 @@ export class MemberService {
    * Fetch all members.
    * @returns List of members.
    */
-  async findAll(): Promise<MemberEntity[]> {
+  async findAll(organizationId?: string): Promise<MemberEntity[]> {
     const members = await this.prisma.member.findMany({
+      where: organizationId ? { organizationId } : undefined,
       include: { group: true },
       orderBy: { createdAt: 'desc' },
     });

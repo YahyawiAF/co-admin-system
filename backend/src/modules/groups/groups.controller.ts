@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { GroupsService } from './groups.service';
@@ -22,8 +23,8 @@ export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
   @Get()
-  list() {
-    return this.groupsService.list();
+  list(@Query('organizationId') organizationId?: string) {
+    return this.groupsService.list(organizationId);
   }
 
   @Get(':id')

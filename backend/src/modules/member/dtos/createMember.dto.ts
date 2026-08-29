@@ -10,6 +10,11 @@ export class AddMemberDto {
 
   @IsOptional()
   @IsString()
+  @ApiProperty({ description: 'Organization ID', required: false })
+  public organizationId?: string;
+
+  @IsOptional()
+  @IsString()
   @ApiProperty({ description: 'Email of the member', required: false })
   public email?: string;
 

@@ -47,4 +47,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   img?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  organizationId?: string;
 }

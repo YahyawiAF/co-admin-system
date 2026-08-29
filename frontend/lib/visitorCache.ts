@@ -1,4 +1,3 @@
-const LEGACY_CACHE_KEY = "collabora_visitor_cache";
 const ORG_KEY = "visitor_org";
 
 export type VisitorCache = {
@@ -11,9 +10,28 @@ export type VisitorCache = {
   orgSlug?: string;
 };
 
-function cacheKey(org?: string) {
+function requireOrg(org?: string | null): string {
   const slug = org || getActiveOrg();
-  return slug ? `collabora_visitor_cache_${slug}` : LEGACY_CACHE_KEY;
+  if (!slug) {
+    throw new Error("Organization slug required for visitor session");
+  }
+  return slug;
+}
+
+function cacheKey(org: string) {
+  return `collabora_visitor_cache_${org}`;
+}
+
+function sessionMemberKey(org: string) {
+  return `memberId_${org}`;
+}
+
+function sessionTokenKey(org: string) {
+  return `memberToken_${org}`;
+}
+
+function sessionPhoneKey(org: string) {
+  return `memberPhone_${org}`;
 }
 
 function anonKey(org: string) {
@@ -47,28 +65,11 @@ export function ensureAnonId(org: string): string {
 export function loadVisitorCache(org?: string): VisitorCache | null {
   if (typeof window === "undefined") return null;
   try {
-    const key = cacheKey(org);
-    const raw = localStorage.getItem(key);
-    if (raw) return JSON.parse(raw) as VisitorCache;
-    if (org) {
-      const legacy = localStorage.getItem(LEGACY_CACHE_KEY);
-      if (legacy) {
-        const data = JSON.parse(legacy) as VisitorCache;
-        saveVisitorCache(
-          {
-            id: data.memberId,
-            phone: data.phone,
-            firstName: data.firstName,
-            lastName: data.lastName,
-            visitorNumber: data.visitorNumber,
-          },
-          data.accessToken,
-          org
-        );
-        return loadVisitorCache(org);
-      }
-    }
-    return null;
+    const slug = org || getActiveOrg();
+    if (!slug) return null;
+    const raw = localStorage.getItem(cacheKey(slug));
+    if (!raw) return null;
+    return JSON.parse(raw) as VisitorCache;
   } catch {
     return null;
   }
@@ -85,7 +86,7 @@ export function saveVisitorCache(
   accessToken?: string,
   org?: string
 ) {
-  const slug = org || getActiveOrg() || undefined;
+  const slug = requireOrg(org);
   const data: VisitorCache = {
     memberId: member.id,
     phone: member.phone || undefined,
@@ -96,20 +97,30 @@ export function saveVisitorCache(
     orgSlug: slug,
   };
   localStorage.setItem(cacheKey(slug), JSON.stringify(data));
-  sessionStorage.setItem("memberId", member.id);
-  if (accessToken) sessionStorage.setItem("memberToken", accessToken);
-  if (member.phone) sessionStorage.setItem("memberPhone", member.phone);
+  sessionStorage.setItem(sessionMemberKey(slug), member.id);
+  if (accessToken) sessionStorage.setItem(sessionTokenKey(slug), accessToken);
+  if (member.phone) sessionStorage.setItem(sessionPhoneKey(slug), member.phone);
+  // Clear legacy global keys that caused cross-org bleed
+  sessionStorage.removeItem("memberId");
+  sessionStorage.removeItem("memberToken");
+  sessionStorage.removeItem("memberPhone");
+  localStorage.removeItem("collabora_visitor_cache");
 }
 
 export function clearVisitorCache(org?: string) {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(cacheKey(org));
-  localStorage.removeItem(LEGACY_CACHE_KEY);
+  const slug = org || getActiveOrg();
+  if (slug) {
+    localStorage.removeItem(cacheKey(slug));
+    sessionStorage.removeItem(sessionMemberKey(slug));
+    sessionStorage.removeItem(sessionTokenKey(slug));
+    sessionStorage.removeItem(sessionPhoneKey(slug));
+    sessionStorage.removeItem(pendingKey(slug));
+  }
+  localStorage.removeItem("collabora_visitor_cache");
   sessionStorage.removeItem("memberId");
   sessionStorage.removeItem("memberToken");
   sessionStorage.removeItem("memberPhone");
-  const slug = org || getActiveOrg();
-  if (slug) sessionStorage.removeItem(pendingKey(slug));
 }
 
 export type PendingRegister = {

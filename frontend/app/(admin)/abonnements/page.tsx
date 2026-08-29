@@ -172,7 +172,8 @@ function AbonnementsInner() {
     () =>
       prices.filter(
         (p) =>
-          p.category === PriceCategory.ABONNEMENT || p.type === "abonnement",
+          p.isActive !== false &&
+          (p.category === PriceCategory.ABONNEMENT || p.type === "abonnement"),
       ),
     [prices],
   );

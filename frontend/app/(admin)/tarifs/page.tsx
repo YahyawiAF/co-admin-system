@@ -75,6 +75,7 @@ const schema = z.object({
     (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
     z.number().nullable().optional()
   ),
+  isActive: z.boolean().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -112,6 +113,7 @@ function PriceFormDialog({
       reserveSeat: false,
       reserveSeatFromHour: null,
       reserveSeatToHour: null,
+      isActive: true,
     },
   });
 
@@ -132,12 +134,14 @@ function PriceFormDialog({
       reserveSeat: !!price?.reserveSeat,
       reserveSeatFromHour: price?.reserveSeatFromHour ?? null,
       reserveSeatToHour: price?.reserveSeatToHour ?? null,
+      isActive: price?.isActive !== false,
     });
   }, [open, price]);
 
   const billingUnit = form.watch("billingUnit");
   const category = form.watch("category");
   const reserveSeat = form.watch("reserveSeat");
+  const isActive = form.watch("isActive");
 
   const save = useMutation({
     mutationFn: (v: FormValues) => {
@@ -171,6 +175,7 @@ function PriceFormDialog({
           v.category === PriceCategory.ABONNEMENT && v.reserveSeat
             ? v.reserveSeatToHour
             : null,
+        isActive: v.isActive !== false,
         type,
         timePeriod: { start: "0", end: String(v.durationHours || 0) },
       };
@@ -373,6 +378,19 @@ function PriceFormDialog({
               ) : null}
             </div>
           ) : null}
+          <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-3">
+            <div>
+              <Label>Tarif actif</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Inactif = masqué du check-in, mobile et sélecteurs (reste
+                éditable ici).
+              </p>
+            </div>
+            <Switch
+              checked={isActive !== false}
+              onCheckedChange={(v) => form.setValue("isActive", v)}
+            />
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annuler
@@ -432,7 +450,10 @@ export default function TarifsPage() {
   const renderGrid = (list: Price[]) => (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {list.map((p) => (
-        <Card key={p.id}>
+        <Card
+          key={p.id}
+          className={p.isActive === false ? "opacity-60" : undefined}
+        >
           <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
             <CardTitle className="text-base">{p.name}</CardTitle>
             <div className="flex gap-1">
@@ -464,6 +485,9 @@ export default function TarifsPage() {
               {formatTarifPrice(p)}
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
+              <Badge variant={p.isActive === false ? "secondary" : "default"}>
+                {p.isActive === false ? "Inactif" : "Actif"}
+              </Badge>
               {p.billingUnit ? (
                 <Badge variant="secondary">
                   {BILLING_UNIT_LABEL[p.billingUnit] || p.billingUnit}

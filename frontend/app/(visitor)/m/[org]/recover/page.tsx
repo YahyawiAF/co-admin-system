@@ -19,7 +19,7 @@ import {
 function RecoverInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { href } = useOrg();
+  const { href, slug } = useOrg();
   const { confirm } = useVisitorSession();
   const token = searchParams.get("token") || "";
   const [phone, setPhone] = useState<string | undefined>();
@@ -35,7 +35,8 @@ function RecoverInner() {
       token?: string;
       shortCode?: string;
       phone?: string;
-    }) => mobileApi.consumeMagicLogin(body),
+      orgSlug?: string;
+    }) => mobileApi.consumeMagicLogin({ ...body, orgSlug: slug }),
     onSuccess: (res) => {
       setMember(res.member);
       setAccessToken(res.accessToken);

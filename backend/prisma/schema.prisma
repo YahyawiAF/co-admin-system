@@ -22,13 +22,17 @@ model User {
   accessToken        String?
   phoneNumber        String?   @unique
   Journals           Journal[]
+  organizationMemberships OrganizationMembership[]
+  facilityMemberships     FacilityMembership[]
 
   @@map("users")
 }
 
 model Member {
   id            String        @id @default(uuid())
-  email         String?       @unique @db.VarChar(256)
+  organizationId String
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email         String?       @db.VarChar(256)
   firstName     String?       @db.VarChar(56)
   lastName      String?       @db.VarChar(56)
   bio           String?
@@ -40,10 +44,10 @@ model Member {
   deletedAt     DateTime?     @db.Timestamp(6)
   isActive      Boolean       @default(false)
   functionality String?
-  phone         String?       @unique @db.VarChar(32)
+  phone         String?       @db.VarChar(32)
   passwordHash  String?
   pinHash       String?
-  visitorNumber Int?          @unique
+  visitorNumber Int?
   userId        Int?
   groupId       String?
   group         MemberGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
@@ -68,6 +72,9 @@ model Member {
   eventRegistrations     EventRegistration[]
   pushSubscriptions      PushSubscription[]
 
+  @@unique([organizationId, phone])
+  @@unique([organizationId, visitorNumber])
+  @@index([organizationId])
   @@index([groupId])
   @@map("members")
 }
@@ -104,6 +111,8 @@ model PushSubscription {
 
 model MemberGroup {
   id                 String   @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name               String
   maxMembers         Int      @default(15)
   discountForfait    Float    @default(0)
@@ -113,11 +122,14 @@ model MemberGroup {
   updatedAt          DateTime @updatedAt
   members            Member[]
 
+  @@index([organizationId])
   @@map("member_groups")
 }
 
 model Price {
   id             String         @id @default(uuid())
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   price          Float
   type           PriceType
@@ -132,6 +144,7 @@ model Price {
   reserveSeatFromHour Int?
   /// Hour 0-23 when dedicated seat ends (null = all day)
   reserveSeatToHour   Int?
+  isActive       Boolean        @default(true)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   timePeriod     Json
@@ -139,7 +152,9 @@ model Price {
   journals       Journal[]
   visitRequests  VisitRequest[]
 
+  @@index([organizationId])
   @@index([spaceId])
+  @@index([isActive])
   @@map("prices")
 }
 
@@ -204,6 +219,8 @@ model Reservation {
 
 model Product {
   id            String   @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name          String
   description   String?
   purchasePrice Float    @map("prix_achat")
@@ -213,6 +230,8 @@ model Product {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   dailyProducts DailyProduct[]
+
+  @@index([organizationId])
   @@map("products")
 }
 model DailyProduct {
@@ -272,10 +291,49 @@ model Organization {
   logo          String?
   facebookUrl   String?
   instagramUrl  String?
+  isActive      Boolean    @default(true)
+  activatedAt   DateTime?  @default(now())
+  notes         String?
   createdAt     DateTime   @default(now())
   facilities    Facility[]
+  members       Member[]
+  memberGroups  MemberGroup[]
+  products      Product[]
+  prices        Price[]
+  memberships   OrganizationMembership[]
 
   @@map("organizations")
+}
+
+model OrganizationMembership {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           Role     @default(ORG_ADMIN)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("organization_memberships")
+}
+
+model FacilityMembership {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facilityId  String
+  facility    Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  /// Stub for Phase 3 fine-grained permissions
+  permissions String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, facilityId])
+  @@index([facilityId])
+  @@map("facility_memberships")
 }
 
 model Facility {
@@ -296,6 +354,7 @@ model Facility {
   updatedAt      DateTime       @updatedAt
   spaces         Space[]
   events         Event[]
+  memberships    FacilityMembership[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -581,6 +640,9 @@ enum ProductOrderStatus {
 }
 
 enum Role {
+  SUPER_ADMIN
+  ORG_ADMIN
+  FACILITY_ADMIN
   ADMIN
   USER
 }
