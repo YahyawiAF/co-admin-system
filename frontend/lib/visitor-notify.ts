@@ -107,7 +107,6 @@ export function showVisitorNotification(payload: VisitorNotifyPayload) {
       tag: payload.tag || "visitor",
       icon: "/collabora-icon.svg",
       badge: "/collabora-icon.svg",
-      renotify: true,
     });
     n.onclick = () => {
       window.focus();
