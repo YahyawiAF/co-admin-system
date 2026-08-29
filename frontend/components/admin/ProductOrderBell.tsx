@@ -83,8 +83,7 @@ export function ProductOrderBell() {
   });
 
   const cancel = useMutation({
-    mutationFn: (row: { id: string; memberId?: string | null }) =>
-      mobileApi.cancelOrder(row.id, row.memberId || ""),
+    mutationFn: (row: { id: string }) => mobileApi.rejectOrder(row.id),
     onSuccess: () => {
       toast.message("Commande refusée");
       queryClient.invalidateQueries({

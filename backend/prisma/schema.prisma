@@ -64,9 +64,25 @@ model Member {
   openToCollaboration    Boolean   @default(true)
   showInDirectory        Boolean   @default(true)
   eventRegistrations     EventRegistration[]
+  pushSubscriptions      PushSubscription[]
 
   @@index([groupId])
   @@map("members")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([memberId])
+  @@map("push_subscriptions")
 }
 
 model MemberGroup {

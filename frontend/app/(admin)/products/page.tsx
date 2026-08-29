@@ -137,6 +137,17 @@ export default function ProductsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const rejectOrder = useMutation({
+    mutationFn: (id: string) => mobileApi.rejectOrder(id),
+    onSuccess: () => {
+      toast.message("Commande refusée");
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.productOrdersPending,
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -222,13 +233,23 @@ export default function ProductsPage() {
                       {o.quantity}× {o.productName} · {o.amount.toFixed(2)} DT
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    disabled={confirmOrder.isPending}
-                    onClick={() => confirmOrder.mutate(o.id)}
-                  >
-                    Confirmer
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={rejectOrder.isPending}
+                      onClick={() => rejectOrder.mutate(o.id)}
+                    >
+                      Refuser
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={confirmOrder.isPending}
+                      onClick={() => confirmOrder.mutate(o.id)}
+                    >
+                      Confirmer
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

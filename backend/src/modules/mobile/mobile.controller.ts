@@ -143,6 +143,11 @@ export class MobileController {
     return this.mobileService.confirmOrder(id);
   }
 
+  @Patch('admin/orders/:id/reject')
+  rejectOrder(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.rejectOrderAdmin(id);
+  }
+
   @Patch('admin/orders/:id/pay')
   payOrder(
     @Param('id', ParseUUIDPipe) id: string,
@@ -302,5 +307,28 @@ export class MobileController {
   @Patch('staff-messages/:id/read')
   markStaffMessageRead(@Param('id', ParseUUIDPipe) id: string) {
     return this.mobileService.markStaffMessageRead(id);
+  }
+
+  @Get('push/vapid-public-key')
+  vapidPublicKey() {
+    return this.mobileService.getVapidPublicKey();
+  }
+
+  @Post('push/subscribe')
+  pushSubscribe(
+    @Body()
+    body: {
+      memberId: string;
+      endpoint: string;
+      keys: { p256dh: string; auth: string };
+      userAgent?: string;
+    },
+  ) {
+    return this.mobileService.savePushSubscription(body);
+  }
+
+  @Post('push/unsubscribe')
+  pushUnsubscribe(@Body() body: { memberId?: string; endpoint: string }) {
+    return this.mobileService.removePushSubscription(body);
   }
 }

@@ -2,7 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, BellRing, Coffee, Clock, MessageCircle } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  Coffee,
+  Clock,
+  MessageCircle,
+  Share,
+  XCircle,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +25,9 @@ import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import {
   enableVisitorNotifications,
   hasSessionWarned,
+  isIosDevice,
   isNotifyOptIn,
+  isStandalonePwa,
   markSessionWarned,
   showVisitorNotification,
   unlockVisitorAudio,
@@ -46,6 +56,10 @@ type SessionWarn = {
   sessionId: string;
 };
 
+type OrderRefused = {
+  productName: string;
+};
+
 const FIVE_MIN = 5 * 60 * 1000;
 
 export function VisitorAlerts() {
@@ -55,10 +69,12 @@ export function VisitorAlerts() {
   const router = useRouter();
   const [memberId, setMemberId] = useState<string | null>(null);
   const [optIn, setOptIn] = useState(false);
+  const [needInstall, setNeedInstall] = useState(false);
   const [coffee, setCoffee] = useState<CoffeeReady | null>(null);
   const [visit, setVisit] = useState<VisitAlert | null>(null);
   const [inbox, setInbox] = useState<InboxAlert | null>(null);
   const [sessionWarn, setSessionWarn] = useState<SessionWarn | null>(null);
+  const [refused, setRefused] = useState<OrderRefused | null>(null);
   const warnedRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -66,6 +82,7 @@ export function VisitorAlerts() {
       loadVisitorCache()?.memberId || sessionStorage.getItem("memberId")
     );
     setOptIn(isNotifyOptIn());
+    setNeedInstall(isIosDevice() && !isStandalonePwa());
   }, []);
 
   const { data: status } = useQuery({
@@ -75,7 +92,6 @@ export function VisitorAlerts() {
     refetchInterval: 4000,
   });
 
-  // Session ending in < 5 minutes
   useEffect(() => {
     const session = status?.session as
       | {
@@ -118,16 +134,37 @@ export function VisitorAlerts() {
       label?: string;
       quantity?: number;
       orderId?: string;
+      byAdmin?: boolean;
     }) => {
       queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });
 
       const forMe = !payload.memberId || payload.memberId === memberId;
+      if (!forMe) return;
+
+      if (
+        payload.type === "product_order_cancelled" ||
+        payload.status === "CANCELLED"
+      ) {
+        const productName =
+          payload.productName || payload.label || "Votre commande";
+        if (payload.byAdmin) {
+          setRefused({ productName });
+          showVisitorNotification({
+            title: "Commande refusée",
+            body: `${productName} a été annulée par l’accueil.`,
+            tag: `order-cancel-${payload.orderId || "x"}`,
+            sound: "alert",
+          });
+        }
+        return;
+      }
+
       const confirmed =
         payload.type === "product_order_confirmed" ||
         payload.status === "CONFIRMED" ||
         payload.ready === true;
-      if (!forMe || !confirmed) return;
+      if (!confirmed) return;
 
       const productName = payload.productName || payload.label || "Votre commande";
       setCoffee({
@@ -226,8 +263,9 @@ export function VisitorAlerts() {
   }, [socket, memberId, queryClient]);
 
   const onEnable = async () => {
-    const ok = await enableVisitorNotifications();
-    setOptIn(ok || isNotifyOptIn());
+    const res = await enableVisitorNotifications(memberId);
+    setOptIn(res.ok || isNotifyOptIn());
+    setNeedInstall(res.needInstall);
   };
 
   return (
@@ -246,6 +284,18 @@ export function VisitorAlerts() {
             Activer
           </span>
         </button>
+      ) : needInstall ? (
+        <div className="mb-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-950">
+          <p className="flex items-start gap-2 font-medium">
+            <Share className="mt-0.5 h-4 w-4 shrink-0" />
+            iPhone : alertes hors Safari
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
+            Touchez Partager → « Sur l’écran d’accueil », ouvrez l’icône Collabora,
+            puis réactivez les notifications. Sans cette étape, iOS bloque les
+            alertes quand Safari est fermé.
+          </p>
+        </div>
       ) : null}
 
       <Dialog open={!!coffee} onOpenChange={(o) => !o && setCoffee(null)}>
@@ -272,6 +322,26 @@ export function VisitorAlerts() {
               }}
             >
               OK, j’arrive
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!refused} onOpenChange={(o) => !o && setRefused(null)}>
+        <DialogContent className="max-w-[420px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-rose-600" />
+              Commande refusée
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-base leading-relaxed">
+            {refused?.productName} a été annulée par l’accueil. Le stock a été
+            remis.
+          </p>
+          <DialogFooter>
+            <Button className="h-11 w-full" onClick={() => setRefused(null)}>
+              OK
             </Button>
           </DialogFooter>
         </DialogContent>

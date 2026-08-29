@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleDollarSign } from "lucide-react";
+import { Check, CircleDollarSign, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,12 +18,14 @@ function OrderCard({
   tone,
   onPay,
   onConfirm,
+  onReject,
   pending,
 }: {
   order: ProductOrder;
   tone: "unpaid" | "paid";
   onPay: (isPayed: boolean) => void;
   onConfirm?: () => void;
+  onReject?: () => void;
   pending?: boolean;
 }) {
   return (
@@ -60,6 +62,19 @@ function OrderCard({
             >
               <Check className="mr-1 h-3.5 w-3.5" />
               Confirmer
+            </Button>
+          ) : null}
+          {onReject &&
+          (order.status === "PENDING" || order.status === "CONFIRMED") ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive"
+              disabled={pending}
+              onClick={onReject}
+            >
+              <X className="mr-1 h-3.5 w-3.5" />
+              Refuser
             </Button>
           ) : null}
           <Button
@@ -117,6 +132,15 @@ export function CommandesBoard({ dateKey }: { dateKey: string }) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const reject = useMutation({
+    mutationFn: (id: string) => mobileApi.rejectOrder(id),
+    onSuccess: () => {
+      toast.message("Commande refusée / annulée");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     return orders.filter((o) => {
@@ -127,11 +151,11 @@ export function CommandesBoard({ dateKey }: { dateKey: string }) {
     });
   }, [orders, q]);
 
-  const unpaid = filtered.filter((o) => !o.isPayed);
-  const paid = filtered.filter((o) => o.isPayed);
+  const unpaid = filtered.filter((o) => !o.isPayed && o.status !== "CANCELLED");
+  const paid = filtered.filter((o) => o.isPayed && o.status !== "CANCELLED");
   const unpaidTotal = unpaid.reduce((a, o) => a + o.amount, 0);
   const paidTotal = paid.reduce((a, o) => a + o.amount, 0);
-  const pending = pay.isPending || confirm.isPending;
+  const pending = pay.isPending || confirm.isPending || reject.isPending;
 
   return (
     <div className="space-y-4">
@@ -171,6 +195,7 @@ export function CommandesBoard({ dateKey }: { dateKey: string }) {
                         ? () => confirm.mutate(o.id)
                         : undefined
                     }
+                    onReject={() => reject.mutate(o.id)}
                     onPay={(isPayed) => pay.mutate({ id: o.id, isPayed })}
                   />
                 ))
@@ -198,7 +223,8 @@ export function CommandesBoard({ dateKey }: { dateKey: string }) {
                     key={o.id}
                     order={o}
                     tone="paid"
-                    pending={pay.isPending}
+                    pending={pending}
+                    onReject={() => reject.mutate(o.id)}
                     onPay={(isPayed) => pay.mutate({ id: o.id, isPayed })}
                   />
                 ))

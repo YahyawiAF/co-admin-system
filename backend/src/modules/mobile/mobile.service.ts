@@ -33,6 +33,7 @@ import {
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
+import { PushService } from '../push/push.service';
 
 export const roundsOfHashing = 10;
 
@@ -42,6 +43,7 @@ export class MobileService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly eventsGateway: EventsGateway,
+    private readonly pushService: PushService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -352,6 +354,9 @@ export class MobileService {
       isPayed: r.isPayed,
       createdAt: r.createdAt,
       canEdit: r.status === ProductOrderStatus.PENDING,
+      canCancel:
+        r.status === ProductOrderStatus.PENDING ||
+        r.status === ProductOrderStatus.CONFIRMED,
     };
   }
 
@@ -2359,6 +2364,12 @@ export class MobileService {
       requestId: updated.id,
       seatLabel: assignedLabel,
     });
+    void this.pushService.sendToMember(updated.memberId, {
+      title: 'Demande confirmée',
+      body: 'Votre demande a été acceptée par l’accueil.',
+      tag: `visit-ok-${updated.id}`,
+      url: '/m',
+    });
 
     return {
       request: updated,
@@ -2385,6 +2396,12 @@ export class MobileService {
       status: updated.status,
       type: updated.type,
       memberId: updated.memberId,
+    });
+    void this.pushService.sendToMember(updated.memberId, {
+      title: 'Demande refusée',
+      body: 'Votre demande a été refusée par l’accueil.',
+      tag: `visit-no-${updated.id}`,
+      url: '/m',
     });
 
     return updated;
@@ -2679,19 +2696,28 @@ export class MobileService {
     return this.mapOrder(updated);
   }
 
-  async cancelOrder(id: string, memberId: string) {
+  async cancelOrder(
+    id: string,
+    memberId: string,
+    opts?: { byAdmin?: boolean },
+  ) {
     const order = await this.prisma.dailyProduct.findUnique({
       where: { id },
+      include: { product: true },
     });
     if (!order) throw new NotFoundException('Commande introuvable');
-    if (order.memberId !== memberId && order.externalRef !== memberId) {
+    if (
+      !opts?.byAdmin &&
+      order.memberId !== memberId &&
+      order.externalRef !== memberId
+    ) {
       throw new ConflictException('Cette commande ne vous appartient pas');
     }
-    if (order.status !== ProductOrderStatus.PENDING) {
-      throw new BadRequestException(
-        'Commande déjà confirmée — suppression impossible',
-      );
+    if (order.status === ProductOrderStatus.CANCELLED) {
+      throw new BadRequestException('Commande déjà annulée');
     }
+    const targetMemberId =
+      order.memberId || order.externalRef || memberId || null;
     const [updated] = await this.prisma.$transaction([
       this.prisma.dailyProduct.update({
         where: { id },
@@ -2703,10 +2729,20 @@ export class MobileService {
         data: { stock: { increment: order.quantite } },
       }),
     ]);
+    const productName = updated.product?.name || order.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_cancelled',
       orderId: id,
-      memberId,
+      memberId: targetMemberId,
+      status: ProductOrderStatus.CANCELLED,
+      productName,
+      quantity: order.quantite,
+      byAdmin: !!opts?.byAdmin,
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'product_order_cancelled',
+      orderId: id,
+      memberId: targetMemberId,
     });
     const product = await this.prisma.product.findUnique({
       where: { id: order.productId },
@@ -2719,7 +2755,25 @@ export class MobileService {
         stock: product.stock,
       });
     }
+    if (targetMemberId && opts?.byAdmin) {
+      void this.pushService.sendToMember(targetMemberId, {
+        title: 'Commande refusée',
+        body: `${productName} a été refusée / annulée par l’accueil.`,
+        tag: `order-cancel-${id}`,
+        url: '/m',
+      });
+    }
     return this.mapOrder(updated);
+  }
+
+  async rejectOrderAdmin(id: string) {
+    const order = await this.prisma.dailyProduct.findUnique({
+      where: { id },
+    });
+    if (!order) throw new NotFoundException('Commande introuvable');
+    return this.cancelOrder(id, order.memberId || order.externalRef || '', {
+      byAdmin: true,
+    });
   }
 
   async confirmOrder(id: string) {
@@ -2736,20 +2790,30 @@ export class MobileService {
       data: { status: ProductOrderStatus.CONFIRMED },
       include: { product: true, member: true },
     });
+    const memberId = updated.memberId || updated.externalRef;
+    const productName = updated.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_confirmed',
       orderId: id,
-      memberId: updated.memberId || updated.externalRef,
+      memberId,
       status: updated.status,
-      productName: updated.product?.name || 'Commande',
+      productName,
       quantity: updated.quantite,
       ready: true,
     });
     this.eventsGateway.sendTableUpdates({
       type: 'product_order_confirmed',
       orderId: id,
-      memberId: updated.memberId || updated.externalRef,
+      memberId,
     });
+    if (memberId) {
+      void this.pushService.sendToMember(memberId, {
+        title: 'Commande prête ☕',
+        body: `${productName} est prêt·e — venez récupérer à l’accueil.`,
+        tag: `order-ready-${id}`,
+        url: '/m',
+      });
+    }
     return this.mapOrder(updated);
   }
 
@@ -3047,6 +3111,12 @@ export class MobileService {
       fromMemberId: dto.fromMemberId,
       toMemberId: dto.toMemberId,
     });
+    void this.pushService.sendToMember(dto.toMemberId, {
+      title: `Message de ${from.firstName || 'la communauté'}`,
+      body: text.slice(0, 120),
+      tag: `msg-${created.id}`,
+      url: '/m',
+    });
     return created;
   }
 
@@ -3098,6 +3168,12 @@ export class MobileService {
       memberId: dto.memberId,
       messageId: created.id,
     });
+    void this.pushService.sendToMember(dto.memberId, {
+      title: 'Message de l’accueil',
+      body: created.text.slice(0, 120),
+      tag: `staff-${created.id}`,
+      url: '/m',
+    });
     return created;
   }
 
@@ -3110,6 +3186,39 @@ export class MobileService {
       orderBy: { createdAt: 'desc' },
       take: 40,
     });
+  }
+
+  getVapidPublicKey() {
+    return { publicKey: this.pushService.getPublicKey() };
+  }
+
+  async savePushSubscription(dto: {
+    memberId: string;
+    endpoint: string;
+    keys: { p256dh: string; auth: string };
+    userAgent?: string;
+  }) {
+    if (!dto.memberId || !dto.endpoint || !dto.keys?.p256dh || !dto.keys?.auth) {
+      throw new BadRequestException('Abonnement push invalide');
+    }
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    await this.pushService.saveSubscription({
+      memberId: dto.memberId,
+      endpoint: dto.endpoint,
+      p256dh: dto.keys.p256dh,
+      auth: dto.keys.auth,
+      userAgent: dto.userAgent,
+    });
+    return { ok: true };
+  }
+
+  async removePushSubscription(dto: { memberId?: string; endpoint: string }) {
+    if (!dto.endpoint) throw new BadRequestException('Endpoint manquant');
+    await this.pushService.removeSubscription(dto.endpoint, dto.memberId);
+    return { ok: true };
   }
 
   async markStaffMessageRead(id: string) {

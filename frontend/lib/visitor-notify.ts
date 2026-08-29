@@ -3,6 +3,7 @@ const WARNED_KEY = "visitor-session-warned";
 
 let audioCtx: AudioContext | null = null;
 let unlocked = false;
+let audioEl: HTMLAudioElement | null = null;
 
 function getCtx() {
   if (typeof window === "undefined") return null;
@@ -15,19 +16,41 @@ function getCtx() {
   return audioCtx;
 }
 
+/** Short beep as data-URI — more reliable on iOS than oscillators alone. */
+function getAudioEl() {
+  if (typeof window === "undefined") return null;
+  if (!audioEl) {
+    // tiny WAV beep (~0.15s)
+    audioEl = new Audio(
+      "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp2YjHx0cXR8h5Odm5WIenRvdH6JlZ+blYl8dW91fYmUn5uViXx1b3V9iZSfm5WJfHVvdX2JlJ+blYl8dW91fYmUn5uViXx1b3V9iZSfm5WJfHVvdX2JlJ+blYl8dW91fYmUn5uViXx1b3V9iZSfm5WJfHVvdX2JlJ+blYl8dW91fYmUn5uViXx1b3V9iZSfm5WJfHVvdX2JlJ+blYl8dW91fYmUn5uViXx1b3V9iZSfm5WJfHVvdX2JlJ+blYl8"
+    );
+    audioEl.preload = "auto";
+  }
+  return audioEl;
+}
+
 /** Call from a user gesture so iOS/Safari allow later beeps. */
 export async function unlockVisitorAudio() {
   const ctx = getCtx();
-  if (!ctx) return;
+  const el = getAudioEl();
   try {
-    if (ctx.state === "suspended") await ctx.resume();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    gain.gain.value = 0.0001;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.01);
+    if (ctx && ctx.state === "suspended") await ctx.resume();
+    if (el) {
+      el.volume = 0.01;
+      await el.play().catch(() => undefined);
+      el.pause();
+      el.currentTime = 0;
+      el.volume = 1;
+    }
+    if (ctx) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.01);
+    }
     unlocked = true;
   } catch {
     /* ignore */
@@ -35,6 +58,12 @@ export async function unlockVisitorAudio() {
 }
 
 export function playNotifySound(kind: "ready" | "alert" | "message" = "alert") {
+  const el = getAudioEl();
+  if (el) {
+    el.currentTime = 0;
+    void el.play().catch(() => undefined);
+  }
+
   const ctx = getCtx();
   if (!ctx) return;
   void ctx.resume().catch(() => undefined);
@@ -72,17 +101,117 @@ export function setNotifyOptIn(on: boolean) {
   localStorage.setItem(STORAGE_KEY, on ? "1" : "0");
 }
 
-export async function enableVisitorNotifications(): Promise<boolean> {
+export function isIosDevice() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+export function isStandalonePwa() {
+  if (typeof window === "undefined") return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return (
+    nav.standalone === true ||
+    window.matchMedia("(display-mode: standalone)").matches
+  );
+}
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+async function registerServiceWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return null;
+  }
+  try {
+    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+  } catch {
+    return null;
+  }
+}
+
+async function subscribePush(memberId: string): Promise<boolean> {
+  if (!memberId || typeof window === "undefined") return false;
+  if (!("PushManager" in window) || !("serviceWorker" in navigator)) return false;
+
+  const vapid =
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+    (await fetchVapidKey());
+  if (!vapid) return false;
+
+  const reg = await registerServiceWorker();
+  if (!reg) return false;
+  await navigator.serviceWorker.ready;
+
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapid),
+    });
+  }
+
+  const json = sub.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return false;
+
+  const api = process.env.NEXT_PUBLIC_API_URL || "";
+  const res = await fetch(`${api}/mobile/push/subscribe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      memberId,
+      endpoint: json.endpoint,
+      keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      userAgent: navigator.userAgent,
+    }),
+  });
+  return res.ok;
+}
+
+async function fetchVapidKey(): Promise<string | null> {
+  try {
+    const api = process.env.NEXT_PUBLIC_API_URL || "";
+    const res = await fetch(`${api}/mobile/push/vapid-public-key`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { publicKey?: string | null };
+    return data.publicKey || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function enableVisitorNotifications(
+  memberId?: string | null
+): Promise<{ ok: boolean; needInstall: boolean }> {
   await unlockVisitorAudio();
   setNotifyOptIn(true);
-  if (typeof Notification === "undefined") return unlocked;
+
+  const needInstall = isIosDevice() && !isStandalonePwa();
+
+  if (typeof Notification === "undefined") {
+    return { ok: unlocked, needInstall };
+  }
+
   try {
-    if (Notification.permission === "granted") return true;
-    if (Notification.permission === "denied") return unlocked;
-    const p = await Notification.requestPermission();
-    return p === "granted" || unlocked;
+    let permission = Notification.permission;
+    if (permission === "default") {
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== "granted") {
+      return { ok: unlocked, needInstall };
+    }
+    if (memberId) {
+      await subscribePush(memberId);
+    }
+    return { ok: true, needInstall };
   } catch {
-    return unlocked;
+    return { ok: unlocked, needInstall };
   }
 }
 
@@ -94,9 +223,6 @@ export type VisitorNotifyPayload = {
 };
 
 export function showVisitorNotification(payload: VisitorNotifyPayload) {
-  if (!isNotifyOptIn() && typeof Notification !== "undefined") {
-    // Still play sound if previously unlocked; popup only when allowed
-  }
   playNotifySound(payload.sound || "alert");
 
   if (typeof Notification === "undefined") return;

@@ -176,6 +176,7 @@ export interface ProductOrder {
   isPayed: boolean;
   createdAt: string;
   canEdit?: boolean;
+  canCancel?: boolean;
   memberId?: string | null;
   memberName?: string | null;
   visitorNumber?: number | null;

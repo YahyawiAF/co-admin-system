@@ -661,6 +661,9 @@ export const mobileApi = {
   confirmOrder(id: string) {
     return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/confirm`, {});
   },
+  rejectOrder(id: string) {
+    return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/reject`, {});
+  },
   payOrder(id: string, isPayed: boolean) {
     return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/pay`, {
       isPayed,

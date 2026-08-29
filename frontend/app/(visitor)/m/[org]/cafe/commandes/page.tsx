@@ -125,9 +125,11 @@ export default function CafeOrdersPage() {
                     ? "Confirmée"
                     : o.status === "PENDING"
                       ? "En attente"
-                      : o.status}
+                      : o.status === "CANCELLED"
+                        ? "Annulée"
+                        : o.status}
                 </Badge>
-                {o.canEdit || o.status === "PENDING" ? (
+                {o.status === "PENDING" ? (
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
@@ -159,12 +161,27 @@ export default function CafeOrdersPage() {
                       className="h-7 text-destructive"
                       onClick={() => cancelOrder.mutate(o.id)}
                     >
-                      Supprimer
+                      Annuler
+                    </Button>
+                  </div>
+                ) : o.status === "CONFIRMED" || o.canCancel ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">
+                      {o.isPayed ? "Payé" : "À payer le soir"}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-destructive"
+                      disabled={cancelOrder.isPending}
+                      onClick={() => cancelOrder.mutate(o.id)}
+                    >
+                      Annuler
                     </Button>
                   </div>
                 ) : (
                   <span className="text-xs text-slate-400">
-                    {o.isPayed ? "Payé en fin de journée" : "À payer le soir"}
+                    {o.status === "CANCELLED" ? "Annulée" : "—"}
                   </span>
                 )}
               </div>

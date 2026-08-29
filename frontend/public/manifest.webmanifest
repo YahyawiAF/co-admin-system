@@ -3,7 +3,7 @@
   "short_name": "Collabora",
   "description": "Espace visiteur coworking",
   "start_url": "/m",
-  "scope": "/m",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f3f6fb",
