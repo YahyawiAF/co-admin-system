@@ -15,6 +15,7 @@ import { loadVisitorCache } from "@/lib/visitorCache";
 import { mobileApi } from "@/lib/api/resources";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import type { StaffMessage } from "@/lib/types";
+import { showVisitorNotification, unlockVisitorAudio } from "@/lib/visitor-notify";
 
 export function StaffMessageModal() {
   const queryClient = useQueryClient();
@@ -34,7 +35,15 @@ export function StaffMessageModal() {
   });
 
   useEffect(() => {
-    if (!current && unread.length) setCurrent(unread[0]);
+    if (!current && unread.length) {
+      setCurrent(unread[0]);
+      showVisitorNotification({
+        title: "Message de l’accueil",
+        body: unread[0].text,
+        tag: `staff-${unread[0].id}`,
+        sound: "message",
+      });
+    }
   }, [unread, current]);
 
   useEffect(() => {
@@ -75,7 +84,10 @@ export function StaffMessageModal() {
           <Button
             className="h-11 w-full"
             disabled={ack.isPending || !current}
-            onClick={() => ack.mutate()}
+            onClick={() => {
+              void unlockVisitorAudio();
+              ack.mutate();
+            }}
           >
             OK, compris
           </Button>

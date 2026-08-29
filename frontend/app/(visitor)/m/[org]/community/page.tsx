@@ -15,6 +15,7 @@ import { DirectoryCard } from "@/components/visitor/DirectoryCard";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 
 function nameOf(m?: Member | null) {
   return (
@@ -27,12 +28,31 @@ function nameOf(m?: Member | null) {
 function CommunityInner() {
   const queryClient = useQueryClient();
   const { memberId } = useVisitorSession();
+  const { socket } = useRealtime();
   const searchParams = useSearchParams();
   const peerId = searchParams.get("peer");
   const [q, setQ] = useState("");
   const [peer, setPeer] = useState<Member | null>(null);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"inbox" | "people">("inbox");
+
+  useEffect(() => {
+    if (!socket || !memberId) return;
+    const onMsg = (payload: { toMemberId?: string; fromMemberId?: string }) => {
+      if (
+        payload.toMemberId !== memberId &&
+        payload.fromMemberId !== memberId
+      ) {
+        return;
+      }
+      queryClient.invalidateQueries({ queryKey: ["mobile-inbox"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-thread"] });
+    };
+    socket.on("community_message", onMsg);
+    return () => {
+      socket.off("community_message", onMsg);
+    };
+  }, [socket, memberId, queryClient]);
 
   const { data: inbox = [] } = useQuery({
     queryKey: ["mobile-inbox", memberId],

@@ -3,17 +3,30 @@ import { PrismaService } from 'database/prisma.service';
 import { CreateProductDto } from './dtos/createProduct.dto';
 import { ProductEntity } from './entities/product.entitie';
 import { UpdateProductDto } from './dtos/updateProduct';
+import { EventsGateway } from '../webSocket/events.gateway';
 
 @Injectable()
 export class ProductsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private eventsGateway: EventsGateway,
+  ) {}
+
+  private emitStock(product: { id: string; name: string; stock: number }) {
+    this.eventsGateway.sendProductUpdated({
+      type: 'product_updated',
+      productId: product.id,
+      name: product.name,
+      stock: product.stock,
+    });
+  }
 
   async create(createProductDto: CreateProductDto): Promise<ProductEntity> {
-    return new ProductEntity(
-      await this.prisma.product.create({
-        data: createProductDto,
-      }),
-    );
+    const created = await this.prisma.product.create({
+      data: createProductDto,
+    });
+    this.emitStock(created);
+    return new ProductEntity(created);
   }
 
   async findAll(): Promise<ProductEntity[]> {
@@ -33,20 +46,20 @@ export class ProductsService {
     id: string,
     updateProductDto: UpdateProductDto,
   ): Promise<ProductEntity> {
-    return new ProductEntity(
-      await this.prisma.product.update({
-        where: { id },
-        data: updateProductDto,
-      }),
-    );
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data: updateProductDto,
+    });
+    this.emitStock(updated);
+    return new ProductEntity(updated);
   }
 
   async remove(id: string): Promise<ProductEntity> {
-    return new ProductEntity(
-      await this.prisma.product.delete({
-        where: { id },
-      }),
-    );
+    const deleted = await this.prisma.product.delete({
+      where: { id },
+    });
+    this.emitStock({ ...deleted, stock: 0 });
+    return new ProductEntity(deleted);
   }
 
   async createDailyProduct(data: {
@@ -58,7 +71,7 @@ export class ProductsService {
       data: {
         productId: data.productId,
         quantite: data.quantite,
-        date: data.date ? new Date(data.date) : new Date(), // Default to current date if not provided
+        date: data.date ? new Date(data.date) : new Date(),
       },
     });
   }
@@ -67,7 +80,7 @@ export class ProductsService {
     data: {
       productId?: string;
       quantite?: number;
-      date?: string; // Add this field
+      date?: string;
     },
   ) {
     return this.prisma.dailyProduct.update({
@@ -75,7 +88,7 @@ export class ProductsService {
       data: {
         ...(data.productId && { productId: data.productId }),
         ...(data.quantite && { quantite: data.quantite }),
-        ...(data.date && { date: new Date(data.date) }), // Process the date field
+        ...(data.date && { date: new Date(data.date) }),
       },
     });
   }

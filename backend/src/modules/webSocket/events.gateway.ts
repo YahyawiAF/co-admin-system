@@ -47,6 +47,14 @@ export class EventsGateway {
     this.server.sockets.emit('product_order', data);
   }
 
+  sendProductUpdated(data: any) {
+    this.server.sockets.emit('product_updated', data);
+  }
+
+  sendCommunityMessage(data: any) {
+    this.server.sockets.emit('community_message', data);
+  }
+
   sendStaffMessage(data: any) {
     this.server.sockets.emit('staff_message', data);
   }

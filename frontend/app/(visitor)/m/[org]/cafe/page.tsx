@@ -36,20 +36,30 @@ export default function CafePage() {
 
   useEffect(() => {
     if (!socket) return;
-    const refresh = (payload: { memberId?: string; status?: string }) => {
+    const refreshOrders = (payload: { memberId?: string; status?: string }) => {
       if (payload?.memberId && memberId && payload.memberId !== memberId) return;
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });
-                    if (payload?.status === "CONFIRMED") {
+      if (payload?.status === "CONFIRMED") {
         toast.success("Votre commande a été confirmée");
       }
     };
-    socket.on("product_order", refresh);
-    socket.on("product_order_confirmed", refresh);
-    socket.on("table_updates", refresh);
+    const refreshStock = () => {
+      queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
+    };
+    socket.on("product_order", refreshOrders);
+    socket.on("product_order_confirmed", refreshOrders);
+    socket.on("product_updated", refreshStock);
+    socket.on("table_updates", (p: { type?: string }) => {
+      if (p?.type === "product_order" || p?.type === "product_updated") {
+        refreshStock();
+      }
+      refreshOrders(p as { memberId?: string; status?: string });
+    });
     return () => {
-      socket.off("product_order", refresh);
-      socket.off("product_order_confirmed", refresh);
-      socket.off("table_updates", refresh);
+      socket.off("product_order", refreshOrders);
+      socket.off("product_order_confirmed", refreshOrders);
+      socket.off("product_updated", refreshStock);
+      socket.off("table_updates");
     };
   }, [socket, memberId, queryClient]);
 

@@ -16,6 +16,7 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
+import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 
 const FULL_NAV = [
   { path: "", label: "Accueil", icon: Home },
@@ -57,6 +58,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
     >
       <div className="px-4 pb-4 pt-2">
         <MobileHeader />
+        {onboarded ? <VisitorAlerts /> : null}
         {children}
         {onboarded ? <StaffMessageModal /> : null}
       </div>

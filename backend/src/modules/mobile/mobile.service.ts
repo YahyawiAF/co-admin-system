@@ -2610,6 +2610,12 @@ export class MobileService {
       seat,
       forfaitName: session?.prices?.name || null,
     });
+    this.eventsGateway.sendProductUpdated({
+      type: 'product_updated',
+      productId: product.id,
+      name: product.name,
+      stock: product.stock - qty,
+    });
     this.eventsGateway.sendTableUpdates({
       type: 'product_order',
       memberId: dto.memberId,
@@ -2702,6 +2708,17 @@ export class MobileService {
       orderId: id,
       memberId,
     });
+    const product = await this.prisma.product.findUnique({
+      where: { id: order.productId },
+    });
+    if (product) {
+      this.eventsGateway.sendProductUpdated({
+        type: 'product_updated',
+        productId: product.id,
+        name: product.name,
+        stock: product.stock,
+      });
+    }
     return this.mapOrder(updated);
   }
 
@@ -2722,13 +2739,16 @@ export class MobileService {
     this.eventsGateway.sendProductOrder({
       type: 'product_order_confirmed',
       orderId: id,
-      memberId: updated.memberId,
+      memberId: updated.memberId || updated.externalRef,
       status: updated.status,
+      productName: updated.product?.name || 'Commande',
+      quantity: updated.quantite,
+      ready: true,
     });
     this.eventsGateway.sendTableUpdates({
       type: 'product_order_confirmed',
       orderId: id,
-      memberId: updated.memberId,
+      memberId: updated.memberId || updated.externalRef,
     });
     return this.mapOrder(updated);
   }
@@ -3012,6 +3032,15 @@ export class MobileService {
         toMemberId: dto.toMemberId,
         text,
       },
+    });
+    this.eventsGateway.sendCommunityMessage({
+      type: 'community_message',
+      id: created.id,
+      fromMemberId: dto.fromMemberId,
+      toMemberId: dto.toMemberId,
+      text,
+      fromName: from.firstName || 'Membre',
+      createdAt: created.createdAt,
     });
     this.eventsGateway.sendTableUpdates({
       type: 'community_message',

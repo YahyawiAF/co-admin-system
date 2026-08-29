@@ -50,7 +50,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));
     s.on("visit_request", invalidateOps);
-    s.on("visit_request_resolved", invalidateOps);
+    s.on("visit_request_resolved", () => {
+      invalidateOps();
+      queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
+    });
     s.on("visitor_checkout", invalidateOps);
     s.on("table_updates", invalidateOps);
     s.on("payment_updated", invalidateOps);
@@ -58,9 +61,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: queryKeys.productOrdersPending });
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });
       queryClient.invalidateQueries({ queryKey: ["visitor-day"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
     };
     s.on("product_order", invalidateOrders);
     s.on("product_order_confirmed", invalidateOrders);
+    s.on("product_updated", invalidateOrders);
 
     setSocket(s);
     return () => {
