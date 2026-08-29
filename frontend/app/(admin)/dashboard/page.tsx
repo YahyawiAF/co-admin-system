@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { addDays, format, startOfDay } from "date-fns";
@@ -10,6 +10,7 @@ import {
   AlertCircle,
   ArrowRight,
   CalendarClock,
+  QrCode,
 } from "lucide-react";
 import {
   Card,
@@ -22,18 +23,29 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
   journalApi,
   facilityApi,
   abonnementsApi,
   visitRequestsApi,
   caisseApi,
+  organizationsApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { isPendingReservation, memberOf } from "@/lib/journal-utils";
+import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 
 export default function DashboardPage() {
   const today = useMemo(() => new Date(), []);
   const tomorrow = useMemo(() => addDays(startOfDay(new Date()), 1), []);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const { data: journalPage } = useQuery({
     queryKey: queryKeys.journal(today),
@@ -76,6 +88,12 @@ export default function DashboardPage() {
     queryFn: () => facilityApi.occupancy(),
   });
 
+  const { data: organizations = [] } = useQuery({
+    queryKey: ["organizations"],
+    queryFn: () => organizationsApi.list(),
+    enabled: qrOpen,
+  });
+
   const rows = journalPage?.data ?? [];
   const tomorrowReservations = (tomorrowJournal?.data ?? []).filter(
     isPendingReservation
@@ -108,18 +126,54 @@ export default function DashboardPage() {
             {format(today, "EEEE d MMMM yyyy")}
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/finance">
-            Finance / Caisse
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
-        <Button asChild>
-          <Link href="/journal">
-            Check-in rapide
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/finance">
+              Finance / Caisse
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+          <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <QrCode className="mr-2 h-4 w-4" />
+                QR visiteur
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>QR visiteur</DialogTitle>
+                <DialogDescription>
+                  Chaque organisation a son propre lien mobile (/m/slug).
+                  Téléchargez ou copiez le QR pour l&apos;accueil.
+                </DialogDescription>
+              </DialogHeader>
+              {organizations.length ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {organizations.map((org) => (
+                    <VisitorQrCard
+                      key={org.id}
+                      orgSlug={org.slug}
+                      orgName={org.name}
+                      size="md"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aucune organisation. Créez-en une dans Facility → Profil &amp;
+                  QR.
+                </p>
+              )}
+            </DialogContent>
+          </Dialog>
+          <Button asChild>
+            <Link href="/journal">
+              Check-in rapide
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {finance ? (

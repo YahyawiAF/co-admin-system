@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { mobileApi } from "@/lib/api/resources";
 import { loadVisitorCache } from "@/lib/visitorCache";
 import { useOrg } from "@/lib/org";
+import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 
 export default function SubscriptionPage() {
   const { href } = useOrg();
@@ -42,6 +43,7 @@ export default function SubscriptionPage() {
   if (!sub) {
     return (
       <div>
+        <MobileBackHome />
         <h1 className="text-2xl font-bold">Abonnement</h1>
         <p className="mb-4 mt-2 text-slate-500">Aucun abonnement actif.</p>
         <Button asChild>
@@ -57,6 +59,9 @@ export default function SubscriptionPage() {
 
   return (
     <div className="text-center">
+      <div className="mb-2 text-left">
+        <MobileBackHome />
+      </div>
       <p className="text-xs uppercase text-slate-500">Abonnement actif</p>
       <h1 className="mt-1 text-2xl font-bold">
         {sub.price?.name || "Formule"}

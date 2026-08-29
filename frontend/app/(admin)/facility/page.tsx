@@ -35,6 +35,7 @@ import { BOOKING_EVENT_KEY } from "@/lib/facility-spaces";
 import { layoutSeatsOnTable, SEAT_LAYOUT_OPTIONS, type SeatLayoutMode } from "@/lib/seat-layout";
 import { FloorPlanCanvas, type EditTool, FIXTURE_OPTIONS } from "@/components/admin/FloorPlanCanvas";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
 import { PRICE_CATEGORY_LABEL } from "@/lib/tarif-labels";
 import { isActiveVisit } from "@/lib/journal-utils";
@@ -670,14 +671,10 @@ export default function FacilityPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const appUrl =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001";
   const orgSlug =
     organizations.find((o) => o.facility?.id === facility?.id)?.slug ||
     organizations[0]?.slug ||
-    "collabora-hub";
+    "";
 
   const bookingForSeat = (label: string) =>
     bookings.find(
@@ -2130,14 +2127,22 @@ export default function FacilityPage() {
               <CardTitle className="text-base">QR visiteur</CardTitle>
             </CardHeader>
             <CardContent>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                alt="QR"
-                className="h-40 w-40 rounded-lg border bg-white p-2"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-                  `${appUrl}/m/${orgSlug}`
-                )}`}
-              />
+              {orgSlug ? (
+                <VisitorQrCard
+                  orgSlug={orgSlug}
+                  orgName={
+                    organizations.find((o) => o.slug === orgSlug)?.name ||
+                    orgDraft.name ||
+                    null
+                  }
+                  size="md"
+                  className="max-w-sm"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Créez ou liez une organisation pour générer le QR.
+                </p>
+              )}
             </CardContent>
           </Card>
 

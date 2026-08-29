@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { mobileApi } from "@/lib/api/resources";
 import { PriceCategory } from "@/lib/types";
+import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 
 export default function MobileTarifsPage() {
   const { data: tarifs = [] } = useQuery({
@@ -28,6 +29,7 @@ export default function MobileTarifsPage() {
 
   return (
     <div>
+      <MobileBackHome />
       <h1 className="mb-2 text-2xl font-bold">Tarifs</h1>
       <p className="mb-4 text-sm text-slate-500">
         En cas de dépassement, le prix du forfait reste affiché ; l&apos;accueil

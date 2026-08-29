@@ -16,6 +16,7 @@ import { PriceCategory, PriceType } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 
 function ChooseInner() {
   const router = useRouter();
@@ -185,6 +186,9 @@ function ChooseInner() {
   if (mode === "day" && status?.session && !status.pendingRequest) {
     return (
       <div className="space-y-3 text-center">
+        <div className="text-left">
+          <MobileBackHome />
+        </div>
         <Alert>
           <AlertDescription>
             Vous avez déjà une session en cours.
@@ -205,6 +209,9 @@ function ChooseInner() {
         ?.dailyCreditRemainingHours;
     return (
       <div className="space-y-3 text-center">
+        <div className="text-left">
+          <MobileBackHome />
+        </div>
         <Alert>
           <AlertDescription>
             {subKind === "HOURS_POOL"
@@ -224,7 +231,10 @@ function ChooseInner() {
   if (pendingId || status?.pendingRequest) {
     const rejected = pendingRequest?.status === "REJECTED";
     return (
-      <div className="py-10 text-center">
+      <div className="py-4 text-center">
+        <div className="mb-4 text-left">
+          <MobileBackHome />
+        </div>
         {rejected ? (
           <>
             <Alert variant="destructive" className="mb-4 text-left">
@@ -265,6 +275,7 @@ function ChooseInner() {
 
   return (
     <div>
+      <MobileBackHome />
       <h1 className="text-2xl font-bold">
         {mode === "subscription" ? "Abonnement" : "Forfait"}
       </h1>
