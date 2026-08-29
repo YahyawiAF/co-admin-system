@@ -43,6 +43,12 @@ export class MemberEntity implements Member {
   })
   passwordHash: string | null;
 
+  @ApiProperty({
+    description: 'PIN hash for visitor mobile auth',
+    required: false,
+  })
+  pinHash: string | null;
+
   @ApiProperty({ description: 'Admin-only visitor number', required: false })
   visitorNumber: number | null;
 

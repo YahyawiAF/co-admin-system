@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash, randomBytes } from 'crypto';
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import {
   BadRequestException,
@@ -636,6 +636,7 @@ export class MobileService {
     isActive: boolean;
     visitorNumber?: number | null;
     passwordHash?: string | null;
+    pinHash?: string | null;
     bio?: string | null;
     functionality?: string | null;
     avatarUrl?: string | null;
@@ -656,6 +657,7 @@ export class MobileService {
       visitorNumber: member.visitorNumber ?? null,
       isSubscribed:
         member.plan === Subscription.Membership || !!member.passwordHash,
+      hasPin: !!member.pinHash,
       bio: member.bio || null,
       functionality: member.functionality || null,
       avatarUrl: member.avatarUrl || null,
@@ -665,6 +667,142 @@ export class MobileService {
       linkedinUrl: member.linkedinUrl || null,
       openToCollaboration: !!member.openToCollaboration,
       showInDirectory: !!member.showInDirectory,
+    };
+  }
+
+  private hashToken(raw: string) {
+    return createHash('sha256').update(raw).digest('hex');
+  }
+
+  private makeShortCode() {
+    return String(Math.floor(100000 + Math.random() * 900000));
+  }
+
+  async setPin(dto: { memberId: string; pin: string }) {
+    const pin = (dto.pin || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+      throw new BadRequestException('Le code PIN doit contenir 4 chiffres');
+    }
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const pinHash = await bcrypt.hash(pin, roundsOfHashing);
+    const updated = await this.prisma.member.update({
+      where: { id: member.id },
+      data: { pinHash },
+    });
+    const accessToken = await this.signMemberToken(updated.id, updated.phone);
+    return { member: this.sanitizeMember(updated as any), accessToken };
+  }
+
+  async loginWithPin(dto: { phone: string; pin: string }) {
+    const pin = (dto.pin || '').trim();
+    if (!/^\d{4}$/.test(pin)) {
+      throw new BadRequestException('Le code PIN doit contenir 4 chiffres');
+    }
+    const phone = this.parseTunisiaPhone(dto.phone);
+    const member = await this.findMemberByPhone(phone);
+    if (!member) throw new NotFoundException('Numéro inconnu');
+    if (!member.pinHash) {
+      throw new BadRequestException(
+        'Aucun code PIN défini — utilisez un lien de récupération à l’accueil',
+      );
+    }
+    const ok = await bcrypt.compare(pin, member.pinHash);
+    if (!ok) throw new UnauthorizedException('PIN incorrect');
+    const accessToken = await this.signMemberToken(member.id, member.phone);
+    return { member: this.sanitizeMember(member as any), accessToken };
+  }
+
+  async createLoginToken(memberId: string, opts?: { hours?: number }) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const rawToken = randomBytes(32).toString('hex');
+    const shortCode = this.makeShortCode();
+    const hours = opts?.hours ?? 48;
+    const expiresAt = addHours(new Date(), hours);
+    await this.prisma.memberLoginToken.create({
+      data: {
+        memberId,
+        tokenHash: this.hashToken(rawToken),
+        shortCode,
+        expiresAt,
+      },
+    });
+    return {
+      token: rawToken,
+      shortCode,
+      expiresAt,
+      member: this.sanitizeMember(member as any),
+    };
+  }
+
+  async consumeLoginToken(dto: {
+    token?: string;
+    shortCode?: string;
+    phone?: string;
+  }) {
+    const now = new Date();
+    let row:
+      | {
+          id: string;
+          memberId: string;
+          expiresAt: Date;
+          usedAt: Date | null;
+          member: any;
+        }
+      | null = null;
+
+    if (dto.token) {
+      row = await this.prisma.memberLoginToken.findUnique({
+        where: { tokenHash: this.hashToken(dto.token.trim()) },
+        include: { member: true },
+      });
+    } else if (dto.shortCode) {
+      const code = dto.shortCode.trim();
+      if (!/^\d{6}$/.test(code)) {
+        throw new BadRequestException('Code à 6 chiffres invalide');
+      }
+      if (!dto.phone) {
+        throw new BadRequestException('Téléphone requis avec le code');
+      }
+      const phone = this.parseTunisiaPhone(dto.phone);
+      const member = await this.findMemberByPhone(phone);
+      if (!member) throw new NotFoundException('Numéro inconnu');
+      row = await this.prisma.memberLoginToken.findFirst({
+        where: {
+          memberId: member.id,
+          shortCode: code,
+          usedAt: null,
+          expiresAt: { gt: now },
+        },
+        include: { member: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      throw new BadRequestException('Token ou code requis');
+    }
+
+    if (!row) throw new UnauthorizedException('Lien ou code invalide');
+    if (row.usedAt) throw new BadRequestException('Lien déjà utilisé');
+    if (row.expiresAt.getTime() < now.getTime()) {
+      throw new BadRequestException('Lien expiré');
+    }
+    await this.prisma.memberLoginToken.update({
+      where: { id: row.id },
+      data: { usedAt: now },
+    });
+    const accessToken = await this.signMemberToken(
+      row.member.id,
+      row.member.phone,
+    );
+    return {
+      member: this.sanitizeMember(row.member as any),
+      accessToken,
+      needsPin: !row.member.pinHash,
     };
   }
 

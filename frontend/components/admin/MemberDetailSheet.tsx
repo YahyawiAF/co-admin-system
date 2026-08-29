@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Send } from "lucide-react";
+import { Copy, KeyRound, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -14,11 +14,14 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
-import { membersApi, mobileApi } from "@/lib/api/resources";
+import { visitorMobileUrl } from "@/components/admin/VisitorQrCard";
+import { membersApi, mobileApi, organizationsApi } from "@/lib/api/resources";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -63,6 +66,292 @@ function StaffAdminThread({ memberId }: { memberId: string }) {
   );
 }
 
+function MemberAdminPin({
+  memberId,
+  hasPin: initialHasPin,
+}: {
+  memberId: string;
+  hasPin: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const [pin, setPin] = useState("");
+  const [pin2, setPin2] = useState("");
+  const [hasPin, setHasPin] = useState(initialHasPin);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    setHasPin(initialHasPin);
+    setPin("");
+    setPin2("");
+    setOpen(false);
+  }, [memberId, initialHasPin]);
+
+  const save = useMutation({
+    mutationFn: () => mobileApi.setPin({ memberId, pin }),
+    onSuccess: () => {
+      setHasPin(true);
+      setPin("");
+      setPin2("");
+      setOpen(false);
+      toast.success(hasPin ? "PIN mis à jour" : "PIN défini pour le visiteur");
+      void queryClient.invalidateQueries({
+        queryKey: ["member-insights", memberId],
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const pinOk = /^\d{4}$/.test(pin) && pin === pin2;
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-medium">Code PIN mobile</p>
+          <p className="text-xs text-muted-foreground">
+            {hasPin
+              ? "Le visiteur a déjà un PIN — vous pouvez le réinitialiser."
+              : "Aucun PIN — définissez-en un pour qu’il se connecte."}
+          </p>
+        </div>
+        <Badge variant={hasPin ? "default" : "secondary"}>
+          {hasPin ? "PIN OK" : "Sans PIN"}
+        </Badge>
+      </div>
+      {!open ? (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => setOpen(true)}
+        >
+          <KeyRound className="mr-2 h-4 w-4" />
+          {hasPin ? "Réinitialiser le PIN" : "Définir un PIN"}
+        </Button>
+      ) : (
+        <div className="space-y-2">
+          <div>
+            <Label className="text-xs">Nouveau PIN (4 chiffres)</Label>
+            <Input
+              className="mt-1 h-10 text-center text-lg tracking-[0.35em]"
+              inputMode="numeric"
+              maxLength={4}
+              value={pin}
+              onChange={(e) =>
+                setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+              }
+              placeholder="••••"
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Confirmer</Label>
+            <Input
+              className="mt-1 h-10 text-center text-lg tracking-[0.35em]"
+              inputMode="numeric"
+              maxLength={4}
+              value={pin2}
+              onChange={(e) =>
+                setPin2(e.target.value.replace(/\D/g, "").slice(0, 4))
+              }
+              placeholder="••••"
+            />
+          </div>
+          {pin2 && pin !== pin2 ? (
+            <p className="text-xs text-destructive">Les codes ne correspondent pas</p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="flex-1"
+              disabled={!pinOk || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              Enregistrer
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false);
+                setPin("");
+                setPin2("");
+              }}
+            >
+              Annuler
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemberLoginRecovery({
+  memberId,
+  memberName,
+  phone,
+}: {
+  memberId: string;
+  memberName: string;
+  phone?: string | null;
+}) {
+  const { data: organizations = [] } = useQuery({
+    queryKey: ["organizations"],
+    queryFn: () => organizationsApi.list(),
+  });
+  const orgSlug = organizations[0]?.slug || "collabora-hub";
+  const [issued, setIssued] = useState<{
+    token: string;
+    shortCode: string;
+    expiresAt: string;
+  } | null>(null);
+
+  useEffect(() => {
+    setIssued(null);
+  }, [memberId]);
+
+  const create = useMutation({
+    mutationFn: () => mobileApi.createMemberLoginToken(memberId),
+    onSuccess: (res) => {
+      setIssued({
+        token: res.token,
+        shortCode: res.shortCode,
+        expiresAt: String(res.expiresAt),
+      });
+      toast.success("Lien de récupération créé");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const magicUrl = useMemo(() => {
+    if (!issued) return "";
+    return `${visitorMobileUrl(orgSlug)}/recover?token=${issued.token}`;
+  }, [issued, orgSlug]);
+
+  const qrSrc = useMemo(() => {
+    if (!magicUrl) return "";
+    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
+      magicUrl
+    )}`;
+  }, [magicUrl]);
+
+  const waText = useMemo(() => {
+    if (!issued) return "";
+    const lines = [
+      `Bonjour ${memberName},`,
+      ``,
+      `Voici votre accès Collabora :`,
+      `Lien : ${magicUrl}`,
+      ``,
+      `Ou dans l'icône Collabora : code ${issued.shortCode}`,
+      phone ? `avec votre téléphone ${phone}` : "",
+      ``,
+      `Valable 48 h.`,
+    ].filter(Boolean);
+    return lines.join("\n");
+  }, [issued, magicUrl, memberName, phone]);
+
+  const copy = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copié`);
+    } catch {
+      toast.error("Impossible de copier");
+    }
+  };
+
+  return (
+    <div className="space-y-3 rounded-lg border p-3">
+      <div className="flex items-start gap-2">
+        <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
+        <div>
+          <p className="text-sm font-medium">Récupération mobile</p>
+          <p className="text-xs text-muted-foreground">
+            Lien WhatsApp + QR + code 6 chiffres pour l&apos;icône Accueil.
+          </p>
+        </div>
+      </div>
+      <Button
+        type="button"
+        className="w-full"
+        disabled={create.isPending}
+        onClick={() => create.mutate()}
+      >
+        {issued ? "Générer un nouveau lien" : "Générer lien / code"}
+      </Button>
+      {issued ? (
+        <div className="space-y-3">
+          <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
+            <p className="text-[10px] uppercase text-muted-foreground">
+              Code (icône Collabora)
+            </p>
+            <p className="font-mono text-3xl font-bold tracking-[0.25em]">
+              {issued.shortCode}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Expire{" "}
+              {format(new Date(issued.expiresAt), "dd MMM HH:mm", {
+                locale: fr,
+              })}
+            </p>
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt="QR récupération"
+            className="mx-auto rounded-lg border bg-white p-2"
+            width={160}
+            height={160}
+            src={qrSrc}
+          />
+          <p className="break-all font-mono text-[10px] text-muted-foreground">
+            {magicUrl}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => copy(magicUrl, "Lien")}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Lien
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => copy(issued.shortCode, "Code")}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Code
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => copy(waText, "Message WhatsApp")}
+            >
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              WhatsApp
+            </Button>
+            {phone ? (
+              <Button type="button" size="sm" asChild>
+                <a
+                  href={`https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(waText)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ouvrir WhatsApp
+                </a>
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   member: Member | null;
   open: boolean;
@@ -100,6 +389,10 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     [m?.firstName, m?.lastName].filter(Boolean).join(" ") ||
     m?.firstName ||
     "Visiteur";
+  const hasPin = !!(
+    m?.hasPin ||
+    (data?.member as Member & { pinHash?: string | null })?.pinHash
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -125,6 +418,17 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                 ) : null}
               </div>
             </div>
+
+            {member?.id ? (
+              <>
+                <MemberAdminPin memberId={member.id} hasPin={hasPin} />
+                <MemberLoginRecovery
+                  memberId={member.id}
+                  memberName={name}
+                  phone={m.phone}
+                />
+              </>
+            ) : null}
 
             {isLoading ? (
               <p className="text-sm text-muted-foreground">Chargement…</p>

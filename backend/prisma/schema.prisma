@@ -42,6 +42,7 @@ model Member {
   functionality String?
   phone         String?       @unique @db.VarChar(32)
   passwordHash  String?
+  pinHash       String?
   visitorNumber Int?          @unique
   userId        Int?
   groupId       String?
@@ -58,6 +59,7 @@ model Member {
   sentMessages     CommunityMessage[] @relation("MessageFrom")
   receivedMessages CommunityMessage[] @relation("MessageTo")
   staffMessages    StaffMessage[]
+  loginTokens      MemberLoginToken[]
   skills                 String[]  @default([])
   services               String[]  @default([])
   linkedinUrl            String?
@@ -68,6 +70,21 @@ model Member {
 
   @@index([groupId])
   @@map("members")
+}
+
+model MemberLoginToken {
+  id        String    @id @default(uuid())
+  memberId  String
+  member    Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  shortCode String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([memberId, shortCode])
+  @@index([expiresAt])
+  @@map("member_login_tokens")
 }
 
 model PushSubscription {

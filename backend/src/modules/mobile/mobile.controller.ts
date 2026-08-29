@@ -51,6 +51,28 @@ export class MobileController {
     return this.mobileService.login(dto);
   }
 
+  @Post('auth/pin-login')
+  pinLogin(@Body() body: { phone: string; pin: string }) {
+    return this.mobileService.loginWithPin(body);
+  }
+
+  @Post('auth/set-pin')
+  setPin(@Body() body: { memberId: string; pin: string }) {
+    return this.mobileService.setPin(body);
+  }
+
+  @Post('auth/magic-consume')
+  magicConsume(
+    @Body() body: { token?: string; shortCode?: string; phone?: string },
+  ) {
+    return this.mobileService.consumeLoginToken(body);
+  }
+
+  @Post('admin/members/:id/login-token')
+  createLoginToken(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.createLoginToken(id);
+  }
+
   @Post('auth/quick-register')
   quickRegister(@Body() dto: QuickRegisterDto) {
     return this.mobileService.quickRegister(dto);

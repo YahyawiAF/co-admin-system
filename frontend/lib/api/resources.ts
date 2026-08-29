@@ -508,6 +508,39 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
+  pinLogin(data: { phone: string; pin: string }) {
+    return http.post<{ member: Member; accessToken: string }>(
+      "/mobile/auth/pin-login",
+      data,
+      { skipAuth: true },
+    );
+  },
+  setPin(data: { memberId: string; pin: string }) {
+    return http.post<{ member: Member; accessToken: string }>(
+      "/mobile/auth/set-pin",
+      data,
+      { skipAuth: true },
+    );
+  },
+  consumeMagicLogin(data: {
+    token?: string;
+    shortCode?: string;
+    phone?: string;
+  }) {
+    return http.post<{
+      member: Member;
+      accessToken: string;
+      needsPin?: boolean;
+    }>("/mobile/auth/magic-consume", data, { skipAuth: true });
+  },
+  createMemberLoginToken(memberId: string) {
+    return http.post<{
+      token: string;
+      shortCode: string;
+      expiresAt: string;
+      member: Member;
+    }>(`/mobile/admin/members/${memberId}/login-token`, {});
+  },
   status(memberId: string) {
     return http.get<{
       session:

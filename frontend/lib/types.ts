@@ -57,6 +57,7 @@ export interface Member {
   functionality?: string | null;
   avatarUrl?: string | null;
   isSubscribed?: boolean;
+  hasPin?: boolean;
   createdAt?: string;
   updatedAt?: string;
   groupId?: string | null;

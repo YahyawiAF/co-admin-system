@@ -17,6 +17,7 @@ import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
+import { PinSetupGate } from "@/components/visitor/PinSetupGate";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 
 const FULL_NAV = [
@@ -43,7 +44,11 @@ export function MobileShell({ children }: { children: ReactNode }) {
   const base = `/m/${orgSlug}`;
   const rest = pathname === base ? "" : pathname.slice(base.length);
   const allowed =
-    rest === "" || rest === "/" || rest.startsWith("/profile");
+    rest === "" ||
+    rest === "/" ||
+    rest.startsWith("/profile") ||
+    rest.startsWith("/recover") ||
+    rest.startsWith("/signup");
 
   useEffect(() => {
     if (!ready || onboarded || allowed) return;
@@ -61,6 +66,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
         <MobileHeader />
         <OfflineBanner />
         {onboarded ? <VisitorAlerts /> : null}
+        {onboarded ? <PinSetupGate /> : null}
         {children}
         {onboarded ? <StaffMessageModal /> : null}
       </div>

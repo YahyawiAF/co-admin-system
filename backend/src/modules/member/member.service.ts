@@ -276,7 +276,12 @@ export class MemberService {
     }).reverse();
 
     return {
-      member: new MemberEntity(member),
+      member: {
+        ...new MemberEntity(member),
+        hasPin: !!member.pinHash,
+        passwordHash: undefined,
+        pinHash: undefined,
+      },
       totals: {
         visits: journals.length,
         hours: Math.round(visitHours * 10) / 10,
