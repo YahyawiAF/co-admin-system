@@ -65,9 +65,17 @@ const schema = z.object({
     z.number().nullable().optional()
   ),
   periodDays: z.coerce.number().optional().nullable(),
-      spaceId: z.string().optional(),
-      reserveSeat: z.boolean().optional(),
-    });
+  spaceId: z.string().optional(),
+  reserveSeat: z.boolean().optional(),
+  reserveSeatFromHour: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
+    z.number().nullable().optional()
+  ),
+  reserveSeatToHour: z.preprocess(
+    (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
+    z.number().nullable().optional()
+  ),
+});
 
 type FormValues = z.infer<typeof schema>;
 
@@ -102,6 +110,8 @@ function PriceFormDialog({
       periodDays: 7,
       spaceId: "",
       reserveSeat: false,
+      reserveSeatFromHour: null,
+      reserveSeatToHour: null,
     },
   });
 
@@ -120,11 +130,14 @@ function PriceFormDialog({
       periodDays: price?.periodDays ?? 7,
       spaceId: price?.spaceId || "",
       reserveSeat: !!price?.reserveSeat,
+      reserveSeatFromHour: price?.reserveSeatFromHour ?? null,
+      reserveSeatToHour: price?.reserveSeatToHour ?? null,
     });
   }, [open, price]);
 
   const billingUnit = form.watch("billingUnit");
   const category = form.watch("category");
+  const reserveSeat = form.watch("reserveSeat");
 
   const save = useMutation({
     mutationFn: (v: FormValues) => {
@@ -138,18 +151,26 @@ function PriceFormDialog({
         category: v.category,
         billingUnit: v.billingUnit,
         durationHours:
-          v.billingUnit === BillingUnit.PERIOD
-            ? null
-            : v.billingUnit === BillingUnit.HOURLY &&
-                v.category !== PriceCategory.ABONNEMENT &&
-                !v.durationHours
+          v.category === PriceCategory.ABONNEMENT
+            ? v.durationHours
+            : v.billingUnit === BillingUnit.PERIOD
               ? null
-              : v.durationHours,
+              : v.billingUnit === BillingUnit.HOURLY && !v.durationHours
+                ? null
+                : v.durationHours,
         periodDays:
           v.billingUnit === BillingUnit.PERIOD ? v.periodDays : null,
         spaceId: v.spaceId || "",
         reserveSeat:
           v.category === PriceCategory.ABONNEMENT ? !!v.reserveSeat : false,
+        reserveSeatFromHour:
+          v.category === PriceCategory.ABONNEMENT && v.reserveSeat
+            ? v.reserveSeatFromHour
+            : null,
+        reserveSeatToHour:
+          v.category === PriceCategory.ABONNEMENT && v.reserveSeat
+            ? v.reserveSeatToHour
+            : null,
         type,
         timePeriod: { start: "0", end: String(v.durationHours || 0) },
       };
@@ -223,11 +244,30 @@ function PriceFormDialog({
           </div>
           {billingUnit === BillingUnit.PERIOD ? (
             <div className="space-y-2">
-              <Label>Jours</Label>
+              <Label>Jours (validité)</Label>
               <Input type="number" {...form.register("periodDays")} />
+              <p className="text-xs text-muted-foreground">
+                Ex. 30 = 1 mois. Pour une journée complète tous les jours du
+                mois : catégorie Abonnement, facturation Période, 30 jours,
+                durée 12 h.
+              </p>
             </div>
-          ) : billingUnit === BillingUnit.HOURLY &&
-            category !== PriceCategory.ABONNEMENT ? (
+          ) : null}
+          {category === PriceCategory.ABONNEMENT ? (
+            <div className="space-y-2">
+              <Label>
+                {billingUnit === BillingUnit.HOURLY
+                  ? "Quota d'heures (total)"
+                  : "Crédit heures / jour (6 = demi-journée, 12 = journée)"}
+              </Label>
+              <Input
+                type="number"
+                step="0.5"
+                placeholder="6 ou 12"
+                {...form.register("durationHours")}
+              />
+            </div>
+          ) : billingUnit === BillingUnit.HOURLY ? (
             <div className="space-y-2">
               <Label>Limite (heures) — optionnel</Label>
               <Input
@@ -236,21 +276,17 @@ function PriceFormDialog({
                 placeholder="Vide = compteur ouvert"
                 {...form.register("durationHours")}
               />
-              <p className="text-xs text-muted-foreground">
-                Laissez vide pour facturer le temps réel à la sortie (ex. 1,5 h
-                × tarif). Une limite fixe le forfait minimum.
-              </p>
             </div>
-          ) : (
+          ) : billingUnit !== BillingUnit.PERIOD ? (
             <div className="space-y-2">
-              <Label>
-                {billingUnit === BillingUnit.HOURLY
-                  ? "Quota d'heures"
-                  : "Durée (heures)"}
-              </Label>
-              <Input type="number" step="0.5" {...form.register("durationHours")} />
+              <Label>Durée (heures)</Label>
+              <Input
+                type="number"
+                step="0.5"
+                {...form.register("durationHours")}
+              />
             </div>
-          )}
+          ) : null}
           <div className="space-y-2">
             <Label>
               {billingUnit === BillingUnit.HOURLY &&
@@ -292,18 +328,49 @@ function PriceFormDialog({
             </p>
           </div>
           {category === PriceCategory.ABONNEMENT ? (
-            <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2">
-              <div>
-                <Label>Réserver une place dédiée</Label>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  La place reste attribuée pendant l’abonnement actif, puis
-                  se libère automatiquement à la fin.
-                </p>
+            <div className="space-y-3 rounded-lg border px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label>Privilège place dédiée</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Si activé : place réservée (à assigner à la création
+                    d&apos;abonnement). Sinon : place assignée à chaque scan
+                    comme un visiteur.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!reserveSeat}
+                  onCheckedChange={(v) => form.setValue("reserveSeat", v)}
+                />
               </div>
-              <Switch
-                checked={!!form.watch("reserveSeat")}
-                onCheckedChange={(v) => form.setValue("reserveSeat", v)}
-              />
+              {reserveSeat ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Réservée de (heure)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={23}
+                      placeholder="Vide = toute la journée"
+                      {...form.register("reserveSeatFromHour")}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Jusqu&apos;à (heure)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={23}
+                      placeholder="Ex. 9 pour 4h→9h"
+                      {...form.register("reserveSeatToHour")}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground sm:col-span-2">
+                    Ex. 4 et 9 = place bloquée de 4h à 9h. Laissez vide pour
+                    toute la journée pendant l&apos;abonnement.
+                  </p>
+                </div>
+              ) : null}
             </div>
           ) : null}
           <DialogFooter>

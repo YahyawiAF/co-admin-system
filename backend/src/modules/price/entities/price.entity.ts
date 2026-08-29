@@ -55,4 +55,10 @@ export class PriceEntity {
 
   @ApiPropertyOptional()
   reserveSeat?: boolean;
+
+  @ApiPropertyOptional()
+  reserveSeatFromHour?: number | null;
+
+  @ApiPropertyOptional()
+  reserveSeatToHour?: number | null;
 }

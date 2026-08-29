@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { mobileApi } from "@/lib/api/resources";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
+import { formatDurationHm } from "@/lib/journal-utils";
 import type {
   Journal,
   MobileSeatMode,
@@ -15,7 +16,7 @@ import type {
   SeatAssignmentInfo,
 } from "@/lib/types";
 
-function formatMs(ms: number) {
+function formatClock(ms: number) {
   const abs = Math.abs(ms);
   const totalSec = Math.floor(abs / 1000);
   const h = Math.floor(totalSec / 3600);
@@ -23,14 +24,6 @@ function formatMs(ms: number) {
   const s = totalSec % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-
-function formatHours(h: number) {
-  const whole = Math.floor(h);
-  const mins = Math.round((h - whole) * 60);
-  if (whole <= 0) return `${mins} min`;
-  if (mins <= 0) return `${whole} h`;
-  return `${whole} h ${mins} min`;
 }
 
 export type ActiveSession = Journal & {
@@ -71,8 +64,7 @@ export function ActiveSessionPanel({
     return () => clearInterval(t);
   }, []);
 
-  const subKind =
-    session.subscriptionKind || subscriptionKind || null;
+  const subKind = session.subscriptionKind || subscriptionKind || null;
   const isHoursPool = subKind === "HOURS_POOL";
   const seat = session.seat || seatProp || null;
   const seatMode = (seatSettings?.mobileSeatMode || null) as MobileSeatMode | null;
@@ -115,6 +107,7 @@ export function ActiveSessionPanel({
   const overtime = remainingMs !== null && remainingMs < 0;
   const covered = session.coveredBySubscription || hasActiveSubscription;
   const amount = covered ? 0 : session.amountDue ?? session.payedAmount ?? 0;
+  const forfaitName = session.prices?.name || session.price?.name || "Forfait";
 
   const checkout = useMutation({
     mutationFn: () => mobileApi.checkout(session.id),
@@ -128,12 +121,10 @@ export function ActiveSessionPanel({
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
         Session en cours
       </p>
-      <h2 className="mt-1 text-lg font-bold">
-        {session.prices?.name || session.price?.name || "Forfait"}
-      </h2>
+      <h2 className="mt-1 text-lg font-bold">{forfaitName}</h2>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         {covered ? (
-          <Badge>Abonnement</Badge>
+          <Badge>Abonnement actif</Badge>
         ) : (
           <Badge variant={session.isPayed ? "default" : "secondary"}>
             {session.isPayed ? "Payé" : "Non payé"}
@@ -148,45 +139,7 @@ export function ActiveSessionPanel({
         {isHoursPool ? <Badge variant="outline">Heures</Badge> : null}
       </div>
 
-      {seatLabel ? (
-        <div className="mt-4 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            Votre place
-          </p>
-          <p className="mt-1 font-semibold">
-            {[seat?.spaceName, seat?.tableName, seatLabel]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-          {seat?.isOverflow ? (
-            <Badge className="mt-2" variant="outline">
-              Overflow
-            </Badge>
-          ) : null}
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-slate-500">
-          {canPickSeat
-            ? "Choisissez votre place sur le plan ci-dessous."
-            : isHoursPool
-              ? "L’accueil vous attribue une place."
-              : subKind === "SEMI_DAY" || subKind === "FULL_DAY"
-                ? "Votre place d’abonnement est réservée."
-                : "Aucune place assignée pour l’instant."}
-        </p>
-      )}
-
-      {seatLabel || canPickSeat || seatMode === "ADMIN_ASSIGN" ? (
-        <div className="mt-4 text-left">
-          <VisitorSeatMap
-            memberId={memberId}
-            assignedSeatLabel={seatLabel}
-            seatMode={seatMode}
-            canPick={canPickSeat}
-          />
-        </div>
-      ) : null}
-
+      {/* Timer + forfait on top */}
       {isHoursPool ? (
         <>
           <div className="my-4 rounded-2xl border bg-slate-50 px-4 py-5">
@@ -194,9 +147,11 @@ export function ActiveSessionPanel({
               Temps de cette session
             </p>
             <div className="mt-2 font-mono text-4xl font-bold tabular-nums text-primary">
-              {elapsedMs != null ? formatMs(elapsedMs) : "—"}
+              {elapsedMs != null ? formatClock(elapsedMs) : "—"}
             </div>
-            <p className="mt-1 text-sm text-slate-500">Chronomètre</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {elapsedMs != null ? formatDurationHm(elapsedMs) : "Chronomètre"}
+            </p>
           </div>
           <div className="mb-4 rounded-2xl border bg-slate-50 px-4 py-5">
             <p className="text-xs uppercase tracking-wide text-slate-500">
@@ -210,15 +165,23 @@ export function ActiveSessionPanel({
               {remainingMs === null
                 ? "—"
                 : overtime
-                  ? `+${formatMs(remainingMs)}`
-                  : formatMs(remainingMs)}
+                  ? `+${formatClock(remainingMs)}`
+                  : formatClock(remainingMs)}
             </div>
+            <p className="mt-1 text-sm text-slate-500">
+              {remainingMs == null
+                ? null
+                : overtime
+                  ? `Dépassement ${formatDurationHm(remainingMs, { signed: true })}`
+                  : `Reste ${formatDurationHm(remainingMs)}`}
+            </p>
             {session.hoursQuota != null ? (
               <div className="mt-4 space-y-2 text-left">
                 <Progress value={poolProgress ?? 0} className="h-2" />
                 <p className="text-xs text-slate-500">
-                  {formatHours(
-                    (session.hoursUsed ?? 0) + (elapsedMs ?? 0) / 3600_000
+                  {formatDurationHm(
+                    ((session.hoursUsed ?? 0) + (elapsedMs ?? 0) / 3600_000) *
+                      3600_000
                   )}{" "}
                   consommées / {session.hoursQuota} h au total
                 </p>
@@ -236,11 +199,15 @@ export function ActiveSessionPanel({
             {remainingMs === null
               ? "—"
               : overtime
-                ? `+${formatMs(remainingMs)}`
-                : formatMs(remainingMs)}
+                ? `+${formatClock(remainingMs)}`
+                : formatClock(remainingMs)}
           </div>
           <p className="mt-2 text-slate-500">
-            {overtime ? "Temps dépassé" : "Temps restant"}
+            {overtime
+              ? `Temps dépassé · ${formatDurationHm(remainingMs!, { signed: true })}`
+              : remainingMs != null
+                ? `Temps restant · ${formatDurationHm(remainingMs)}`
+                : "Temps restant"}
           </p>
         </div>
       )}
@@ -265,6 +232,46 @@ export function ActiveSessionPanel({
           Couvert par votre abonnement actif
         </p>
       )}
+
+      {seatLabel ? (
+        <div className="mb-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Votre place
+          </p>
+          <p className="mt-1 font-semibold">
+            {[seat?.spaceName, seat?.tableName, seatLabel]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          {seat?.isOverflow ? (
+            <Badge className="mt-2" variant="outline">
+              Overflow
+            </Badge>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mb-3 text-sm text-slate-500">
+          {canPickSeat
+            ? "Choisissez votre place sur le plan ci-dessous."
+            : isHoursPool
+              ? "L’accueil vous attribue une place."
+              : subKind === "SEMI_DAY" || subKind === "FULL_DAY"
+                ? "Votre place d’abonnement est réservée."
+                : "Aucune place assignée pour l’instant."}
+        </p>
+      )}
+
+      {seatLabel || canPickSeat || seatMode === "ADMIN_ASSIGN" ? (
+        <div className="mb-4 text-left">
+          <VisitorSeatMap
+            memberId={memberId}
+            assignedSeatLabel={seatLabel}
+            assignedSpaceId={seat?.spaceId}
+            seatMode={seatMode}
+            canPick={canPickSeat}
+          />
+        </div>
+      ) : null}
 
       {checkout.isError ? (
         <Alert variant="destructive" className="mb-3 text-left">

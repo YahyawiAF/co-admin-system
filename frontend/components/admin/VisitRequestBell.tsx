@@ -388,13 +388,14 @@ export function VisitRequestBell() {
                     </span>
                   ) : null}
                 </p>
-                <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
+                <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20 p-1">
                   {activeSpace ? (
                     <FloorPlanCanvas
                       space={activeSpace}
                       bookings={bookings}
                       editMode={false}
                       variant="picker"
+                      className="h-full min-h-[min(50vh,480px)]"
                       selectedSeatId={selectedSeatId}
                       onSelectSeat={pickSeat}
                     />

@@ -522,6 +522,7 @@ export const mobileApi = {
       hasActiveSubscription: boolean;
       canChooseForfait?: boolean;
       mustScanToEnter?: boolean;
+      dailyCreditRemainingHours?: number | null;
       pendingRequest: VisitRequest | null;
       hasOpenSession: boolean;
       seat?: SeatAssignmentInfo | null;

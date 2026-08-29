@@ -7,7 +7,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   addDays,
   format,
-  formatDistanceStrict,
   isSameDay,
   parseISO,
   startOfDay,
@@ -101,6 +100,7 @@ import {
   memberOf,
   priceOf,
   remainingMs,
+  formatDurationHm,
   visitAmountDue,
   visitStatus,
   visitorLabel,
@@ -548,30 +548,15 @@ export default function JournalClient() {
   });
 
   const durationLabel = (row: Journal) => {
-    const start = new Date(row.registredTime);
-    const end = row.leaveTime ? new Date(row.leaveTime) : new Date(now);
-    try {
-      return formatDistanceStrict(start, end, { locale: fr });
-    } catch {
-      return "—";
-    }
+    const start = new Date(row.registredTime).getTime();
+    const end = row.leaveTime ? new Date(row.leaveTime).getTime() : now;
+    return formatDurationHm(end - start);
   };
 
   const remainingLabel = (row: Journal) => {
     const rem = remainingMs(row, now);
     if (rem == null) return null;
-    if (rem < 0) {
-      try {
-        return `+${formatDistanceStrict(0, Math.abs(rem), { locale: fr })}`;
-      } catch {
-        return "dépassé";
-      }
-    }
-    try {
-      return formatDistanceStrict(0, rem, { locale: fr });
-    } catch {
-      return null;
-    }
+    return formatDurationHm(rem, { signed: true });
   };
 
   const quickChips: {
@@ -1002,6 +987,12 @@ export default function JournalClient() {
                           <div>
                             <div className="flex flex-wrap items-center gap-1.5 font-medium">
                               {visitorLabel(row)}
+                              {p?.category === "ABONNEMENT" ||
+                              p?.type === "abonnement" ? (
+                                <Badge className="h-5 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                  Abonné
+                                </Badge>
+                              ) : null}
                               {groupOf(row)?.name ? (
                                 <Badge variant="outline" className="h-5 text-[10px]">
                                   {groupOf(row)!.name}

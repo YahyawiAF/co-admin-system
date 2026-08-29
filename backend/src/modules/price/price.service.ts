@@ -181,6 +181,8 @@ export class PriceService {
     periodDays: number | null;
     spaceId?: string | null;
     reserveSeat?: boolean;
+    reserveSeatFromHour?: number | null;
+    reserveSeatToHour?: number | null;
     createdAt: Date;
     updatedAt: Date;
     space?: { id: string; name: string } | null;
@@ -190,6 +192,8 @@ export class PriceService {
       spaceId: price.spaceId ?? null,
       spaceName: price.space?.name ?? null,
       reserveSeat: !!price.reserveSeat,
+      reserveSeatFromHour: price.reserveSeatFromHour ?? null,
+      reserveSeatToHour: price.reserveSeatToHour ?? null,
       timePeriod: price.timePeriod as { start: string; end: string },
     });
   }
@@ -206,6 +210,8 @@ export class PriceService {
       periodDays,
       spaceId,
       reserveSeat,
+      reserveSeatFromHour,
+      reserveSeatToHour,
     } = createPriceDto;
 
     if (!name || price === undefined || !timePeriod || !type) {
@@ -226,6 +232,14 @@ export class PriceService {
         billingUnit,
         periodDays,
         reserveSeat: !!reserveSeat,
+        reserveSeatFromHour:
+          reserveSeat && reserveSeatFromHour != null
+            ? Number(reserveSeatFromHour)
+            : null,
+        reserveSeatToHour:
+          reserveSeat && reserveSeatToHour != null
+            ? Number(reserveSeatToHour)
+            : null,
         ...(spaceId ? { space: { connect: { id: spaceId } } } : {}),
       },
       include: { space: { select: { id: true, name: true } } },

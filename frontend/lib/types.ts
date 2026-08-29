@@ -103,6 +103,8 @@ export interface Price {
   spaceId?: string | null;
   spaceName?: string | null;
   reserveSeat?: boolean;
+  reserveSeatFromHour?: number | null;
+  reserveSeatToHour?: number | null;
 }
 
 export interface Journal {
@@ -138,6 +140,7 @@ export type SeatAssignmentInfo = {
   seatLabel: string;
   tableName?: string | null;
   spaceName?: string | null;
+  spaceId?: string | null;
   isOverflow?: boolean;
 };
 

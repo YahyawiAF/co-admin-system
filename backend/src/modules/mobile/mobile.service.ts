@@ -53,6 +53,67 @@ export class MobileService {
     return kind === 'SEMI_DAY' || kind === 'FULL_DAY';
   }
 
+  private periodDailyQuotaHours(price: {
+    durationHours?: number | null;
+  }, kind: 'SEMI_DAY' | 'FULL_DAY') {
+    if (price.durationHours && price.durationHours > 0) {
+      return price.durationHours;
+    }
+    return kind === 'SEMI_DAY' ? 6 : 12;
+  }
+
+  /** Hours already consumed today from subscription sessions (open + closed). */
+  private async dailySubscriptionUsedHours(
+    memberId: string,
+    priceId: string,
+    now = new Date(),
+  ) {
+    const rows = await this.prisma.journal.findMany({
+      where: {
+        memberID: memberId,
+        priceId,
+        registredTime: {
+          gte: startOfDay(now),
+          lt: endOfDay(now),
+        },
+      },
+      select: { registredTime: true, leaveTime: true },
+    });
+    let hours = 0;
+    for (const row of rows) {
+      const end = row.leaveTime ? new Date(row.leaveTime).getTime() : now.getTime();
+      const start = new Date(row.registredTime).getTime();
+      hours += Math.max(0, (end - start) / 3600_000);
+    }
+    return hours;
+  }
+
+  private priceHasSeatPrivilege(price: {
+    reserveSeat?: boolean | null;
+  } | null | undefined) {
+    return !!price?.reserveSeat;
+  }
+
+  /** Dedicated desk held now (all day or within hour window). */
+  private seatPrivilegeActiveNow(
+    price: {
+      reserveSeat?: boolean | null;
+      reserveSeatFromHour?: number | null;
+      reserveSeatToHour?: number | null;
+    } | null | undefined,
+    now = new Date(),
+  ) {
+    if (!this.priceHasSeatPrivilege(price)) return false;
+    const from = price?.reserveSeatFromHour;
+    const to = price?.reserveSeatToHour;
+    if (from == null || to == null) return true;
+    const h = now.getHours() + now.getMinutes() / 60;
+    if (from === to) return true;
+    if (from < to) return h >= from && h < to;
+    // overnight window e.g. 22 → 6
+    return h >= from || h < to;
+  }
+
   private async releaseStaleBookings() {
     await this.prisma.seatBooking.deleteMany({
       where: {
@@ -76,9 +137,8 @@ export class MobileService {
       }
       const kind = sub.price ? this.subscriptionKind(sub.price) : null;
       const keepDedicated =
-        !!sub.reservedSeatLabel ||
-        !!(sub.price as { reserveSeat?: boolean } | null)?.reserveSeat ||
-        this.isPeriodKind(kind);
+        !!sub.reservedSeatLabel &&
+        this.seatPrivilegeActiveNow(sub.price as any);
       if (!keepDedicated) {
         await this.prisma.seatBooking.delete({ where: { id: booking.id } });
         continue;
@@ -478,6 +538,8 @@ export class MobileService {
         visitorNumber,
         credits: 0,
         isActive: true,
+        openToCollaboration: true,
+        showInDirectory: true,
         plan: dto.requirePassword
           ? Subscription.Membership
           : Subscription.Journal,
@@ -521,6 +583,8 @@ export class MobileService {
           credits: 0,
           isActive: true,
           plan: Subscription.Journal,
+          openToCollaboration: true,
+          showInDirectory: true,
         },
       });
     }
@@ -722,6 +786,31 @@ export class MobileService {
           )
         : null;
 
+    let dailyCreditHours: number | null = null;
+    let dailyCreditUsedHours: number | null = null;
+    let dailyCreditRemainingHours: number | null = null;
+    let canChooseForfait = false;
+    if (kind === 'HOURS_POOL') {
+      canChooseForfait = false;
+    } else if (this.isPeriodKind(kind) && subscription?.price) {
+      dailyCreditHours = this.periodDailyQuotaHours(
+        subscription.price,
+        kind as 'SEMI_DAY' | 'FULL_DAY',
+      );
+      dailyCreditUsedHours = await this.dailySubscriptionUsedHours(
+        memberId,
+        subscription.priceId,
+      );
+      dailyCreditRemainingHours = Math.max(
+        0,
+        dailyCreditHours - dailyCreditUsedHours,
+      );
+      // Forfait only after today's subscription credit is exhausted
+      canChooseForfait = !session && dailyCreditRemainingHours <= 0.01;
+    } else {
+      canChooseForfait = true;
+    }
+
     return {
       session: session
         ? await this.enrichSessionWithSeat(session as any)
@@ -733,11 +822,23 @@ export class MobileService {
             daysRemaining,
             hoursRemaining,
             reservedSeatLabel: subscription.reservedSeatLabel || null,
+            hasSeatPrivilege: this.priceHasSeatPrivilege(
+              subscription.price as any,
+            ),
+            seatPrivilegeActiveNow: this.seatPrivilegeActiveNow(
+              subscription.price as any,
+            ),
+            dailyCreditHours,
+            dailyCreditUsedHours,
+            dailyCreditRemainingHours,
           }
         : null,
       hasActiveSubscription: !!subscription,
-      canChooseForfait: this.isPeriodKind(kind),
-      mustScanToEnter: kind === 'HOURS_POOL' || this.isPeriodKind(kind),
+      canChooseForfait,
+      mustScanToEnter:
+        kind === 'HOURS_POOL' ||
+        (this.isPeriodKind(kind) && (dailyCreditRemainingHours ?? 0) > 0.01),
+      dailyCreditRemainingHours,
       pendingRequest,
       hasOpenSession: !!session,
       seat,
@@ -910,6 +1011,21 @@ export class MobileService {
         'Abonnement heures : pointez (scan) pour entrer. L’accueil attribue la place.',
       );
     }
+    if (this.isPeriodKind(subKind) && activeSub?.price) {
+      const quota = this.periodDailyQuotaHours(
+        activeSub.price,
+        subKind as 'SEMI_DAY' | 'FULL_DAY',
+      );
+      const used = await this.dailySubscriptionUsedHours(
+        dto.memberId,
+        activeSub.priceId,
+      );
+      if (used < quota - 0.01) {
+        throw new BadRequestException(
+          `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un forfait.`,
+        );
+      }
+    }
 
     await this.releaseStaleBookings();
 
@@ -1078,12 +1194,16 @@ export class MobileService {
     if (journal.memberID) {
       const keepDaySeat =
         this.isFullDayPack(journal.prices || {}) || kind === 'FULL_DAY';
-      if (this.isPeriodKind(kind)) {
+      const keepDedicated =
+        isSubscriptionVisit &&
+        this.seatPrivilegeActiveNow(activeSub?.price as any) &&
+        !!activeSub?.reservedSeatLabel;
+      if (this.isPeriodKind(kind) || kind === 'HOURS_POOL') {
         await this.prisma.seatBooking.deleteMany({
           where: {
             memberId: journal.memberID,
             isBooked: true,
-            isPermanent: false,
+            ...(keepDedicated ? { isPermanent: false } : {}),
           },
         });
       } else if (this.isOpenSpaceDay(journal.prices || {}) || !keepDaySeat) {
@@ -1205,10 +1325,7 @@ export class MobileService {
       data: { plan: Subscription.Membership },
     });
 
-    if (
-      (price.reserveSeat || this.isPeriodKind(this.subscriptionKind(price))) &&
-      dto.reservedSeatLabel
-    ) {
+    if (price.reserveSeat && dto.reservedSeatLabel) {
       await this.bookSeatForMember(dto.memberId, dto.reservedSeatLabel.trim(), {
         permanent: true,
         spaceId: dto.reservedSeatSpaceId,
@@ -1797,18 +1914,18 @@ export class MobileService {
     }
 
     const kind = this.subscriptionKind(sub.price);
-    if (kind === 'SEMI_DAY') {
-      const today = await this.prisma.journal.findFirst({
-        where: {
-          memberID: memberId,
-          registredTime: {
-            gte: startOfDay(new Date()),
-            lt: endOfDay(new Date()),
-          },
-        },
-      });
-      if (today) {
-        throw new ConflictException('Demi-journée : un seul check-in par jour');
+    let remainingCredit: number | null = null;
+    if (this.isPeriodKind(kind)) {
+      const quota = this.periodDailyQuotaHours(
+        sub.price,
+        kind as 'SEMI_DAY' | 'FULL_DAY',
+      );
+      const used = await this.dailySubscriptionUsedHours(memberId, sub.priceId);
+      remainingCredit = Math.max(0, quota - used);
+      if (remainingCredit <= 0.01) {
+        throw new BadRequestException(
+          'Crédit abonnement du jour épuisé. Vous pouvez prendre un forfait.',
+        );
       }
     }
     if (kind === 'HOURS_POOL') {
@@ -1821,10 +1938,8 @@ export class MobileService {
 
     const now = new Date();
     const packHours =
-      kind === 'SEMI_DAY'
-        ? 6
-        : kind === 'FULL_DAY'
-        ? sub.price.durationHours || 12
+      kind === 'SEMI_DAY' || kind === 'FULL_DAY'
+        ? remainingCredit
         : null;
     const expectedLeave = packHours ? addHours(now, packHours) : null;
 
@@ -1843,8 +1958,7 @@ export class MobileService {
 
     if (
       sub.reservedSeatLabel &&
-      (this.isPeriodKind(kind) ||
-        !!(sub.price as { reserveSeat?: boolean }).reserveSeat)
+      this.seatPrivilegeActiveNow(sub.price as any)
     ) {
       await this.bookSeatForMember(memberId, sub.reservedSeatLabel, {
         permanent: true,
@@ -2022,6 +2136,21 @@ export class MobileService {
           'Abonnement heures : pointez (scan) pour entrer. Pas de forfait.',
         );
       }
+      if (this.isPeriodKind(subKind) && activeSub?.price) {
+        const quota = this.periodDailyQuotaHours(
+          activeSub.price,
+          subKind as 'SEMI_DAY' | 'FULL_DAY',
+        );
+        const used = await this.dailySubscriptionUsedHours(
+          dto.memberId,
+          activeSub.priceId,
+        );
+        if (used < quota - 0.01) {
+          throw new BadRequestException(
+            `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un forfait.`,
+          );
+        }
+      }
       const openSession = await this.getOpenSession(dto.memberId);
       if (openSession) {
         throw new ConflictException(
@@ -2131,8 +2260,7 @@ export class MobileService {
       requestKind === 'HOURS_POOL';
     const wantsDedicatedSeat =
       request.type === VisitRequestType.SUBSCRIPTION &&
-      (!!(request.price as { reserveSeat?: boolean }).reserveSeat ||
-        this.isPeriodKind(requestKind));
+      !!(request.price as { reserveSeat?: boolean }).reserveSeat;
     const skipSeat =
       (hoursSub && !wantsDedicatedSeat) || this.isOpenSpaceDay(request.price);
 

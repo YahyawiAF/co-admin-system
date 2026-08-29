@@ -56,6 +56,11 @@ export default function MobileHomePage() {
   const subKind = (status?.subscription as { kind?: string } | null)?.kind;
   const hoursPool = subKind === "HOURS_POOL";
   const periodSub = subKind === "SEMI_DAY" || subKind === "FULL_DAY";
+  const canChooseForfait = status?.canChooseForfait !== false;
+  const dailyRem =
+    status?.dailyCreditRemainingHours ??
+    (status?.subscription as { dailyCreditRemainingHours?: number } | null)
+      ?.dailyCreditRemainingHours;
   const displayName =
     [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
     member?.firstName ||
@@ -188,6 +193,7 @@ export default function MobileHomePage() {
           <Button
             variant="outline"
             className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+            disabled={!canChooseForfait}
             onClick={goChooseDay}
           >
             <Monitor className="mr-1.5 h-4 w-4" />
@@ -265,10 +271,17 @@ export default function MobileHomePage() {
       ) : !session && !pending && periodSub ? (
         <div className="rounded-2xl bg-white p-4 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Présence
+            Présence abonnement
           </p>
           <p className="mt-2 text-sm text-slate-500">
-            Pointez pour indiquer que vous êtes là. Votre place reste réservée.
+            Pointez pour démarrer votre crédit du jour
+            {dailyRem != null
+              ? ` (${Number(dailyRem).toFixed(1)} h restantes)`
+              : ""}
+            . Compteur + plan de place s&apos;affichent ensuite.
+            {!canChooseForfait
+              ? " Le forfait reste bloqué tant que ce crédit n’est pas terminé."
+              : ""}
           </p>
           {scanIn.isError ? (
             <Alert variant="destructive" className="mt-3">
@@ -279,7 +292,7 @@ export default function MobileHomePage() {
           ) : null}
           <Button
             className="mt-3 h-12 w-full rounded-full"
-            disabled={scanIn.isPending}
+            disabled={scanIn.isPending || (dailyRem != null && dailyRem <= 0)}
             onClick={() => scanIn.mutate()}
           >
             Je suis présent

@@ -51,8 +51,8 @@ export default function ProfilePage() {
     skills: [] as string[],
     services: [] as string[],
     linkedinUrl: "",
-    openToCollaboration: false,
-    showInDirectory: false,
+    openToCollaboration: true,
+    showInDirectory: true,
   });
 
   const { data, isLoading } = useQuery({
@@ -78,8 +78,8 @@ export default function ProfilePage() {
       skills: member?.skills || [],
       services: member?.services || [],
       linkedinUrl: member?.linkedinUrl || "",
-      openToCollaboration: !!member?.openToCollaboration,
-      showInDirectory: !!member?.showInDirectory,
+      openToCollaboration: member?.openToCollaboration !== false,
+      showInDirectory: member?.showInDirectory !== false,
     });
     setEditOpen(true);
   };

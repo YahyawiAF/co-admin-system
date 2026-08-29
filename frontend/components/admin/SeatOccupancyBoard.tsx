@@ -35,7 +35,10 @@ function formatRemain(ms: number | null) {
   const totalMin = Math.floor(abs / 60_000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
-  const core = h > 0 ? `${h}h${String(m).padStart(2, "0")}` : `${m} min`;
+  let core: string;
+  if (h <= 0) core = `${m} min`;
+  else if (m <= 0) core = `${h} h`;
+  else core = `${h} h ${String(m).padStart(2, "0")} min`;
   return ms < 0 ? `+${core}` : core;
 }
 
@@ -354,13 +357,14 @@ export function SeatOccupancyBoard({
               {activeSpace?.name || "Espace"} — {freeInSpace.free}/
               {freeInSpace.total} libres · cliquez une place pour le détail
             </p>
-            <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
+            <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20 p-1">
               {activeSpace ? (
                 <FloorPlanCanvas
                   space={activeSpace}
                   bookings={bookings}
                   editMode={false}
                   variant="picker"
+                  className="h-full min-h-[min(60vh,560px)]"
                   selectedSeatId={selectedSeatId}
                   onSelectSeat={(seat) => setSelectedSeatLabel(seat.label)}
                 />
@@ -445,6 +449,12 @@ export function SeatOccupancyBoard({
                             <span className="font-semibold">
                               {visitorLabel(row.journal)}
                             </span>
+                            {priceOf(row.journal)?.category === "ABONNEMENT" ||
+                            priceOf(row.journal)?.type === "abonnement" ? (
+                              <Badge className="h-5 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                Abonné
+                              </Badge>
+                            ) : null}
                             {groupOf(row.journal)?.name ? (
                               <Badge variant="outline" className="h-5 text-[10px]">
                                 {groupOf(row.journal)!.name}

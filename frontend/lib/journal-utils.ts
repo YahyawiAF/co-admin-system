@@ -119,3 +119,18 @@ export function remainingMs(row: Journal, now = Date.now()): number | null {
   if (end == null) return null;
   return end - now;
 }
+
+/** Format duration as "2 h 15 min" (or "45 min" / "3 h"). */
+export function formatDurationHm(ms: number, opts?: { signed?: boolean }) {
+  const neg = ms < 0;
+  const abs = Math.abs(ms);
+  const totalMin = Math.floor(abs / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  let core: string;
+  if (h <= 0) core = `${m} min`;
+  else if (m <= 0) core = `${h} h`;
+  else core = `${h} h ${String(m).padStart(2, "0")} min`;
+  if (opts?.signed && neg) return `+${core}`;
+  return core;
+}

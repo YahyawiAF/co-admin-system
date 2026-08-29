@@ -299,8 +299,7 @@ export class AbonnementService {
     seatLabel: string | null | undefined,
   ) {
     if (!seatLabel?.trim()) return false;
-    if (price?.reserveSeat) return true;
-    return this.isPeriodPrice(price);
+    return !!price?.reserveSeat;
   }
 
   private async releasePermanentSeat(memberId: string) {

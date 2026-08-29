@@ -61,8 +61,8 @@ model Member {
   skills                 String[]  @default([])
   services               String[]  @default([])
   linkedinUrl            String?
-  openToCollaboration    Boolean   @default(false)
-  showInDirectory        Boolean   @default(false)
+  openToCollaboration    Boolean   @default(true)
+  showInDirectory        Boolean   @default(true)
   eventRegistrations     EventRegistration[]
 
   @@index([groupId])
@@ -95,6 +95,10 @@ model Price {
   spaceId        String?
   space          Space?         @relation(fields: [spaceId], references: [id], onDelete: SetNull)
   reserveSeat    Boolean        @default(false)
+  /// Hour 0-23 when dedicated seat starts (null = all day if reserveSeat)
+  reserveSeatFromHour Int?
+  /// Hour 0-23 when dedicated seat ends (null = all day)
+  reserveSeatToHour   Int?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   timePeriod     Json

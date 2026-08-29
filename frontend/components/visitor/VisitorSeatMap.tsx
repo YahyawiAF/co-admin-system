@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 type Props = {
   memberId: string;
   assignedSeatLabel?: string | null;
+  assignedSpaceId?: string | null;
   seatMode?: MobileSeatMode | null;
   canPick?: boolean;
   className?: string;
@@ -21,6 +22,7 @@ type Props = {
 export function VisitorSeatMap({
   memberId,
   assignedSeatLabel,
+  assignedSpaceId,
   seatMode,
   canPick = false,
   className,
@@ -44,29 +46,42 @@ export function VisitorSeatMap({
   const spaces = (data?.spaces || []) as Space[];
   const bookings = (data?.bookings || []) as SeatBooking[];
 
+  /** Space that contains the visitor's seat — only that one is shown when assigned. */
+  const lockedSpaceId = useMemo(() => {
+    if (assignedSpaceId && spaces.some((s) => s.id === assignedSpaceId)) {
+      return assignedSpaceId;
+    }
+    if (!assignedSeatLabel) return null;
+    for (const space of spaces) {
+      const all = [
+        ...(space.seats || []),
+        ...(space.tables || []).flatMap((t) => t.seats || []),
+      ];
+      if (all.some((s) => s.label === assignedSeatLabel)) return space.id;
+    }
+    return null;
+  }, [spaces, assignedSeatLabel, assignedSpaceId]);
+
+  const showSpaceSwitcher = canPick && !lockedSpaceId && spaces.length > 1;
+
   useEffect(() => {
     if (!spaces.length) {
       setSpaceId(null);
       return;
     }
-    if (assignedSeatLabel) {
-      for (const space of spaces) {
-        const all = [
-          ...(space.seats || []),
-          ...(space.tables || []).flatMap((t) => t.seats || []),
-        ];
-        if (all.some((s) => s.label === assignedSeatLabel)) {
-          setSpaceId(space.id);
-          return;
-        }
-      }
+    if (lockedSpaceId) {
+      setSpaceId(lockedSpaceId);
+      return;
     }
     if (!spaceId || !spaces.some((s) => s.id === spaceId)) {
       setSpaceId(spaces[0].id);
     }
-  }, [spaces, spaceId, assignedSeatLabel]);
+  }, [spaces, spaceId, lockedSpaceId]);
 
-  const activeSpace = spaces.find((s) => s.id === spaceId) || spaces[0] || null;
+  const activeSpace =
+    spaces.find((s) => s.id === (lockedSpaceId || spaceId)) ||
+    spaces[0] ||
+    null;
 
   const selectedSeatId = useMemo(() => {
     const label = canPick ? pickedLabel || assignedSeatLabel : assignedSeatLabel;
@@ -80,7 +95,11 @@ export function VisitorSeatMap({
 
   const claim = useMutation({
     mutationFn: (seatLabel: string) =>
-      mobileApi.claimSeat(memberId, seatLabel, spaceId || undefined),
+      mobileApi.claimSeat(
+        memberId,
+        seatLabel,
+        (lockedSpaceId || spaceId) || undefined
+      ),
     onSuccess: () => {
       toast.success("Place confirmée");
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
@@ -128,7 +147,9 @@ export function VisitorSeatMap({
             {canPick ? "Choisissez votre place" : "Votre place sur le plan"}
           </p>
           {assignedSeatLabel ? (
-            <p className="text-sm font-semibold">Place {assignedSeatLabel}</p>
+            <p className="text-sm font-semibold">
+              {[activeSpace?.name, assignedSeatLabel].filter(Boolean).join(" · ")}
+            </p>
           ) : canPick ? (
             <p className="text-sm text-slate-500">
               Touchez une place libre, puis confirmez.
@@ -146,26 +167,31 @@ export function VisitorSeatMap({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {spaces.map((s) => (
-          <Button
-            key={s.id}
-            size="sm"
-            variant={activeSpace?.id === s.id ? "default" : "outline"}
-            onClick={() => setSpaceId(s.id)}
-          >
-            {s.name}
-          </Button>
-        ))}
-      </div>
+      {showSpaceSwitcher ? (
+        <div className="flex flex-wrap gap-2">
+          {spaces.map((s) => (
+            <Button
+              key={s.id}
+              size="sm"
+              variant={activeSpace?.id === s.id ? "default" : "outline"}
+              onClick={() => setSpaceId(s.id)}
+            >
+              {s.name}
+            </Button>
+          ))}
+        </div>
+      ) : activeSpace ? (
+        <p className="text-xs font-medium text-slate-500">{activeSpace.name}</p>
+      ) : null}
 
-      <div className="w-full overflow-auto rounded-xl border bg-slate-50 p-1">
+      <div className="h-[min(52vw,280px)] w-full overflow-hidden rounded-xl border bg-slate-50">
         {activeSpace ? (
           <FloorPlanCanvas
             space={activeSpace}
             bookings={bookings}
             editMode={false}
-            variant="picker"
+            variant="fit"
+            className="h-full min-h-0 rounded-none border-0"
             selectedSeatId={selectedSeatId}
             onSelectSeat={canPick ? onSelectSeat : undefined}
           />

@@ -198,13 +198,20 @@ function ChooseInner() {
   }
 
   const subKind = (status?.subscription as { kind?: string } | null)?.kind;
-  if (mode === "day" && subKind === "HOURS_POOL") {
+  if (mode === "day" && status?.canChooseForfait === false) {
+    const rem =
+      status.dailyCreditRemainingHours ??
+      (status.subscription as { dailyCreditRemainingHours?: number } | null)
+        ?.dailyCreditRemainingHours;
     return (
       <div className="space-y-3 text-center">
         <Alert>
           <AlertDescription>
-            Abonnement heures actif : pointez pour entrer. L&apos;accueil vous
-            attribue une place. Pas de forfait.
+            {subKind === "HOURS_POOL"
+              ? "Abonnement heures actif : pointez pour entrer. Pas de forfait tant que l’abonnement est actif."
+              : `Crédit abonnement du jour encore disponible${
+                  rem != null ? ` (${Number(rem).toFixed(1)} h)` : ""
+                }. Pointez votre présence et utilisez votre forfait abonnement avant d’acheter un forfait.`}
           </AlertDescription>
         </Alert>
         <Button onClick={() => router.push(href())}>

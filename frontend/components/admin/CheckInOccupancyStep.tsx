@@ -234,13 +234,14 @@ export function CheckInOccupancyStep({
               Cliquez une place libre (open space ou salle).
             </p>
           )}
-          <div className="min-h-[min(52vh,520px)] overflow-auto rounded-lg border bg-muted/20 p-2">
+          <div className="min-h-[min(52vh,520px)] overflow-hidden rounded-lg border bg-muted/20 p-1">
             {activeSpace ? (
               <FloorPlanCanvas
                 space={activeSpace}
                 bookings={bookings}
                 editMode={false}
                 variant="picker"
+                className="h-full min-h-[min(52vh,520px)]"
                 selectedSeatIds={selectedIds}
                 onSelectSeat={pickSeat}
               />

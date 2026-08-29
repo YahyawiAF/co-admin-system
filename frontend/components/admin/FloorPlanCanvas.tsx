@@ -30,8 +30,12 @@ type Props = {
   bookings: SeatBooking[];
   editMode: boolean;
   tool?: EditTool;
-  /** picker = large scrollable plan for dialogs (same size as editor, no shrink). */
-  variant?: "editor" | "picker";
+  /**
+   * editor = scrollable fixed plan (facility editor).
+   * picker = fill container width (admin dialogs / occupation).
+   * fit = fill width+height, no scroll (mobile visitor).
+   */
+  variant?: "editor" | "picker" | "fit";
   /** Extra zoom multiplier (1 = default). */
   zoom?: number;
   onSelectSeat?: (seat: SpaceSeat) => void;
@@ -119,6 +123,7 @@ export function FloorPlanCanvas({
   const booked = bookedLabelsForSpace(bookings, space.id);
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(1);
   const [localPos, setLocalPos] = useState<
     Record<string, { x: number; y: number }>
   >({});
@@ -138,9 +143,36 @@ export function FloorPlanCanvas({
   const fixtures = space.fixtures || [];
   const looseSeats = (space.seats || []).filter((s) => !s.tableId);
   const bounds = contentBounds(space);
-  const isPicker = variant === "picker";
-  const planW = Math.max(bounds.width + bounds.minX, 720);
-  const planH = Math.max(bounds.height + bounds.minY, isPicker ? 520 : 560);
+  const isFit = variant === "fit";
+  const isPicker = variant === "picker" || isFit;
+  const planW = Math.max(bounds.width, 280);
+  const planH = Math.max(bounds.height, 220);
+
+  useEffect(() => {
+    if (!isPicker) {
+      setFitScale(1);
+      return;
+    }
+    const el = viewportRef.current;
+    if (!el) return;
+    const update = () => {
+      const pad = 8;
+      const availW = Math.max(el.clientWidth - pad, 120);
+      const availH = Math.max(el.clientHeight - pad, 120);
+      let s: number;
+      if (isFit) {
+        s = Math.min(availW / planW, availH / planH) * zoom;
+      } else {
+        // Fill width; height can scroll if needed. Allow scale-up.
+        s = (availW / planW) * zoom;
+      }
+      setFitScale(Number.isFinite(s) && s > 0 ? s : 1);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [isPicker, isFit, planW, planH, zoom, space.id]);
 
   useEffect(() => {
     if (!selectedSeatId || !canvasRef.current) return;
@@ -157,11 +189,10 @@ export function FloorPlanCanvas({
     const el = canvasRef.current;
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const scale = zoom || 1;
-    const scrollEl = viewportRef.current;
+    const scale = isPicker ? fitScale : zoom || 1;
     return {
-      x: (clientX - rect.left) / scale + (scrollEl?.scrollLeft || 0),
-      y: (clientY - rect.top) / scale + (scrollEl?.scrollTop || 0),
+      x: (clientX - rect.left) / scale + (isPicker ? bounds.minX : 0),
+      y: (clientY - rect.top) / scale + (isPicker ? bounds.minY : 0),
     };
   };
 
@@ -204,11 +235,26 @@ export function FloorPlanCanvas({
     <div
       ref={viewportRef}
       className={cn(
-        "relative w-full overflow-auto rounded-xl border bg-slate-100",
-        isPicker ? "min-h-[min(52vh,520px)]" : "min-h-[420px]",
+        "relative w-full rounded-xl border bg-slate-100",
+        isFit
+          ? "h-full min-h-[240px] overflow-hidden"
+          : isPicker
+            ? "min-h-[min(52vh,520px)] overflow-auto"
+            : "min-h-[420px] overflow-auto",
         className
       )}
     >
+      <div
+        className={cn(isPicker && "mx-auto")}
+        style={
+          isPicker
+            ? {
+                width: Math.ceil(planW * fitScale),
+                height: Math.ceil(planH * fitScale),
+              }
+            : { minWidth: "100%" }
+        }
+      >
       <div
         ref={canvasRef}
         className={cn(
@@ -221,11 +267,13 @@ export function FloorPlanCanvas({
             ? `url(${space.floorPlanUrl})`
             : undefined,
           backgroundColor: space.floorPlanUrl ? undefined : "#e8eef5",
-          width: isPicker ? planW : undefined,
-          height: planH,
-          minWidth: isPicker ? planW : undefined,
-          transform:
-            zoom !== 1 ? `scale(${zoom})` : undefined,
+          width: isPicker ? planW + bounds.minX : undefined,
+          height: isPicker ? planH + bounds.minY : Math.max(planH + bounds.minY, 560),
+          transform: isPicker
+            ? `translate(${-bounds.minX * fitScale}px, ${-bounds.minY * fitScale}px) scale(${fitScale})`
+            : zoom !== 1
+              ? `scale(${zoom})`
+              : undefined,
           transformOrigin: "top left",
         }}
         onPointerDown={(e) => {
@@ -241,7 +289,7 @@ export function FloorPlanCanvas({
               e.clientY - drag.startY
             );
             if (dist > 3) drag.moved = true;
-            const scale = zoom || 1;
+            const scale = isPicker ? fitScale : zoom || 1;
             const x = Math.max(
               0,
               drag.origX + (e.clientX - drag.startX) / scale
@@ -524,6 +572,7 @@ export function FloorPlanCanvas({
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -562,12 +611,17 @@ function SeatChip({
           : occupied
             ? "border-amber-500 bg-amber-500 text-white"
             : "border-emerald-400 bg-emerald-50 text-emerald-900",
-        selected &&
-          "z-30 scale-125 animate-pulse ring-4 ring-primary ring-offset-2 ring-offset-background",
+        selected && "z-30 scale-125 ring-2 ring-primary ring-offset-1",
         editMode && "cursor-grab active:cursor-grabbing"
       )}
       style={style}
     >
+      {selected ? (
+        <span
+          aria-hidden
+          className="seat-pulse-ring pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary"
+        />
+      ) : null}
       {seat.isOverflow ? "X" : seat.label.split("-").pop()}
     </button>
   );

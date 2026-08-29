@@ -73,4 +73,18 @@ export class CreatePriceDto {
   @IsOptional()
   @IsBoolean()
   reserveSeat?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Hour 0–23 when dedicated seat starts (null = all day)',
+  })
+  @IsOptional()
+  @IsNumber()
+  reserveSeatFromHour?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Hour 0–23 when dedicated seat ends (null = all day)',
+  })
+  @IsOptional()
+  @IsNumber()
+  reserveSeatToHour?: number | null;
 }

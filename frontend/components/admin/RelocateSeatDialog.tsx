@@ -113,14 +113,14 @@ export function RelocateSeatDialog({
   if (!occupants.length) return null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50/60 p-3">
-      <Alert>
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-2 overflow-hidden rounded-xl border border-amber-300 bg-amber-50/60 p-3">
+      <Alert className="shrink-0">
         <AlertDescription>
-          Cliquez une place <strong>libre</strong> sur le plan ci-dessous, puis
-          appuyez sur <strong>Confirmer le déplacement</strong>.
+          Cliquez une place <strong>libre</strong> sur le plan, puis{" "}
+          <strong>Confirmer le déplacement</strong> en bas.
         </AlertDescription>
       </Alert>
-      <div className="space-y-2">
+      <div className="max-h-28 shrink-0 space-y-1 overflow-y-auto">
         {occupants.map((o) => (
           <button
             key={o.seatLabel}
@@ -148,7 +148,7 @@ export function RelocateSeatDialog({
           </button>
         ))}
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
         {spaces.map((s) => (
           <Button
             key={s.id}
@@ -160,13 +160,14 @@ export function RelocateSeatDialog({
           </Button>
         ))}
       </div>
-      <div className="min-h-[min(52vh,520px)] flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
+      <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20">
         {activeSpace ? (
           <FloorPlanCanvas
             space={activeSpace}
             bookings={bookings}
             editMode={false}
-            variant="picker"
+            variant="fit"
+            className="h-full min-h-0 rounded-none border-0"
             selectedSeatId={selectedSeatId}
             onSelectSeat={pickSeat}
           />
@@ -174,7 +175,7 @@ export function RelocateSeatDialog({
           <p className="p-4 text-sm text-muted-foreground">Aucun espace</p>
         )}
       </div>
-      <div className="shrink-0 space-y-2 border-t border-amber-200 pt-3">
+      <div className="shrink-0 space-y-2 border-t border-amber-200 bg-amber-50/90 pt-2">
         {!allTargetsPicked ? (
           <p className="text-xs text-muted-foreground">
             Choisissez d&apos;abord une place cible (cercle vert) sur le plan.
