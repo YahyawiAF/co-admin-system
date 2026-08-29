@@ -49,3 +49,24 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Mobile visitor (/m): reduce Safari bounce + prevent iOS input zoom */
+.mobile-shell {
+  min-height: 100dvh;
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-shell input,
+.mobile-shell textarea,
+.mobile-shell select,
+.mobile-shell .PhoneInputInput {
+  font-size: 16px !important;
+  scroll-margin-bottom: 6rem;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .mobile-shell {
+    min-height: -webkit-fill-available;
+  }
+}

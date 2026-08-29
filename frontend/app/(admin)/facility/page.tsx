@@ -554,32 +554,118 @@ export default function FacilityPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [mapZoom, setMapZoom] = useState(1);
   const [profile, setProfile] = useState({
     name: "",
     numtel: "",
     email: "",
     adresse: "",
+    logo: "" as string | null,
+    facebook: "",
+    instagram: "",
     mobileSeatMode: "ADMIN_ASSIGN" as "ADMIN_ASSIGN" | "VISITOR_CHOOSE" | "AUTO_ASSIGN",
     receptionAway: false,
   });
+  const [orgDraft, setOrgDraft] = useState({
+    id: "",
+    name: "",
+    slug: "",
+    logo: "" as string | null,
+    facebookUrl: "",
+    instagramUrl: "",
+  });
+  const [newOrg, setNewOrg] = useState({ name: "", slug: "" });
 
   useEffect(() => {
     if (!facility) return;
+    const social = facility.socialNetworks || {};
     setProfile({
       name: facility.name || "",
       numtel: facility.numtel || "",
       email: facility.email || "",
       adresse: facility.adresse || "",
+      logo: facility.logo || null,
+      facebook: social.facebook || "",
+      instagram: social.instagram || "",
       mobileSeatMode: facility.mobileSeatMode || "ADMIN_ASSIGN",
       receptionAway: !!facility.receptionAway,
     });
   }, [facility]);
 
+  useEffect(() => {
+    const org =
+      organizations.find((o) => o.facility?.id === facility?.id) ||
+      organizations[0];
+    if (!org) return;
+    setOrgDraft({
+      id: org.id,
+      name: org.name || "",
+      slug: org.slug || "",
+      logo: org.logo || null,
+      facebookUrl: org.facebookUrl || "",
+      instagramUrl: org.instagramUrl || "",
+    });
+  }, [organizations, facility?.id]);
+
   const updateProfile = useMutation({
-    mutationFn: () => facilityApi.update(facility!.id, profile),
+    mutationFn: () =>
+      facilityApi.update(facility!.id, {
+        name: profile.name,
+        numtel: profile.numtel,
+        email: profile.email,
+        adresse: profile.adresse,
+        logo: profile.logo || undefined,
+        mobileSeatMode: profile.mobileSeatMode,
+        receptionAway: profile.receptionAway,
+        socialNetworks: {
+          facebook: profile.facebook,
+          instagram: profile.instagram,
+        },
+        ...(orgDraft.id ? { organizationId: orgDraft.id } : {}),
+      } as Parameters<typeof facilityApi.update>[1] & {
+        organizationId?: string;
+      }),
     onSuccess: () => {
       toast.success("Profil enregistré");
       invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateOrg = useMutation({
+    mutationFn: () =>
+      organizationsApi.update(orgDraft.id, {
+        name: orgDraft.name,
+        slug: orgDraft.slug,
+        logo: orgDraft.logo,
+        facebookUrl: orgDraft.facebookUrl || null,
+        instagramUrl: orgDraft.instagramUrl || null,
+      }),
+    onSuccess: () => {
+      toast.success("Organisation enregistrée");
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const createOrg = useMutation({
+    mutationFn: () =>
+      organizationsApi.create({
+        name: newOrg.name,
+        slug: newOrg.slug || newOrg.name,
+      }),
+    onSuccess: (org) => {
+      toast.success(`Organisation ${org.slug} créée`);
+      setNewOrg({ name: "", slug: "" });
+      queryClient.invalidateQueries({ queryKey: ["organizations"] });
+      setOrgDraft({
+        id: org.id,
+        name: org.name,
+        slug: org.slug,
+        logo: org.logo || null,
+        facebookUrl: org.facebookUrl || "",
+        instagramUrl: org.instagramUrl || "",
+      });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -750,11 +836,45 @@ export default function FacilityPage() {
               </CardContent>
             </Card>
           ) : (
+            <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Taille du plan</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={mapZoom <= 0.6}
+                onClick={() => setMapZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))}
+              >
+                −
+              </Button>
+              <span className="w-12 text-center text-sm font-medium">
+                {Math.round(mapZoom * 100)}%
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={mapZoom >= 1.8}
+                onClick={() => setMapZoom((z) => Math.min(1.8, +(z + 0.1).toFixed(2)))}
+              >
+                +
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => setMapZoom(1)}
+              >
+                Reset
+              </Button>
+            </div>
             <FloorPlanCanvas
               space={activeSpace}
               bookings={bookings}
               editMode={editMode}
               tool={tool}
+              zoom={mapZoom}
               selectedTableId={liveSelectedTable?.id}
               selectedWallId={selectedWall?.id}
               selectedSeatId={selectedSeat?.id}
@@ -809,6 +929,7 @@ export default function FacilityPage() {
                 }
               }}
             />
+            </>
           )}
 
           {editMode && liveSelectedTable ? (
@@ -1922,35 +2043,6 @@ export default function FacilityPage() {
 
         <TabsContent value="profile" className="mt-4 space-y-4">
           <Card>
-            <CardContent className="grid gap-3 p-6 sm:grid-cols-2">
-              {(
-                [
-                  ["name", "Nom"],
-                  ["numtel", "Téléphone"],
-                  ["email", "Email"],
-                  ["adresse", "Adresse"],
-                ] as const
-              ).map(([key, label]) => (
-                <div key={key} className="space-y-2">
-                  <Label>{label}</Label>
-                  <Input
-                    value={profile[key]}
-                    onChange={(e) =>
-                      setProfile((p) => ({ ...p, [key]: e.target.value }))
-                    }
-                  />
-                </div>
-              ))}
-              <Button
-                className="sm:col-span-2"
-                disabled={!facility || updateProfile.isPending}
-                onClick={() => updateProfile.mutate()}
-              >
-                Enregistrer
-              </Button>
-            </CardContent>
-          </Card>
-          <Card>
             <CardHeader>
               <CardTitle className="text-base">Places mobile (visiteurs)</CardTitle>
             </CardHeader>
@@ -2024,8 +2116,15 @@ export default function FacilityPage() {
                   />
                 </label>
               ) : null}
+              <Button
+                disabled={!facility || updateProfile.isPending}
+                onClick={() => updateProfile.mutate()}
+              >
+                Enregistrer les places mobile
+              </Button>
             </CardContent>
           </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">QR visiteur</CardTitle>
@@ -2039,6 +2138,193 @@ export default function FacilityPage() {
                   `${appUrl}/m/${orgSlug}`
                 )}`}
               />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Organisation (mobile /m)</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label>Organisation liée</Label>
+                <Select
+                  value={orgDraft.id || undefined}
+                  onValueChange={(id) => {
+                    const org = organizations.find((o) => o.id === id);
+                    if (!org) return;
+                    setOrgDraft({
+                      id: org.id,
+                      name: org.name,
+                      slug: org.slug,
+                      logo: org.logo || null,
+                      facebookUrl: org.facebookUrl || "",
+                      instagramUrl: org.instagramUrl || "",
+                    });
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choisir une organisation" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.name} ({o.slug})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Nom public</Label>
+                <Input
+                  value={orgDraft.name}
+                  onChange={(e) =>
+                    setOrgDraft((o) => ({ ...o, name: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Slug URL (/m/…)</Label>
+                <Input
+                  value={orgDraft.slug}
+                  onChange={(e) =>
+                    setOrgDraft((o) => ({ ...o, slug: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <ImageUpload
+                  label="Logo organisation"
+                  value={orgDraft.logo}
+                  onChange={(url) => setOrgDraft((o) => ({ ...o, logo: url }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Facebook</Label>
+                <Input
+                  placeholder="https://facebook.com/…"
+                  value={orgDraft.facebookUrl}
+                  onChange={(e) =>
+                    setOrgDraft((o) => ({ ...o, facebookUrl: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Instagram</Label>
+                <Input
+                  placeholder="https://instagram.com/…"
+                  value={orgDraft.instagramUrl}
+                  onChange={(e) =>
+                    setOrgDraft((o) => ({ ...o, instagramUrl: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 sm:col-span-2">
+                <Button
+                  disabled={!orgDraft.id || updateOrg.isPending}
+                  onClick={() => updateOrg.mutate()}
+                >
+                  Enregistrer l&apos;organisation
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!facility || !orgDraft.id || updateProfile.isPending}
+                  onClick={() => updateProfile.mutate()}
+                >
+                  Lier à cette facility
+                </Button>
+              </div>
+              <div className="rounded-lg border border-dashed p-3 sm:col-span-2">
+                <p className="mb-2 text-xs font-medium text-muted-foreground">
+                  Nouvelle organisation
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    className="max-w-[180px]"
+                    placeholder="Nom"
+                    value={newOrg.name}
+                    onChange={(e) =>
+                      setNewOrg((n) => ({ ...n, name: e.target.value }))
+                    }
+                  />
+                  <Input
+                    className="max-w-[160px]"
+                    placeholder="slug"
+                    value={newOrg.slug}
+                    onChange={(e) =>
+                      setNewOrg((n) => ({ ...n, slug: e.target.value }))
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    disabled={!newOrg.name.trim() || createOrg.isPending}
+                    onClick={() => createOrg.mutate()}
+                  >
+                    Créer
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Détails facility</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  ["name", "Nom"],
+                  ["numtel", "Téléphone"],
+                  ["email", "Email"],
+                  ["adresse", "Adresse"],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="space-y-2">
+                  <Label>{label}</Label>
+                  <Input
+                    value={profile[key]}
+                    onChange={(e) =>
+                      setProfile((p) => ({ ...p, [key]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+              <div className="space-y-2 sm:col-span-2">
+                <ImageUpload
+                  label="Logo facility"
+                  value={profile.logo}
+                  onChange={(url) => setProfile((p) => ({ ...p, logo: url }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Facebook</Label>
+                <Input
+                  placeholder="https://facebook.com/…"
+                  value={profile.facebook}
+                  onChange={(e) =>
+                    setProfile((p) => ({ ...p, facebook: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Instagram</Label>
+                <Input
+                  placeholder="https://instagram.com/…"
+                  value={profile.instagram}
+                  onChange={(e) =>
+                    setProfile((p) => ({ ...p, instagram: e.target.value }))
+                  }
+                />
+              </div>
+              <Button
+                className="sm:col-span-2"
+                disabled={!facility || updateProfile.isPending}
+                onClick={() => updateProfile.mutate()}
+              >
+                Enregistrer la facility
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

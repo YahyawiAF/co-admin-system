@@ -14,9 +14,10 @@ export default function MobileIndexRedirect() {
   });
 
   useEffect(() => {
+    if (isLoading || isError) return;
     if (!data?.length) return;
     router.replace(`/m/${data[0].slug}`);
-  }, [data, router]);
+  }, [data, isLoading, isError, router]);
 
   if (isError) {
     return (
@@ -27,8 +28,8 @@ export default function MobileIndexRedirect() {
   }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[480px] items-center justify-center bg-[#f3f6fb] text-slate-500">
-      {isLoading ? "Chargement…" : "Redirection…"}
+    <div className="mobile-shell mx-auto flex min-h-dvh max-w-[480px] items-center justify-center bg-[#f3f6fb] text-slate-500">
+      {isLoading ? "Chargement…" : data?.length ? "Redirection…" : "Aucune organisation configurée."}
     </div>
   );
 }

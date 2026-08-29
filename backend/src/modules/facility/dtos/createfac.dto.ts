@@ -90,4 +90,9 @@ export class CreateFacilityDto {
   @IsOptional()
   @IsBoolean()
   receptionAway?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  organizationId?: string | null;
 }

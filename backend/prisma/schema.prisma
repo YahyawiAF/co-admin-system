@@ -229,12 +229,14 @@ enum MobileSeatMode {
 }
 
 model Organization {
-  id          String     @id @default(uuid())
-  name        String
-  slug        String     @unique
-  logo        String?
-  createdAt   DateTime   @default(now())
-  facilities  Facility[]
+  id            String     @id @default(uuid())
+  name          String
+  slug          String     @unique
+  logo          String?
+  facebookUrl   String?
+  instagramUrl  String?
+  createdAt     DateTime   @default(now())
+  facilities    Facility[]
 
   @@map("organizations")
 }

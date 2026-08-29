@@ -190,7 +190,7 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
         }
       }}
     >
-      <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-3 overflow-hidden sm:max-w-4xl">
+      <DialogContent className="flex max-h-[92vh] w-[96vw] max-w-6xl flex-col gap-3 overflow-hidden sm:max-w-6xl">
         <DialogHeader>
           <DialogTitle>Assigner une place</DialogTitle>
           <DialogDescription>
@@ -239,6 +239,7 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
               space={activeSpace}
               bookings={bookings}
               editMode={false}
+              variant="picker"
               selectedSeatId={selectedSeatId}
               onSelectSeat={pickSeat}
             />

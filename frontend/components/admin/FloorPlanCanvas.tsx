@@ -30,6 +30,10 @@ type Props = {
   bookings: SeatBooking[];
   editMode: boolean;
   tool?: EditTool;
+  /** picker = large scrollable plan for dialogs (same size as editor, no shrink). */
+  variant?: "editor" | "picker";
+  /** Extra zoom multiplier (1 = default). */
+  zoom?: number;
   onSelectSeat?: (seat: SpaceSeat) => void;
   onMoveTable?: (tableId: string, x: number, y: number) => void;
   onMoveSeat?: (
@@ -49,7 +53,43 @@ type Props = {
   selectedSeatId?: string | null;
   selectedSeatIds?: string[];
   selectedFixtureId?: string | null;
+  className?: string;
 };
+
+function contentBounds(space: Space) {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = 40;
+  let maxY = 40;
+  const grow = (x: number, y: number, w = 36, h = 36) => {
+    minX = Math.min(minX, x);
+    minY = Math.min(minY, y);
+    maxX = Math.max(maxX, x + w);
+    maxY = Math.max(maxY, y + h);
+  };
+  for (const t of space.tables || []) {
+    grow(t.x, t.y, t.width, t.height);
+    for (const s of t.seats || []) {
+      grow(t.x + s.offsetX - 4, t.y + s.offsetY - 4, 32, 32);
+    }
+  }
+  for (const w of space.walls || []) grow(w.x, w.y, w.width, w.height);
+  for (const f of space.fixtures || []) grow(f.x, f.y, f.width, f.height);
+  for (const s of space.seats || []) {
+    if (s.tableId) continue;
+    grow(s.offsetX, s.offsetY, 32, 32);
+  }
+  if (!Number.isFinite(minX)) {
+    return { minX: 0, minY: 0, width: 640, height: 420 };
+  }
+  const pad = 28;
+  return {
+    minX: Math.max(0, minX - pad),
+    minY: Math.max(0, minY - pad),
+    width: Math.max(280, maxX - Math.max(0, minX - pad) + pad),
+    height: Math.max(220, maxY - Math.max(0, minY - pad) + pad),
+  };
+}
 
 type DragKind = "table" | "seat" | "wall" | "fixture";
 
@@ -58,6 +98,8 @@ export function FloorPlanCanvas({
   bookings,
   editMode,
   tool = "select",
+  variant = "editor",
+  zoom = 1,
   onSelectSeat,
   onMoveTable,
   onMoveSeat,
@@ -72,8 +114,10 @@ export function FloorPlanCanvas({
   selectedSeatId,
   selectedSeatIds,
   selectedFixtureId,
+  className,
 }: Props) {
   const booked = bookedLabelsForSpace(bookings, space.id);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [localPos, setLocalPos] = useState<
     Record<string, { x: number; y: number }>
@@ -93,6 +137,10 @@ export function FloorPlanCanvas({
   const walls = space.walls || [];
   const fixtures = space.fixtures || [];
   const looseSeats = (space.seats || []).filter((s) => !s.tableId);
+  const bounds = contentBounds(space);
+  const isPicker = variant === "picker";
+  const planW = Math.max(bounds.width + bounds.minX, 720);
+  const planH = Math.max(bounds.height + bounds.minY, isPicker ? 520 : 560);
 
   useEffect(() => {
     if (!selectedSeatId || !canvasRef.current) return;
@@ -109,9 +157,11 @@ export function FloorPlanCanvas({
     const el = canvasRef.current;
     if (!el) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
+    const scale = zoom || 1;
+    const scrollEl = viewportRef.current;
     return {
-      x: clientX - rect.left + el.scrollLeft,
-      y: clientY - rect.top + el.scrollTop,
+      x: (clientX - rect.left) / scale + (scrollEl?.scrollLeft || 0),
+      y: (clientY - rect.top) / scale + (scrollEl?.scrollTop || 0),
     };
   };
 
@@ -151,11 +201,19 @@ export function FloorPlanCanvas({
   };
 
   return (
-    <div className="relative min-h-[420px] w-full overflow-auto rounded-xl border bg-slate-100">
+    <div
+      ref={viewportRef}
+      className={cn(
+        "relative w-full overflow-auto rounded-xl border bg-slate-100",
+        isPicker ? "min-h-[min(52vh,520px)]" : "min-h-[420px]",
+        className
+      )}
+    >
       <div
         ref={canvasRef}
         className={cn(
-          "relative min-h-[420px] min-w-full bg-cover bg-center",
+          "relative bg-cover bg-center",
+          !isPicker && "min-h-[420px] min-w-full",
           editMode && tool !== "select" && "cursor-crosshair"
         )}
         style={{
@@ -163,7 +221,12 @@ export function FloorPlanCanvas({
             ? `url(${space.floorPlanUrl})`
             : undefined,
           backgroundColor: space.floorPlanUrl ? undefined : "#e8eef5",
-          height: 560,
+          width: isPicker ? planW : undefined,
+          height: planH,
+          minWidth: isPicker ? planW : undefined,
+          transform:
+            zoom !== 1 ? `scale(${zoom})` : undefined,
+          transformOrigin: "top left",
         }}
         onPointerDown={(e) => {
           if (!editMode || tool === "select") return;
@@ -178,8 +241,15 @@ export function FloorPlanCanvas({
               e.clientY - drag.startY
             );
             if (dist > 3) drag.moved = true;
-            const x = Math.max(0, drag.origX + (e.clientX - drag.startX));
-            const y = Math.max(0, drag.origY + (e.clientY - drag.startY));
+            const scale = zoom || 1;
+            const x = Math.max(
+              0,
+              drag.origX + (e.clientX - drag.startX) / scale
+            );
+            const y = Math.max(
+              0,
+              drag.origY + (e.clientY - drag.startY) / scale
+            );
             setLocalPos((p) => ({ ...p, [drag.id]: { x, y } }));
           }
         }}

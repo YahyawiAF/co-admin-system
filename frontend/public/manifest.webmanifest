@@ -1,0 +1,25 @@
+{
+  "name": "Collabora Hub",
+  "short_name": "Collabora",
+  "description": "Espace visiteur coworking",
+  "start_url": "/m",
+  "scope": "/m",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f6fb",
+  "theme_color": "#1976d2",
+  "icons": [
+    {
+      "src": "/collabora-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/collabora-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

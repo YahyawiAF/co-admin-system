@@ -13,7 +13,7 @@ import { Server } from 'socket.io';
   cors: {
     origin: '*',
   },
-  transports: ['websocket'],
+  transports: ['websocket', 'polling'],
   allowEIO3: true,
 })
 export class EventsGateway {

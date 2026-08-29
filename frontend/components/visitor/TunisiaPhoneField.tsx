@@ -33,12 +33,15 @@ export function TunisiaPhoneField({
       value={value}
       onChange={onChange}
       className={cn(
-        "PhoneInput flex h-11 w-full items-center rounded-md border border-input bg-white px-3 text-sm",
+        "PhoneInput flex h-11 w-full items-center rounded-md border border-input bg-white px-3 text-base",
         className
       )}
       numberInputProps={{
+        type: "tel",
+        inputMode: "tel",
+        autoComplete: "tel",
         className:
-          "flex-1 border-0 bg-transparent outline-none placeholder:text-muted-foreground",
+          "PhoneInputInput flex-1 border-0 bg-transparent text-base outline-none placeholder:text-muted-foreground",
         placeholder: "20 123 456",
       }}
     />

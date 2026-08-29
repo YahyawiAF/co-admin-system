@@ -453,6 +453,8 @@ export interface Organization {
   name: string;
   slug: string;
   logo?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
   facility?: { id: string; name: string; logo?: string | null } | null;
 }
 

@@ -360,6 +360,7 @@ export function SeatOccupancyBoard({
                   space={activeSpace}
                   bookings={bookings}
                   editMode={false}
+                  variant="picker"
                   selectedSeatId={selectedSeatId}
                   onSelectSeat={(seat) => setSelectedSeatLabel(seat.label)}
                 />

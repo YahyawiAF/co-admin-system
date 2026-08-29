@@ -160,12 +160,13 @@ export function RelocateSeatDialog({
           </Button>
         ))}
       </div>
-      <div className="min-h-[220px] flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
+      <div className="min-h-[min(52vh,520px)] flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
         {activeSpace ? (
           <FloorPlanCanvas
             space={activeSpace}
             bookings={bookings}
             editMode={false}
+            variant="picker"
             selectedSeatId={selectedSeatId}
             onSelectSeat={pickSeat}
           />

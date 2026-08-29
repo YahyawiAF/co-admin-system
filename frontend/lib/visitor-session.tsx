@@ -3,7 +3,7 @@
 import {
   createContext,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useState,
   type ReactNode,
 } from "react";
@@ -47,7 +47,7 @@ export function VisitorSessionProvider({
     setReady(true);
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgSlug]);

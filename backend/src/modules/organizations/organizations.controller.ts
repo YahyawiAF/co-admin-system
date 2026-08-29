@@ -1,4 +1,11 @@
-import { Controller, Get, Param } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { OrganizationsService } from './organizations.service';
 
@@ -10,6 +17,35 @@ export class OrganizationsController {
   @Get()
   list() {
     return this.organizationsService.list();
+  }
+
+  @Post()
+  create(
+    @Body()
+    body: {
+      name: string;
+      slug: string;
+      logo?: string | null;
+      facebookUrl?: string | null;
+      instagramUrl?: string | null;
+    },
+  ) {
+    return this.organizationsService.create(body);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body()
+    body: Partial<{
+      name: string;
+      slug: string;
+      logo: string | null;
+      facebookUrl: string | null;
+      instagramUrl: string | null;
+    }>,
+  ) {
+    return this.organizationsService.update(id, body);
   }
 
   @Get(':slug')

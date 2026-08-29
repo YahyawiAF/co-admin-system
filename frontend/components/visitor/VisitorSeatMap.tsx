@@ -159,12 +159,13 @@ export function VisitorSeatMap({
         ))}
       </div>
 
-      <div className="max-h-72 overflow-auto rounded-xl border bg-slate-50 p-2">
+      <div className="w-full overflow-auto rounded-xl border bg-slate-50 p-1">
         {activeSpace ? (
           <FloorPlanCanvas
             space={activeSpace}
             bookings={bookings}
             editMode={false}
+            variant="picker"
             selectedSeatId={selectedSeatId}
             onSelectSeat={canPick ? onSelectSeat : undefined}
           />

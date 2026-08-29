@@ -332,7 +332,7 @@ export function VisitRequestBell() {
           }
         }}
       >
-        <DialogContent className="flex max-h-[92vh] max-w-4xl flex-col gap-3 overflow-hidden sm:max-w-4xl">
+        <DialogContent className="flex h-[min(94vh,900px)] w-[96vw] max-w-6xl flex-col gap-3 overflow-hidden sm:max-w-6xl">
           <DialogHeader>
             <DialogTitle className="flex flex-wrap items-center gap-2">
               Demande de visite
@@ -346,51 +346,8 @@ export function VisitRequestBell() {
             </DialogTitle>
           </DialogHeader>
           {current ? (
-            <div className="space-y-3 overflow-y-auto text-sm">
-              <div className="grid gap-1 sm:grid-cols-2">
-                <p>
-                  <span className="text-muted-foreground">Visiteur : </span>
-                  {current.member?.firstName || "Visiteur"}
-                  {current.member?.visitorNumber
-                    ? ` #${current.member.visitorNumber}`
-                    : ""}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Téléphone : </span>
-                  {current.member?.phone || "—"}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Forfait : </span>
-                  {current.price?.name} ({current.price?.price} DT)
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Type : </span>
-                  {current.type}
-                </p>
-              </div>
-
-              {occupancy ? (
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">
-                    Places {occupancy.normalOccupied}/
-                    {occupancy.normalCapacity}
-                  </Badge>
-                  {occupancy.overflowCapacity > 0 ? (
-                    <Badge variant="outline">
-                      Overflow {occupancy.overflowOccupied}/
-                      {occupancy.overflowCapacity}
-                    </Badge>
-                  ) : null}
-                  {isFull ? (
-                    <Badge className="bg-rose-600">Complet</Badge>
-                  ) : null}
-                </div>
-              ) : null}
-
-              <div className="space-y-2 rounded-lg border p-3">
-                <p className="text-xs font-semibold uppercase text-muted-foreground">
-                  Places restantes par espace
-                </p>
+            <div className="grid min-h-0 flex-1 gap-4 overflow-hidden text-sm lg:grid-cols-[1.35fr_1fr]">
+              <div className="flex min-h-0 flex-col gap-2">
                 <div className="flex flex-wrap gap-2">
                   {spaceStats.map(
                     ({
@@ -422,39 +379,22 @@ export function VisitRequestBell() {
                     )
                   )}
                 </div>
-                {!isFull ? (
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={allowOverflow}
-                      onChange={(e) => setAllowOverflow(e.target.checked)}
-                    />
-                    Afficher places overflow
-                  </label>
-                ) : null}
                 <p className="text-xs text-muted-foreground">
-                  {isPeriodSubRequest(current)
-                    ? "Abonnement période : choisissez la place réservée (toujours à eux)."
-                    : isHoursPoolRequest(current)
-                      ? "Abonnement heures : pas de place maintenant. Après le scan, attribuez-la comme un visiteur."
-                    : needsAdminSeat
-                      ? "Mode admin : sélectionnez une place puis confirmez."
-                      : autoSeat
-                        ? "Mode auto : une place libre sera attribuée à la confirmation."
-                        : "Mode visiteur : le client choisira sa place après confirmation."}
+                  {activeSpace?.name || "Espace"} — cliquez une place libre
                   {seatLabel ? (
                     <span className="font-medium text-foreground">
                       {" "}
-                      Sélection : {seatLabel}
+                      · sélection : {seatLabel}
                     </span>
                   ) : null}
                 </p>
-                <div className="max-h-64 overflow-auto rounded-md border bg-muted/20 p-2">
+                <div className="min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-2">
                   {activeSpace ? (
                     <FloorPlanCanvas
                       space={activeSpace}
                       bookings={bookings}
                       editMode={false}
+                      variant="picker"
                       selectedSeatId={selectedSeatId}
                       onSelectSeat={pickSeat}
                     />
@@ -463,6 +403,75 @@ export function VisitRequestBell() {
                       Aucun plan d&apos;espace configuré.
                     </p>
                   )}
+                </div>
+              </div>
+
+              <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+                <div className="grid gap-1 sm:grid-cols-1">
+                  <p>
+                    <span className="text-muted-foreground">Visiteur : </span>
+                    {current.member?.firstName || "Visiteur"}
+                    {current.member?.visitorNumber
+                      ? ` #${current.member.visitorNumber}`
+                      : ""}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Téléphone : </span>
+                    {current.member?.phone || "—"}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Forfait : </span>
+                    {current.price?.name} ({current.price?.price} DT)
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Type : </span>
+                    {current.type}
+                  </p>
+                </div>
+
+                {occupancy ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">
+                      Places {occupancy.normalOccupied}/
+                      {occupancy.normalCapacity}
+                    </Badge>
+                    {occupancy.overflowCapacity > 0 ? (
+                      <Badge variant="outline">
+                        Overflow {occupancy.overflowOccupied}/
+                        {occupancy.overflowCapacity}
+                      </Badge>
+                    ) : null}
+                    {isFull ? (
+                      <Badge className="bg-rose-600">Complet</Badge>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <div className="space-y-2 rounded-lg border p-3">
+                  <p className="text-xs font-semibold uppercase text-muted-foreground">
+                    Places restantes par espace
+                  </p>
+                  {!isFull ? (
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={allowOverflow}
+                        onChange={(e) => setAllowOverflow(e.target.checked)}
+                      />
+                      Afficher places overflow
+                    </label>
+                  ) : null}
+                  <p className="text-xs text-muted-foreground">
+                    {isPeriodSubRequest(current)
+                      ? "Abonnement période : choisissez la place réservée (toujours à eux)."
+                      : isHoursPoolRequest(current)
+                        ? "Abonnement heures : pas de place maintenant. Après le scan, attribuez-la comme un visiteur."
+                        : needsAdminSeat
+                          ? "Mode admin : sélectionnez une place puis confirmez."
+                          : autoSeat
+                            ? "Mode auto : une place libre sera attribuée à la confirmation."
+                            : "Mode visiteur : le client choisira sa place après confirmation."}
+                  </p>
                 </div>
               </div>
             </div>

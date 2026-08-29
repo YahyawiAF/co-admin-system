@@ -191,6 +191,7 @@ export function ProductOrderBell() {
                     space={activeSpace}
                     bookings={bookings}
                     editMode={false}
+                    variant="picker"
                     selectedSeatId={selectedSeatId}
                   />
                 </div>

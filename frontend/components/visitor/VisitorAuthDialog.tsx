@@ -96,7 +96,9 @@ export function VisitorAuthDialog({
               <Input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                type="tel"
                 inputMode="tel"
+                autoComplete="tel"
                 autoFocus
               />
             </div>
@@ -138,7 +140,9 @@ export function VisitorAuthDialog({
               <Input
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
+                type="tel"
                 inputMode="tel"
+                autoComplete="tel"
               />
             </div>
             {signup.isError ? (

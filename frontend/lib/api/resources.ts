@@ -752,6 +752,27 @@ export const organizationsApi = {
       { skipAuth: true },
     );
   },
+  create(data: {
+    name: string;
+    slug: string;
+    logo?: string | null;
+    facebookUrl?: string | null;
+    instagramUrl?: string | null;
+  }) {
+    return http.post<Organization>("/organizations", data);
+  },
+  update(
+    id: string,
+    data: Partial<{
+      name: string;
+      slug: string;
+      logo: string | null;
+      facebookUrl: string | null;
+      instagramUrl: string | null;
+    }>,
+  ) {
+    return http.patch<Organization>(`/organizations/${id}`, data);
+  },
 };
 
 export const eventsApi = {

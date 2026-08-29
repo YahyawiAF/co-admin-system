@@ -286,7 +286,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
       <DialogTrigger asChild>
         <Button size="lg">+ Check-in</Button>
       </DialogTrigger>
-      <DialogContent className="flex h-[90vh] max-h-[90vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden p-0">
+      <DialogContent className="flex h-[90vh] max-h-[90vh] w-[96vw] max-w-6xl flex-col gap-0 overflow-hidden p-0 sm:max-w-6xl">
         <div className="border-b bg-muted/40 px-6 py-4 pr-12">
           <DialogHeader>
             <DialogTitle className="text-xl">Check-in</DialogTitle>

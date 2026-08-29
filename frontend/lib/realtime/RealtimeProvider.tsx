@@ -29,10 +29,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const base = API_BASE_URL.replace(/\/api\/?$/, "");
+    const raw =
+      process.env.NEXT_PUBLIC_WS_URL ||
+      API_BASE_URL.replace(/\/api\/?$/, "");
+    const base = raw.replace(/\/$/, "");
     const s = io(base, {
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 12,
+      timeout: 12_000,
     });
 
     const invalidateOps = () => {
