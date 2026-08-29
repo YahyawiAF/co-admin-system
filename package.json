@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:frontend-legacy\"",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:all": "concurrently -n api,web,legacy -c blue,green,yellow \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:frontend-legacy\"",
     "dev:backend": "cd backend && npm run start:dev",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:frontend-legacy": "cd Front-end && npm run dev"

@@ -211,6 +211,10 @@ export class AuthService {
     userId: string,
     refreshToken: string,
   ): Promise<AuthEntity> {
+    if (!userId || !refreshToken) {
+      throw new ForbiddenException('Access Denied');
+    }
+
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user || !user.refreshToken) {
@@ -240,6 +244,9 @@ export class AuthService {
    * Déconnexion d'un utilisateur
    */
   async logout(userId: string): Promise<void> {
+    if (!userId) {
+      throw new ForbiddenException('Access Denied');
+    }
     try {
       await this.prisma.user.update({
         where: { id: userId },

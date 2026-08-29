@@ -47,8 +47,13 @@ export class AuthController {
   @Get('refresh')
   @ApiOkResponse({ type: AuthEntity })
   refreshTokens(@Req() req: Request) {
-    const userId = req.user['sub'];
-    const refreshToken = req.user['refreshToken'];
+    const user = req.user as {
+      userId?: string;
+      sub?: string;
+      refreshToken?: string;
+    };
+    const userId = user.userId ?? user.sub;
+    const refreshToken = user.refreshToken;
     return this.authService.refreshTokens(userId, refreshToken);
   }
 
@@ -73,7 +78,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ description: 'Logout successful' })
   async logout(@Req() req: Request) {
-    const userId = req.user['sub'];
+    const user = req.user as { userId?: string; sub?: string };
+    const userId = user.userId ?? user.sub;
     await this.authService.logout(userId);
     return { message: 'Logout successful' };
   }
@@ -83,8 +89,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard) // Appliquez le guard pour protéger la route
   @ApiOkResponse({ description: 'Accès à une ressource protégée' })
   getProtectedResource(@Req() req: Request) {
-    // Vous pouvez accéder aux informations de l'utilisateur via `req.user`
-    const userId = req.user['sub'];
+    const user = req.user as { userId?: string; sub?: string };
+    const userId = user.userId ?? user.sub;
     return {
       message: 'Ceci est une ressource protégée',
       userId: userId,
