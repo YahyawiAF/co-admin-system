@@ -286,6 +286,7 @@ export interface Space {
   capacityNormal: number;
   wifiSsid?: string | null;
   wifiPassword?: string | null;
+  openForReservation?: boolean;
   tables?: SpaceTable[];
   seats?: SpaceSeat[];
   walls?: SpaceWall[];

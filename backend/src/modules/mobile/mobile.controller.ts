@@ -84,9 +84,17 @@ export class MobileController {
   }
 
   @Get('tarifs')
-  tarifs(@Query('org') org?: string) {
-    // Only active tarifs for visitors / check-in pickers
-    return this.priceService.findAll(undefined, { activeOnly: true });
+  async tarifs(@Query('org') org?: string) {
+    let organizationId: string | undefined;
+    if (org) {
+      try {
+        const resolved = await this.mobileService.resolveOrganizationBySlug(org);
+        organizationId = resolved.id;
+      } catch {
+        organizationId = undefined;
+      }
+    }
+    return this.priceService.findAll(organizationId, { activeOnly: true });
   }
 
   @Get('seat-settings')
@@ -123,6 +131,14 @@ export class MobileController {
   @Get('community')
   community(@Query('memberId') memberId?: string) {
     return this.mobileService.listCommunity(memberId);
+  }
+
+  @Get('community/member/:id')
+  communityMember(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('viewerId') viewerId?: string,
+  ) {
+    return this.mobileService.getCommunityMember(id, viewerId);
   }
 
   @Get('products')

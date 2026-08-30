@@ -450,6 +450,34 @@ export class SpaceEventsService {
     };
   }
 
+  async listForMember(memberId: string) {
+    const rows = await this.prisma.eventRegistration.findMany({
+      where: {
+        memberId,
+        status: {
+          in: [
+            EventRegistrationStatus.ATTENDED,
+            EventRegistrationStatus.REGISTERED,
+          ],
+        },
+      },
+      include: { event: true },
+      orderBy: { event: { startAt: 'desc' } },
+      take: 40,
+    });
+    return rows.map((r) => ({
+      id: r.event.id,
+      title: r.event.title,
+      kind: r.event.kind,
+      startAt: r.event.startAt,
+      endAt: r.event.endAt,
+      location: r.event.location,
+      coverImage: r.event.coverImage,
+      status: r.event.status,
+      registrationStatus: r.status,
+    }));
+  }
+
   async feedback(eventId: string, dto: EventFeedbackDto) {
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },

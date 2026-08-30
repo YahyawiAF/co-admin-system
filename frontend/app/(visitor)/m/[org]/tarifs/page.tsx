@@ -7,11 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { mobileApi } from "@/lib/api/resources";
 import { PriceCategory } from "@/lib/types";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
+import { useOrg } from "@/lib/org";
 
 export default function MobileTarifsPage() {
+  const { slug } = useOrg();
   const { data: tarifs = [] } = useQuery({
-    queryKey: ["mobile-tarifs"],
-    queryFn: () => mobileApi.tarifs(),
+    queryKey: ["mobile-tarifs", slug],
+    queryFn: () => mobileApi.tarifs(slug),
   });
 
   const groups = useMemo(() => {

@@ -363,24 +363,25 @@ model Facility {
 }
 
 model Space {
-  id             String          @id @default(uuid())
-  facilityId     String
-  facility       Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  name           String
-  category       PriceCategory?
-  floorPlanUrl   String?
-  sortOrder      Int             @default(0)
-  capacityNormal Int             @default(0)
-  wifiSsid       String?
-  wifiPassword   String?
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  tables         Table[]
-  seats          Seat[]
-  walls          SpaceWall[]
-  fixtures       SpaceFixture[]
-  bookings       SeatBooking[]
-  prices         Price[]
+  id                  String          @id @default(uuid())
+  facilityId          String
+  facility            Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  name                String
+  category            PriceCategory?
+  floorPlanUrl        String?
+  sortOrder           Int             @default(0)
+  capacityNormal      Int             @default(0)
+  wifiSsid            String?
+  wifiPassword        String?
+  openForReservation  Boolean         @default(false)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  tables              Table[]
+  seats               Seat[]
+  walls               SpaceWall[]
+  fixtures            SpaceFixture[]
+  bookings            SeatBooking[]
+  prices              Price[]
 
   @@map("spaces")
 }

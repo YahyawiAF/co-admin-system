@@ -31,6 +31,8 @@ import {
   VisitRequestStatus,
   VisitRequestType,
   BookingRequestKind,
+  EventRegistrationStatus,
+  EventStatus,
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
@@ -2956,6 +2958,101 @@ export class MobileService {
     }));
   }
 
+  async getCommunityMember(memberId: string, viewerId?: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+    });
+    if (!member || member.deletedAt) {
+      throw new NotFoundException('Membre introuvable');
+    }
+    if (!member.showInDirectory && member.id !== viewerId) {
+      throw new NotFoundException('Profil non publié');
+    }
+    const now = new Date();
+    const present = await this.prisma.journal.findFirst({
+      where: {
+        memberID: memberId,
+        leaveTime: null,
+        registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+      },
+      select: { id: true },
+    });
+    const events = await this.prisma.eventRegistration.findMany({
+      where: {
+        memberId,
+        status: {
+          in: [
+            EventRegistrationStatus.ATTENDED,
+            EventRegistrationStatus.REGISTERED,
+          ],
+        },
+        event: { status: EventStatus.PUBLISHED },
+      },
+      include: {
+        event: {
+          select: {
+            id: true,
+            title: true,
+            kind: true,
+            startAt: true,
+            endAt: true,
+            location: true,
+            coverImage: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: { event: { startAt: 'desc' } },
+      take: 30,
+    });
+    return {
+      member: {
+        ...this.sanitizeMember(member as any),
+        isPresent: !!present,
+      },
+      events: events.map((r) => ({
+        id: r.event.id,
+        title: r.event.title,
+        kind: r.event.kind,
+        startAt: r.event.startAt,
+        endAt: r.event.endAt,
+        location: r.event.location,
+        coverImage: r.event.coverImage,
+        registrationStatus: r.status,
+      })),
+    };
+  }
+
+  async listMemberEvents(memberId: string) {
+    const rows = await this.prisma.eventRegistration.findMany({
+      where: {
+        memberId,
+        status: {
+          in: [
+            EventRegistrationStatus.ATTENDED,
+            EventRegistrationStatus.REGISTERED,
+          ],
+        },
+      },
+      include: {
+        event: true,
+      },
+      orderBy: { event: { startAt: 'desc' } },
+      take: 40,
+    });
+    return rows.map((r) => ({
+      id: r.event.id,
+      title: r.event.title,
+      kind: r.event.kind,
+      startAt: r.event.startAt,
+      endAt: r.event.endAt,
+      location: r.event.location,
+      coverImage: r.event.coverImage,
+      status: r.event.status,
+      registrationStatus: r.status,
+    }));
+  }
+
   async listProducts(orgSlug?: string) {
     let organizationId: string | undefined;
     if (orgSlug) {
@@ -3859,21 +3956,41 @@ export class MobileService {
       throw new ConflictException('Vous avez déjà une réservation en attente');
     }
     let spaceName: string | null = null;
-    if (dto.spaceId) {
-      const space = await this.prisma.space.findUnique({
-        where: { id: dto.spaceId },
-      });
-      if (!space) throw new NotFoundException('Espace introuvable');
-      spaceName = space.name;
+    const spaceIdToCheck =
+      kind === BookingRequestKind.ROOM
+        ? dto.spaceId
+        : dto.seatSpaceId || dto.spaceId;
+    if (!spaceIdToCheck) {
+      throw new BadRequestException(
+        kind === BookingRequestKind.ROOM
+          ? 'Choisissez une salle'
+          : 'Choisissez un espace',
+      );
     }
+    const space = await this.prisma.space.findUnique({
+      where: { id: spaceIdToCheck },
+    });
+    if (!space) throw new NotFoundException('Espace introuvable');
+    if (!space.openForReservation) {
+      throw new BadRequestException(
+        'Cet espace n’est pas ouvert aux réservations',
+      );
+    }
+    spaceName = space.name;
     const created = await this.prisma.bookingRequest.create({
       data: {
         memberId: dto.memberId,
         kind,
-        spaceId: dto.spaceId || null,
+        spaceId:
+          kind === BookingRequestKind.ROOM
+            ? spaceIdToCheck
+            : dto.spaceId || spaceIdToCheck,
         spaceName,
         seatLabel: dto.seatLabel?.trim() || null,
-        seatSpaceId: dto.seatSpaceId || dto.spaceId || null,
+        seatSpaceId:
+          kind === BookingRequestKind.SEAT
+            ? spaceIdToCheck
+            : dto.seatSpaceId || null,
         date: day,
         startAt,
         endAt,

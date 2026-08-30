@@ -33,7 +33,7 @@ export function JournalReceptionToggles() {
   if (!facility) return null;
 
   return (
-    <div className="mt-3 flex flex-wrap gap-2">
+    <div className="flex flex-wrap justify-end gap-2">
       <label className="flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm">
         <Pause className="h-3.5 w-3.5 text-muted-foreground" />
         <span>Auto-accepter forfaits</span>

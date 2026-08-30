@@ -39,6 +39,7 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "/choose": "Forfaits",
   "/staff": "Accueil",
   "/reserve": "Réserver",
+  "/reservations": "Mes réservations",
 };
 
 export function MobileHeader() {
@@ -83,7 +84,11 @@ export function MobileHeader() {
           ? "Événements"
           : suffix.startsWith("/community")
             ? "Communauté"
-            : org.name);
+            : suffix.startsWith("/chat/")
+              ? "Message"
+              : suffix.startsWith("/u/")
+                ? "Profil"
+                : org.name);
   const facilityName = layout?.facility?.name || org.name;
 
   const notices = useMemo(() => {

@@ -635,8 +635,9 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
-  tarifs() {
-    return http.get<Price[]>("/mobile/tarifs", { skipAuth: true });
+  tarifs(orgSlug?: string) {
+    const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
+    return http.get<Price[]>(`/mobile/tarifs${q}`, { skipAuth: true });
   },
   createVisitRequest(data: {
     memberId: string;
@@ -696,6 +697,37 @@ export const mobileApi = {
   community(memberId?: string) {
     const q = memberId ? `?memberId=${memberId}` : "";
     return http.get<Member[]>(`/mobile/community${q}`, { skipAuth: true });
+  },
+  communityMember(id: string, viewerId?: string) {
+    const q = viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : "";
+    return http.get<{
+      member: Member;
+      events: Array<{
+        id: string;
+        title: string;
+        kind: string;
+        startAt: string;
+        endAt: string;
+        location?: string | null;
+        coverImage?: string | null;
+        registrationStatus: string;
+      }>;
+    }>(`/mobile/community/member/${id}${q}`, { skipAuth: true });
+  },
+  myEvents(memberId: string) {
+    return http.get<
+      Array<{
+        id: string;
+        title: string;
+        kind: string;
+        startAt: string;
+        endAt: string;
+        location?: string | null;
+        coverImage?: string | null;
+        status: string;
+        registrationStatus: string;
+      }>
+    >(`/mobile/events/mine/${memberId}`, { skipAuth: true });
   },
   products(orgSlug?: string) {
     const q = orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : "";
@@ -875,6 +907,10 @@ export const mobileApi = {
 };
 
 export const bookingRequestsApi = {
+  list(status?: "PENDING" | "APPROVED" | "REJECTED") {
+    const q = status ? `?status=${status}` : "";
+    return http.get<BookingRequest[]>(`/mobile/admin/booking-requests${q}`);
+  },
   pending() {
     return http.get<BookingRequest[]>(
       "/mobile/admin/booking-requests?status=PENDING"

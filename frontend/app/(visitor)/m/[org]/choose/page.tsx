@@ -22,7 +22,7 @@ import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 
 function ChooseInner() {
   const router = useRouter();
-  const { href } = useOrg();
+  const { href, slug } = useOrg();
   const { memberId: sessionMemberId } = useVisitorSession();
   const searchParams = useSearchParams();
   const mode = (searchParams.get("mode") as string) || "day";
@@ -56,8 +56,8 @@ function ChooseInner() {
   });
 
   const { data: tarifs = [] } = useQuery({
-    queryKey: ["mobile-tarifs"],
-    queryFn: () => mobileApi.tarifs(),
+    queryKey: ["mobile-tarifs", slug],
+    queryFn: () => mobileApi.tarifs(slug),
     staleTime: 5 * 60_000,
   });
 

@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -1620,6 +1621,18 @@ export default function FacilityPage() {
                         </SelectItem>
                       </SelectContent>
                     </Select>
+                    <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
+                      <Switch
+                        checked={!!space.openForReservation}
+                        onCheckedChange={(on) =>
+                          updateSpace.mutate({
+                            id: space.id,
+                            data: { openForReservation: on },
+                          })
+                        }
+                      />
+                      Réservation mobile
+                    </label>
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"

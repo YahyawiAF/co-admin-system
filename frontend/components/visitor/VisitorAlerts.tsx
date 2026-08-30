@@ -464,7 +464,7 @@ export function VisitorAlerts() {
                 onClick={() => {
                   const id = inbox.fromMemberId;
                   setInbox(null);
-                  router.push(href(`/community?peer=${id}`));
+                  router.push(href(`/chat/${id}`));
                 }}
               >
                 Répondre

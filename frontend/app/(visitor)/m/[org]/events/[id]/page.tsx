@@ -200,7 +200,7 @@ export default function EventDetailPage() {
                 key={a.id}
                 member={a as Member}
                 onClick={() =>
-                  router.push(href(`/community?peer=${a.id}`))
+                  router.push(href(`/u/${a.id}`))
                 }
               />
             ))

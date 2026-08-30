@@ -50,7 +50,8 @@ export function MobileShell({ children }: { children: ReactNode }) {
     rest.startsWith("/recover") ||
     rest.startsWith("/join") ||
     rest.startsWith("/signup");
-  const immersiveChat = rest.startsWith("/staff");
+  const immersiveChat =
+    rest.startsWith("/staff") || rest.startsWith("/chat/");
 
   useEffect(() => {
     if (!ready || onboarded || allowed) return;

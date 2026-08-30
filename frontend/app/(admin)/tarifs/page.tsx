@@ -422,8 +422,13 @@ export default function TarifsPage() {
       OTHER: [],
     };
     for (const p of prices) {
-      const key = p.category || "OTHER";
-      if (!map[key]) map[key] = [];
+      const key =
+        p.category === PriceCategory.JOURNEE ||
+        p.category === PriceCategory.SALLE ||
+        p.category === PriceCategory.OPEN_SPACE ||
+        p.category === PriceCategory.ABONNEMENT
+          ? p.category
+          : "OTHER";
       map[key].push(p);
     }
     return map;
@@ -534,10 +539,27 @@ export default function TarifsPage() {
 
       <Tabs defaultValue="JOURNEE">
         <TabsList>
-          <TabsTrigger value="JOURNEE">Bureau / journée</TabsTrigger>
-          <TabsTrigger value="SALLE">Salle de réunion</TabsTrigger>
-          <TabsTrigger value="OPEN_SPACE">Open space</TabsTrigger>
-          <TabsTrigger value="ABONNEMENT">Abonnement</TabsTrigger>
+          <TabsTrigger value="JOURNEE">
+            Bureau / journée
+            {byCat.JOURNEE.length ? ` (${byCat.JOURNEE.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="SALLE">
+            Salle de réunion
+            {byCat.SALLE.length ? ` (${byCat.SALLE.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="OPEN_SPACE">
+            Open space
+            {byCat.OPEN_SPACE.length ? ` (${byCat.OPEN_SPACE.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="ABONNEMENT">
+            Abonnement
+            {byCat.ABONNEMENT.length ? ` (${byCat.ABONNEMENT.length})` : ""}
+          </TabsTrigger>
+          {byCat.OTHER.length ? (
+            <TabsTrigger value="OTHER">
+              Autres ({byCat.OTHER.length})
+            </TabsTrigger>
+          ) : null}
         </TabsList>
         <TabsContent value="JOURNEE" className="mt-4">
           {renderGrid(byCat.JOURNEE)}
@@ -551,6 +573,11 @@ export default function TarifsPage() {
         <TabsContent value="ABONNEMENT" className="mt-4">
           {renderGrid(byCat.ABONNEMENT)}
         </TabsContent>
+        {byCat.OTHER.length ? (
+          <TabsContent value="OTHER" className="mt-4">
+            {renderGrid(byCat.OTHER)}
+          </TabsContent>
+        ) : null}
       </Tabs>
 
       <PriceFormDialog

@@ -77,6 +77,11 @@ export class MobileEventsController {
     );
   }
 
+  @Get('mine/:memberId')
+  myEvents(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.eventsService.listForMember(memberId);
+  }
+
   @Get(':id/attendees')
   attendees(
     @Param('id', ParseUUIDPipe) id: string,

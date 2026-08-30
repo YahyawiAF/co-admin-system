@@ -370,6 +370,7 @@ export class FacilityService {
       category: PriceCategory;
       wifiSsid: string | null;
       wifiPassword: string | null;
+      openForReservation: boolean;
     }>,
   ) {
     const space = await this.prisma.space.update({

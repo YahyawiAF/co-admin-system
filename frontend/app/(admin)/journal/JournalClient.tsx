@@ -651,109 +651,116 @@ export default function JournalClient() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
-          <div className="mt-1 flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setDate(addDays(selectedDate, -1))}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="min-w-[160px] text-center text-sm font-medium">
-              {format(selectedDate, "EEEE d MMM yyyy", { locale: fr })}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setDate(addDays(selectedDate, 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDate(new Date())}
-            >
-              Aujourd&apos;hui
-            </Button>
+        </div>
+        <div className="flex min-w-0 flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex items-center gap-1 rounded-lg border bg-card px-1 py-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setDate(addDays(selectedDate, -1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[150px] px-1 text-center text-sm font-medium">
+                {format(selectedDate, "EEEE d MMM yyyy", { locale: fr })}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setDate(addDays(selectedDate, 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8"
+                onClick={() => setDate(new Date())}
+              >
+                Aujourd&apos;hui
+              </Button>
+            </div>
+            <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
+              <SeatOccupancyBoard
+                date={selectedDate}
+                open={occupancyOpen}
+                onOpenChange={(o) => {
+                  setOccupancyOpen(o);
+                  if (!o) {
+                    setFocusSeatLabel(null);
+                    setFocusSpaceId(null);
+                  }
+                }}
+                focusSeatLabel={focusSeatLabel}
+                focusSpaceId={focusSpaceId}
+              />
+              <JournalCommandesRail date={selectedDate} />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="lg">
+                    <Printer className="mr-2 h-4 w-4" />
+                    Exporter
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportPrint}>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Imprimer / PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportWhatsApp}>
+                    <Share2 className="mr-2 h-4 w-4" />
+                    WhatsApp (copie + ouvrir)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    disabled={!present || endOfDay.isPending}
+                  >
+                    <Moon className="mr-2 h-4 w-4" />
+                    Fin de journée
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      Check-out de {present} présent{present !== 1 ? "s" : ""} ?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Toutes les sessions en cours seront clôturées et leurs places
+                      libérées sur le plan.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => endOfDay.mutate()}>
+                      Check-out tous
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              <ReservationPanel
+                journalDate={selectedDate}
+                onDone={() => refetch()}
+              />
+              <Button size="lg" variant="outline" asChild>
+                <Link href="/abonnements">Abonnements</Link>
+              </Button>
+              <QuickCheckInPanel
+                presentMemberIds={presentMemberIds}
+                onDone={() => refetch()}
+              />
+            </div>
           </div>
           <JournalReceptionToggles />
-        </div>
-        <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
-          <SeatOccupancyBoard
-            date={selectedDate}
-            open={occupancyOpen}
-            onOpenChange={(o) => {
-              setOccupancyOpen(o);
-              if (!o) {
-                setFocusSeatLabel(null);
-                setFocusSpaceId(null);
-              }
-            }}
-            focusSeatLabel={focusSeatLabel}
-            focusSpaceId={focusSpaceId}
-          />
-          <JournalCommandesRail date={selectedDate} />
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="lg">
-                <Printer className="mr-2 h-4 w-4" />
-                Exporter
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={exportPrint}>
-                <Printer className="mr-2 h-4 w-4" />
-                Imprimer / PDF
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={exportWhatsApp}>
-                <Share2 className="mr-2 h-4 w-4" />
-                WhatsApp (copie + ouvrir)
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="lg"
-                disabled={!present || endOfDay.isPending}
-              >
-                <Moon className="mr-2 h-4 w-4" />
-                Fin de journée
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>
-                  Check-out de {present} présent{present !== 1 ? "s" : ""} ?
-                </AlertDialogTitle>
-                <AlertDialogDescription>
-                  Toutes les sessions en cours seront clôturées et leurs places
-                  libérées sur le plan.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Annuler</AlertDialogCancel>
-                <AlertDialogAction onClick={() => endOfDay.mutate()}>
-                  Check-out tous
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-
-          <ReservationPanel
-            journalDate={selectedDate}
-            onDone={() => refetch()}
-          />
-          <Button size="lg" variant="outline" asChild>
-            <Link href="/abonnements">Abonnements</Link>
-          </Button>
-          <QuickCheckInPanel
-            presentMemberIds={presentMemberIds}
-            onDone={() => refetch()}
-          />
         </div>
       </div>
 

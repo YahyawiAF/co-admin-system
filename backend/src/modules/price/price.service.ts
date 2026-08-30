@@ -268,7 +268,14 @@ export class PriceService {
   ): Promise<PriceEntity[]> {
     const prices = await this.prisma.price.findMany({
       where: {
-        ...(organizationId ? { organizationId } : {}),
+        ...(organizationId
+          ? {
+              OR: [
+                { organizationId },
+                { organizationId: null },
+              ],
+            }
+          : {}),
         ...(opts?.activeOnly ? { isActive: true } : {}),
       },
       orderBy: [{ category: 'asc' }, { price: 'asc' }],

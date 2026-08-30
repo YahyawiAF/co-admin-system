@@ -63,6 +63,7 @@ export class FacilityController {
       category: PriceCategory;
       wifiSsid: string | null;
       wifiPassword: string | null;
+      openForReservation: boolean;
     }>,
   ) {
     return this.facilityService.updateSpace(id, body);

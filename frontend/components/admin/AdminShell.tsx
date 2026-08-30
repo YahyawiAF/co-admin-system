@@ -36,6 +36,7 @@ import { useState, type ReactNode } from "react";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/journal", label: "Journal", icon: ClipboardList },
+  { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },
   { href: "/finance", label: "Finance", icon: Banknote },
   { href: "/members", label: "Members", icon: Users },
