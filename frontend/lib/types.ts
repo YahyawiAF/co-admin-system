@@ -81,6 +81,7 @@ export interface Member {
   linkedinUrl?: string | null;
   openToCollaboration?: boolean;
   showInDirectory?: boolean;
+  isPresent?: boolean;
 }
 
 export interface MemberGroup {
@@ -421,6 +422,7 @@ export interface StaffMessage {
   visitorNumber?: number | null;
   phone?: string | null;
   avatarUrl?: string | null;
+  unread?: boolean;
 }
 
 export interface MemberInsights {
@@ -534,4 +536,50 @@ export interface EventAttendee {
   avatarUrl?: string | null;
   bio?: string | null;
   showInDirectory?: boolean;
+}
+
+export type LedgerKind = "CREDIT" | "ECHEANCE";
+
+export interface MemberLedgerEntry {
+  id: string;
+  memberId: string;
+  kind: LedgerKind;
+  amount: number;
+  note?: string | null;
+  dueDate?: string | null;
+  source?: string | null;
+  journalId?: string | null;
+  abonnementId?: string | null;
+  settled: boolean;
+  createdAt: string;
+}
+
+export interface MemberLedgerSummary {
+  entries: MemberLedgerEntry[];
+  owedByMember: number;
+  owedToMember: number;
+  net: number;
+}
+
+export type BookingRequestKind = "ROOM" | "SEAT";
+
+export interface BookingRequest {
+  id: string;
+  memberId: string;
+  kind: BookingRequestKind;
+  spaceId?: string | null;
+  spaceName?: string | null;
+  seatLabel?: string | null;
+  seatSpaceId?: string | null;
+  date: string;
+  startAt: string;
+  endAt: string;
+  note?: string | null;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  journalId?: string | null;
+  createdAt: string;
+  memberName?: string | null;
+  visitorNumber?: number | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
 }

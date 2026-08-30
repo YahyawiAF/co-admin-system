@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { membersApi, groupsApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Member, MemberGroup } from "@/lib/types";
+import { MemberInviteShare } from "@/components/admin/MemberInviteShare";
 
 const schema = z.object({
   firstName: z.string().optional(),
@@ -52,6 +53,7 @@ export function MemberFormModal({
   onSaved,
 }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
+  const [inviteMember, setInviteMember] = useState<Member | null>(null);
   const open = controlledOpen ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const queryClient = useQueryClient();
@@ -122,11 +124,13 @@ export function MemberFormModal({
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       setOpen(false);
       onSaved?.(res);
+      if (!isEdit) setInviteMember(res);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   return (
+    <>
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="sm:max-w-lg">
@@ -232,5 +236,34 @@ export function MemberFormModal({
         </form>
       </DialogContent>
     </Dialog>
+      <Dialog
+        open={!!inviteMember}
+        onOpenChange={(o) => {
+          if (!o) setInviteMember(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Lien à envoyer</DialogTitle>
+            <DialogDescription>
+              Envoyez ce lien WhatsApp. Le visiteur confirme uniquement son
+              numéro.
+            </DialogDescription>
+          </DialogHeader>
+          {inviteMember ? (
+            <MemberInviteShare
+              memberId={inviteMember.id}
+              memberName={
+                [inviteMember.firstName, inviteMember.lastName]
+                  .filter(Boolean)
+                  .join(" ") || "bonjour"
+              }
+              phone={inviteMember.phone}
+              autoIssue
+            />
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

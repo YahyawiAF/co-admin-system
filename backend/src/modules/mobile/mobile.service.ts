@@ -30,6 +30,7 @@ import {
   Subscription,
   VisitRequestStatus,
   VisitRequestType,
+  BookingRequestKind,
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
@@ -39,6 +40,8 @@ export const roundsOfHashing = 10;
 
 @Injectable()
 export class MobileService {
+  private readonly sessionEndWarned = new Set<string>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -49,6 +52,50 @@ export class MobileService {
   @Cron(CronExpression.EVERY_10_MINUTES)
   async sweepExpiredSubscriptionSeats() {
     await this.releaseStaleBookings();
+  }
+
+  /** Push + vibrate even if the PWA is closed — ~5 min before session end. */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async notifySessionsEndingSoon() {
+    const now = new Date();
+    const sessions = await this.prisma.journal.findMany({
+      where: {
+        leaveTime: null,
+        memberID: { not: null },
+        registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+      },
+      include: {
+        prices: true,
+        members: { select: { id: true, organizationId: true } },
+      },
+    });
+    for (const session of sessions) {
+      const memberId = session.memberID;
+      if (!memberId || this.sessionEndWarned.has(session.id)) continue;
+      const enriched = await this.enrichSessionWithSeat(session as any);
+      const remaining = enriched?.remainingMs;
+      if (remaining == null || remaining <= 0 || remaining > 5 * 60_000) {
+        continue;
+      }
+      this.sessionEndWarned.add(session.id);
+      const org = session.members?.organizationId
+        ? await this.prisma.organization.findUnique({
+            where: { id: session.members.organizationId },
+            select: { slug: true },
+          })
+        : null;
+      await this.pushService.sendToMember(memberId, {
+        title: 'Fin de session bientôt',
+        body: 'Il vous reste moins de 5 minutes. Pensez à finaliser.',
+        tag: `session-end-${session.id}`,
+        url: org?.slug ? `/m/${org.slug}` : '/m',
+        vibrate: [200, 80, 200, 80, 400],
+        requireInteraction: true,
+      });
+    }
+    if (this.sessionEndWarned.size > 400) {
+      this.sessionEndWarned.clear();
+    }
   }
 
   private isPeriodKind(kind: 'HOURS_POOL' | 'SEMI_DAY' | 'FULL_DAY' | null) {
@@ -397,6 +444,95 @@ export class MobileService {
     });
   }
 
+  private phonesEqual(stored: string | null | undefined, submitted: string) {
+    if (!stored) return false;
+    const a = new Set(this.phoneLookupVariants(stored));
+    return this.phoneLookupVariants(submitted).some((v) => a.has(v));
+  }
+
+  /** Visible in admin members + community + staff conversations. */
+  private async activateMemberPresence(member: {
+    id: string;
+    organizationId: string;
+    isActive: boolean;
+    visitorNumber: number | null;
+    showInDirectory: boolean | null;
+    plan: Subscription | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+    avatarUrl?: string | null;
+  }) {
+    const updates: {
+      isActive?: boolean;
+      visitorNumber?: number;
+      showInDirectory?: boolean;
+      plan?: Subscription;
+    } = {};
+    if (!member.isActive) updates.isActive = true;
+    if (member.visitorNumber == null) {
+      updates.visitorNumber = await this.nextVisitorNumber(
+        member.organizationId,
+      );
+    }
+    if (!member.showInDirectory) updates.showInDirectory = true;
+    if (!member.plan) updates.plan = Subscription.Journal;
+    const updated =
+      Object.keys(updates).length > 0
+        ? await this.prisma.member.update({
+            where: { id: member.id },
+            data: updates,
+          })
+        : member;
+    await this.ensureStaffWelcome(updated);
+    return updated;
+  }
+
+  private async ensureStaffWelcome(member: {
+    id: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    phone?: string | null;
+    visitorNumber?: number | null;
+    avatarUrl?: string | null;
+  }) {
+    const existing = await this.prisma.staffMessage.findFirst({
+      where: { toMemberId: member.id },
+      select: { id: true },
+    });
+    if (existing) return;
+    const created = await this.prisma.staffMessage.create({
+      data: {
+        toMemberId: member.id,
+        direction: 'TO_STAFF',
+        text: 'Nouveau visiteur connecté depuis mobile.',
+      },
+    });
+    const memberName =
+      [member.firstName, member.lastName].filter(Boolean).join(' ') ||
+      member.firstName ||
+      'Visiteur';
+    this.eventsGateway.sendStaffMessage({
+      id: created.id,
+      memberId: member.id,
+      toMemberId: member.id,
+      text: created.text,
+      createdAt: created.createdAt,
+      direction: 'TO_STAFF',
+      from: member.firstName || 'Visiteur',
+      memberName,
+      visitorNumber: member.visitorNumber,
+      phone: member.phone,
+      avatarUrl: member.avatarUrl,
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'staff_message',
+      memberId: member.id,
+      messageId: created.id,
+      direction: 'TO_STAFF',
+    });
+  }
+
   async resolveOrganizationBySlug(orgSlug?: string) {
     if (!orgSlug) {
       throw new BadRequestException('Organisation (orgSlug) requise');
@@ -616,6 +752,7 @@ export class MobileService {
         },
       });
     }
+    member = (await this.activateMemberPresence(member)) as typeof member;
     const accessToken = await this.signMemberToken(member.id, member.phone);
     return { member: this.sanitizeMember(member as any), accessToken };
   }
@@ -640,12 +777,13 @@ export class MobileService {
     const ensured = await this.ensureVisitorIdentity(member, {
       requirePassword: !!member.passwordHash,
     });
+    const present = await this.activateMemberPresence(ensured || member);
     const accessToken = await this.signMemberToken(
-      (ensured || member).id,
-      (ensured || member).phone,
+      present.id,
+      present.phone,
     );
     return {
-      member: this.sanitizeMember((ensured || member) as any),
+      member: this.sanitizeMember(present as any),
       accessToken,
     };
   }
@@ -735,8 +873,12 @@ export class MobileService {
     }
     const ok = await bcrypt.compare(pin, member.pinHash);
     if (!ok) throw new UnauthorizedException('PIN incorrect');
-    const accessToken = await this.signMemberToken(member.id, member.phone);
-    return { member: this.sanitizeMember(member as any), accessToken };
+    const activated = await this.activateMemberPresence(member);
+    const accessToken = await this.signMemberToken(
+      activated.id,
+      activated.phone,
+    );
+    return { member: this.sanitizeMember(activated as any), accessToken };
   }
 
   async createLoginToken(memberId: string, opts?: { hours?: number }) {
@@ -782,6 +924,9 @@ export class MobileService {
       | null = null;
 
     if (dto.token) {
+      if (!dto.phone) {
+        throw new BadRequestException('Confirmez votre numéro de téléphone');
+      }
       row = await this.prisma.memberLoginToken.findUnique({
         where: { tokenHash: this.hashToken(dto.token.trim()) },
         include: { member: true },
@@ -790,6 +935,14 @@ export class MobileService {
         const org = await this.resolveOrganizationBySlug(dto.orgSlug);
         if (row.member.organizationId !== org.id) {
           throw new UnauthorizedException('Lien invalide pour cette organisation');
+        }
+      }
+      if (row?.member) {
+        const phone = this.parseTunisiaPhone(dto.phone);
+        if (!this.phonesEqual(row.member.phone, phone)) {
+          throw new UnauthorizedException(
+            'Ce numéro ne correspond pas à ce profil',
+          );
         }
       }
     } else if (dto.shortCode) {
@@ -827,14 +980,15 @@ export class MobileService {
       where: { id: row.id },
       data: { usedAt: now },
     });
+    const activated = await this.activateMemberPresence(row.member);
     const accessToken = await this.signMemberToken(
-      row.member.id,
-      row.member.phone,
+      activated.id,
+      activated.phone,
     );
     return {
-      member: this.sanitizeMember(row.member as any),
+      member: this.sanitizeMember(activated as any),
       accessToken,
-      needsPin: !row.member.pinHash,
+      needsPin: false,
     };
   }
 
@@ -937,7 +1091,10 @@ export class MobileService {
           orderBy: { createdAt: 'desc' },
         }),
         this.resolveSeatForMember(memberId),
-        this.prisma.member.findUnique({ where: { id: memberId } }),
+        this.prisma.member.findUnique({
+          where: { id: memberId },
+          include: { organization: { select: { slug: true } } },
+        }),
       ]);
     const daysRemaining = subscription?.leaveDate
       ? Math.max(
@@ -1017,7 +1174,7 @@ export class MobileService {
       pendingRequest,
       hasOpenSession: !!session,
       seat,
-      seatSettings: await this.getSeatSettings(),
+      seatSettings: await this.getSeatSettings(member?.organization?.slug),
       member: member ? this.sanitizeMember(member as any) : null,
     };
   }
@@ -1120,8 +1277,20 @@ export class MobileService {
     };
   }
 
-  async claimSeat(memberId: string, seatLabel: string, spaceId?: string) {
-    const settings = await this.getSeatSettings();
+  async claimSeat(
+    memberId: string,
+    seatLabel: string,
+    spaceId?: string,
+    orgSlug?: string,
+  ) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      include: { organization: { select: { slug: true } } },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+    const settings = await this.getSeatSettings(
+      orgSlug || member.organization?.slug,
+    );
     if (settings.mobileSeatMode !== MobileSeatMode.VISITOR_CHOOSE) {
       throw new BadRequestException(
         'Le choix de place par le visiteur n’est pas activé',
@@ -1136,11 +1305,6 @@ export class MobileService {
     if (kind === 'HOURS_POOL') {
       throw new BadRequestException(
         'Abonnement heures : l’accueil attribue votre place',
-      );
-    }
-    if (this.isPeriodKind(kind)) {
-      throw new BadRequestException(
-        'Votre place d’abonnement est déjà réservée',
       );
     }
     const existing = await this.resolveSeatForMember(memberId);
@@ -2321,6 +2485,7 @@ export class MobileService {
   async createVisitRequest(dto: CreateVisitRequestDto) {
     const member = await this.prisma.member.findUnique({
       where: { id: dto.memberId },
+      include: { organization: { select: { slug: true } } },
     });
     if (!member) throw new NotFoundException('Member not found');
 
@@ -2406,12 +2571,8 @@ export class MobileService {
 
     this.eventsGateway.sendVisitRequest(payload);
 
-    const settings = await this.getSeatSettings();
-    if (
-      settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN &&
-      settings.receptionAway
-    ) {
-      // Unattended reception: auto-confirm + auto seat
+    const settings = await this.getSeatSettings(member.organization?.slug);
+    if (settings.receptionAway) {
       const approved = await this.approveVisitRequest(request.id);
       return {
         ...approved.request,
@@ -2442,7 +2603,10 @@ export class MobileService {
   async getVisitRequest(id: string) {
     const request = await this.prisma.visitRequest.findUnique({
       where: { id },
-      include: { member: true, price: true },
+      include: {
+        member: { include: { organization: { select: { slug: true } } } },
+        price: true,
+      },
     });
     if (!request) throw new NotFoundException('Visit request not found');
     return request;
@@ -2454,7 +2618,9 @@ export class MobileService {
       throw new ConflictException('Request already resolved');
     }
 
-    const settings = await this.getSeatSettings();
+    const settings = await this.getSeatSettings(
+      request.member.organization?.slug,
+    );
     let assignedLabel = seatLabel?.trim() || null;
     let assignedSpaceId = spaceId || undefined;
     const requestKind = this.subscriptionKind(request.price);
@@ -2476,13 +2642,16 @@ export class MobileService {
     } else if (skipSeat) {
       assignedLabel = null;
       assignedSpaceId = undefined;
-    } else if (settings.mobileSeatMode === MobileSeatMode.ADMIN_ASSIGN) {
-      if (!assignedLabel) {
-        throw new BadRequestException(
-          'Sélectionnez une place sur le plan avant de confirmer',
-        );
-      }
-    } else if (settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN) {
+    } else if (
+      settings.mobileSeatMode === MobileSeatMode.VISITOR_CHOOSE &&
+      !assignedLabel
+    ) {
+      assignedLabel = null;
+      assignedSpaceId = undefined;
+    } else if (
+      settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN ||
+      settings.receptionAway
+    ) {
       if (!assignedLabel) {
         const free = await this.pickFreeSeat(true);
         assignedLabel = free?.label || null;
@@ -2490,6 +2659,12 @@ export class MobileService {
       }
       if (!assignedLabel) {
         throw new BadRequestException('Aucune place libre disponible');
+      }
+    } else if (settings.mobileSeatMode === MobileSeatMode.ADMIN_ASSIGN) {
+      if (!assignedLabel) {
+        throw new BadRequestException(
+          'Sélectionnez une place sur le plan avant de confirmer',
+        );
       }
     } else {
       assignedLabel = assignedLabel || null;
@@ -2761,9 +2936,24 @@ export class MobileService {
         ...(excludeMemberId ? { id: { not: excludeMemberId } } : {}),
       },
       orderBy: { createdAt: 'desc' },
-      take: 80,
+      take: 200,
     });
-    return members.map((m) => this.sanitizeMember(m as any));
+    const now = new Date();
+    const present = await this.prisma.journal.findMany({
+      where: {
+        leaveTime: null,
+        memberID: { in: members.map((m) => m.id) },
+        registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+      },
+      select: { memberID: true },
+    });
+    const presentIds = new Set(
+      present.map((j) => j.memberID).filter(Boolean) as string[],
+    );
+    return members.map((m) => ({
+      ...this.sanitizeMember(m as any),
+      isPresent: presentIds.has(m.id),
+    }));
   }
 
   async listProducts(orgSlug?: string) {
@@ -3448,8 +3638,7 @@ export class MobileService {
   }
 
   async listStaffInbox() {
-    const unread = await this.prisma.staffMessage.findMany({
-      where: { direction: 'TO_STAFF', readAt: null },
+    const rows = await this.prisma.staffMessage.findMany({
       include: {
         toMember: {
           select: {
@@ -3463,22 +3652,44 @@ export class MobileService {
         },
       },
       orderBy: { createdAt: 'desc' },
-      take: 40,
+      take: 200,
     });
-    return unread.map((m) => ({
-      id: m.id,
-      memberId: m.toMemberId,
-      text: m.text,
-      createdAt: m.createdAt,
-      direction: m.direction,
-      memberName:
-        [m.toMember.firstName, m.toMember.lastName].filter(Boolean).join(' ') ||
-        m.toMember.firstName ||
-        'Visiteur',
-      visitorNumber: m.toMember.visitorNumber,
-      phone: m.toMember.phone,
-      avatarUrl: m.toMember.avatarUrl,
-    }));
+    const seen = new Set<string>();
+    const inbox: Array<{
+      id: string;
+      memberId: string;
+      text: string;
+      createdAt: Date;
+      direction: string;
+      unread: boolean;
+      memberName: string;
+      visitorNumber: number | null;
+      phone: string | null;
+      avatarUrl: string | null;
+    }> = [];
+    for (const m of rows) {
+      if (seen.has(m.toMemberId)) continue;
+      seen.add(m.toMemberId);
+      inbox.push({
+        id: m.id,
+        memberId: m.toMemberId,
+        text: m.text,
+        createdAt: m.createdAt,
+        direction: m.direction,
+        unread: m.direction === 'TO_STAFF' && !m.readAt,
+        memberName:
+          [m.toMember.firstName, m.toMember.lastName]
+            .filter(Boolean)
+            .join(' ') ||
+          m.toMember.firstName ||
+          'Visiteur',
+        visitorNumber: m.toMember.visitorNumber,
+        phone: m.toMember.phone,
+        avatarUrl: m.toMember.avatarUrl,
+      });
+      if (inbox.length >= 40) break;
+    }
+    return inbox;
   }
 
   async markStaffThreadRead(memberId: string, as: 'member' | 'staff') {
@@ -3545,5 +3756,268 @@ export class MobileService {
       where: { id },
       data: { readAt: new Date() },
     });
+  }
+
+  async lookupPhone(dto: { phone: string; orgSlug?: string }) {
+    const org = await this.resolveOrganizationBySlug(dto.orgSlug);
+    const phone = this.parseTunisiaPhone(dto.phone);
+    const member = await this.findMemberByPhone(phone, org.id);
+    if (!member) return { exists: false, hasPin: false };
+    return {
+      exists: true,
+      hasPin: !!member.pinHash,
+      firstName: member.firstName || null,
+    };
+  }
+
+  private serializeBooking(row: {
+    id: string;
+    memberId: string;
+    kind: BookingRequestKind;
+    spaceId: string | null;
+    spaceName: string | null;
+    seatLabel: string | null;
+    seatSpaceId: string | null;
+    date: Date;
+    startAt: Date;
+    endAt: Date;
+    note: string | null;
+    status: VisitRequestStatus;
+    journalId: string | null;
+    createdAt: Date;
+    member?: {
+      firstName: string | null;
+      lastName: string | null;
+      phone: string | null;
+      visitorNumber: number | null;
+      avatarUrl: string | null;
+    } | null;
+  }) {
+    const memberName = row.member
+      ? [row.member.firstName, row.member.lastName].filter(Boolean).join(' ') ||
+        row.member.firstName ||
+        'Visiteur'
+      : 'Visiteur';
+    return {
+      id: row.id,
+      memberId: row.memberId,
+      kind: row.kind,
+      spaceId: row.spaceId,
+      spaceName: row.spaceName,
+      seatLabel: row.seatLabel,
+      seatSpaceId: row.seatSpaceId,
+      date: row.date,
+      startAt: row.startAt,
+      endAt: row.endAt,
+      note: row.note,
+      status: row.status,
+      journalId: row.journalId,
+      createdAt: row.createdAt,
+      memberName,
+      visitorNumber: row.member?.visitorNumber ?? null,
+      phone: row.member?.phone ?? null,
+      avatarUrl: row.member?.avatarUrl ?? null,
+    };
+  }
+
+  async createBookingRequest(dto: {
+    memberId: string;
+    kind: 'ROOM' | 'SEAT';
+    spaceId?: string;
+    seatLabel?: string;
+    seatSpaceId?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    note?: string;
+  }) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const kind =
+      dto.kind === 'SEAT' ? BookingRequestKind.SEAT : BookingRequestKind.ROOM;
+    if (kind === BookingRequestKind.ROOM && !dto.spaceId) {
+      throw new BadRequestException('Choisissez une salle');
+    }
+    if (kind === BookingRequestKind.SEAT && !dto.seatLabel) {
+      throw new BadRequestException('Choisissez une place');
+    }
+    const day = startOfDay(new Date(`${dto.date}T12:00:00`));
+    const startAt = new Date(`${dto.date}T${dto.startTime}:00`);
+    const endAt = new Date(`${dto.date}T${dto.endTime}:00`);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      throw new BadRequestException('Horaires invalides');
+    }
+    if (endAt.getTime() <= startAt.getTime()) {
+      throw new BadRequestException('L’heure de fin doit être après le début');
+    }
+    const pending = await this.prisma.bookingRequest.findFirst({
+      where: { memberId: dto.memberId, status: VisitRequestStatus.PENDING },
+    });
+    if (pending) {
+      throw new ConflictException('Vous avez déjà une réservation en attente');
+    }
+    let spaceName: string | null = null;
+    if (dto.spaceId) {
+      const space = await this.prisma.space.findUnique({
+        where: { id: dto.spaceId },
+      });
+      if (!space) throw new NotFoundException('Espace introuvable');
+      spaceName = space.name;
+    }
+    const created = await this.prisma.bookingRequest.create({
+      data: {
+        memberId: dto.memberId,
+        kind,
+        spaceId: dto.spaceId || null,
+        spaceName,
+        seatLabel: dto.seatLabel?.trim() || null,
+        seatSpaceId: dto.seatSpaceId || dto.spaceId || null,
+        date: day,
+        startAt,
+        endAt,
+        note: (dto.note || '').trim() || null,
+      },
+      include: { member: true },
+    });
+    const payload = this.serializeBooking(created);
+    this.eventsGateway.sendBookingRequest(payload);
+    return payload;
+  }
+
+  async listBookingRequests(status?: VisitRequestStatus) {
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: status ? { status } : undefined,
+      include: { member: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    return rows.map((r) => this.serializeBooking(r));
+  }
+
+  async listMemberBookingRequests(memberId: string) {
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: { memberId },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+    return rows.map((r) => this.serializeBooking(r));
+  }
+
+  async cancelBookingRequest(id: string, memberId: string) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    if (row.memberId !== memberId) {
+      throw new ConflictException('Pas votre réservation');
+    }
+    if (row.status !== VisitRequestStatus.PENDING) {
+      throw new ConflictException('Déjà traitée');
+    }
+    const updated = await this.prisma.bookingRequest.update({
+      where: { id },
+      data: { status: VisitRequestStatus.REJECTED },
+      include: { member: true },
+    });
+    this.eventsGateway.sendBookingRequestResolved({
+      id: updated.id,
+      status: 'CANCELLED',
+      memberId: updated.memberId,
+    });
+    return this.serializeBooking(updated);
+  }
+
+  async approveBookingRequest(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({
+      where: { id },
+      include: { member: true },
+    });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    if (row.status !== VisitRequestStatus.PENDING) {
+      throw new ConflictException('Déjà traitée');
+    }
+    const price = await this.prisma.price.findFirst({
+      where: {
+        isActive: true,
+        category:
+          row.kind === BookingRequestKind.ROOM
+            ? PriceCategory.SALLE
+            : { in: [PriceCategory.JOURNEE, PriceCategory.OPEN_SPACE] },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    const journal = price
+      ? await this.prisma.journal.create({
+          data: {
+            memberID: row.memberId,
+            priceId: price.id,
+            registredTime: row.startAt,
+            leaveTime: row.endAt,
+            isPayed: false,
+            isReservation: true,
+            payedAmount: price.price,
+          },
+        })
+      : null;
+    const today = startOfDay(new Date());
+    if (row.date.getTime() <= today.getTime()) {
+      if (row.kind === BookingRequestKind.ROOM && row.spaceId) {
+        await this.bookSeatsForMemberByKind(row.memberId, {
+          spaceId: row.spaceId,
+        });
+      } else if (row.seatLabel) {
+        await this.bookSeatForMember(row.memberId, row.seatLabel, {
+          spaceId: row.seatSpaceId || undefined,
+        });
+      }
+    }
+    const updated = await this.prisma.bookingRequest.update({
+      where: { id },
+      data: {
+        status: VisitRequestStatus.APPROVED,
+        journalId: journal?.id || null,
+      },
+      include: { member: true },
+    });
+    this.eventsGateway.sendBookingRequestResolved({
+      id: updated.id,
+      status: updated.status,
+      memberId: updated.memberId,
+    });
+    void this.pushService.sendToMember(updated.memberId, {
+      title: 'Réservation confirmée',
+      body: 'L’accueil a accepté votre réservation.',
+      tag: `book-ok-${updated.id}`,
+      url: '/m',
+    });
+    return this.serializeBooking(updated);
+  }
+
+  async rejectBookingRequest(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({
+      where: { id },
+      include: { member: true },
+    });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    if (row.status !== VisitRequestStatus.PENDING) {
+      throw new ConflictException('Déjà traitée');
+    }
+    const updated = await this.prisma.bookingRequest.update({
+      where: { id },
+      data: { status: VisitRequestStatus.REJECTED },
+      include: { member: true },
+    });
+    this.eventsGateway.sendBookingRequestResolved({
+      id: updated.id,
+      status: updated.status,
+      memberId: updated.memberId,
+    });
+    void this.pushService.sendToMember(updated.memberId, {
+      title: 'Réservation refusée',
+      body: 'L’accueil a refusé votre réservation.',
+      tag: `book-no-${updated.id}`,
+      url: '/m',
+    });
+    return this.serializeBooking(updated);
   }
 }

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Pencil, MapPin, MoreHorizontal } from "lucide-react";
+import { Pencil, MapPin, MoreHorizontal, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,7 @@ import { cn } from "@/lib/utils";
 import { AbonnementSeatMap } from "@/components/admin/AbonnementSeatMap";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
+import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import {
   daysLeft,
   hoursLeft,
@@ -138,6 +139,7 @@ function AbonnementsInner() {
   const [moveSpaceId, setMoveSpaceId] = useState<string | null>(null);
   const [ending, setEnding] = useState<Abonnement | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
+  const [ledgerAbo, setLedgerAbo] = useState<Abonnement | null>(null);
 
   const { data: raw } = useQuery({
     queryKey: queryKeys.abonnements,
@@ -824,6 +826,10 @@ function AbonnementsInner() {
                               <Pencil className="mr-2 h-4 w-4" />
                               Modifier
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setLedgerAbo(a)}>
+                              <Banknote className="mr-2 h-4 w-4" />
+                              Crédit / échéance
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {
                                 if (a.reservedSeatLabel) {
@@ -1027,6 +1033,30 @@ function AbonnementsInner() {
           ) : null}
         </SheetContent>
       </Sheet>
+      {ledgerAbo ? (
+        <MemberLedgerDialog
+          memberId={ledgerAbo.memberID}
+          memberName={
+            [ledgerAbo.members?.firstName, ledgerAbo.members?.lastName]
+              .filter(Boolean)
+              .join(" ") || "Membre"
+          }
+          source="abonnement"
+          abonnementId={ledgerAbo.id}
+          defaultAmount={
+            !ledgerAbo.isPayed
+              ? Math.max(
+                  0,
+                  (ledgerAbo.price?.price || 0) - (ledgerAbo.payedAmount || 0)
+                )
+              : undefined
+          }
+          open
+          onOpenChange={(o) => {
+            if (!o) setLedgerAbo(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

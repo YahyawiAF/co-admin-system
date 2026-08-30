@@ -85,18 +85,14 @@ export function StaffInboxBell() {
         size="icon"
         className="relative"
         onClick={() => {
-          if (inbox[0]) {
-            setActive(inbox[0]);
-            setOpen(true);
-          } else {
-            toast.message("Aucun message visiteur en attente");
-          }
+          setActive(inbox[0] || null);
+          setOpen(true);
         }}
       >
         <MessageSquare className="h-5 w-5" />
-        {inbox.length ? (
+        {inbox.filter((m) => m.unread).length ? (
           <Badge className="absolute -right-1 -top-1 h-5 min-w-5 justify-center rounded-full px-1 text-[10px]">
-            {inbox.length}
+            {inbox.filter((m) => m.unread).length}
           </Badge>
         ) : null}
       </Button>
@@ -106,7 +102,7 @@ export function StaffInboxBell() {
           <DialogHeader>
             <DialogTitle>Messages visiteurs</DialogTitle>
           </DialogHeader>
-          {inbox.length > 1 ? (
+          {inbox.length > 0 ? (
             <div className="flex flex-wrap gap-1">
               {inbox.map((m) => (
                 <Button
@@ -116,10 +112,15 @@ export function StaffInboxBell() {
                   onClick={() => setActive(m)}
                 >
                   {m.memberName || "Visiteur"}
+                  {m.unread ? " ·" : ""}
                 </Button>
               ))}
             </div>
-          ) : null}
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Aucune conversation visiteur pour l’instant.
+            </p>
+          )}
           {active ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">

@@ -4,23 +4,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Coffee, CreditCard, HelpCircle, MessageSquare, Monitor, Wifi } from "lucide-react";
+import {
+  CalendarDays,
+  Coffee,
+  CreditCard,
+  HelpCircle,
+  MessageSquare,
+  Monitor,
+  Wifi,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { mobileApi } from "@/lib/api/resources";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { WelcomeRegister } from "@/components/visitor/WelcomeRegister";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
-import { AdminStaffChat } from "@/components/visitor/AdminStaffChat";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
+import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import {
   readLocalCache,
@@ -31,7 +33,6 @@ export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
-  const [staffOpen, setStaffOpen] = useState(false);
   const [wifiOpen, setWifiOpen] = useState(false);
 
   const { data: status, refetch } = useMobileStatus();
@@ -97,21 +98,6 @@ export default function MobileHomePage() {
 
   return (
     <div className="space-y-4">
-      <Dialog open={staffOpen} onOpenChange={setStaffOpen}>
-        <DialogContent className="max-w-[440px] rounded-2xl p-0 sm:max-w-[440px]">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Message à l’accueil</DialogTitle>
-          </DialogHeader>
-          {memberId ? (
-            <AdminStaffChat
-              memberId={memberId}
-              compact
-              className="shadow-none"
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
       <WifiCredentialsModal
         seat={seat}
         forceOpen={wifiOpen}
@@ -263,11 +249,26 @@ export default function MobileHomePage() {
         <Button
           variant="outline"
           className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
-          onClick={() => setStaffOpen(true)}
+          asChild
         >
-          <MessageSquare className="mr-1.5 h-4 w-4" />
-          Accueil
+          <Link href={href("/staff")}>
+            <MessageSquare className="mr-1.5 h-4 w-4" />
+            Accueil
+          </Link>
         </Button>
+        <Button
+          variant="outline"
+          className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+          asChild
+        >
+          <Link href={href("/reserve")}>
+            <CalendarDays className="mr-1.5 h-4 w-4" />
+            Réserver
+          </Link>
+        </Button>
+      </div>
+
+      <div className="flex gap-2">
         {seat?.wifiSsid || seat?.wifiPassword ? (
           <Button
             variant="outline"
@@ -283,6 +284,7 @@ export default function MobileHomePage() {
             Wi‑Fi
           </Button>
         ) : null}
+        <InstallAppButton className="flex-1" />
       </div>
 
       <div className="flex gap-2">

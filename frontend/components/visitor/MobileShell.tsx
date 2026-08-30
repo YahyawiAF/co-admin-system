@@ -48,7 +48,9 @@ export function MobileShell({ children }: { children: ReactNode }) {
     rest === "/" ||
     rest.startsWith("/profile") ||
     rest.startsWith("/recover") ||
+    rest.startsWith("/join") ||
     rest.startsWith("/signup");
+  const immersiveChat = rest.startsWith("/staff");
 
   useEffect(() => {
     if (!ready || onboarded || allowed) return;
@@ -59,17 +61,35 @@ export function MobileShell({ children }: { children: ReactNode }) {
     <div
       className={cn(
         "mobile-shell mx-auto max-w-[480px] bg-[#f3f6fb] text-slate-900",
-        keyboardOpen ? "min-h-dvh pb-4" : "min-h-dvh pb-24"
+        immersiveChat
+          ? "h-dvh overflow-hidden"
+          : keyboardOpen
+            ? "min-h-dvh pb-4"
+            : "min-h-dvh pb-24"
       )}
     >
-      <div className="px-4 pb-4 pt-2">
-        <MobileHeader />
-        <OfflineBanner />
-        {onboarded ? <VisitorAlerts /> : null}
-        {onboarded ? <PinSetupGate /> : null}
-        {children}
-        {onboarded ? <StaffMessageModal /> : null}
-      </div>
+      {immersiveChat ? (
+        <div
+          className={cn(
+            "flex h-full min-h-0 flex-col",
+            !keyboardOpen &&
+              "pb-[calc(4.25rem+env(safe-area-inset-bottom))]"
+          )}
+        >
+          {onboarded ? <PinSetupGate /> : null}
+          <div className="min-h-0 flex-1">{children}</div>
+          {onboarded ? <StaffMessageModal /> : null}
+        </div>
+      ) : (
+        <div className="px-4 pb-4 pt-2">
+          <MobileHeader />
+          <OfflineBanner />
+          {onboarded ? <VisitorAlerts /> : null}
+          {onboarded ? <PinSetupGate /> : null}
+          {children}
+          {onboarded ? <StaffMessageModal /> : null}
+        </div>
+      )}
       <nav
         aria-hidden={keyboardOpen}
         className={cn(

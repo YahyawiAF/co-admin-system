@@ -1,5 +1,5 @@
 /* Collabora Hub visitor SW — push + light offline shell cache */
-const SHELL_CACHE = "collabora-shell-v1";
+const SHELL_CACHE = "collabora-shell-v2";
 const SHELL_URLS = ["/", "/m", "/collabora-icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -95,7 +95,16 @@ self.addEventListener("push", (event) => {
       body: data.body || "",
       tag: data.tag || "collabora",
       data: { url: data.url || "/m" },
-      vibrate: [120, 60, 120],
+      icon: "/collabora-icon.svg",
+      badge: "/collabora-icon.svg",
+      vibrate: data.vibrate ||
+        (String(data.tag || "").startsWith("session-end")
+          ? [200, 80, 200, 80, 400]
+          : [120, 60, 120]),
+      requireInteraction:
+        data.requireInteraction ||
+        String(data.tag || "").startsWith("session-end"),
+      silent: false,
     })
   );
 });

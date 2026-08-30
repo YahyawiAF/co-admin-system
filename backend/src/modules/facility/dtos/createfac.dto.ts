@@ -85,7 +85,7 @@ export class CreateFacilityDto {
   @ApiProperty({
     required: false,
     description:
-      'When true with AUTO_ASSIGN, visit requests auto-approve with a free seat',
+      'When true (accueil en pause), visit requests auto-approve. Seat is auto-assigned unless VISITOR_CHOOSE.',
   })
   @IsOptional()
   @IsBoolean()

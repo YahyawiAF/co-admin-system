@@ -31,6 +31,10 @@ import type {
   EventAttendee,
   EventKind,
   EventStatus,
+  MemberLedgerSummary,
+  MemberLedgerEntry,
+  LedgerKind,
+  BookingRequest,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -142,6 +146,28 @@ export const membersApi = {
   },
   insights(id: string) {
     return http.get<MemberInsights>(`/members/${id}/insights`);
+  },
+  ledger(id: string) {
+    return http.get<MemberLedgerSummary>(`/members/${id}/ledger`);
+  },
+  addLedger(
+    id: string,
+    data: {
+      kind: LedgerKind;
+      amount: number;
+      note?: string;
+      dueDate?: string;
+      source?: string;
+      journalId?: string;
+      abonnementId?: string;
+    }
+  ) {
+    return http.post<MemberLedgerEntry>(`/members/${id}/ledger`, data);
+  },
+  settleLedger(entryId: string, settled = true) {
+    return http.patch<MemberLedgerEntry>(`/members/ledger/${entryId}/settle`, {
+      settled,
+    });
   },
 };
 
@@ -602,10 +628,10 @@ export const mobileApi = {
       seatSettings: MobileSeatSettings;
     }>(`/mobile/floor-plan${q}`, { skipAuth: true });
   },
-  claimSeat(memberId: string, seatLabel: string, spaceId?: string) {
+  claimSeat(memberId: string, seatLabel: string, spaceId?: string, org?: string) {
     return http.post<{ seat: SeatAssignmentInfo | null }>(
       "/mobile/session/claim-seat",
-      { memberId, seatLabel, spaceId },
+      { memberId, seatLabel, spaceId, orgSlug: org },
       { skipAuth: true },
     );
   },
@@ -810,6 +836,60 @@ export const mobileApi = {
       `/mobile/staff-messages/${id}/read`,
       {},
       { skipAuth: true },
+    );
+  },
+  lookupPhone(phone: string, orgSlug: string) {
+    return http.post<{ exists: boolean; hasPin: boolean; firstName?: string | null }>(
+      "/mobile/auth/lookup-phone",
+      { phone, orgSlug },
+      { skipAuth: true },
+    );
+  },
+  createBookingRequest(data: {
+    memberId: string;
+    kind: "ROOM" | "SEAT";
+    spaceId?: string;
+    seatLabel?: string;
+    seatSpaceId?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    note?: string;
+  }) {
+    return http.post<BookingRequest>("/mobile/booking-request", data, {
+      skipAuth: true,
+    });
+  },
+  myBookingRequests(memberId: string) {
+    return http.get<BookingRequest[]>(`/mobile/booking-request/${memberId}`, {
+      skipAuth: true,
+    });
+  },
+  cancelBookingRequest(id: string, memberId: string) {
+    return http.patch<BookingRequest>(
+      `/mobile/booking-request/${id}/cancel`,
+      { memberId },
+      { skipAuth: true },
+    );
+  },
+};
+
+export const bookingRequestsApi = {
+  pending() {
+    return http.get<BookingRequest[]>(
+      "/mobile/admin/booking-requests?status=PENDING"
+    );
+  },
+  approve(id: string) {
+    return http.patch<BookingRequest>(
+      `/mobile/admin/booking-requests/${id}/approve`,
+      {}
+    );
+  },
+  reject(id: string) {
+    return http.patch<BookingRequest>(
+      `/mobile/admin/booking-requests/${id}/reject`,
+      {}
     );
   },
 };

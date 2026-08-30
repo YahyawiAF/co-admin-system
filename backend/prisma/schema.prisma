@@ -71,6 +71,8 @@ model Member {
   showInDirectory        Boolean   @default(true)
   eventRegistrations     EventRegistration[]
   pushSubscriptions      PushSubscription[]
+  ledgerEntries          MemberLedger[]
+  bookingRequests        BookingRequest[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
@@ -597,6 +599,58 @@ model StaffMessage {
 enum StaffMessageDirection {
   TO_MEMBER
   TO_STAFF
+}
+
+enum LedgerKind {
+  CREDIT
+  ECHEANCE
+}
+
+model MemberLedger {
+  id           String     @id @default(uuid())
+  memberId     String
+  member       Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind         LedgerKind
+  amount       Float
+  note         String?
+  dueDate      DateTime?
+  source       String?
+  journalId    String?
+  abonnementId String?
+  settled      Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@index([memberId, createdAt])
+  @@index([kind, settled])
+  @@map("member_ledger")
+}
+
+enum BookingRequestKind {
+  ROOM
+  SEAT
+}
+
+model BookingRequest {
+  id             String             @id @default(uuid())
+  memberId       String
+  member         Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind           BookingRequestKind
+  spaceId        String?
+  spaceName      String?
+  seatLabel      String?
+  seatSpaceId    String?
+  date           DateTime
+  startAt        DateTime
+  endAt          DateTime
+  note           String?
+  status         VisitRequestStatus @default(PENDING)
+  journalId      String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@index([status, createdAt])
+  @@index([memberId])
+  @@map("booking_requests")
 }
 
 enum VisitRequestType {

@@ -16,9 +16,15 @@ export function PinSetupGate() {
   const { data: status, refetch, isLoading } = useMobileStatus();
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
+  const [skipped, setSkipped] = useState(false);
 
   const member = status?.member;
-  const needsPin = !!memberId && !!member && member.hasPin === false;
+  const skipPin =
+    skipped ||
+    (typeof window !== "undefined" &&
+      !!memberId &&
+      sessionStorage.getItem(`visitor-skip-pin:${memberId}`) === "1");
+  const needsPin = !!memberId && !!member && member.hasPin === false && !skipPin;
 
   const save = useMutation({
     mutationFn: () => mobileApi.setPin({ memberId: memberId!, pin }),
@@ -39,14 +45,14 @@ export function PinSetupGate() {
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/50 p-4 sm:items-center">
       <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Étape obligatoire
+          Reconnexion plus simple
         </p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">
           Configurez votre code PIN
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          4 chiffres pour vous reconnecter (téléphone + PIN). Requis avant
-          d&apos;utiliser l&apos;app.
+          4 chiffres pour vous reconnecter (téléphone + PIN). Vous pouvez
+          aussi le faire plus tard.
         </p>
         <div className="mt-4 space-y-3">
           <div>
@@ -85,6 +91,21 @@ export function PinSetupGate() {
             onClick={() => save.mutate()}
           >
             Enregistrer mon PIN
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-11 w-full rounded-full text-slate-500"
+            onClick={() => {
+              try {
+                sessionStorage.setItem(`visitor-skip-pin:${memberId}`, "1");
+              } catch {
+                /* ignore */
+              }
+              setSkipped(true);
+            }}
+          >
+            Plus tard
           </Button>
         </div>
       </div>

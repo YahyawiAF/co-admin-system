@@ -57,6 +57,14 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     s.on("visitor_checkout", invalidateOps);
     s.on("table_updates", invalidateOps);
     s.on("payment_updated", invalidateOps);
+    const invalidateBookings = () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.bookingRequestsPending,
+      });
+      queryClient.invalidateQueries({ queryKey: ["my-bookings"] });
+    };
+    s.on("booking_request", invalidateBookings);
+    s.on("booking_request_resolved", invalidateBookings);
     const invalidateOrders = () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.productOrdersPending });
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });

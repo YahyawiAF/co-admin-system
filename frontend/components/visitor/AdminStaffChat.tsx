@@ -18,9 +18,15 @@ type Props = {
   memberId: string;
   className?: string;
   compact?: boolean;
+  fullScreen?: boolean;
 };
 
-export function AdminStaffChat({ memberId, className, compact }: Props) {
+export function AdminStaffChat({
+  memberId,
+  className,
+  compact,
+  fullScreen,
+}: Props) {
   const queryClient = useQueryClient();
   const { socket } = useRealtime();
   const [draft, setDraft] = useState("");
@@ -69,21 +75,33 @@ export function AdminStaffChat({ memberId, className, compact }: Props) {
   });
 
   return (
-    <div className={cn("flex flex-col rounded-2xl bg-white shadow-sm", className)}>
-      <div className="flex items-center gap-3 border-b px-4 py-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-800 text-white">
-          <Building2 className="h-5 w-5" />
+    <div
+      className={cn(
+        "flex flex-col bg-[#eef4fb]",
+        fullScreen ? "h-full min-h-0" : "rounded-2xl bg-white shadow-sm",
+        className
+      )}
+    >
+      {!fullScreen ? (
+        <div className="flex items-center gap-3 border-b bg-white px-4 py-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-800 text-white">
+            <Building2 className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="font-semibold">Administration</p>
+            <p className="text-xs text-slate-500">Accueil · Collabora</p>
+          </div>
         </div>
-        <div>
-          <p className="font-semibold">Administration</p>
-          <p className="text-xs text-slate-500">Accueil · Collabora</p>
-        </div>
-      </div>
+      ) : null}
 
       <div
         className={cn(
-          "space-y-2 overflow-y-auto px-3 py-3",
-          compact ? "max-h-56" : "max-h-[50vh] min-h-[220px]"
+          "min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3",
+          fullScreen
+            ? ""
+            : compact
+              ? "max-h-56"
+              : "max-h-[50vh] min-h-[220px]"
         )}
       >
         {!thread.length ? (
@@ -100,10 +118,10 @@ export function AdminStaffChat({ memberId, className, compact }: Props) {
               >
                 <div
                   className={cn(
-                    "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
+                    "max-w-[85%] rounded-[22px] px-3.5 py-2 text-[15px] leading-snug",
                     mine
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-slate-100 text-slate-900"
+                      ? "rounded-br-md bg-primary text-primary-foreground"
+                      : "bg-white text-slate-900 shadow-sm"
                   )}
                 >
                   <p className="whitespace-pre-wrap">{m.text}</p>
@@ -126,7 +144,7 @@ export function AdminStaffChat({ memberId, className, compact }: Props) {
       </div>
 
       <form
-        className="flex gap-2 border-t p-3"
+        className="flex gap-2 border-t bg-white p-3"
         onSubmit={(e) => {
           e.preventDefault();
           if (!draft.trim()) return;

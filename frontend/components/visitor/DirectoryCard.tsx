@@ -34,6 +34,11 @@ export function DirectoryCard({
           {job ? (
             <span className="font-normal text-slate-600"> — {job}</span>
           ) : null}
+          {member.isPresent ? (
+            <span className="ml-2 text-xs font-medium text-emerald-600">
+              Présent
+            </span>
+          ) : null}
         </p>
         {skills.length ? (
           <p className="mt-0.5 text-sm text-slate-500">

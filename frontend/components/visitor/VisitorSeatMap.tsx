@@ -10,6 +10,7 @@ import { mobileApi, type SeatBooking } from "@/lib/api/resources";
 import type { MobileSeatMode, Space, SpaceSeat } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
+import { useOrg } from "@/lib/org";
 
 type Props = {
   memberId: string;
@@ -28,20 +29,15 @@ export function VisitorSeatMap({
   canPick = false,
   className,
 }: Props) {
+  const { slug } = useOrg();
   const queryClient = useQueryClient();
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
   const poll = useVisibleInterval(canPick ? 20_000 : 60_000);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["mobile-floor-plan"],
-    queryFn: () => {
-      const org =
-        typeof window !== "undefined"
-          ? sessionStorage.getItem("visitor_org")
-          : null;
-      return mobileApi.floorPlan(org || undefined);
-    },
+    queryKey: ["mobile-floor-plan", slug],
+    queryFn: () => mobileApi.floorPlan(slug),
     staleTime: 60_000,
     refetchInterval: poll,
   });
@@ -101,7 +97,8 @@ export function VisitorSeatMap({
       mobileApi.claimSeat(
         memberId,
         seatLabel,
-        (lockedSpaceId || spaceId) || undefined
+        (lockedSpaceId || spaceId) || undefined,
+        slug
       ),
     onSuccess: () => {
       toast.success("Place confirmée");

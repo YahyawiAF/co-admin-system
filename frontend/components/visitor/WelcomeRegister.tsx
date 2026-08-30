@@ -80,6 +80,24 @@ export function WelcomeRegister() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const continueSignup = async () => {
+    try {
+      const found = await mobileApi.lookupPhone(phone || "", slug);
+      if (found.exists && found.hasPin) {
+        toast.message(
+          found.firstName
+            ? `Bonjour ${found.firstName}, reconnectez-vous`
+            : "Ce numéro a déjà un compte"
+        );
+        setMode("login");
+        return;
+      }
+    } catch {
+      /* continue to register */
+    }
+    register.mutate();
+  };
+
   const savePin = useMutation({
     mutationFn: () =>
       mobileApi.setPin({ memberId: draft!.member.id, pin }),
@@ -141,13 +159,6 @@ export function WelcomeRegister() {
             onClick={() => setMode("login")}
           >
             Connexion (téléphone + PIN)
-          </Button>
-          <Button
-            variant="ghost"
-            className="h-11 w-full rounded-full text-slate-600"
-            onClick={() => setMode("code")}
-          >
-            Code de récupération (6 chiffres)
           </Button>
         </div>
       </div>
@@ -299,15 +310,7 @@ export function WelcomeRegister() {
             >
               Créer un profil
             </button>
-            {" · "}
-            PIN oublié ?{" "}
-            <button
-              type="button"
-              className="font-medium text-primary"
-              onClick={() => setMode("code")}
-            >
-              Code récupération
-            </button>
+            PIN oublié ? Demandez un lien à l&apos;accueil.
           </p>
         </div>
       </div>
@@ -420,7 +423,7 @@ export function WelcomeRegister() {
         <Button
           className={cn("h-12 w-full rounded-full")}
           disabled={!valid || register.isPending}
-          onClick={() => register.mutate()}
+          onClick={() => void continueSignup()}
         >
           Continuer
         </Button>

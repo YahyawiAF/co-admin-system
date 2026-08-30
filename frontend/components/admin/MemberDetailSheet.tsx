@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Copy, KeyRound, Send } from "lucide-react";
+import { KeyRound, Send } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -21,8 +21,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
-import { visitorMobileUrl } from "@/components/admin/VisitorQrCard";
-import { membersApi, mobileApi, organizationsApi } from "@/lib/api/resources";
+import { MemberInviteShare } from "@/components/admin/MemberInviteShare";
+import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
+import { membersApi, mobileApi } from "@/lib/api/resources";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { subscriptionExpiryLabel } from "@/lib/subscription-utils";
@@ -188,172 +189,6 @@ function MemberAdminPin({
   );
 }
 
-function MemberLoginRecovery({
-  memberId,
-  memberName,
-  phone,
-}: {
-  memberId: string;
-  memberName: string;
-  phone?: string | null;
-}) {
-  const { data: organizations = [] } = useQuery({
-    queryKey: ["organizations"],
-    queryFn: () => organizationsApi.list(),
-  });
-  const orgSlug = organizations[0]?.slug || "collabora-hub";
-  const [issued, setIssued] = useState<{
-    token: string;
-    shortCode: string;
-    expiresAt: string;
-  } | null>(null);
-
-  useEffect(() => {
-    setIssued(null);
-  }, [memberId]);
-
-  const create = useMutation({
-    mutationFn: () => mobileApi.createMemberLoginToken(memberId),
-    onSuccess: (res) => {
-      setIssued({
-        token: res.token,
-        shortCode: res.shortCode,
-        expiresAt: String(res.expiresAt),
-      });
-      toast.success("Lien de récupération créé");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const magicUrl = useMemo(() => {
-    if (!issued) return "";
-    return `${visitorMobileUrl(orgSlug)}/recover?token=${issued.token}`;
-  }, [issued, orgSlug]);
-
-  const qrSrc = useMemo(() => {
-    if (!magicUrl) return "";
-    return `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(
-      magicUrl
-    )}`;
-  }, [magicUrl]);
-
-  const waText = useMemo(() => {
-    if (!issued) return "";
-    const lines = [
-      `Bonjour ${memberName},`,
-      ``,
-      `Voici votre accès Collabora :`,
-      `Lien : ${magicUrl}`,
-      ``,
-      `Ou dans l'icône Collabora : code ${issued.shortCode}`,
-      phone ? `avec votre téléphone ${phone}` : "",
-      ``,
-      `Valable 48 h.`,
-    ].filter(Boolean);
-    return lines.join("\n");
-  }, [issued, magicUrl, memberName, phone]);
-
-  const copy = async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${label} copié`);
-    } catch {
-      toast.error("Impossible de copier");
-    }
-  };
-
-  return (
-    <div className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-start gap-2">
-        <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
-        <div>
-          <p className="text-sm font-medium">Récupération mobile</p>
-          <p className="text-xs text-muted-foreground">
-            Lien WhatsApp + QR + code 6 chiffres pour l&apos;icône Accueil.
-          </p>
-        </div>
-      </div>
-      <Button
-        type="button"
-        className="w-full"
-        disabled={create.isPending}
-        onClick={() => create.mutate()}
-      >
-        {issued ? "Générer un nouveau lien" : "Générer lien / code"}
-      </Button>
-      {issued ? (
-        <div className="space-y-3">
-          <div className="rounded-md bg-muted/50 px-3 py-2 text-center">
-            <p className="text-[10px] uppercase text-muted-foreground">
-              Code (icône Collabora)
-            </p>
-            <p className="font-mono text-3xl font-bold tracking-[0.25em]">
-              {issued.shortCode}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Expire{" "}
-              {format(new Date(issued.expiresAt), "dd MMM HH:mm", {
-                locale: fr,
-              })}
-            </p>
-          </div>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            alt="QR récupération"
-            className="mx-auto rounded-lg border bg-white p-2"
-            width={160}
-            height={160}
-            src={qrSrc}
-          />
-          <p className="break-all font-mono text-[10px] text-muted-foreground">
-            {magicUrl}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => copy(magicUrl, "Lien")}
-            >
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              Lien
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => copy(issued.shortCode, "Code")}
-            >
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              Code
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => copy(waText, "Message WhatsApp")}
-            >
-              <Copy className="mr-1.5 h-3.5 w-3.5" />
-              WhatsApp
-            </Button>
-            {phone ? (
-              <Button type="button" size="sm" asChild>
-                <a
-                  href={`https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(waText)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Ouvrir WhatsApp
-                </a>
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 type Props = {
   member: Member | null;
   open: boolean;
@@ -438,10 +273,15 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
             {member?.id ? (
               <>
                 <MemberAdminPin memberId={member.id} hasPin={hasPin} />
-                <MemberLoginRecovery
+                <MemberInviteShare
                   memberId={member.id}
                   memberName={name}
                   phone={m.phone}
+                />
+                <MemberLedgerDialog
+                  memberId={member.id}
+                  memberName={name}
+                  source="member"
                 />
               </>
             ) : null}

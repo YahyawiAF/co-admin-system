@@ -59,6 +59,14 @@ export class EventsGateway {
     this.server.sockets.emit('staff_message', data);
   }
 
+  sendBookingRequest(data: any) {
+    this.server.sockets.emit('booking_request', data);
+  }
+
+  sendBookingRequestResolved(data: any) {
+    this.server.sockets.emit('booking_request_resolved', data);
+  }
+
   @SubscribeMessage('identity')
   async identity(@MessageBody() data: number): Promise<number> {
     return data;

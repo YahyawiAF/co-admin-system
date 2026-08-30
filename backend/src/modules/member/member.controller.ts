@@ -75,6 +75,39 @@ export class MemberController {
     return this.memberService.insights(id);
   }
 
+  @Get(':id/ledger')
+  @ApiBearerAuth()
+  ledger(@Param('id', ParseUUIDPipe) id: string) {
+    return this.memberService.listLedger(id);
+  }
+
+  @Post(':id/ledger')
+  @ApiBearerAuth()
+  addLedger(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body()
+    body: {
+      kind: 'CREDIT' | 'ECHEANCE';
+      amount: number;
+      note?: string;
+      dueDate?: string;
+      source?: string;
+      journalId?: string;
+      abonnementId?: string;
+    },
+  ) {
+    return this.memberService.addLedger({ ...body, memberId: id });
+  }
+
+  @Patch('ledger/:entryId/settle')
+  @ApiBearerAuth()
+  settleLedger(
+    @Param('entryId', ParseUUIDPipe) entryId: string,
+    @Body() body: { settled?: boolean },
+  ) {
+    return this.memberService.settleLedger(entryId, body.settled !== false);
+  }
+
   @Get(':id')
   // @Roles([Role.ADMIN, Role.USER])
   // @UseGuards(JwtAuthGuard, RolesGuard)

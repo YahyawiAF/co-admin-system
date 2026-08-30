@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -16,8 +16,8 @@ import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
-import { AdminStaffChat } from "@/components/visitor/AdminStaffChat";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
+import { useOrg } from "@/lib/org";
 
 function nameOf(m?: Member | null) {
   return (
@@ -29,21 +29,25 @@ function nameOf(m?: Member | null) {
 
 function CommunityInner() {
   const queryClient = useQueryClient();
+  const { href } = useOrg();
+  const router = useRouter();
   const { memberId } = useVisitorSession();
   const { socket } = useRealtime();
   const searchParams = useSearchParams();
   const peerId = searchParams.get("peer");
   const [q, setQ] = useState("");
   const [peer, setPeer] = useState<Member | null>(null);
-  const [adminChat, setAdminChat] = useState(false);
   const [draft, setDraft] = useState("");
   const [tab, setTab] = useState<"inbox" | "people">("inbox");
+  const [presence, setPresence] = useState<"all" | "present">("all");
+  const [jobFilter, setJobFilter] = useState<string | null>(null);
+  const [skillFilter, setSkillFilter] = useState<string | null>(null);
   const inboxPoll = useVisibleInterval(45_000);
   const threadPoll = useVisibleInterval(peer ? 20_000 : false);
 
   useEffect(() => {
-    if (peerId === "admin") setAdminChat(true);
-  }, [peerId]);
+    if (peerId === "admin") router.replace(href("/staff"));
+  }, [peerId, router, href]);
 
   useEffect(() => {
     if (!socket || !memberId) return;
@@ -109,46 +113,59 @@ function CommunityInner() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const professions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of people) {
+      const job = p.functionality?.trim();
+      if (job) set.add(job);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [people]);
+
+  const skillChips = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of people) {
+      for (const s of p.skills || []) {
+        if (s.trim()) set.add(s.trim());
+      }
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [people]);
+
   const filteredPeople = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return people;
-    return people.filter((p) =>
-      `${p.firstName} ${p.lastName} ${p.functionality} ${p.bio} ${(p.skills || []).join(" ")}`
+    return people.filter((p) => {
+      if (presence === "present" && !p.isPresent) return false;
+      if (jobFilter && p.functionality?.trim() !== jobFilter) return false;
+      if (skillFilter && !(p.skills || []).includes(skillFilter)) return false;
+      if (!s) return true;
+      return `${p.firstName} ${p.lastName} ${p.functionality} ${p.bio} ${(p.skills || []).join(" ")}`
         .toLowerCase()
-        .includes(s)
-    );
-  }, [people, q]);
+        .includes(s);
+    });
+  }, [people, q, presence, jobFilter, skillFilter]);
+
+  const presentIds = useMemo(
+    () => new Set(people.filter((p) => p.isPresent).map((p) => p.id)),
+    [people]
+  );
 
   const filteredInbox = useMemo(() => {
     const s = q.trim().toLowerCase();
-    if (!s) return inbox;
-    return inbox.filter((t) =>
-      `${nameOf(t.peer)} ${t.peer.functionality} ${t.lastMessage}`
+    return inbox.filter((t) => {
+      if (presence === "present" && !presentIds.has(t.peer.id)) return false;
+      if (!s) return true;
+      return `${nameOf(t.peer)} ${t.peer.functionality} ${t.lastMessage}`
         .toLowerCase()
-        .includes(s)
-    );
-  }, [inbox, q]);
+        .includes(s);
+    });
+  }, [inbox, q, presence, presentIds]);
 
   if (!memberId) {
     return (
       <p className="text-sm text-slate-500">
         Connectez-vous pour voir la communauté.
       </p>
-    );
-  }
-
-  if (adminChat && memberId) {
-    return (
-      <div className="space-y-3">
-        <button
-          type="button"
-          className="text-sm font-medium text-primary"
-          onClick={() => setAdminChat(false)}
-        >
-          ← Messages
-        </button>
-        <AdminStaffChat memberId={memberId} />
-      </div>
     );
   }
 
@@ -262,13 +279,79 @@ function CommunityInner() {
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium",
+            presence === "all"
+              ? "bg-slate-800 text-white"
+              : "bg-white text-slate-600"
+          )}
+          onClick={() => setPresence("all")}
+        >
+          Tous
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "rounded-full px-3 py-1 text-xs font-medium",
+            presence === "present"
+              ? "bg-emerald-600 text-white"
+              : "bg-white text-slate-600"
+          )}
+          onClick={() =>
+            setPresence((v) => (v === "present" ? "all" : "present"))
+          }
+        >
+          Présents
+        </button>
+        {tab === "people"
+          ? professions.slice(0, 10).map((job) => (
+              <button
+                key={job}
+                type="button"
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  jobFilter === job
+                    ? "bg-primary text-white"
+                    : "bg-white text-slate-600"
+                )}
+                onClick={() =>
+                  setJobFilter((v) => (v === job ? null : job))
+                }
+              >
+                {job}
+              </button>
+            ))
+          : null}
+        {tab === "people"
+          ? skillChips.slice(0, 12).map((skill) => (
+              <button
+                key={skill}
+                type="button"
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-medium",
+                  skillFilter === skill
+                    ? "bg-sky-600 text-white"
+                    : "bg-white text-slate-600"
+                )}
+                onClick={() =>
+                  setSkillFilter((v) => (v === skill ? null : skill))
+                }
+              >
+                {skill}
+              </button>
+            ))
+          : null}
+      </div>
 
       {tab === "inbox" ? (
         <div className="overflow-hidden rounded-2xl bg-white">
           <button
             type="button"
             className="flex w-full items-start gap-3 border-b px-4 py-3 text-left"
-            onClick={() => setAdminChat(true)}
+            onClick={() => router.push(href("/staff"))}
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-slate-800 text-white">
               <Building2 className="h-5 w-5" />
@@ -285,7 +368,7 @@ function CommunityInner() {
               Pas encore de conversation membre. Ouvrez Annuaire.
             </p>
           ) : (
-            filteredInbox.map((t, i) => (
+            filteredInbox.map((t) => (
               <button
                 key={t.peer.id}
                 type="button"
@@ -307,15 +390,9 @@ function CommunityInner() {
                   <p className="truncate text-xs text-slate-500">
                     {t.peer.functionality || "Membre"}
                   </p>
-                  {i === 0 ? (
-                    <p className="mt-1 rounded-2xl bg-primary px-3 py-2 text-sm text-white">
-                      {t.lastMessage}
-                    </p>
-                  ) : (
-                    <p className="truncate text-sm text-slate-600">
-                      {t.lastMessage}
-                    </p>
-                  )}
+                  <p className="truncate text-sm text-slate-600">
+                    {t.lastMessage}
+                  </p>
                 </div>
               </button>
             ))

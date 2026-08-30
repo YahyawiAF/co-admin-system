@@ -7,6 +7,8 @@ export type PushPayload = {
   body: string;
   tag?: string;
   url?: string;
+  vibrate?: number[];
+  requireInteraction?: boolean;
 };
 
 @Injectable()
@@ -81,6 +83,8 @@ export class PushService implements OnModuleInit {
       body: payload.body,
       tag: payload.tag || 'collabora',
       url: payload.url || '/m',
+      vibrate: payload.vibrate || [200, 80, 200, 80, 400],
+      requireInteraction: payload.requireInteraction ?? false,
     });
 
     await Promise.all(

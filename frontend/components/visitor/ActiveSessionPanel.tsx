@@ -76,9 +76,7 @@ export function ActiveSessionPanel({
     !!session &&
     !seatLabel &&
     seatMode === "VISITOR_CHOOSE" &&
-    subKind !== "HOURS_POOL" &&
-    subKind !== "SEMI_DAY" &&
-    subKind !== "FULL_DAY";
+    !isHoursPool;
 
   const elapsedMs = useMemo(() => {
     if (session.registredTime) {
@@ -258,13 +256,11 @@ export function ActiveSessionPanel({
             ? "Choisissez votre place sur le plan ci-dessous."
             : isHoursPool
               ? "L’accueil vous attribue une place."
-              : subKind === "SEMI_DAY" || subKind === "FULL_DAY"
-                ? "Votre place d’abonnement est réservée."
-                : "Aucune place assignée pour l’instant."}
+              : "Aucune place assignée pour l’instant."}
         </p>
       )}
 
-      {seatLabel || canPickSeat || seatMode === "ADMIN_ASSIGN" ? (
+      {seatLabel || canPickSeat || seatMode === "ADMIN_ASSIGN" || seatMode === "VISITOR_CHOOSE" ? (
         <div className="mb-4 text-left">
           <VisitorSeatMap
             memberId={memberId}

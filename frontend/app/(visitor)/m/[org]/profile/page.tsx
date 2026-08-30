@@ -35,6 +35,10 @@ import { TagInput } from "@/components/visitor/TagInput";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import {
+  PROFESSION_SUGGESTIONS,
+  SKILL_SUGGESTIONS,
+} from "@/lib/directory-suggestions";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -320,6 +324,25 @@ export default function ProfilePage() {
                   setForm((f) => ({ ...f, functionality: e.target.value }))
                 }
               />
+              <div className="flex flex-wrap gap-1">
+                {PROFESSION_SUGGESTIONS.filter(
+                  (p) =>
+                    p.toLowerCase() !== form.functionality.trim().toLowerCase()
+                )
+                  .slice(0, 12)
+                  .map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] text-slate-600"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, functionality: p }))
+                      }
+                    >
+                      {p}
+                    </button>
+                  ))}
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Compétences</Label>
@@ -327,6 +350,7 @@ export default function ProfilePage() {
                 value={form.skills}
                 onChange={(skills) => setForm((f) => ({ ...f, skills }))}
                 placeholder="React, Node.js…"
+                suggestions={SKILL_SUGGESTIONS}
               />
             </div>
             <div className="space-y-1">

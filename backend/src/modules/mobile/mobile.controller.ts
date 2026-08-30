@@ -233,6 +233,7 @@ export class MobileController {
       dto.memberId,
       dto.seatLabel,
       dto.spaceId,
+      dto.orgSlug,
     );
   }
 
@@ -381,5 +382,56 @@ export class MobileController {
   @Post('push/unsubscribe')
   pushUnsubscribe(@Body() body: { memberId?: string; endpoint: string }) {
     return this.mobileService.removePushSubscription(body);
+  }
+
+  @Post('auth/lookup-phone')
+  lookupPhone(@Body() body: { phone: string; orgSlug?: string }) {
+    return this.mobileService.lookupPhone(body);
+  }
+
+  @Post('booking-request')
+  createBooking(
+    @Body()
+    body: {
+      memberId: string;
+      kind: 'ROOM' | 'SEAT';
+      spaceId?: string;
+      seatLabel?: string;
+      seatSpaceId?: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      note?: string;
+    },
+  ) {
+    return this.mobileService.createBookingRequest(body);
+  }
+
+  @Get('booking-request/:memberId')
+  memberBookings(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.listMemberBookingRequests(memberId);
+  }
+
+  @Patch('booking-request/:id/cancel')
+  cancelBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { memberId: string },
+  ) {
+    return this.mobileService.cancelBookingRequest(id, body.memberId);
+  }
+
+  @Get('admin/booking-requests')
+  adminBookings(@Query('status') status?: VisitRequestStatus) {
+    return this.mobileService.listBookingRequests(status);
+  }
+
+  @Patch('admin/booking-requests/:id/approve')
+  approveBooking(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.approveBookingRequest(id);
+  }
+
+  @Patch('admin/booking-requests/:id/reject')
+  rejectBooking(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.rejectBookingRequest(id);
   }
 }

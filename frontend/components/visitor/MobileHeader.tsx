@@ -37,6 +37,8 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "/tarifs": "Tarifs",
   "/subscription": "Abonnement",
   "/choose": "Forfaits",
+  "/staff": "Accueil",
+  "/reserve": "Réserver",
 };
 
 export function MobileHeader() {

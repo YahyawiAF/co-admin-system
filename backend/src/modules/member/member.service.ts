@@ -7,7 +7,13 @@ import {
 import { PrismaService } from '../../../database/prisma.service';
 import { AddMemberDto } from './dtos/createMember.dto';
 import { UpdateMemberDto } from './dtos/updateMember.dto';
-import { Prisma, Member, ProductOrderStatus } from '@prisma/client';
+import {
+  Prisma,
+  Member,
+  ProductOrderStatus,
+  Subscription,
+  LedgerKind,
+} from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
@@ -17,6 +23,15 @@ import { startOfWeek, addWeeks, format, getHours, getDay } from 'date-fns';
 @Injectable()
 export class MemberService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private async nextVisitorNumber(organizationId: string): Promise<number> {
+    const last = await this.prisma.member.findFirst({
+      where: { organizationId, visitorNumber: { not: null } },
+      orderBy: { visitorNumber: 'desc' },
+      select: { visitorNumber: true },
+    });
+    return (last?.visitorNumber || 0) + 1;
+  }
 
   private async assertCanJoinGroup(groupId: string, excludeMemberId?: string) {
     const group = await this.prisma.memberGroup.findUnique({
@@ -61,8 +76,16 @@ export class MemberService {
         }
         organizationId = org.id;
       }
+      const visitorNumber = await this.nextVisitorNumber(organizationId);
       const member = await this.prisma.member.create({
-        data: { ...addMemberDto, organizationId },
+        data: {
+          ...addMemberDto,
+          organizationId,
+          isActive: true,
+          showInDirectory: true,
+          plan: addMemberDto.plan || Subscription.Journal,
+          visitorNumber,
+        },
         include: { group: true },
       });
       return new MemberEntity(member);
@@ -395,5 +418,72 @@ export class MemberService {
         `Failed to delete member with ID ${id}: ${(error as Error).message}`,
       );
     }
+  }
+
+  async listLedger(memberId: string) {
+    const rows = await this.prisma.memberLedger.findMany({
+      where: { memberId },
+      orderBy: { createdAt: 'desc' },
+      take: 80,
+    });
+    const open = rows.filter((r) => !r.settled);
+    const owedByMember = open
+      .filter((r) => r.kind === LedgerKind.CREDIT)
+      .reduce((s, r) => s + r.amount, 0);
+    const owedToMember = open
+      .filter((r) => r.kind === LedgerKind.ECHEANCE)
+      .reduce((s, r) => s + r.amount, 0);
+    return {
+      entries: rows,
+      owedByMember,
+      owedToMember,
+      net: owedByMember - owedToMember,
+    };
+  }
+
+  async addLedger(dto: {
+    memberId: string;
+    kind: LedgerKind | 'CREDIT' | 'ECHEANCE';
+    amount: number;
+    note?: string;
+    dueDate?: string | Date | null;
+    source?: string;
+    journalId?: string;
+    abonnementId?: string;
+  }) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const amount = Number(dto.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException('Montant invalide');
+    }
+    const kind =
+      String(dto.kind) === 'ECHEANCE'
+        ? LedgerKind.ECHEANCE
+        : LedgerKind.CREDIT;
+    const created = await this.prisma.memberLedger.create({
+      data: {
+        memberId: dto.memberId,
+        kind,
+        amount,
+        note: (dto.note || '').trim() || null,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        source: dto.source || 'member',
+        journalId: dto.journalId || null,
+        abonnementId: dto.abonnementId || null,
+      },
+    });
+    return created;
+  }
+
+  async settleLedger(id: string, settled = true) {
+    const row = await this.prisma.memberLedger.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Écriture introuvable');
+    return this.prisma.memberLedger.update({
+      where: { id },
+      data: { settled },
+    });
   }
 }

@@ -81,7 +81,7 @@ export function StaffMessageModal() {
             Message de l’accueil
           </DialogTitle>
         </DialogHeader>
-        <p className="whitespace-pre-wrap text-base leading-relaxed">
+        <p className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap text-base leading-relaxed">
           {current?.text}
         </p>
         <DialogFooter className="flex-col gap-2 sm:flex-col">
@@ -100,7 +100,7 @@ export function StaffMessageModal() {
             className="h-11 w-full"
             onClick={() => {
               ack.mutate();
-              router.push(href("/community?peer=admin"));
+              router.push(href("/staff"));
             }}
           >
             Voir la conversation

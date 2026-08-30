@@ -254,6 +254,11 @@ export type VisitorNotifyPayload = {
 
 export function showVisitorNotification(payload: VisitorNotifyPayload) {
   playNotifySound(payload.sound || "alert");
+  try {
+    navigator.vibrate?.([200, 80, 120, 80, 200]);
+  } catch {
+    /* ignore */
+  }
 
   if (typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
@@ -263,6 +268,7 @@ export function showVisitorNotification(payload: VisitorNotifyPayload) {
       tag: payload.tag || "visitor",
       icon: "/collabora-icon.svg",
       badge: "/collabora-icon.svg",
+      requireInteraction: (payload.tag || "").startsWith("session-end"),
     });
     n.onclick = () => {
       window.focus();

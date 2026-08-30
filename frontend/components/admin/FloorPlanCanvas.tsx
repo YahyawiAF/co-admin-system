@@ -603,7 +603,7 @@ function SeatChip({
       onPointerDown={onPointerDown}
       title={`${seat.label}${seat.isOverflow ? " (overflow)" : ""}`}
       className={cn(
-        "absolute z-20 flex h-7 min-w-[1.75rem] items-center justify-center rounded-full border px-1 text-[9px] font-bold shadow transition-transform",
+        "absolute z-20 flex h-7 min-w-[1.75rem] items-center justify-center rounded-full border px-1 text-[9px] font-bold shadow transition-transform touch-manipulation",
         seat.isOverflow
           ? occupied
             ? "border-rose-500 bg-rose-500 text-white"

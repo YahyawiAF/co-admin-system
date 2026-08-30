@@ -30,6 +30,7 @@ import {
   X,
   Coffee,
   UserRound,
+  Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -78,9 +79,11 @@ import { QuickCheckInPanel } from "@/components/admin/QuickCheckInPanel";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { ReservationPanel } from "@/components/admin/ReservationPanel";
 import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
+import { JournalReceptionToggles } from "@/components/admin/JournalReceptionToggles";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
+import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
@@ -674,6 +677,7 @@ export default function JournalClient() {
               Aujourd&apos;hui
             </Button>
           </div>
+          <JournalReceptionToggles />
         </div>
         <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
           <SeatOccupancyBoard
@@ -1257,6 +1261,28 @@ export default function JournalClient() {
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
+                          {m ? (
+                            <MemberLedgerDialog
+                              memberId={m.id}
+                              memberName={visitorLabel(row)}
+                              source="journal"
+                              journalId={row.id}
+                              defaultAmount={
+                                row.isPayed
+                                  ? undefined
+                                  : visitAmountDue(row, now)
+                              }
+                              trigger={
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  title="Crédit / échéance"
+                                >
+                                  <Banknote className="h-4 w-4" />
+                                </Button>
+                              }
+                            />
+                          ) : null}
                           {m ? (
                             <Button
                               size="icon"

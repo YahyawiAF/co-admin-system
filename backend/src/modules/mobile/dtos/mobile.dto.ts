@@ -302,6 +302,11 @@ export class ClaimSeatDto {
   @IsOptional()
   @IsString()
   spaceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  orgSlug?: string;
 }
 
 export class UpdateMobileProfileDto {

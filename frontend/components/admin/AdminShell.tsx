@@ -26,6 +26,8 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { VisitRequestBell } from "@/components/admin/VisitRequestBell";
 import { ProductOrderBell } from "@/components/admin/ProductOrderBell";
 import { StaffInboxBell } from "@/components/admin/StaffInboxBell";
+import { BookingRequestBell } from "@/components/admin/BookingRequestBell";
+import { CheckoutNotify } from "@/components/admin/CheckoutNotify";
 import { JournalAlertNavBell } from "@/components/admin/JournalAlertCenter";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { JournalAlertsProvider } from "@/lib/journal-alerts-context";
@@ -164,7 +166,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <JournalAlertNavBell />
           <StaffInboxBell />
           <ProductOrderBell />
+          <BookingRequestBell />
           <VisitRequestBell />
+          <CheckoutNotify />
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>

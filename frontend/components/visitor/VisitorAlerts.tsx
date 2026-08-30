@@ -86,6 +86,19 @@ export function VisitorAlerts() {
   useEffect(() => {
     if (!memberId || !optIn) return;
     void ensurePushSubscription(memberId);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void ensurePushSubscription(memberId);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const t = window.setInterval(() => {
+      void ensurePushSubscription(memberId);
+    }, 5 * 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(t);
+    };
   }, [memberId, optIn]);
 
   const { data: status } = useMobileStatus();
@@ -266,10 +279,37 @@ export function VisitorAlerts() {
       }
     };
 
+    const onBookingResolved = (payload: {
+      memberId?: string;
+      status?: string;
+    }) => {
+      if (payload.memberId && payload.memberId !== memberId) return;
+      queryClient.invalidateQueries({ queryKey: ["my-bookings", memberId] });
+      if (payload.status === "APPROVED" || payload.status === "REJECTED") {
+        setVisit({
+          status: payload.status,
+          type: "BOOKING",
+        });
+        showVisitorNotification({
+          title:
+            payload.status === "APPROVED"
+              ? "Réservation confirmée"
+              : "Réservation refusée",
+          body:
+            payload.status === "APPROVED"
+              ? "L’accueil a accepté votre réservation."
+              : "L’accueil a refusé votre réservation.",
+          tag: `booking-${payload.status}`,
+          sound: payload.status === "APPROVED" ? "ready" : "alert",
+        });
+      }
+    };
+
     socket.on("product_order", onProductOrder);
     socket.on("product_order_confirmed", onProductOrder);
     socket.on("product_updated", onProductUpdated);
     socket.on("visit_request_resolved", onVisitResolved);
+    socket.on("booking_request_resolved", onBookingResolved);
     socket.on("community_message", onCommunity);
     socket.on("staff_message", onStaff);
 
@@ -278,6 +318,7 @@ export function VisitorAlerts() {
       socket.off("product_order_confirmed", onProductOrder);
       socket.off("product_updated", onProductUpdated);
       socket.off("visit_request_resolved", onVisitResolved);
+      socket.off("booking_request_resolved", onBookingResolved);
       socket.off("community_message", onCommunity);
       socket.off("staff_message", onStaff);
     };
@@ -373,15 +414,23 @@ export function VisitorAlerts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Bell className="h-5 w-5 text-primary" />
-              {visit?.status === "APPROVED"
-                ? "Demande confirmée"
-                : "Demande refusée"}
+              {visit?.type === "BOOKING"
+                ? visit?.status === "APPROVED"
+                  ? "Réservation confirmée"
+                  : "Réservation refusée"
+                : visit?.status === "APPROVED"
+                  ? "Demande confirmée"
+                  : "Demande refusée"}
             </DialogTitle>
           </DialogHeader>
           <p className="text-base leading-relaxed">
-            {visit?.status === "APPROVED"
-              ? "L’accueil a accepté votre demande. Vous pouvez continuer."
-              : "L’accueil a refusé votre demande. Vous pouvez en faire une nouvelle."}
+            {visit?.type === "BOOKING"
+              ? visit?.status === "APPROVED"
+                ? "L’accueil a accepté votre réservation."
+                : "L’accueil a refusé votre réservation. Vous pouvez en faire une nouvelle."
+              : visit?.status === "APPROVED"
+                ? "L’accueil a accepté votre demande. Vous pouvez continuer."
+                : "L’accueil a refusé votre demande. Vous pouvez en faire une nouvelle."}
           </p>
           <DialogFooter>
             <Button
