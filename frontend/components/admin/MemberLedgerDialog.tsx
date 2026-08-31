@@ -308,7 +308,7 @@ export function MemberLedgerDialog({
                 <div className="grid gap-2 sm:grid-cols-2">
                   {AVOIR_REASONS.map((r) => {
                     const disabled =
-                      r.id === "unused_today" && today && !today.isPayed;
+                      r.id === "unused_today" && !!today && !today.isPayed;
                     return (
                     <button
                       key={r.id}
