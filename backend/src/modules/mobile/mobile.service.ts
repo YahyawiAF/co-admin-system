@@ -318,6 +318,68 @@ export class MobileService {
     return seats[0] || null;
   }
 
+  private async openJournalIdForMember(memberId: string) {
+    const j = await this.prisma.journal.findFirst({
+      where: { memberID: memberId, leaveTime: null, isReservation: false },
+      orderBy: { registredTime: 'desc' },
+      select: { id: true },
+    });
+    return j?.id || null;
+  }
+
+  private async recordSeatStay(input: {
+    type: 'seat.assigned' | 'seat.moved' | 'seat.released';
+    memberId?: string | null;
+    seatId: string;
+    journalId?: string | null;
+    meta?: Record<string, unknown>;
+  }) {
+    if (!input.memberId && !input.seatId) return;
+    await this.prisma.opsEvent.create({
+      data: {
+        type: input.type,
+        memberId: input.memberId || undefined,
+        seatId: input.seatId,
+        journalId: input.journalId || undefined,
+        meta: (input.meta || {}) as never,
+      },
+    });
+  }
+
+  private async snapshotAndReleaseSeats(
+    memberId: string,
+    where: { isPermanent?: boolean | { equals?: boolean } },
+    journalId?: string | null,
+  ) {
+    const current = await this.prisma.seatBooking.findMany({
+      where: {
+        memberId,
+        isBooked: true,
+        eventKey: 'collabora-hub',
+        ...where,
+      },
+      include: { space: { select: { name: true } } },
+    });
+    for (const b of current) {
+      await this.recordSeatStay({
+        type: 'seat.released',
+        memberId,
+        seatId: b.seatId,
+        journalId: journalId || undefined,
+        meta: {
+          spaceId: b.spaceId,
+          spaceName: b.space?.name || null,
+          reason: 'checkout',
+        },
+      });
+    }
+    if (current.length) {
+      await this.prisma.seatBooking.deleteMany({
+        where: { id: { in: current.map((b) => b.id) } },
+      });
+    }
+  }
+
   private async seatOccupants(labels: string[], spaceId?: string) {
     if (!labels.length) return [];
     const taken = await this.prisma.seatBooking.findMany({
@@ -1190,12 +1252,16 @@ export class MobileService {
             id: true,
             mobileSeatMode: true,
             receptionAway: true,
+            receptionAwayStartedAt: true,
           },
         });
     return {
       facilityId: facility?.id || null,
       mobileSeatMode: facility?.mobileSeatMode || MobileSeatMode.ADMIN_ASSIGN,
       receptionAway: facility?.receptionAway ?? false,
+      receptionAwayStartedAt:
+        (facility as { receptionAwayStartedAt?: Date | null } | null)
+          ?.receptionAwayStartedAt || null,
     };
   }
 
@@ -1552,21 +1618,17 @@ export class MobileService {
         this.seatPrivilegeActiveNow(activeSub?.price as any) &&
         !!activeSub?.reservedSeatLabel;
       if (this.isPeriodKind(kind) || kind === 'HOURS_POOL') {
-        await this.prisma.seatBooking.deleteMany({
-          where: {
-            memberId: journal.memberID,
-            isBooked: true,
-            ...(keepDedicated ? { isPermanent: false } : {}),
-          },
-        });
+        await this.snapshotAndReleaseSeats(
+          journal.memberID,
+          keepDedicated ? { isPermanent: false } : {},
+          journal.id,
+        );
       } else if (this.isOpenSpaceDay(journal.prices || {}) || !keepDaySeat) {
-        await this.prisma.seatBooking.deleteMany({
-          where: {
-            memberId: journal.memberID,
-            isBooked: true,
-            isPermanent: false,
-          },
-        });
+        await this.snapshotAndReleaseSeats(
+          journal.memberID,
+          { isPermanent: false },
+          journal.id,
+        );
       }
     }
 
@@ -1973,6 +2035,13 @@ export class MobileService {
     ) {
       await this.throwOccupied('Cette place est déjà prise', [seatLabel], spaceId);
     }
+    const previous = await this.prisma.seatBooking.findMany({
+      where: {
+        memberId,
+        isBooked: true,
+        eventKey: 'collabora-hub',
+      },
+    });
     if (!opts?.keepExisting) {
       await this.prisma.seatBooking.deleteMany({
         where: {
@@ -1984,7 +2053,7 @@ export class MobileService {
         },
       });
     }
-    return this.prisma.seatBooking.upsert({
+    const booked = await this.prisma.seatBooking.upsert({
       where: {
         eventKey_spaceId_seatId: {
           eventKey: 'collabora-hub',
@@ -2008,6 +2077,37 @@ export class MobileService {
         bookedAt: new Date(),
       },
     });
+    const from = previous.find(
+      (p) => !(p.spaceId === spaceId && p.seatId === seatLabel),
+    );
+    const journalId = await this.openJournalIdForMember(memberId);
+    if (from && from.seatId !== seatLabel) {
+      await this.recordSeatStay({
+        type: 'seat.moved',
+        memberId,
+        seatId: seatLabel,
+        journalId,
+        meta: {
+          fromSeat: from.seatId,
+          fromSpaceId: from.spaceId,
+          toSeat: seatLabel,
+          spaceId,
+          spaceName: seat.space?.name || null,
+        },
+      });
+    } else if (!previous.some((p) => p.seatId === seatLabel && p.spaceId === spaceId && p.isBooked)) {
+      await this.recordSeatStay({
+        type: 'seat.assigned',
+        memberId,
+        seatId: seatLabel,
+        journalId,
+        meta: {
+          spaceId,
+          spaceName: seat.space?.name || null,
+        },
+      });
+    }
+    return booked;
   }
 
   async bookAnonymousSeat(seatLabel: string, spaceId?: string) {
@@ -2215,6 +2315,22 @@ export class MobileService {
         bookedAt: new Date(),
       },
     });
+    const journalId = booking.memberId
+      ? await this.openJournalIdForMember(booking.memberId)
+      : null;
+    await this.recordSeatStay({
+      type: 'seat.moved',
+      memberId: booking.memberId,
+      seatId: toLabel,
+      journalId,
+      meta: {
+        fromSeat: booking.seatId,
+        fromSpaceId: booking.spaceId,
+        toSeat: toLabel,
+        spaceId: destSeat.spaceId,
+        spaceName: destSeat.space?.name || null,
+      },
+    });
     this.eventsGateway.sendTableUpdates({
       type: 'seat_moved',
       memberId: booking.memberId,
@@ -2263,6 +2379,16 @@ export class MobileService {
         memberId,
       })),
     });
+    const journalId = await this.openJournalIdForMember(memberId);
+    for (const s of seats) {
+      await this.recordSeatStay({
+        type: 'seat.assigned',
+        memberId,
+        seatId: s.label,
+        journalId,
+        meta: { spaceId: s.spaceId },
+      });
+    }
   }
 
   async bookAllOpenSpaceSeats(memberId: string) {
@@ -2542,12 +2668,14 @@ export class MobileService {
     }
 
     const request = await this.prisma.visitRequest.create({
-      data: {
-        memberId: dto.memberId,
-        priceId: dto.priceId,
-        type: dto.type,
-        status: VisitRequestStatus.PENDING,
-      },
+        data: {
+          memberId: dto.memberId,
+          priceId: dto.priceId,
+          type: dto.type,
+          status: VisitRequestStatus.PENDING,
+          seatLabel: dto.seatLabel?.trim() || null,
+          spaceId: dto.spaceId || null,
+        },
       include: {
         member: true,
         price: true,
@@ -2575,7 +2703,11 @@ export class MobileService {
 
     const settings = await this.getSeatSettings(member.organization?.slug);
     if (settings.receptionAway) {
-      const approved = await this.approveVisitRequest(request.id);
+      const approved = await this.approveVisitRequest(
+        request.id,
+        request.seatLabel || undefined,
+        request.spaceId || undefined,
+      );
       return {
         ...approved.request,
         autoApproved: true,
@@ -2623,8 +2755,8 @@ export class MobileService {
     const settings = await this.getSeatSettings(
       request.member.organization?.slug,
     );
-    let assignedLabel = seatLabel?.trim() || null;
-    let assignedSpaceId = spaceId || undefined;
+    let assignedLabel = seatLabel?.trim() || request.seatLabel?.trim() || null;
+    let assignedSpaceId = spaceId || request.spaceId || undefined;
     const requestKind = this.subscriptionKind(request.price);
     const hoursSub =
       request.type === VisitRequestType.SUBSCRIPTION &&
@@ -2717,7 +2849,12 @@ export class MobileService {
 
     const updated = await this.prisma.visitRequest.update({
       where: { id },
-      data: { status: VisitRequestStatus.APPROVED },
+      data: {
+        status: VisitRequestStatus.APPROVED,
+        autoApproved: settings.receptionAway,
+        seatLabel: assignedLabel,
+        spaceId: assignedSpaceId || request.spaceId || null,
+      },
       include: { member: true, price: true },
     });
 

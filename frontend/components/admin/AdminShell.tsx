@@ -17,6 +17,7 @@ import {
   LogOut,
   Menu,
   Globe2,
+  Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -36,6 +37,7 @@ import { useState, type ReactNode } from "react";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/journal", label: "Journal", icon: ClipboardList },
+  { href: "/impayes", label: "Impayés", icon: Wallet },
   { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },
   { href: "/finance", label: "Finance", icon: Banknote },

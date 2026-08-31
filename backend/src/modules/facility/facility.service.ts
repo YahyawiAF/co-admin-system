@@ -166,6 +166,12 @@ export class FacilityService {
       where: { id },
       data: {
         ...updateFacilityDto,
+        receptionAwayStartedAt:
+          updateFacilityDto.receptionAwayStartedAt === undefined
+            ? existingFacility.receptionAwayStartedAt
+            : updateFacilityDto.receptionAwayStartedAt
+              ? new Date(updateFacilityDto.receptionAwayStartedAt)
+              : null,
         socialNetworks:
           updateFacilityDto.socialNetworks !== undefined
             ? updateFacilityDto.socialNetworks
@@ -187,6 +193,140 @@ export class FacilityService {
 
     await this.recalcNbrPlaces(id);
     return this.toFacilityEntity(updatedFacility);
+  }
+
+  async listAwayArrivals(facilityId: string) {
+    const facility = await this.prisma.facility.findUnique({
+      where: { id: facilityId },
+    });
+    if (!facility) {
+      throw new NotFoundException(`Facility with ID ${facilityId} not found`);
+    }
+    const since = facility.receptionAwayStartedAt;
+    if (!since) {
+      return {
+        startedAt: null,
+        receptionAway: facility.receptionAway,
+        arrivals: [],
+      };
+    }
+    const orgId = facility.organizationId;
+    const journals = await this.prisma.journal.findMany({
+      where: {
+        registredTime: { gte: since },
+        ...(orgId ? { members: { organizationId: orgId } } : {}),
+      },
+      include: {
+        members: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            visitorNumber: true,
+          },
+        },
+        prices: { select: { name: true } },
+      },
+      orderBy: { registredTime: 'asc' },
+    });
+    const memberIds = journals
+      .map((j) => j.memberID)
+      .filter((id): id is string => !!id);
+    const bookings = memberIds.length
+      ? await this.prisma.seatBooking.findMany({
+          where: { isBooked: true, memberId: { in: memberIds } },
+          include: { space: { select: { name: true } } },
+        })
+      : [];
+    const seatByMember = new Map(
+      bookings.map((b) => [
+        b.memberId as string,
+        {
+          seatLabel: b.seatId,
+          spaceName: b.space?.name || null,
+        },
+      ]),
+    );
+    const seen = new Set<string>();
+    const arrivals: Array<{
+      memberId: string | null;
+      name: string;
+      visitorNumber: number | null;
+      forfait: string | null;
+      seatLabel: string | null;
+      spaceName: string | null;
+      arrivedAt: string;
+      journalId: string | null;
+      autoApproved: boolean;
+    }> = [];
+
+    for (const j of journals) {
+      const key = j.memberID || j.id;
+      seen.add(key);
+      const seat = j.memberID ? seatByMember.get(j.memberID) : undefined;
+      const name = j.members
+        ? [j.members.firstName, j.members.lastName].filter(Boolean).join(' ') ||
+          'Visiteur'
+        : j.guestName || 'Visiteur';
+      arrivals.push({
+        memberId: j.memberID,
+        name,
+        visitorNumber: j.members?.visitorNumber ?? null,
+        forfait: j.prices?.name || null,
+        seatLabel: seat?.seatLabel || null,
+        spaceName: seat?.spaceName || null,
+        arrivedAt: j.registredTime.toISOString(),
+        journalId: j.id,
+        autoApproved: true,
+      });
+    }
+
+    const requests = await this.prisma.visitRequest.findMany({
+      where: {
+        autoApproved: true,
+        createdAt: { gte: since },
+        ...(orgId ? { member: { organizationId: orgId } } : {}),
+      },
+      include: {
+        member: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            visitorNumber: true,
+          },
+        },
+        price: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+    for (const r of requests) {
+      if (r.memberId && seen.has(r.memberId)) continue;
+      seen.add(r.memberId);
+      const seat = seatByMember.get(r.memberId);
+      arrivals.push({
+        memberId: r.memberId,
+        name:
+          [r.member.firstName, r.member.lastName].filter(Boolean).join(' ') ||
+          'Visiteur',
+        visitorNumber: r.member.visitorNumber ?? null,
+        forfait: r.price?.name || null,
+        seatLabel: r.seatLabel || seat?.seatLabel || null,
+        spaceName: seat?.spaceName || null,
+        arrivedAt: r.createdAt.toISOString(),
+        journalId: null,
+        autoApproved: true,
+      });
+    }
+
+    arrivals.sort(
+      (a, b) => new Date(a.arrivedAt).getTime() - new Date(b.arrivedAt).getTime(),
+    );
+    return {
+      startedAt: since.toISOString(),
+      receptionAway: facility.receptionAway,
+      arrivals,
+    };
   }
 
   async remove(id: string): Promise<void> {
@@ -705,6 +845,12 @@ function fixtureDefaults(kind: FixtureKind): { width: number; height: number } {
       return { width: 40, height: 12 };
     case FixtureKind.KITCHEN:
       return { width: 64, height: 40 };
+    case FixtureKind.TEXT:
+      return { width: 120, height: 40 };
+    case FixtureKind.ARROW:
+      return { width: 48, height: 24 };
+    case FixtureKind.STAIRS:
+      return { width: 48, height: 48 };
     default:
       return { width: 44, height: 44 };
   }

@@ -230,6 +230,11 @@ export class FacilityController {
     return this.facilityService.deleteFixture(id);
   }
 
+  @Get(':id/away-arrivals')
+  awayArrivals(@Param('id') id: string) {
+    return this.facilityService.listAwayArrivals(id);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.facilityService.findOne(id);

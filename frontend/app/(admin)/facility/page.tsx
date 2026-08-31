@@ -593,14 +593,20 @@ export default function FacilityPage() {
         });
         toast.success("Table ajoutée — placez les sièges avec l’outil Place");
       } else if (placeTool === "fixture") {
-        await facilityApi.createFixture({
+        const opt = FIXTURE_OPTIONS.find((f) => f.kind === fixtureKind);
+        const created = await facilityApi.createFixture({
           spaceId: activeSpace.id,
           kind: fixtureKind,
-          label: FIXTURE_OPTIONS.find((f) => f.kind === fixtureKind)?.label,
-          x: x - 22,
-          y: y - 22,
+          label: fixtureKind === "TEXT" ? "" : opt?.label,
+          x: x - (fixtureKind === "TEXT" ? 60 : 22),
+          y: y - (fixtureKind === "TEXT" ? 20 : 22),
         });
-        toast.success("Élément ajouté");
+        setSelectedFixture(created);
+        toast.success(
+          fixtureKind === "TEXT"
+            ? "Bloc texte — saisissez le libellé"
+            : "Élément ajouté"
+        );
       }
       invalidate();
     } catch (e) {
@@ -869,7 +875,7 @@ export default function FacilityPage() {
                   value={fixtureKind}
                   onValueChange={(v) => setFixtureKind(v as FixtureKind)}
                 >
-                  <SelectTrigger className="h-8 w-36">
+                  <SelectTrigger className="h-8 w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -1394,6 +1400,10 @@ export default function FacilityPage() {
                 <div className="space-y-1">
                   <Label>Libellé</Label>
                   <Input
+                    autoFocus={selectedFixture.kind === "TEXT"}
+                    placeholder={
+                      selectedFixture.kind === "TEXT" ? "Texte…" : undefined
+                    }
                     value={fixtureDraft.label}
                     onChange={(e) =>
                       setFixtureDraft((d) => ({ ...d, label: e.target.value }))

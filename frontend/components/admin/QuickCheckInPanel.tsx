@@ -38,6 +38,7 @@ import {
 } from "@/components/admin/VisitTarifSpacePickers";
 import { CheckInOccupancyStep } from "@/components/admin/CheckInOccupancyStep";
 import { Badge } from "@/components/ui/badge";
+import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 
 type Props = {
   presentMemberIds: string[];
@@ -90,6 +91,17 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     queryKey: ["facility-layout"],
     queryFn: () => facilityApi.layout(),
   });
+  const { data: debtorsData } = useQuery({
+    queryKey: queryKeys.debtors,
+    queryFn: () => membersApi.debtors(false),
+  });
+  const debtByMember = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const m of debtorsData?.members || []) {
+      map.set(m.memberId, m.net);
+    }
+    return map;
+  }, [debtorsData]);
 
   const abos = useMemo(() => {
     if (!abosRaw) return [] as Abonnement[];
@@ -431,6 +443,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                           {m.firstName || "Visiteur"}
                           {m.visitorNumber ? ` #${m.visitorNumber}` : ""}
                         </span>
+                        <UnpaidDebtBadge amount={debtByMember.get(m.id)} />
                         <span
                           className={cn(
                             "text-xs",

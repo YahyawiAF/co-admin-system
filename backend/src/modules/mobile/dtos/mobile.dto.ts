@@ -285,6 +285,16 @@ export class CreateVisitRequestDto {
   @ApiProperty({ enum: VisitRequestType })
   @IsEnum(VisitRequestType)
   type: VisitRequestType;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  seatLabel?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  spaceId?: string;
 }
 
 export class ClaimSeatDto {

@@ -53,4 +53,5 @@ export const queryKeys = {
   groups: ["groups"] as const,
   events: ["events"] as const,
   organization: (slug: string) => ["organization", slug] as const,
+  debtors: ["debtors"] as const,
 };

@@ -75,4 +75,10 @@ export class JournalEntity {
 
   @ApiProperty({ required: false, nullable: true })
   groupVisitId?: string | null;
+
+  @ApiProperty({ required: false })
+  hasOpenDebt?: boolean;
+
+  @ApiProperty({ required: false })
+  openDebtAmount?: number;
 }

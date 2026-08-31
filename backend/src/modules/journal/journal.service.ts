@@ -140,12 +140,72 @@ export class JournalService {
       },
     );
 
+    const rows = paginatedResult.data as Array<{
+      memberID?: string | null;
+      isPayed: boolean;
+      payedAmount?: number;
+      prices?: { price?: number } | null;
+    }>;
+
+    const memberIds = [
+      ...new Set(
+        rows.map((row) => row.memberID).filter((id): id is string => !!id),
+      ),
+    ];
+    const debt = await this.debtFlagsForMembers(memberIds);
+
     return {
-      data: paginatedResult.data.map(
-        (member) => new JournalEntity(member),
-      ) as unknown as Journal[],
+      data: rows.map((row) => {
+        const flags = row.memberID ? debt.get(row.memberID) : undefined;
+        const thisUnpaid = !row.isPayed
+          ? Number(row.prices?.price ?? row.payedAmount ?? 0)
+          : 0;
+        const past = Math.max(0, (flags?.amount ?? 0) - thisUnpaid);
+        return new JournalEntity({
+          ...row,
+          hasOpenDebt: past > 0.009,
+          openDebtAmount: Math.round(past * 100) / 100,
+        });
+      }) as unknown as Journal[],
       meta: paginatedResult.meta,
     };
+  }
+
+  private async debtFlagsForMembers(memberIds: string[]) {
+    const map = new Map<string, { amount: number }>();
+    if (!memberIds.length) return map;
+    const [journals, abos, ledgers] = await Promise.all([
+      this.prisma.journal.findMany({
+        where: { memberID: { in: memberIds }, isPayed: false },
+        select: { memberID: true, payedAmount: true, prices: { select: { price: true } } },
+      }),
+      this.prisma.abonnement.findMany({
+        where: { memberID: { in: memberIds }, isPayed: false },
+        select: { memberID: true, payedAmount: true, price: { select: { price: true } } },
+      }),
+      this.prisma.memberLedger.findMany({
+        where: {
+          memberId: { in: memberIds },
+          settled: false,
+          kind: 'CREDIT',
+        },
+        select: { memberId: true, amount: true },
+      }),
+    ]);
+    const add = (id: string | null | undefined, amount: number) => {
+      if (!id) return;
+      const cur = map.get(id) || { amount: 0 };
+      cur.amount += amount;
+      map.set(id, cur);
+    };
+    for (const j of journals) {
+      add(j.memberID, Number(j.prices?.price ?? j.payedAmount ?? 0));
+    }
+    for (const a of abos) {
+      add(a.memberID, Number(a.price?.price ?? a.payedAmount ?? 0));
+    }
+    for (const l of ledgers) add(l.memberId, l.amount);
+    return map;
   }
   findOne(id: string) {
     return this.prisma.journal.findUnique({ where: { id } });

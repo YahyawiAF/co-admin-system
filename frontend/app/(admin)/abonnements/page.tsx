@@ -73,6 +73,7 @@ import { AbonnementSeatMap } from "@/components/admin/AbonnementSeatMap";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
+import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 import {
   daysLeft,
   hoursLeft,
@@ -153,6 +154,24 @@ function AbonnementsInner() {
     queryKey: queryKeys.prices,
     queryFn: () => pricesApi.list(),
   });
+  const { data: debtorsData } = useQuery({
+    queryKey: queryKeys.debtors,
+    queryFn: () => membersApi.debtors(false),
+  });
+  const debtByMember = useMemo(() => {
+    const map = new Map<
+      string,
+      { net: number; owedFromVisits: number; owedFromLedger: number }
+    >();
+    for (const m of debtorsData?.members || []) {
+      map.set(m.memberId, {
+        net: m.net,
+        owedFromVisits: m.owedFromVisits,
+        owedFromLedger: m.owedFromLedger,
+      });
+    }
+    return map;
+  }, [debtorsData]);
 
   const rows = asList(raw);
   const subPrices = useMemo(
@@ -718,11 +737,15 @@ function AbonnementsInner() {
                   const left = daysLeft(a);
                   const hLeft = hoursLeft(a);
                   const active = isActiveSub(a);
+                  const debt = debtByMember.get(a.memberID);
+                  const visitDebt =
+                    (debt?.owedFromVisits || 0) + (debt?.owedFromLedger || 0);
                   return (
                     <TableRow
                       key={a.id}
                       className={cn(
                         focusMember === a.memberID && "bg-primary/5",
+                        !a.isPayed && "bg-rose-50/80",
                         !active && "text-muted-foreground opacity-70",
                       )}
                     >
@@ -734,6 +757,12 @@ function AbonnementsInner() {
                         >
                           {a.members?.firstName || a.memberID.slice(0, 8)}
                         </button>
+                        <div className="mt-1">
+                          <UnpaidDebtBadge
+                            amount={visitDebt}
+                            label="Crédit visites"
+                          />
+                        </div>
                       </TableCell>
                       <TableCell>
                         {a.price?.name || a.priceId.slice(0, 8)}
@@ -828,7 +857,7 @@ function AbonnementsInner() {
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setLedgerAbo(a)}>
                               <Banknote className="mr-2 h-4 w-4" />
-                              Crédit / échéance
+                              Compte visiteur
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => {

@@ -459,15 +459,52 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                   {data.recentVisits.map((v) => (
                     <div
                       key={v.id}
-                      className="flex justify-between text-sm"
+                      className="rounded-lg border px-3 py-2 text-sm"
                     >
-                      <span>
-                        {format(new Date(v.registredTime), "dd MMM", {
-                          locale: fr,
-                        })}{" "}
-                        · {v.forfait || "—"}
-                      </span>
-                      <span>{v.payedAmount} DT</span>
+                      <div className="flex justify-between gap-2">
+                        <span className="font-medium">
+                          {format(new Date(v.registredTime), "dd MMM yyyy", {
+                            locale: fr,
+                          })}{" "}
+                          · {v.forfait || "—"}
+                        </span>
+                        <span
+                          className={
+                            v.isPayed ? "text-muted-foreground" : "text-rose-600"
+                          }
+                        >
+                          {v.payedAmount} DT
+                          {!v.isPayed ? " · dû" : ""}
+                        </span>
+                      </div>
+                      {v.seats?.length ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Place
+                          {v.seats.length > 1 ? "s" : ""} :{" "}
+                          {v.seats.join(" → ")}
+                          {v.lastSpace ? ` · ${v.lastSpace}` : ""}
+                        </p>
+                      ) : v.lastSeat ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Place {v.lastSeat}
+                          {v.lastSpace ? ` · ${v.lastSpace}` : ""}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Place non enregistrée
+                        </p>
+                      )}
+                      {v.seatChanges?.length
+                        ? v.seatChanges.map((c, i) => (
+                            <p
+                              key={`${c.at}-${i}`}
+                              className="text-[11px] text-muted-foreground"
+                            >
+                              Changement {c.from || "?"} → {c.to || "?"}{" "}
+                              {format(new Date(c.at), "HH:mm")}
+                            </p>
+                          ))
+                        : null}
                     </div>
                   ))}
                   <p className="pt-2 text-xs font-semibold uppercase text-muted-foreground">

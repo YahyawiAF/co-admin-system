@@ -18,6 +18,8 @@ type Props = {
   assignedSpaceId?: string | null;
   seatMode?: MobileSeatMode | null;
   canPick?: boolean;
+  pickOnly?: boolean;
+  onPicked?: (seat: SpaceSeat) => void;
   className?: string;
 };
 
@@ -27,13 +29,16 @@ export function VisitorSeatMap({
   assignedSpaceId,
   seatMode,
   canPick = false,
+  pickOnly = false,
+  onPicked,
   className,
 }: Props) {
   const { slug } = useOrg();
   const queryClient = useQueryClient();
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [pickedLabel, setPickedLabel] = useState<string | null>(null);
-  const poll = useVisibleInterval(canPick ? 20_000 : 60_000);
+  const selectable = canPick || pickOnly;
+  const poll = useVisibleInterval(selectable ? 20_000 : 60_000);
 
   const { data, isLoading } = useQuery({
     queryKey: ["mobile-floor-plan", slug],
@@ -61,7 +66,7 @@ export function VisitorSeatMap({
     return null;
   }, [spaces, assignedSeatLabel, assignedSpaceId]);
 
-  const showSpaceSwitcher = canPick && !lockedSpaceId && spaces.length > 1;
+  const showSpaceSwitcher = selectable && !lockedSpaceId && spaces.length > 1;
 
   useEffect(() => {
     if (!spaces.length) {
@@ -83,14 +88,14 @@ export function VisitorSeatMap({
     null;
 
   const selectedSeatId = useMemo(() => {
-    const label = canPick ? pickedLabel || assignedSeatLabel : assignedSeatLabel;
+    const label = selectable ? pickedLabel || assignedSeatLabel : assignedSeatLabel;
     if (!label || !activeSpace) return null;
     const all = [
       ...(activeSpace.seats || []),
       ...(activeSpace.tables || []).flatMap((t) => t.seats || []),
     ];
     return all.find((s) => s.label === label)?.id || null;
-  }, [activeSpace, assignedSeatLabel, pickedLabel, canPick]);
+  }, [activeSpace, assignedSeatLabel, pickedLabel, selectable]);
 
   const claim = useMutation({
     mutationFn: (seatLabel: string) =>
@@ -110,7 +115,7 @@ export function VisitorSeatMap({
   });
 
   const onSelectSeat = (seat: SpaceSeat) => {
-    if (!canPick) return;
+    if (!selectable) return;
     const taken = bookings.some(
       (b) =>
         b.isBooked &&
@@ -123,6 +128,7 @@ export function VisitorSeatMap({
       return;
     }
     setPickedLabel(seat.label);
+    onPicked?.(seat);
   };
 
   if (isLoading) {
@@ -144,15 +150,15 @@ export function VisitorSeatMap({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {canPick ? "Choisissez votre place" : "Votre place sur le plan"}
+            {selectable ? "Choisissez votre place" : "Votre place sur le plan"}
           </p>
           {assignedSeatLabel ? (
             <p className="text-sm font-semibold">
               {[activeSpace?.name, assignedSeatLabel].filter(Boolean).join(" · ")}
             </p>
-          ) : canPick ? (
+          ) : selectable ? (
             <p className="text-sm text-slate-500">
-              Touchez une place libre, puis confirmez.
+              Touchez une place libre{pickOnly ? "." : ", puis confirmez."}
             </p>
           ) : seatMode === "ADMIN_ASSIGN" ? (
             <p className="text-sm text-slate-500">
@@ -193,12 +199,12 @@ export function VisitorSeatMap({
             variant="fit"
             className="h-full min-h-0 rounded-none border-0"
             selectedSeatId={selectedSeatId}
-            onSelectSeat={canPick ? onSelectSeat : undefined}
+            onSelectSeat={selectable ? onSelectSeat : undefined}
           />
         ) : null}
       </div>
 
-      {canPick ? (
+      {canPick && !pickOnly ? (
         <Button
           className="h-11 w-full"
           disabled={!pickedLabel || claim.isPending}

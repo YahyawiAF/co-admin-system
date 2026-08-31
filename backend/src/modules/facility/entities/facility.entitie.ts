@@ -46,6 +46,9 @@ export class FacilityEntity {
   @ApiProperty({ required: false })
   receptionAway?: boolean;
 
+  @ApiProperty({ required: false, nullable: true })
+  receptionAwayStartedAt?: Date | string | null;
+
   @ApiProperty()
   createdAt: Date;
 

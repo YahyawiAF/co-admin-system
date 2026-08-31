@@ -140,6 +140,8 @@ export interface Journal {
   createdAt?: string;
   updatedAt?: string;
   createdbyUserID?: string | null;
+  hasOpenDebt?: boolean;
+  openDebtAmount?: number;
 }
 
 export type MobileSeatMode = 'ADMIN_ASSIGN' | 'VISITOR_CHOOSE' | 'AUTO_ASSIGN';
@@ -148,6 +150,7 @@ export type MobileSeatSettings = {
   facilityId: string | null;
   mobileSeatMode: MobileSeatMode;
   receptionAway: boolean;
+  receptionAwayStartedAt?: string | null;
 };
 
 export type SeatAssignmentInfo = {
@@ -215,6 +218,7 @@ export interface Facility {
   places: Record<string, unknown>;
   mobileSeatMode?: MobileSeatMode;
   receptionAway?: boolean;
+  receptionAwayStartedAt?: string | null;
   organizationId?: string | null;
   spaces?: Space[];
 }
@@ -262,7 +266,10 @@ export type FixtureKind =
   | "CIRCLE"
   | "DOOR"
   | "TOILET"
-  | "KITCHEN";
+  | "KITCHEN"
+  | "ARROW"
+  | "STAIRS"
+  | "TEXT";
 
 export interface SpaceFixture {
   id: string;
@@ -393,6 +400,9 @@ export interface VisitRequest {
   priceId: string;
   type: VisitRequestType;
   status: VisitRequestStatus;
+  seatLabel?: string | null;
+  spaceId?: string | null;
+  autoApproved?: boolean;
   createdAt: string;
   member?: Member & { phone?: string | null; visitorNumber?: number | null };
   price?: Price;
@@ -458,6 +468,15 @@ export interface MemberInsights {
     payedAmount: number;
     isPayed: boolean;
     forfait: string | null;
+    seats?: string[];
+    lastSeat?: string | null;
+    lastSpace?: string | null;
+    seatChanges?: {
+      from: string | null;
+      to: string | null;
+      at: string;
+      spaceName?: string | null;
+    }[];
   }[];
   recentOrders: {
     id: string;
@@ -553,6 +572,19 @@ export interface MemberLedgerEntry {
   abonnementId?: string | null;
   settled: boolean;
   createdAt: string;
+  forfaitName?: string | null;
+  visitDate?: string | null;
+  visitIsPayed?: boolean | null;
+}
+
+export interface MemberAccountVisit {
+  id: string;
+  forfait: string | null;
+  amount: number;
+  isPayed: boolean;
+  isOpen: boolean;
+  registredTime: string;
+  leaveTime?: string | null;
 }
 
 export interface MemberLedgerSummary {
@@ -560,6 +592,63 @@ export interface MemberLedgerSummary {
   owedByMember: number;
   owedToMember: number;
   net: number;
+  todayVisit?: MemberAccountVisit | null;
+  unpaidVisits?: MemberAccountVisit[];
+  unpaidAbos?: {
+    id: string;
+    name: string;
+    amount: number;
+    registredDate: string;
+  }[];
+}
+
+export type DebtorSource = "VISIT" | "ABONNEMENT" | "LEDGER";
+
+export interface DebtorItem {
+  id: string;
+  source: DebtorSource;
+  amount: number;
+  date: string;
+  settled: boolean;
+  label: string;
+  journalId?: string | null;
+  abonnementId?: string | null;
+  ledgerId?: string | null;
+  memberId: string;
+  memberName: string;
+  visitorNumber: number | null;
+  seatLabel?: string | null;
+}
+
+export interface DebtorMember {
+  memberId: string;
+  firstName: string;
+  lastName?: string | null;
+  visitorNumber: number | null;
+  owedFromVisits: number;
+  owedFromAbos: number;
+  owedFromLedger: number;
+  net: number;
+  lastUnpaidAt: string | null;
+  items: DebtorItem[];
+}
+
+export interface AwayArrival {
+  memberId: string | null;
+  name: string;
+  visitorNumber: number | null;
+  forfait: string | null;
+  seatLabel: string | null;
+  spaceName: string | null;
+  arrivedAt: string;
+  journalId?: string | null;
+  autoApproved: boolean;
+}
+
+export interface AwayArrivalsResponse {
+  startedAt: string | null;
+  receptionAway: boolean;
+  arrivals: AwayArrival[];
 }
 
 export type BookingRequestKind = "ROOM" | "SEAT";

@@ -11,7 +11,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { loadVisitorCache } from "@/lib/visitorCache";
 import { isJournalPack } from "@/lib/journal-utils";
 import { VisitorAuthDialog } from "@/components/visitor/VisitorAuthDialog";
-import type { Member } from "@/lib/types";
+import type { Member, Price, SpaceSeat } from "@/lib/types";
 import { PriceCategory, PriceType } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
@@ -19,6 +19,7 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
+import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
 
 function ChooseInner() {
   const router = useRouter();
@@ -29,6 +30,9 @@ function ChooseInner() {
   const [memberId, setMemberId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [pickedPrice, setPickedPrice] = useState<Price | null>(null);
+  const [seatLabel, setSeatLabel] = useState("");
+  const [seatSpaceId, setSeatSpaceId] = useState("");
   const { socket } = useRealtime();
   const pendingPoll = useVisibleInterval(pendingId ? 8_000 : false);
 
@@ -60,6 +64,15 @@ function ChooseInner() {
     queryFn: () => mobileApi.tarifs(slug),
     staleTime: 5 * 60_000,
   });
+
+  const { data: seatSettings } = useQuery({
+    queryKey: ["mobile-seat-settings", slug],
+    queryFn: () => mobileApi.seatSettings(slug),
+    staleTime: 15_000,
+  });
+  const autoAccept = !!seatSettings?.receptionAway;
+  const visitorChoose = seatSettings?.mobileSeatMode === "VISITOR_CHOOSE";
+  const needSeatStep = autoAccept && visitorChoose;
 
   const { data: pendingRequest } = useQuery({
     queryKey: ["visit-request", pendingId],
@@ -130,11 +143,17 @@ function ChooseInner() {
   }, [tarifs, mode]);
 
   const create = useMutation({
-    mutationFn: (priceId: string) =>
+    mutationFn: (opts: {
+      priceId: string;
+      seatLabel?: string;
+      spaceId?: string;
+    }) =>
       mobileApi.createVisitRequest({
         memberId: memberId!,
-        priceId,
+        priceId: opts.priceId,
         type: mode === "subscription" ? "SUBSCRIPTION" : "DAY",
+        seatLabel: opts.seatLabel,
+        spaceId: opts.spaceId,
       }),
     onSuccess: (req) => {
       if (req.status === "APPROVED" || req.autoApproved) {
@@ -275,15 +294,81 @@ function ChooseInner() {
     );
   }
 
+  const hint = autoAccept
+    ? visitorChoose
+      ? "Choisissez votre forfait puis votre place. L’entrée est confirmée tout de suite."
+      : "Choisissez votre forfait. Une place vous sera attribuée automatiquement."
+    : "L'accueil confirmera pour démarrer.";
+
+  const onPickTarif = (o: Price) => {
+    if (needSeatStep) {
+      setPickedPrice(o);
+      setSeatLabel("");
+      setSeatSpaceId("");
+      return;
+    }
+    create.mutate({ priceId: o.id });
+  };
+
+  if (needSeatStep && pickedPrice && memberId) {
+    return (
+      <div className="space-y-3">
+        <MobileBackHome />
+        <button
+          type="button"
+          className="text-sm text-primary"
+          onClick={() => setPickedPrice(null)}
+        >
+          ← Changer de forfait
+        </button>
+        <h1 className="text-2xl font-bold">Votre place</h1>
+        <p className="text-sm text-slate-500">
+          Forfait {pickedPrice.name} · {pickedPrice.price} DT. Touchez une
+          place libre.
+        </p>
+        {create.isError ? (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {(create.error as Error).message}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        <VisitorSeatMap
+          memberId={memberId}
+          pickOnly
+          seatMode="VISITOR_CHOOSE"
+          onPicked={(seat: SpaceSeat) => {
+            setSeatLabel(seat.label);
+            setSeatSpaceId(seat.spaceId || "");
+          }}
+        />
+        {seatLabel ? (
+          <p className="text-sm font-medium">Place {seatLabel}</p>
+        ) : null}
+        <Button
+          className="h-11 w-full rounded-full"
+          disabled={create.isPending || !seatLabel}
+          onClick={() =>
+            create.mutate({
+              priceId: pickedPrice.id,
+              seatLabel,
+              spaceId: seatSpaceId || undefined,
+            })
+          }
+        >
+          {create.isPending ? "Confirmation…" : "Confirmer forfait et place"}
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div>
       <MobileBackHome />
       <h1 className="text-2xl font-bold">
         {mode === "subscription" ? "Abonnement" : "Forfait"}
       </h1>
-      <p className="mb-4 text-sm text-slate-500">
-        L&apos;accueil confirmera pour démarrer.
-      </p>
+      <p className="mb-4 text-sm text-slate-500">{hint}</p>
       {create.isError ? (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>
@@ -297,7 +382,7 @@ function ChooseInner() {
             key={o.id}
             type="button"
             disabled={create.isPending}
-            onClick={() => create.mutate(o.id)}
+            onClick={() => onPickTarif(o)}
             className={cn(
               "flex w-full items-center justify-between rounded-xl border bg-white px-4 py-4 text-left",
               "hover:border-primary/50"

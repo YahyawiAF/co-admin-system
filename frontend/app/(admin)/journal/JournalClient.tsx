@@ -80,6 +80,7 @@ import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { ReservationPanel } from "@/components/admin/ReservationPanel";
 import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
 import { JournalReceptionToggles } from "@/components/admin/JournalReceptionToggles";
+import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
@@ -771,7 +772,7 @@ export default function JournalClient() {
           { label: "Présents", value: String(present) },
           { label: "Réservations", value: String(reservations) },
           { label: "Revenu du jour", value: `${revenue.toFixed(1)} DT` },
-          { label: "Impayés", value: String(unpaid) },
+          { label: "Impayés", value: String(unpaid), href: "/impayes" },
         ].map((k) => (
           <Card key={k.label}>
             <CardHeader className="pb-2">
@@ -780,7 +781,13 @@ export default function JournalClient() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{k.value}</div>
+              {"href" in k && k.href ? (
+                <Link href={k.href} className="text-2xl font-bold hover:underline">
+                  {k.value}
+                </Link>
+              ) : (
+                <div className="text-2xl font-bold">{k.value}</div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -994,8 +1001,9 @@ export default function JournalClient() {
                       className={cn(
                         status === "reservation" &&
                           "bg-violet-50/60 dark:bg-violet-950/20",
+                        !row.isPayed && "bg-rose-50/80 dark:bg-rose-950/25",
                         over && "bg-amber-50/70 dark:bg-amber-950/20",
-                        soon && !over && "bg-sky-50/50 dark:bg-sky-950/15",
+                        soon && !over && row.isPayed && "bg-sky-50/50 dark:bg-sky-950/15",
                         selected && "bg-primary/5"
                       )}
                     >
@@ -1055,6 +1063,7 @@ export default function JournalClient() {
                                   {groupOf(row)!.name}
                                 </Badge>
                               ) : null}
+                              <UnpaidDebtBadge amount={row.openDebtAmount} />
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {isAnonymousVisit(row)
@@ -1283,7 +1292,7 @@ export default function JournalClient() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  title="Crédit / échéance"
+                                  title="Compte visiteur"
                                 >
                                   <Banknote className="h-4 w-4" />
                                 </Button>

@@ -35,6 +35,8 @@ import type {
   MemberLedgerEntry,
   LedgerKind,
   BookingRequest,
+  DebtorMember,
+  AwayArrivalsResponse,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -169,6 +171,12 @@ export const membersApi = {
       settled,
     });
   },
+  debtors(includeSettled = false) {
+    const path = includeSettled
+      ? "/members/debtors?includeSettled=1"
+      : "/members/debtors";
+    return http.get<{ members: DebtorMember[] }>(withOrgQuery(path));
+  },
 };
 
 export const groupsApi = {
@@ -236,6 +244,9 @@ export const facilityApi = {
   },
   occupancy() {
     return http.get<OccupancyStats>("/facilities/occupancy");
+  },
+  awayArrivals(id: string) {
+    return http.get<AwayArrivalsResponse>(`/facilities/${id}/away-arrivals`);
   },
   createSpace(data: {
     facilityId: string;
@@ -643,6 +654,8 @@ export const mobileApi = {
     memberId: string;
     priceId: string;
     type: "DAY" | "SUBSCRIPTION";
+    seatLabel?: string;
+    spaceId?: string;
   }) {
     return http.post<
       VisitRequest & {

@@ -348,8 +348,9 @@ model Facility {
   nbrPlaces      Int            @map("nbr_places")
   socialNetworks Json           @map("social_networks")
   places         Json           @map("places") // legacy JSON; prefer Space/Table/Seat
-  mobileSeatMode MobileSeatMode @default(ADMIN_ASSIGN)
-  receptionAway  Boolean        @default(false)
+  mobileSeatMode          MobileSeatMode @default(ADMIN_ASSIGN)
+  receptionAway           Boolean        @default(false)
+  receptionAwayStartedAt  DateTime?
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())
@@ -410,6 +411,9 @@ enum FixtureKind {
   DOOR
   TOILET
   KITCHEN
+  ARROW
+  STAIRS
+  TEXT
 }
 
 model SpaceFixture {
@@ -555,15 +559,18 @@ model CaisseMovement {
 }
 
 model VisitRequest {
-  id        String             @id @default(uuid())
-  memberId  String
-  priceId   String
-  type      VisitRequestType
-  status    VisitRequestStatus @default(PENDING)
-  member    Member             @relation(fields: [memberId], references: [id])
-  price     Price              @relation(fields: [priceId], references: [id])
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
+  id           String             @id @default(uuid())
+  memberId     String
+  priceId      String
+  type         VisitRequestType
+  status       VisitRequestStatus @default(PENDING)
+  seatLabel    String?
+  spaceId      String?
+  autoApproved Boolean            @default(false)
+  member       Member             @relation(fields: [memberId], references: [id])
+  price        Price              @relation(fields: [priceId], references: [id])
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@map("visit_requests")
 }

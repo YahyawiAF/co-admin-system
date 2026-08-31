@@ -21,8 +21,11 @@ export const FIXTURE_OPTIONS: { kind: FixtureKind; label: string }[] = [
   { kind: "TRIANGLE", label: "Triangle" },
   { kind: "CIRCLE", label: "Cercle" },
   { kind: "DOOR", label: "Porte" },
-  { kind: "TOILET", label: "Toilettes" },
+  { kind: "TOILET", label: "WS" },
   { kind: "KITCHEN", label: "Cuisine" },
+  { kind: "ARROW", label: "Flèche" },
+  { kind: "STAIRS", label: "Escalier" },
+  { kind: "TEXT", label: "Texte" },
 ];
 
 type Props = {
@@ -379,12 +382,15 @@ export function FloorPlanCanvas({
 
         {fixtures.map((fixture) => {
           const pos = posOf(fixture.id, fixture.x, fixture.y);
+          const caption = fixtureCaption(fixture);
+          const isText = fixture.kind === "TEXT";
           return (
             <div
               key={fixture.id}
               data-floor-item
               className={cn(
-                "absolute z-[6] flex items-center justify-center rounded-md border border-slate-300 bg-white/90 shadow-sm",
+                "absolute z-[6] flex flex-col items-center justify-center rounded-md border border-slate-300 bg-white/90 shadow-sm",
+                isText && "bg-amber-50 px-1",
                 selectedFixtureId === fixture.id && "ring-2 ring-primary",
                 editMode && tool === "select" && "cursor-grab"
               )}
@@ -415,7 +421,17 @@ export function FloorPlanCanvas({
                 onSelectFixture?.(fixture);
               }}
             >
-              <FixtureGlyph kind={fixture.kind} />
+              {isText ? null : <FixtureGlyph kind={fixture.kind} />}
+              {caption ? (
+                <span
+                  className={cn(
+                    "max-w-full truncate px-0.5 text-center font-semibold leading-tight text-slate-700",
+                    isText ? "text-[11px]" : "text-[9px]"
+                  )}
+                >
+                  {caption}
+                </span>
+              ) : null}
             </div>
           );
         })}
@@ -627,6 +643,20 @@ function SeatChip({
   );
 }
 
+function fixtureCaption(fixture: SpaceFixture): string | null {
+  const custom = fixture.label?.trim() || "";
+  if (fixture.kind === "TEXT") return custom || "Texte";
+  if (fixture.kind === "TOILET") {
+    if (!custom || custom === "Toilettes" || custom === "TOILET" || custom === "WS")
+      return null;
+    return custom;
+  }
+  if (fixture.kind === "KITCHEN" || fixture.kind === "STAIRS" || custom) {
+    return custom || (fixture.kind === "KITCHEN" ? "Cuisine" : fixture.kind === "STAIRS" ? "Escalier" : custom);
+  }
+  return null;
+}
+
 function FixtureGlyph({ kind }: { kind: FixtureKind }) {
   const cls = "h-[70%] w-[70%] text-slate-700";
   if (kind === "TV") {
@@ -669,11 +699,40 @@ function FixtureGlyph({ kind }: { kind: FixtureKind }) {
   }
   if (kind === "TOILET") {
     return (
+      <span className="text-[10px] font-bold tracking-wide text-slate-700">
+        WS
+      </span>
+    );
+  }
+  if (kind === "ARROW") {
+    return (
       <svg viewBox="0 0 24 24" className={cls} aria-hidden>
-        <rect x="8" y="3" width="8" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M7 9h10v5a5 5 0 01-10 0z" fill="none" stroke="currentColor" strokeWidth="1.8" />
+        <path
+          d="M3 12h14M13 6l8 6-8 6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     );
+  }
+  if (kind === "STAIRS") {
+    return (
+      <svg viewBox="0 0 24 24" className={cls} aria-hidden>
+        <path
+          d="M3 20h5v-4h4v-4h4V8h5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (kind === "TEXT") {
+    return null;
   }
   return (
     <svg viewBox="0 0 24 24" className={cls} aria-hidden>

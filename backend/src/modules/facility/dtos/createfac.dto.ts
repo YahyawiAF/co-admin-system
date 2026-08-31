@@ -91,6 +91,14 @@ export class CreateFacilityDto {
   @IsBoolean()
   receptionAway?: boolean;
 
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'When auto-accept was turned on; cleared after recap dismissed',
+  })
+  @IsOptional()
+  receptionAwayStartedAt?: string | Date | null;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

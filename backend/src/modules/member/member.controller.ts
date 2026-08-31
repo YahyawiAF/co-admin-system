@@ -69,6 +69,18 @@ export class MemberController {
     return await this.memberService.findAll(organizationId);
   }
 
+  @Get('debtors')
+  @ApiBearerAuth()
+  debtors(
+    @Query('organizationId') organizationId?: string,
+    @Query('includeSettled') includeSettled?: string,
+  ) {
+    return this.memberService.listDebtors(
+      organizationId,
+      includeSettled === '1' || includeSettled === 'true',
+    );
+  }
+
   @Get(':id/insights')
   @ApiBearerAuth()
   async insights(@Param('id', ParseUUIDPipe) id: string) {
