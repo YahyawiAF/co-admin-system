@@ -365,6 +365,24 @@ function ChooseInner() {
   return (
     <div>
       <MobileBackHome />
+      <div className="mb-4 flex gap-2">
+        <Button
+          type="button"
+          className="h-11 flex-1 rounded-full"
+          variant={mode !== "subscription" ? "default" : "outline"}
+          onClick={() => router.replace(href("/choose?mode=day"))}
+        >
+          Forfait
+        </Button>
+        <Button
+          type="button"
+          className="h-11 flex-1 rounded-full"
+          variant={mode === "subscription" ? "default" : "outline"}
+          onClick={() => router.replace(href("/choose?mode=subscription"))}
+        >
+          Abonnement
+        </Button>
+      </div>
       <h1 className="text-2xl font-bold">
         {mode === "subscription" ? "Abonnement" : "Forfait"}
       </h1>

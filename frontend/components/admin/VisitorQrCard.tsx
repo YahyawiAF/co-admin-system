@@ -13,7 +13,7 @@ function visitorAppOrigin() {
 }
 
 export function visitorMobileUrl(orgSlug: string) {
-  return `${visitorAppOrigin()}/m/${orgSlug}`;
+  return `${visitorAppOrigin()}/m/${orgSlug}/entry`;
 }
 
 export function visitorQrImageUrl(orgSlug: string, size = 280) {

@@ -18,6 +18,7 @@ import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 import { PinSetupGate } from "@/components/visitor/PinSetupGate";
+import { InstallAppNudge } from "@/components/visitor/InstallAppNudge";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 
 const FULL_NAV = [
@@ -46,6 +47,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
   const allowed =
     rest === "" ||
     rest === "/" ||
+    rest.startsWith("/entry") ||
     rest.startsWith("/profile") ||
     rest.startsWith("/recover") ||
     rest.startsWith("/join") ||
@@ -57,6 +59,16 @@ export function MobileShell({ children }: { children: ReactNode }) {
     if (!ready || onboarded || allowed) return;
     router.replace(base);
   }, [ready, onboarded, allowed, base, router]);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+      return;
+    }
+    void navigator.serviceWorker.register("/sw.js", {
+      scope: "/",
+      updateViaCache: "none",
+    });
+  }, []);
 
   return (
     <div
@@ -78,6 +90,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
           )}
         >
           {onboarded ? <PinSetupGate /> : null}
+          <InstallAppNudge />
           <div className="min-h-0 flex-1">{children}</div>
           {onboarded ? <StaffMessageModal /> : null}
         </div>
@@ -87,6 +100,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
           <OfflineBanner />
           {onboarded ? <VisitorAlerts /> : null}
           {onboarded ? <PinSetupGate /> : null}
+          <InstallAppNudge />
           {children}
           {onboarded ? <StaffMessageModal /> : null}
         </div>

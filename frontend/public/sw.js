@@ -1,5 +1,5 @@
 /* Collabora Hub visitor SW — push + light offline shell cache */
-const SHELL_CACHE = "collabora-shell-v2";
+const SHELL_CACHE = "collabora-shell-v3";
 const SHELL_URLS = ["/", "/m", "/collabora-icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -31,6 +31,7 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  if (url.pathname === "/sw.js") return;
   // Never cache API
   if (url.pathname.startsWith("/api") || url.pathname.includes("/mobile/")) {
     return;

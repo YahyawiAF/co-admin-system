@@ -36,6 +36,7 @@ import { BOOKING_EVENT_KEY } from "@/lib/facility-spaces";
 import { layoutSeatsOnTable, SEAT_LAYOUT_OPTIONS, type SeatLayoutMode } from "@/lib/seat-layout";
 import { FloorPlanCanvas, type EditTool, FIXTURE_OPTIONS } from "@/components/admin/FloorPlanCanvas";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { GalleryUpload } from "@/components/admin/GalleryUpload";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
 import { PRICE_CATEGORY_LABEL } from "@/lib/tarif-labels";
@@ -44,6 +45,7 @@ import { isActiveVisit } from "@/lib/journal-utils";
 type TableFormState = {
   name: string;
   imageUrl: string;
+  galleryUrls: string[];
   seatCount: number;
   overflowCount: number;
 };
@@ -51,6 +53,7 @@ type TableFormState = {
 const emptyTableForm = (): TableFormState => ({
   name: "",
   imageUrl: "",
+  galleryUrls: [],
   seatCount: 4,
   overflowCount: 1,
 });
@@ -147,6 +150,7 @@ export default function FacilityPage() {
   const [tableDraft, setTableDraft] = useState({
     name: "",
     imageUrl: "" as string | null,
+    galleryUrls: [] as string[],
     width: 120,
     height: 80,
   });
@@ -183,9 +187,10 @@ export default function FacilityPage() {
   const [manageTableDraft, setManageTableDraft] = useState<{
     name: string;
     imageUrl: string | null;
+    galleryUrls: string[];
     width: number;
     height: number;
-  }>({ name: "", imageUrl: null, width: 120, height: 80 });
+  }>({ name: "", imageUrl: null, galleryUrls: [], width: 120, height: 80 });
   const [manageTableBusy, setManageTableBusy] = useState(false);
   const [seatLayoutMode, setSeatLayoutMode] =
     useState<SeatLayoutMode>("left-right");
@@ -259,6 +264,7 @@ export default function FacilityPage() {
     setTableDraft({
       name: selectedTable.name,
       imageUrl: selectedTable.imageUrl || null,
+      galleryUrls: selectedTable.galleryUrls || [],
       width: selectedTable.width,
       height: selectedTable.height,
     });
@@ -381,6 +387,7 @@ export default function FacilityPage() {
         spaceId,
         name: form.name.trim(),
         imageUrl: form.imageUrl || undefined,
+        galleryUrls: form.galleryUrls || [],
         seatCount: form.seatCount,
         overflowCount: form.overflowCount,
         x: 60 + Math.random() * 80,
@@ -399,6 +406,7 @@ export default function FacilityPage() {
       facilityApi.updateTable(selectedTable!.id, {
         name: tableDraft.name.trim() || selectedTable!.name,
         imageUrl: tableDraft.imageUrl,
+        galleryUrls: tableDraft.galleryUrls,
         width: Number(tableDraft.width),
         height: Number(tableDraft.height),
       }),
@@ -1068,11 +1076,12 @@ export default function FacilityPage() {
                         </div>
                       </div>
                     </div>
-                    <ImageUpload
-                      label="Photo table"
-                      value={tableDraft.imageUrl}
-                      onChange={(url) =>
-                        setTableDraft((d) => ({ ...d, imageUrl: url }))
+                    <GalleryUpload
+                      label="Galerie table"
+                      hint="Photos de la table pour la réservation (pas le plan)."
+                      values={tableDraft.galleryUrls}
+                      onChange={(urls) =>
+                        setTableDraft((d) => ({ ...d, galleryUrls: urls }))
                       }
                     />
                   </div>
@@ -1573,7 +1582,7 @@ export default function FacilityPage() {
               </div>
               <ImageUpload
                 className="min-w-[220px] flex-1"
-                label="Plan d'étage"
+                label="Plan schématique"
                 value={floorPlanUrl}
                 onChange={setFloorPlanUrl}
               />
@@ -1683,12 +1692,23 @@ export default function FacilityPage() {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <ImageUpload
-                      label="Plan d'étage"
+                      label="Plan schématique"
                       value={space.floorPlanUrl}
                       onChange={(url) =>
                         updateSpace.mutate({
                           id: space.id,
                           data: { floorPlanUrl: url },
+                        })
+                      }
+                    />
+                    <GalleryUpload
+                      label="Galerie de l’espace"
+                      hint="Photos du lieu pour la réservation. Elles ne s’affichent pas sur le plan."
+                      values={space.galleryUrls || []}
+                      onChange={(urls) =>
+                        updateSpace.mutate({
+                          id: space.id,
+                          data: { galleryUrls: urls },
                         })
                       }
                     />
@@ -1722,13 +1742,14 @@ export default function FacilityPage() {
                             placeholder="Table A"
                           />
                         </div>
-                        <ImageUpload
-                          className="min-w-[200px]"
-                          label="Photo table"
-                          value={form.imageUrl || null}
-                          onChange={(url) =>
+                        <GalleryUpload
+                          className="min-w-[220px]"
+                          label="Galerie table"
+                          hint="Photos de la table (réservation)."
+                          values={form.galleryUrls || []}
+                          onChange={(urls) =>
                             patchTableForm(space.id, {
-                              imageUrl: url || "",
+                              galleryUrls: urls,
                             })
                           }
                         />
@@ -1799,10 +1820,10 @@ export default function FacilityPage() {
                             {!editing ? (
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
-                                  {t.imageUrl ? (
+                                  {(t.galleryUrls?.[0] || t.imageUrl) ? (
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
-                                      src={t.imageUrl}
+                                      src={t.galleryUrls?.[0] || t.imageUrl || ""}
                                       alt=""
                                       className="h-10 w-14 rounded object-cover"
                                     />
@@ -1828,6 +1849,7 @@ export default function FacilityPage() {
                                       setManageTableDraft({
                                         name: t.name,
                                         imageUrl: t.imageUrl || null,
+                                        galleryUrls: t.galleryUrls || [],
                                         width: t.width || 120,
                                         height: t.height || 80,
                                       });
@@ -1931,13 +1953,14 @@ export default function FacilityPage() {
                                     </div>
                                   </div>
                                 </div>
-                                <ImageUpload
-                                  label="Photo table"
-                                  value={manageTableDraft.imageUrl}
-                                  onChange={(url) =>
+                                <GalleryUpload
+                                  label="Galerie table"
+                                  hint="Photos de la table pour la réservation (pas le plan)."
+                                  values={manageTableDraft.galleryUrls}
+                                  onChange={(urls) =>
                                     setManageTableDraft((d) => ({
                                       ...d,
-                                      imageUrl: url,
+                                      galleryUrls: urls,
                                     }))
                                   }
                                 />
@@ -2059,6 +2082,7 @@ export default function FacilityPage() {
                                         .updateTable(t.id, {
                                           name: manageTableDraft.name.trim(),
                                           imageUrl: manageTableDraft.imageUrl,
+                                          galleryUrls: manageTableDraft.galleryUrls,
                                           width: Math.max(
                                             40,
                                             Number(manageTableDraft.width) ||

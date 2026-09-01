@@ -40,6 +40,7 @@ import {
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { isPendingReservation, memberOf } from "@/lib/journal-utils";
+import { paidSubscriptionRevenueOnDay, asAbonnementList } from "@/lib/subscription-utils";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 
 export default function DashboardPage() {
@@ -99,9 +100,12 @@ export default function DashboardPage() {
     isPendingReservation
   );
   const present = rows.filter((r) => !r.isReservation && !r.leaveTime).length;
-  const revenue = rows
+  const abos = asAbonnementList(abonnements);
+  const revenueVisits = rows
     .filter((r) => r.isPayed)
     .reduce((acc, r) => acc + (r.payedAmount || 0), 0);
+  const revenueAbo = paidSubscriptionRevenueOnDay(abos, today);
+  const revenue = revenueVisits + revenueAbo;
   const unpaid = rows.filter((r) => !r.isPayed).length;
   const capacity = facilities[0]?.nbrPlaces || 0;
   const occupancyPct =
@@ -219,7 +223,8 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-3xl font-bold">{revenue.toFixed(1)} DT</div>
             <p className="text-xs text-muted-foreground">
-              {unpaid} impayé{unpaid !== 1 ? "s" : ""}
+              Journal {revenueVisits.toFixed(1)} + abo {revenueAbo.toFixed(1)}
+              {unpaid ? ` · ${unpaid} impayé${unpaid !== 1 ? "s" : ""}` : ""}
             </p>
           </CardContent>
         </Card>

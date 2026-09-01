@@ -10,6 +10,15 @@ export function middleware(request: NextRequest) {
   const ua = request.headers.get("user-agent") || "";
   const isMobile = MOBILE_UA.test(ua);
 
+  // Service worker + PWA files must never redirect (closed-app push depends on /sw.js).
+  if (
+    pathname === "/sw.js" ||
+    pathname === "/manifest.webmanifest" ||
+    pathname === "/manifest.json"
+  ) {
+    return NextResponse.next();
+  }
+
   if (!isMobile) {
     return NextResponse.next();
   }
@@ -24,6 +33,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|js|webmanifest|json)$).*)",
   ],
 };

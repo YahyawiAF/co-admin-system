@@ -12,6 +12,37 @@ export function daysLeft(a: Abonnement) {
   return differenceInCalendarDays(new Date(a.leaveDate), new Date());
 }
 
+/** Warn only in the last days — a 7-day pack that just started is not “bientôt fini”. */
+export const SUB_EXPIRING_WITHIN_DAYS = 3;
+
+export function isSubExpiringSoon(a: Abonnement) {
+  const left = daysLeft(a);
+  return left != null && left >= 0 && left <= SUB_EXPIRING_WITHIN_DAYS;
+}
+
+export function asAbonnementList(
+  raw: Abonnement[] | { data?: Abonnement[] } | null | undefined,
+): Abonnement[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  return raw.data || [];
+}
+
+export function paidSubscriptionRevenueOnDay(
+  abos: Abonnement[],
+  day: Date,
+) {
+  const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
+  return abos
+    .filter((a) => {
+      if (!a.isPayed) return false;
+      const d = new Date(a.registredDate);
+      const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      return k === key;
+    })
+    .reduce((sum, a) => sum + (a.payedAmount || 0), 0);
+}
+
 export function isActiveSub(a: Abonnement) {
   if (a.price?.billingUnit === "HOURLY") {
     const quota = a.hoursQuota || a.price.durationHours || 0;

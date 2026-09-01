@@ -155,3 +155,46 @@ export function savePendingRegister(org: string, data: PendingRegister) {
 export function clearPendingRegister(org: string) {
   sessionStorage.removeItem(pendingKey(org));
 }
+
+const installNudgeKey = (org: string, memberId: string) =>
+  `visitor-install-nudge:${org}:${memberId}`;
+
+export function markInstallNudgePending(org: string, memberId: string) {
+  sessionStorage.setItem(installNudgeKey(org, memberId), "1");
+}
+
+export function peekInstallNudgePending(
+  org: string,
+  memberId: string
+): boolean {
+  return sessionStorage.getItem(installNudgeKey(org, memberId)) === "1";
+}
+
+export function clearInstallNudgePending(org: string, memberId: string) {
+  sessionStorage.removeItem(installNudgeKey(org, memberId));
+}
+
+const installSkipKey = (org: string) => `visitor-install-skipped:${org}`;
+
+export function hasSkippedInstall(org: string): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(installSkipKey(org)) === "1";
+}
+
+export function skipInstall(org: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(installSkipKey(org), "1");
+}
+
+const qrEntryKey = (org: string) => `visitor-qr-entry:${org}`;
+
+export function markQrEntry(org: string) {
+  sessionStorage.setItem(qrEntryKey(org), "1");
+}
+
+export function consumeQrEntry(org: string): boolean {
+  const key = qrEntryKey(org);
+  if (sessionStorage.getItem(key) !== "1") return false;
+  sessionStorage.removeItem(key);
+  return true;
+}

@@ -375,6 +375,7 @@ model Space {
   wifiSsid            String?
   wifiPassword        String?
   openForReservation  Boolean         @default(false)
+  galleryUrls         String[]        @default([])
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   tables              Table[]
@@ -440,6 +441,7 @@ model Table {
   space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   name      String
   imageUrl  String?
+  galleryUrls String[] @default([])
   x         Float    @default(40)
   y         Float    @default(40)
   width     Float    @default(120)

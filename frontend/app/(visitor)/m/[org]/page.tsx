@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   CalendarDays,
   Coffee,
@@ -23,19 +24,22 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
+import { ScanQrPresence } from "@/components/visitor/ScanQrPresence";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
+import { consumeQrEntry } from "@/lib/visitorCache";
 
 export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
   const [wifiOpen, setWifiOpen] = useState(false);
+  const entryHandled = useRef(false);
 
-  const { data: status, refetch } = useMobileStatus();
+  const { data: status, refetch, isSuccess: statusReady } = useMobileStatus();
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug],
     queryFn: async () => {
@@ -59,9 +63,62 @@ export default function MobileHomePage() {
   const scanIn = useMutation({
     mutationFn: () => mobileApi.scanIn(memberId!),
     onSuccess: () => {
+      toast.success("Présence enregistrée ✓");
       refetch();
     },
+    onError: (e: Error) => toast.error(e.message),
   });
+  const scanInRef = useRef(scanIn.mutate);
+  scanInRef.current = scanIn.mutate;
+
+  const goForfait = () => {
+    router.replace(href("/choose?mode=day"));
+  };
+
+  const afterScan = () => {
+    if (!statusReady || !status) return;
+    if (status.session || status.pendingRequest) {
+      toast.message("Session déjà en cours");
+      return;
+    }
+    if (status.hasActiveSubscription) {
+      const rem =
+        status.dailyCreditRemainingHours ??
+        (status.subscription as { dailyCreditRemainingHours?: number } | null)
+          ?.dailyCreditRemainingHours;
+      if (rem != null && rem <= 0) {
+        toast.message("Crédit du jour terminé — choisissez un forfait");
+        goForfait();
+        return;
+      }
+      scanInRef.current();
+      return;
+    }
+    toast.message("Choisissez un forfait ou un abonnement");
+    goForfait();
+  };
+
+  useEffect(() => {
+    if (!onboarded || !memberId || !statusReady || !status || entryHandled.current) {
+      return;
+    }
+    if (!consumeQrEntry(slug)) return;
+    entryHandled.current = true;
+    if (status.session || status.pendingRequest) return;
+    if (status.hasActiveSubscription) {
+      const rem =
+        status.dailyCreditRemainingHours ??
+        (status.subscription as { dailyCreditRemainingHours?: number } | null)
+          ?.dailyCreditRemainingHours;
+      if (rem != null && rem <= 0) {
+        router.replace(href("/choose?mode=day"));
+        return;
+      }
+      scanInRef.current();
+      return;
+    }
+    router.replace(href("/choose?mode=day"));
+  }, [onboarded, memberId, statusReady, status, slug, router, href]);
 
   if (!ready) return <p className="text-slate-500">Chargement…</p>;
   if (!onboarded) return <WelcomeRegister />;
@@ -71,7 +128,6 @@ export default function MobileHomePage() {
   const seat = session?.seat || status?.seat || null;
   const member = status?.member;
   const subKind = (status?.subscription as { kind?: string } | null)?.kind;
-  const hoursPool = subKind === "HOURS_POOL";
   const periodSub = subKind === "SEMI_DAY" || subKind === "FULL_DAY";
   const canChooseForfait = status?.canChooseForfait !== false;
   const dailyRem =
@@ -82,6 +138,7 @@ export default function MobileHomePage() {
     [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
     member?.firstName ||
     "Visiteur";
+  const greetingName = member?.firstName || displayName;
   const facilityName = layout?.facility?.name || org.name;
 
   const goChooseDay = () => {
@@ -125,8 +182,9 @@ export default function MobileHomePage() {
           <div className="relative p-4 pb-5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-lg font-bold">{facilityName}</p>
-                <p className="text-xs text-white/80">
+                <p className="text-lg font-bold">Bonjour {greetingName} 👋</p>
+                <p className="text-xs text-white/80">{facilityName}</p>
+                <p className="mt-0.5 text-[11px] text-white/70">
                   {status?.hasActiveSubscription
                     ? "Abonnement actif"
                     : pending
@@ -147,6 +205,26 @@ export default function MobileHomePage() {
           </div>
         </div>
       )}
+
+      {!session && !pending ? (
+        <ScanQrPresence
+          slug={slug}
+          pending={scanIn.isPending || !statusReady}
+          error={
+            scanIn.isError ? (scanIn.error as Error).message : null
+          }
+          hint={
+            status?.hasActiveSubscription
+              ? periodSub && dailyRem != null && dailyRem <= 0
+                ? "Crédit du jour terminé — un forfait sera proposé"
+                : periodSub && dailyRem != null
+                  ? `${Number(dailyRem).toFixed(1)} h restantes aujourd’hui`
+                  : "Scannez le QR de l’accueil"
+              : "Scannez le QR de l’accueil pour un forfait ou un abonnement"
+          }
+          onConfirmed={afterScan}
+        />
+      ) : null}
 
       {status?.hasActiveSubscription && !session ? (
         <div className="rounded-2xl bg-white p-4 shadow-sm">
@@ -309,61 +387,6 @@ export default function MobileHomePage() {
           </Link>
         </Button>
       </div>
-
-      {!session && !pending && hoursPool ? (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Pointer
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Pointez pour entrer. L&apos;accueil vous attribue une place.
-          </p>
-          {scanIn.isError ? (
-            <Alert variant="destructive" className="mt-3">
-              <AlertDescription>
-                {(scanIn.error as Error).message}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <Button
-            className="mt-3 h-12 w-full rounded-full"
-            disabled={scanIn.isPending}
-            onClick={() => scanIn.mutate()}
-          >
-            Pointer (scan)
-          </Button>
-        </div>
-      ) : !session && !pending && periodSub ? (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Présence abonnement
-          </p>
-          <p className="mt-2 text-sm text-slate-500">
-            Pointez pour démarrer votre crédit du jour
-            {dailyRem != null
-              ? ` (${Number(dailyRem).toFixed(1)} h restantes)`
-              : ""}
-            . Compteur + plan de place s&apos;affichent ensuite.
-            {!canChooseForfait
-              ? " Le forfait reste bloqué tant que ce crédit n’est pas terminé."
-              : ""}
-          </p>
-          {scanIn.isError ? (
-            <Alert variant="destructive" className="mt-3">
-              <AlertDescription>
-                {(scanIn.error as Error).message}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          <Button
-            className="mt-3 h-12 w-full rounded-full"
-            disabled={scanIn.isPending || (dailyRem != null && dailyRem <= 0)}
-            onClick={() => scanIn.mutate()}
-          >
-            Je suis présent
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }

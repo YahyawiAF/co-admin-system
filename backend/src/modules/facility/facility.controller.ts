@@ -64,6 +64,7 @@ export class FacilityController {
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;
+      galleryUrls: string[];
     }>,
   ) {
     return this.facilityService.updateSpace(id, body);
@@ -81,6 +82,7 @@ export class FacilityController {
       spaceId: string;
       name: string;
       imageUrl?: string;
+      galleryUrls?: string[];
       x?: number;
       y?: number;
       width?: number;
@@ -105,6 +107,7 @@ export class FacilityController {
       height: number;
       rotation: number;
       sortOrder: number;
+      galleryUrls: string[];
     }>,
   ) {
     return this.facilityService.updateTable(id, body);

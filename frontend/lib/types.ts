@@ -239,6 +239,7 @@ export interface SpaceTable {
   spaceId: string;
   name: string;
   imageUrl?: string | null;
+  galleryUrls?: string[];
   x: number;
   y: number;
   width: number;
@@ -294,6 +295,7 @@ export interface Space {
   wifiSsid?: string | null;
   wifiPassword?: string | null;
   openForReservation?: boolean;
+  galleryUrls?: string[];
   tables?: SpaceTable[];
   seats?: SpaceSeat[];
   walls?: SpaceWall[];

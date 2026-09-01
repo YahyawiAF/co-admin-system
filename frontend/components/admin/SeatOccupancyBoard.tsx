@@ -442,7 +442,7 @@ export function SeatOccupancyBoard({
                   space={activeSpace}
                   bookings={bookings}
                   editMode={false}
-                  variant="picker"
+                  variant="fit"
                   className="h-full min-h-[min(60vh,560px)]"
                   selectedSeatId={selectedSeatId}
                   onSelectSeat={(seat) => setSelectedSeatLabel(seat.label)}

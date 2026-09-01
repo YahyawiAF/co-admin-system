@@ -266,6 +266,7 @@ export const facilityApi = {
     spaceId: string;
     name: string;
     imageUrl?: string;
+    galleryUrls?: string[];
     x?: number;
     y?: number;
     seatCount?: number;

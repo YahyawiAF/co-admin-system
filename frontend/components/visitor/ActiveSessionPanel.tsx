@@ -228,11 +228,7 @@ export function ActiveSessionPanel({
             Statut : {session.isPayed ? "payé" : "non payé"}
           </p>
         </>
-      ) : (
-        <p className="mb-4 text-sm text-slate-500">
-          Couvert par votre abonnement actif
-        </p>
-      )}
+      ) : null}
 
       {seatLabel ? (
         <div className="mb-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm">
@@ -250,17 +246,17 @@ export function ActiveSessionPanel({
             </Badge>
           ) : null}
         </div>
+      ) : canPickSeat ? (
+        <p className="mb-3 text-sm text-slate-500">
+          Choisissez votre place ci-dessous.
+        </p>
       ) : (
         <p className="mb-3 text-sm text-slate-500">
-          {canPickSeat
-            ? "Choisissez votre place sur le plan ci-dessous."
-            : isHoursPool
-              ? "L’accueil vous attribue une place."
-              : "Aucune place assignée pour l’instant."}
+          Place : l’accueil s’en charge
         </p>
       )}
 
-      {seatLabel || canPickSeat || seatMode === "ADMIN_ASSIGN" || seatMode === "VISITOR_CHOOSE" ? (
+      {canPickSeat || seatLabel ? (
         <div className="mb-4 text-left">
           <VisitorSeatMap
             memberId={memberId}

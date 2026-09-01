@@ -79,6 +79,7 @@ import {
   hoursLeft,
   isActiveSub,
   leaveDateFromPeriodStart,
+  paidSubscriptionRevenueOnDay,
   subKind,
 } from "@/lib/subscription-utils";
 
@@ -189,14 +190,23 @@ function AbonnementsInner() {
     const expired = rows.filter((a) => !isActiveSub(a)).length;
     const expiring = rows.filter((a) => {
       const d = daysLeft(a);
-      return isActiveSub(a) && d != null && d <= 7;
+      return isActiveSub(a) && d != null && d <= 3;
     }).length;
     const unpaid = rows.filter((a) => !a.isPayed).length;
     const hoursLow = rows.filter((a) => {
       const h = hoursLeft(a);
       return isActiveSub(a) && h != null && h > 0 && h <= 5;
     }).length;
-    return { total: rows.length, active, expired, expiring, unpaid, hoursLow };
+    const todayPaid = paidSubscriptionRevenueOnDay(rows, new Date());
+    return {
+      total: rows.length,
+      active,
+      expired,
+      expiring,
+      unpaid,
+      hoursLow,
+      todayPaid,
+    };
   }, [rows]);
 
   const quickChips: {
@@ -211,7 +221,7 @@ function AbonnementsInner() {
     },
     {
       id: "expiring",
-      label: "Expire ≤7j",
+      label: "Expire ≤3j",
       tone: "border-amber-200 bg-amber-50 text-amber-800 data-[active=true]:bg-amber-600 data-[active=true]:text-white",
     },
     {
@@ -263,7 +273,7 @@ function AbonnementsInner() {
     else if (quickFilter === "expiring") {
       list = list.filter((a) => {
         const d = daysLeft(a);
-        return isActiveSub(a) && d != null && d <= 7;
+        return isActiveSub(a) && d != null && d <= 3;
       });
     } else if (quickFilter === "unpaid") list = list.filter((a) => !a.isPayed);
     else if (quickFilter === "hours_low") {
@@ -382,6 +392,7 @@ function AbonnementsInner() {
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
       setOpen(false);
       setEditing(null);
     },
@@ -393,6 +404,7 @@ function AbonnementsInner() {
     queryClient.invalidateQueries({ queryKey: ["bookings"] });
     queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
     queryClient.invalidateQueries({ queryKey: queryKeys.members });
+    queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
   };
 
   const endNow = useMutation({
@@ -646,11 +658,15 @@ function AbonnementsInner() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Total", value: String(kpis.total) },
           { label: "Actifs", value: String(kpis.active) },
-          { label: "Expire ≤7j", value: String(kpis.expiring) },
+          {
+            label: "Encaissé aujourd’hui",
+            value: `${kpis.todayPaid.toFixed(1)} DT`,
+          },
+          { label: "Expire ≤3j", value: String(kpis.expiring) },
           { label: "Impayés", value: String(kpis.unpaid) },
           { label: "Heures faibles", value: String(kpis.hoursLow) },
           { label: "Expirés", value: String(kpis.expired) },

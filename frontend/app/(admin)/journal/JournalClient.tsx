@@ -111,6 +111,8 @@ import {
   visitorLabel,
   isAnonymousVisit,
   groupOf,
+  groupJournalByPerson,
+  isAbonnementVisit,
 } from "@/lib/journal-utils";
 import {
   buildDayWhatsAppText,
@@ -120,6 +122,7 @@ import type { Abonnement, Journal, Member } from "@/lib/types";
 import {
   activeSubByMember,
   daysLeft,
+  paidSubscriptionRevenueOnDay,
 } from "@/lib/subscription-utils";
 import { useJournalAlertsDataEffect, useJournalAlerts } from "@/lib/journal-alerts-context";
 import {
@@ -156,6 +159,7 @@ export default function JournalClient() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [personFilter, setPersonFilter] = useState("all");
   const [payFilter, setPayFilter] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -182,7 +186,7 @@ export default function JournalClient() {
   // Clear selection when date or filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [selectedDate, statusFilter, typeFilter, payFilter, quickFilter, search]);
+  }, [selectedDate, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search]);
 
   const tomorrow = useMemo(() => addDays(startOfDay(new Date()), 1), []);
 
@@ -331,6 +335,10 @@ export default function JournalClient() {
     if (typeFilter === "visits") list = list.filter((r) => !r.isReservation);
     if (typeFilter === "reservations")
       list = list.filter(isPendingReservation);
+    if (personFilter === "abonnement")
+      list = list.filter((r) => isAbonnementVisit(r, subByMember));
+    if (personFilter === "visitor")
+      list = list.filter((r) => !isAbonnementVisit(r, subByMember));
     if (payFilter === "paid") list = list.filter((r) => r.isPayed);
     if (payFilter === "unpaid") list = list.filter((r) => !r.isPayed);
 
@@ -367,13 +375,20 @@ export default function JournalClient() {
       list = fuse.search(search).map((r) => r.item);
     }
     return list;
-  }, [rows, statusFilter, typeFilter, payFilter, quickFilter, search, now]);
+  }, [rows, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search, now, subByMember]);
+
+  const displayRows = useMemo(
+    () => groupJournalByPerson(filtered),
+    [filtered]
+  );
 
   const reservations = rows.filter(isPendingReservation).length;
   const present = rows.filter(isActiveVisit).length;
-  const revenue = rows
+  const revenueVisits = rows
     .filter((r) => r.isPayed)
     .reduce((a, r) => a + (r.payedAmount || 0), 0);
+  const revenueAbo = paidSubscriptionRevenueOnDay(abonnements, selectedDate);
+  const revenue = revenueVisits + revenueAbo;
   const unpaid = rows.filter((r) => !r.isPayed).length;
   const capacity = occupancy?.normalCapacity || facilities[0]?.nbrPlaces || 0;
   const free = Math.max(
@@ -386,12 +401,12 @@ export default function JournalClient() {
     capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
 
   const selectedRows = useMemo(
-    () => filtered.filter((r) => selectedIds.has(r.id)),
-    [filtered, selectedIds]
+    () => displayRows.filter((r) => selectedIds.has(r.id)),
+    [displayRows, selectedIds]
   );
   const selectedPresent = selectedRows.filter(isActiveVisit);
   const allFilteredSelected =
-    filtered.length > 0 && filtered.every((r) => selectedIds.has(r.id));
+    displayRows.length > 0 && displayRows.every((r) => selectedIds.has(r.id));
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -406,7 +421,7 @@ export default function JournalClient() {
     if (allFilteredSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(filtered.map((r) => r.id)));
+      setSelectedIds(new Set(displayRows.map((r) => r.id)));
     }
   };
 
@@ -908,6 +923,16 @@ export default function JournalClient() {
               <SelectItem value="reservations">Réservations seules</SelectItem>
             </SelectContent>
           </Select>
+          <Select value={personFilter} onValueChange={setPersonFilter}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Personne" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous profils</SelectItem>
+              <SelectItem value="abonnement">Abonnés</SelectItem>
+              <SelectItem value="visitor">Visiteurs</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={payFilter} onValueChange={setPayFilter}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Paiement" />
@@ -938,7 +963,7 @@ export default function JournalClient() {
                 Réessayer
               </Button>
             </div>
-          ) : !filtered.length ? (
+          ) : !displayRows.length ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <p className="text-muted-foreground">
                 {quickFilter !== "all"
@@ -981,7 +1006,7 @@ export default function JournalClient() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((row) => {
+                {displayRows.map((row) => {
                   const m = memberOf(row);
                   const p = priceOf(row);
                   const over = isOverstay(row, now);
@@ -1033,6 +1058,15 @@ export default function JournalClient() {
                           <div>
                             <div className="flex flex-wrap items-center gap-1.5 font-medium">
                               {visitorLabel(row)}
+                              {row.checkoutCount > 1 ? (
+                                <Badge variant="secondary" className="h-5 text-[10px]">
+                                  {row.checkoutCount} check-out
+                                </Badge>
+                              ) : row.visitCount > 1 ? (
+                                <Badge variant="secondary" className="h-5 text-[10px]">
+                                  {row.visitCount} passages
+                                </Badge>
+                              ) : null}
                               {p?.category === "ABONNEMENT" ||
                               p?.type === "abonnement" ? (
                                 <Badge className="h-5 bg-violet-600 text-[10px] hover:bg-violet-600">
@@ -1045,7 +1079,7 @@ export default function JournalClient() {
                                 const sub = subByMember.get(mid);
                                 if (!sub) return null;
                                 const left = daysLeft(sub);
-                                if (left == null || left < 0 || left > 7)
+                                if (left == null || left < 0 || left > 3)
                                   return null;
                                 return (
                                   <Badge

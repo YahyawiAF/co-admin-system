@@ -4,10 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { fr } from "date-fns/locale";
 import {
   Armchair,
-  Building2,
   CalendarClock,
   DoorOpen,
 } from "lucide-react";
@@ -16,8 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { FloorPlanCanvas } from "@/components/admin/FloorPlanCanvas";
+import { DayScroller } from "@/components/visitor/DayScroller";
+import { SpaceGallery } from "@/components/visitor/SpaceGallery";
+import { TableSeatPicker } from "@/components/visitor/TableSeatPicker";
 import { mobileApi } from "@/lib/api/resources";
+import { bookedLabelsForSpace } from "@/lib/seat-booking";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -33,6 +34,7 @@ export default function ReservePage() {
   const [spaceId, setSpaceId] = useState("");
   const [seatLabel, setSeatLabel] = useState("");
   const [seatSpaceId, setSeatSpaceId] = useState("");
+  const [focusTableId, setFocusTableId] = useState<string | null>(null);
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
@@ -67,14 +69,24 @@ export default function ReservePage() {
     [bookable]
   );
   const seatSpaces = useMemo(
-    () => bookable.filter((s) => (s.seats?.length || 0) > 0 || (s.tables || []).some((t) => (t.seats || []).length > 0)),
+    () =>
+      bookable.filter(
+        (s) =>
+          (s.seats?.length || 0) > 0 ||
+          (s.tables || []).some((t) => (t.seats || []).length > 0)
+      ),
     [bookable]
   );
   const roomOptions = rooms.length ? rooms : bookable;
   const seatOptions = seatSpaces.length ? seatSpaces : bookable;
+  const selectedRoomId = spaceId || roomOptions[0]?.id || "";
+  const selectedSeatSpaceId = seatSpaceId || seatOptions[0]?.id || "";
   const activeSpace =
-    bookable.find((s) => s.id === (kind === "ROOM" ? spaceId : seatSpaceId)) ||
-    bookable[0];
+    bookable.find((s) =>
+      kind === "ROOM"
+        ? s.id === selectedRoomId
+        : s.id === selectedSeatSpaceId
+    ) || bookable[0];
 
   useEffect(() => {
     if (kind === "ROOM" && !spaceId && roomOptions[0]) {
@@ -84,6 +96,16 @@ export default function ReservePage() {
       setSeatSpaceId(seatOptions[0].id);
     }
   }, [kind, spaceId, seatSpaceId, roomOptions, seatOptions]);
+
+  useEffect(() => {
+    setFocusTableId(null);
+  }, [activeSpace?.id, kind]);
+
+  const booked = useMemo(
+    () =>
+      bookedLabelsForSpace(layout?.bookings || [], activeSpace?.id || ""),
+    [layout?.bookings, activeSpace?.id]
+  );
 
   const create = useMutation({
     mutationFn: () =>
@@ -110,12 +132,15 @@ export default function ReservePage() {
   });
 
   const onSelectSeat = (seat: SpaceSeat) => {
+    if (booked.has(seat.label)) return;
     setSeatLabel(seat.label);
     setSeatSpaceId(seat.spaceId || activeSpace?.id || "");
   };
 
   if (!memberId) {
-    return <p className="text-sm text-slate-500">Connectez-vous pour réserver.</p>;
+    return (
+      <p className="text-sm text-slate-500">Connectez-vous pour réserver.</p>
+    );
   }
 
   return (
@@ -164,98 +189,88 @@ export default function ReservePage() {
           Aucun espace ouvert à la réservation pour le moment.
         </div>
       ) : (
-        <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
-          <div className="space-y-2">
-            <Label htmlFor="reserve-date">Jour</Label>
-            <Input
-              id="reserve-date"
-              type="date"
-              className="h-11"
-              value={date}
-              min={format(new Date(), "yyyy-MM-dd")}
-              onChange={(e) => setDate(e.target.value)}
+        <div className="space-y-3">
+          {activeSpace ? (
+            <SpaceGallery
+              key={activeSpace.id}
+              space={activeSpace}
+              tableId={kind === "SEAT" ? focusTableId : null}
             />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-2">
-              <Label htmlFor="reserve-start">De</Label>
-              <Input
-                id="reserve-start"
-                type="time"
-                className="h-11"
-                step={300}
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="reserve-end">À</Label>
-              <Input
-                id="reserve-end"
-                type="time"
-                className="h-11"
-                step={300}
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-              />
-            </div>
-          </div>
+          ) : null}
 
-          {kind === "ROOM" ? (
-            <div>
-              <Label>Espace</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {roomOptions.map((s) => (
-                  <Button
-                    key={s.id}
-                    type="button"
-                    size="sm"
-                    variant={
-                      (spaceId || roomOptions[0]?.id) === s.id
-                        ? "default"
-                        : "outline"
-                    }
-                    onClick={() => setSpaceId(s.id)}
-                  >
-                    <Building2 className="mr-1 h-3.5 w-3.5" />
-                    {s.name}
-                  </Button>
-                ))}
+          <div className="space-y-3 rounded-2xl bg-white p-4 shadow-sm">
+            <DayScroller value={date} onChange={setDate} />
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <Label htmlFor="reserve-start">De</Label>
+                <Input
+                  id="reserve-start"
+                  type="time"
+                  className="h-11"
+                  step={300}
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reserve-end">À</Label>
+                <Input
+                  id="reserve-end"
+                  type="time"
+                  className="h-11"
+                  step={300}
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                />
               </div>
             </div>
-          ) : (
-            <div>
-              <Label>Place</Label>
-              {seatOptions.length > 1 ? (
+
+            {kind === "ROOM" ? (
+              <div>
+                <Label>Espace</Label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {seatOptions.map((s) => (
+                  {roomOptions.map((s) => (
                     <Button
                       key={s.id}
                       type="button"
                       size="sm"
-                      variant={
-                        (seatSpaceId || seatOptions[0]?.id) === s.id
-                          ? "default"
-                          : "outline"
-                      }
-                      onClick={() => {
-                        setSeatSpaceId(s.id);
-                        setSeatLabel("");
-                      }}
+                      variant={selectedRoomId === s.id ? "default" : "outline"}
+                      onClick={() => setSpaceId(s.id)}
                     >
                       {s.name}
                     </Button>
                   ))}
                 </div>
-              ) : null}
-              <div className="mt-2 h-[220px] overflow-hidden rounded-xl border">
+              </div>
+            ) : (
+              <div>
+                <Label>Place</Label>
+                {seatOptions.length > 1 ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {seatOptions.map((s) => (
+                      <Button
+                        key={s.id}
+                        type="button"
+                        size="sm"
+                        variant={
+                          selectedSeatSpaceId === s.id ? "default" : "outline"
+                        }
+                        onClick={() => {
+                          setSeatSpaceId(s.id);
+                          setSeatLabel("");
+                        }}
+                      >
+                        {s.name}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
                 {activeSpace ? (
-                  <FloorPlanCanvas
+                  <TableSeatPicker
+                    key={activeSpace.id}
                     space={activeSpace}
                     bookings={layout?.bookings || []}
-                    editMode={false}
-                    variant="fit"
-                    className="h-full min-h-0 rounded-none border-0"
                     selectedSeatId={
                       activeSpace.seats?.find((s) => s.label === seatLabel)
                         ?.id ||
@@ -264,44 +279,48 @@ export default function ReservePage() {
                         .find((s) => s.label === seatLabel)?.id
                     }
                     onSelectSeat={onSelectSeat}
+                    onTableChange={() => setSeatLabel("")}
+                    onFocusTableChange={setFocusTableId}
                   />
                 ) : null}
+                {seatLabel ? (
+                  <p className="mt-2 text-sm font-medium">
+                    Place choisie : {seatLabel}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-slate-500">
+                    Table d’abord, puis une place libre
+                  </p>
+                )}
               </div>
-              {seatLabel ? (
-                <p className="mt-1 text-sm font-medium">Place {seatLabel}</p>
-              ) : (
-                <p className="mt-1 text-xs text-slate-500">
-                  Touchez une place sur le plan
-                </p>
-              )}
-            </div>
-          )}
+            )}
 
-          <div>
-            <Label>Note</Label>
-            <Textarea
-              className="mt-1"
-              rows={2}
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder={
-                visitorNumber != null ? `#${visitorNumber}` : "Atelier…"
+            <div>
+              <Label>Note</Label>
+              <Textarea
+                className="mt-1"
+                rows={2}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder={
+                  visitorNumber != null ? `#${visitorNumber}` : "Atelier…"
+                }
+              />
+            </div>
+            <Button
+              className="h-11 w-full rounded-full"
+              disabled={
+                create.isPending ||
+                (kind === "SEAT" && !seatLabel) ||
+                !date ||
+                !startTime ||
+                !endTime
               }
-            />
+              onClick={() => create.mutate()}
+            >
+              Envoyer la demande
+            </Button>
           </div>
-          <Button
-            className="h-11 w-full rounded-full"
-            disabled={
-              create.isPending ||
-              (kind === "SEAT" && !seatLabel) ||
-              !date ||
-              !startTime ||
-              !endTime
-            }
-            onClick={() => create.mutate()}
-          >
-            Envoyer la demande
-          </Button>
         </div>
       )}
     </div>

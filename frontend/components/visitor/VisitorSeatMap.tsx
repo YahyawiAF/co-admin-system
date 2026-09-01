@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { FloorPlanCanvas } from "@/components/admin/FloorPlanCanvas";
+import { TableSeatPicker } from "@/components/visitor/TableSeatPicker";
 import { mobileApi, type SeatBooking } from "@/lib/api/resources";
 import type { MobileSeatMode, Space, SpaceSeat } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -147,31 +146,18 @@ export function VisitorSeatMap({
 
   return (
     <div className={cn("space-y-3 rounded-2xl border bg-white p-3", className)}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {selectable ? "Choisissez votre place" : "Votre place sur le plan"}
-          </p>
-          {assignedSeatLabel ? (
-            <p className="text-sm font-semibold">
-              {[activeSpace?.name, assignedSeatLabel].filter(Boolean).join(" · ")}
+      {selectable ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Choisissez votre place
             </p>
-          ) : selectable ? (
             <p className="text-sm text-slate-500">
-              Touchez une place libre{pickOnly ? "." : ", puis confirmez."}
+              Touchez une table, puis une place libre.
             </p>
-          ) : seatMode === "ADMIN_ASSIGN" ? (
-            <p className="text-sm text-slate-500">
-              L&apos;accueil assigne votre place…
-            </p>
-          ) : seatMode === "AUTO_ASSIGN" ? (
-            <p className="text-sm text-slate-500">Attribution automatique…</p>
-          ) : null}
+          </div>
         </div>
-        {assignedSeatLabel ? (
-          <Badge variant="secondary">{assignedSeatLabel}</Badge>
-        ) : null}
-      </div>
+      ) : null}
 
       {showSpaceSwitcher ? (
         <div className="flex flex-wrap gap-2">
@@ -186,20 +172,17 @@ export function VisitorSeatMap({
             </Button>
           ))}
         </div>
-      ) : activeSpace ? (
-        <p className="text-xs font-medium text-slate-500">{activeSpace.name}</p>
       ) : null}
 
-      <div className="h-[min(52vw,280px)] w-full overflow-hidden rounded-xl border bg-slate-50">
+      <div className="overflow-hidden">
         {activeSpace ? (
-          <FloorPlanCanvas
+          <TableSeatPicker
             space={activeSpace}
             bookings={bookings}
-            editMode={false}
-            variant="fit"
-            className="h-full min-h-0 rounded-none border-0"
             selectedSeatId={selectedSeatId}
-            onSelectSeat={selectable ? onSelectSeat : undefined}
+            onSelectSeat={selectable ? onSelectSeat : () => {}}
+            onTableChange={() => setPickedLabel(null)}
+            lockSeatLabel={!selectable ? assignedSeatLabel : null}
           />
         ) : null}
       </div>

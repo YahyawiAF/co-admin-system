@@ -511,6 +511,7 @@ export class FacilityService {
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;
+      galleryUrls: string[];
     }>,
   ) {
     const space = await this.prisma.space.update({
@@ -547,6 +548,7 @@ export class FacilityService {
     spaceId: string;
     name: string;
     imageUrl?: string;
+    galleryUrls?: string[];
     x?: number;
     y?: number;
     width?: number;
@@ -559,6 +561,7 @@ export class FacilityService {
         spaceId: data.spaceId,
         name: data.name,
         imageUrl: data.imageUrl,
+        galleryUrls: data.galleryUrls || [],
         x: data.x ?? 40,
         y: data.y ?? 40,
         width: data.width ?? 120,
@@ -614,6 +617,7 @@ export class FacilityService {
       height: number;
       rotation: number;
       sortOrder: number;
+      galleryUrls: string[];
     }>,
   ) {
     return this.prisma.table.update({

@@ -135,7 +135,7 @@ export function buildJournalAlerts({
             journalId: row.id,
             memberId: row.memberID,
           });
-        } else if (left != null && left <= 7) {
+        } else if (left != null && left <= 3) {
           items.push({
             id: `sub-warn-${row.memberID}`,
             kind: "sub_expiring",

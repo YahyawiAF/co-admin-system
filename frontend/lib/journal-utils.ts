@@ -45,12 +45,69 @@ export function priceOf(row: Journal) {
   return row.prices || row.price || null;
 }
 
+/** Visit paid via subscription pack, or member currently on an active abo. */
+export function isAbonnementVisit(
+  row: Journal,
+  subMemberIds?: Set<string> | Map<string, unknown>,
+) {
+  const p = priceOf(row);
+  if (p?.category === "ABONNEMENT" || p?.type === "abonnement") return true;
+  const mid = row.memberID || memberOf(row)?.id;
+  if (!mid || !subMemberIds) return false;
+  return subMemberIds instanceof Map
+    ? subMemberIds.has(mid)
+    : subMemberIds.has(mid);
+}
+
 export function isPendingReservation(row: Journal) {
   return row.isReservation;
 }
 
 export function isActiveVisit(row: Journal) {
   return !row.isReservation && !row.leaveTime;
+}
+
+/** One list row per person; reservations stay unique. */
+export type JournalListRow = Journal & {
+  visitCount: number;
+  checkoutCount: number;
+};
+
+export function journalPersonKey(row: Journal): string {
+  if (row.isReservation) return `res:${row.id}`;
+  if (row.memberID) return `m:${row.memberID}`;
+  const name = row.guestName?.trim().toLowerCase();
+  if (name) return `g:${name}`;
+  return `visit:${row.id}`;
+}
+
+export function groupJournalByPerson(rows: Journal[]): JournalListRow[] {
+  const buckets = new Map<string, Journal[]>();
+  const order: string[] = [];
+  for (const row of rows) {
+    const key = journalPersonKey(row);
+    if (!buckets.has(key)) {
+      order.push(key);
+      buckets.set(key, []);
+    }
+    buckets.get(key)!.push(row);
+  }
+  return order.map((key) => {
+    const items = buckets.get(key)!;
+    const visits = items.filter((r) => !r.isReservation);
+    const present = visits.find(isActiveVisit);
+    const latest = [...items].sort(
+      (a, b) =>
+        new Date(b.registredTime).getTime() -
+        new Date(a.registredTime).getTime()
+    )[0];
+    const primary = present || latest;
+    return {
+      ...primary,
+      visitCount: visits.length || items.length,
+      checkoutCount: visits.filter((r) => !!r.leaveTime).length,
+    };
+  });
 }
 
 export function visitStatus(row: Journal): "reservation" | "present" | "left" {

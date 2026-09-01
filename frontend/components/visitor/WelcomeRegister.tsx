@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,47 +17,46 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import {
   clearPendingRegister,
+  consumeQrEntry,
   loadPendingRegister,
-  savePendingRegister,
+  markInstallNudgePending,
 } from "@/lib/visitorCache";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Mode = "welcome" | "signup" | "confirm" | "pin" | "login" | "code";
+type Mode = "welcome" | "signup" | "login" | "code";
 
 export function WelcomeRegister() {
+  const router = useRouter();
   const { org, slug, href } = useOrg();
   const { confirm } = useVisitorSession();
   const [mode, setMode] = useState<Mode>("welcome");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [phone, setPhone] = useState<string | undefined>();
-  const [pin, setPin] = useState("");
-  const [pin2, setPin2] = useState("");
   const [loginPin, setLoginPin] = useState("");
   const [shortCode, setShortCode] = useState("");
-  const [draft, setDraft] = useState<{
-    member: Member;
-    accessToken?: string;
-  } | null>(null);
+
+  const finish = (
+    member: Member,
+    accessToken?: string,
+    isNew = false
+  ) => {
+    confirm(member, accessToken);
+    if (isNew) {
+      markInstallNudgePending(slug, member.id);
+      consumeQrEntry(slug);
+      router.replace(href("/choose?mode=day"));
+    }
+  };
 
   useEffect(() => {
     const pending = loadPendingRegister(slug);
     if (!pending) return;
-    setFirstName(pending.firstName);
-    setLastName(pending.lastName);
-    setPhone(pending.phone);
-    setDraft({
-      member: pending.member as Member,
-      accessToken: pending.accessToken,
-    });
-    setMode("confirm");
-  }, [slug]);
-
-  const finish = (member: Member, accessToken?: string) => {
     clearPendingRegister(slug);
-    confirm(member, accessToken);
-  };
+    finish(pending.member as Member, pending.accessToken, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   const register = useMutation({
     mutationFn: () =>
@@ -67,15 +67,8 @@ export function WelcomeRegister() {
         phone: phone || "",
       }),
     onSuccess: (res) => {
-      savePendingRegister(slug, {
-        member: res.member,
-        accessToken: res.accessToken,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
-        phone: phone || "",
-      });
-      setDraft(res);
-      setMode("confirm");
+      toast.success("Profil créé");
+      finish(res.member, res.accessToken, true);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -98,20 +91,17 @@ export function WelcomeRegister() {
     register.mutate();
   };
 
-  const savePin = useMutation({
-    mutationFn: () =>
-      mobileApi.setPin({ memberId: draft!.member.id, pin }),
-    onSuccess: (res) => {
-      toast.success("Code PIN enregistré");
-      finish(res.member, res.accessToken);
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const pinLogin = useMutation({
     mutationFn: () =>
       mobileApi.pinLogin({ phone: phone || "", pin: loginPin, orgSlug: slug }),
-    onSuccess: (res) => finish(res.member, res.accessToken),
+    onSuccess: (res) => {
+      toast.success(
+        res.member.firstName
+          ? `Bonjour ${res.member.firstName} 👋`
+          : "Connexion réussie"
+      );
+      finish(res.member, res.accessToken);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -123,11 +113,7 @@ export function WelcomeRegister() {
         orgSlug: slug,
       }),
     onSuccess: (res) => {
-      setDraft({ member: res.member, accessToken: res.accessToken });
-      if (res.needsPin || !res.member.hasPin) {
-        setMode("pin");
-        return;
-      }
+      toast.success("Profil récupéré");
       finish(res.member, res.accessToken);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -159,97 +145,6 @@ export function WelcomeRegister() {
             onClick={() => setMode("login")}
           >
             Connexion (téléphone + PIN)
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "confirm" && draft) {
-    const name = [firstName, lastName].filter(Boolean).join(" ");
-    return (
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Confirmation
-        </p>
-        <h1 className="mt-1 text-2xl font-bold">C&apos;est vous ?</h1>
-        <p className="mt-3 text-lg font-semibold">{name}</p>
-        <p className="text-sm text-slate-500">{phone}</p>
-        <div className="mt-5 flex gap-2">
-          <Button
-            variant="outline"
-            className="h-12 flex-1 rounded-full"
-            onClick={() => {
-              clearPendingRegister(slug);
-              setMode("signup");
-            }}
-          >
-            Modifier
-          </Button>
-          <Button
-            className="h-12 flex-1 rounded-full"
-            onClick={() => {
-              // PIN is always configured next (or finish if already set)
-              if (draft.member.hasPin) {
-                finish(draft.member, draft.accessToken);
-              } else {
-                setMode("pin");
-              }
-            }}
-          >
-            Continuer — créer mon PIN
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (mode === "pin" && draft) {
-    const pinOk = /^\d{4}$/.test(pin) && pin === pin2;
-    return (
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Sécurité
-        </p>
-        <h1 className="mt-1 text-2xl font-bold">Créez votre code PIN</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          4 chiffres pour vous reconnecter sur cet appareil ou un autre, sans
-          renvoyer vos infos.
-        </p>
-        <div className="mt-4 space-y-3">
-          <div>
-            <Label>Code PIN</Label>
-            <Input
-              className="mt-1 h-12 text-center text-2xl tracking-[0.4em]"
-              inputMode="numeric"
-              maxLength={4}
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              placeholder="••••"
-            />
-          </div>
-          <div>
-            <Label>Confirmer le PIN</Label>
-            <Input
-              className="mt-1 h-12 text-center text-2xl tracking-[0.4em]"
-              inputMode="numeric"
-              maxLength={4}
-              value={pin2}
-              onChange={(e) =>
-                setPin2(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              placeholder="••••"
-            />
-          </div>
-          {pin2 && pin !== pin2 ? (
-            <p className="text-sm text-rose-600">Les codes ne correspondent pas</p>
-          ) : null}
-          <Button
-            className="h-12 w-full rounded-full"
-            disabled={!pinOk || savePin.isPending}
-            onClick={() => savePin.mutate()}
-          >
-            Enregistrer mon PIN
           </Button>
         </div>
       </div>
@@ -376,7 +271,6 @@ export function WelcomeRegister() {
     );
   }
 
-  // signup
   const valid =
     firstName.trim().length > 0 &&
     lastName.trim().length > 0 &&

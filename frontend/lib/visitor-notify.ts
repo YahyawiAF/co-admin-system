@@ -130,7 +130,10 @@ async function registerServiceWorker() {
     return null;
   }
   try {
-    return await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    return await navigator.serviceWorker.register("/sw.js", {
+      scope: "/",
+      updateViaCache: "none",
+    });
   } catch {
     return null;
   }
@@ -237,7 +240,7 @@ export async function enableVisitorNotifications(
     }
     if (memberId) {
       const pushed = await subscribePush(memberId);
-      return { ok: pushed || true, needInstall };
+      return { ok: pushed, needInstall };
     }
     return { ok: true, needInstall };
   } catch {

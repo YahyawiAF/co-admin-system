@@ -12,50 +12,12 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { isIosDevice, isStandalonePwa } from "@/lib/visitor-notify";
+import {
+  ANDROID_INSTALL_STEPS,
+  IOS_INSTALL_STEPS,
+} from "@/components/visitor/installSteps";
 
 type BeforeInstall = Event & { prompt: () => Promise<void> };
-
-const IOS_STEPS = [
-  {
-    src: "/install/install-ios-1.jpg",
-    alt: "Safari : appuyez sur le bouton Partager en bas de l’écran",
-    title: "Appuyez sur Partager",
-    hint: "Le carré avec la flèche, en bas au centre.",
-  },
-  {
-    src: "/install/install-ios-2.jpg",
-    alt: "Dans le menu Partager, appuyez sur Sur l’écran d’accueil",
-    title: "Sur l’écran d’accueil",
-    hint: "Faites défiler la liste, puis appuyez.",
-  },
-  {
-    src: "/install/install-ios-3.jpg",
-    alt: "L’icône de l’app apparaît sur l’écran d’accueil",
-    title: "C’est installé",
-    hint: "Ouvrez l’app depuis l’écran d’accueil.",
-  },
-] as const;
-
-const ANDROID_STEPS = [
-  {
-    src: "/install/install-android-1.jpg",
-    alt: "Chrome : appuyez sur le menu à trois points",
-    title: "Ouvrez le menu",
-    hint: "Les trois points ⋮ en haut à droite.",
-  },
-  {
-    src: "/install/install-android-2.jpg",
-    alt: "Dans le menu Chrome, appuyez sur Installer l’application",
-    title: "Installer l’application",
-    hint: "Puis confirmez l’installation.",
-  },
-  {
-    src: "/install/install-android-3.jpg",
-    alt: "L’app est installée sur l’écran d’accueil",
-    title: "C’est installé",
-    hint: "L’icône est sur l’écran d’accueil.",
-  },
-] as const;
 
 function isIosSafari() {
   if (!isIosDevice()) return false;
@@ -88,7 +50,7 @@ export function InstallAppButton({ className }: { className?: string }) {
 
   if (hidden) return null;
 
-  const steps = ios ? IOS_STEPS : ANDROID_STEPS;
+  const steps = ios ? IOS_INSTALL_STEPS : ANDROID_INSTALL_STEPS;
   const current = steps[step]!;
   const last = step === steps.length - 1;
 

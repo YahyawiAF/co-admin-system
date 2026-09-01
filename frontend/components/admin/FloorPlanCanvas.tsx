@@ -41,6 +41,10 @@ type Props = {
   variant?: "editor" | "picker" | "fit";
   /** Extra zoom multiplier (1 = default). */
   zoom?: number;
+  /** Compact overview seats; slightly larger chips after a table is focused. */
+  touchMode?: boolean;
+  /** Zoom the viewport onto this table (mobile table → seat flow). */
+  focusTableId?: string | null;
   onSelectSeat?: (seat: SpaceSeat) => void;
   onMoveTable?: (tableId: string, x: number, y: number) => void;
   onMoveSeat?: (
@@ -98,6 +102,52 @@ function contentBounds(space: Space) {
   };
 }
 
+function tableViewBounds(table: SpaceTable) {
+  let minX = table.x;
+  let minY = table.y;
+  let maxX = table.x + table.width;
+  let maxY = table.y + table.height;
+  for (const s of table.seats || []) {
+    const sx = table.x + s.offsetX;
+    const sy = table.y + s.offsetY;
+    minX = Math.min(minX, sx);
+    minY = Math.min(minY, sy);
+    maxX = Math.max(maxX, sx + 48);
+    maxY = Math.max(maxY, sy + 48);
+  }
+  const pad = 40;
+  return {
+    minX: Math.max(0, minX - pad),
+    minY: Math.max(0, minY - pad),
+    width: Math.max(160, maxX - minX + pad * 2),
+    height: Math.max(140, maxY - minY + pad * 2),
+  };
+}
+
+function looseSeatsViewBounds(space: Space) {
+  const seats = (space.seats || []).filter((s) => !s.tableId);
+  if (!seats.length) {
+    return { minX: 0, minY: 0, width: 280, height: 220 };
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = 0;
+  let maxY = 0;
+  for (const s of seats) {
+    minX = Math.min(minX, s.offsetX);
+    minY = Math.min(minY, s.offsetY);
+    maxX = Math.max(maxX, s.offsetX + 48);
+    maxY = Math.max(maxY, s.offsetY + 48);
+  }
+  const pad = 40;
+  return {
+    minX: Math.max(0, minX - pad),
+    minY: Math.max(0, minY - pad),
+    width: Math.max(160, maxX - minX + pad * 2),
+    height: Math.max(140, maxY - minY + pad * 2),
+  };
+}
+
 type DragKind = "table" | "seat" | "wall" | "fixture";
 
 export function FloorPlanCanvas({
@@ -122,11 +172,14 @@ export function FloorPlanCanvas({
   selectedSeatIds,
   selectedFixtureId,
   className,
+  touchMode = false,
+  focusTableId = null,
 }: Props) {
   const booked = bookedLabelsForSpace(bookings, space.id);
   const viewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
+  const [vpSize, setVpSize] = useState({ w: 0, h: 0 });
   const [localPos, setLocalPos] = useState<
     Record<string, { x: number; y: number }>
   >({});
@@ -146,10 +199,20 @@ export function FloorPlanCanvas({
   const fixtures = space.fixtures || [];
   const looseSeats = (space.seats || []).filter((s) => !s.tableId);
   const bounds = contentBounds(space);
+  const focusTable =
+    focusTableId && focusTableId !== "__loose__"
+      ? tables.find((t) => t.id === focusTableId) || null
+      : null;
+  const view =
+    focusTableId === "__loose__"
+      ? looseSeatsViewBounds(space)
+      : focusTable
+        ? tableViewBounds(focusTable)
+        : bounds;
   const isFit = variant === "fit";
   const isPicker = variant === "picker" || isFit;
-  const planW = Math.max(bounds.width, 280);
-  const planH = Math.max(bounds.height, 220);
+  const planW = Math.max(view.width, 120);
+  const planH = Math.max(view.height, 100);
 
   useEffect(() => {
     if (!isPicker) {
@@ -162,28 +225,31 @@ export function FloorPlanCanvas({
       const pad = 8;
       const availW = Math.max(el.clientWidth - pad, 120);
       const availH = Math.max(el.clientHeight - pad, 120);
-      let s: number;
-      if (isFit) {
-        s = Math.min(availW / planW, availH / planH) * zoom;
-      } else {
-        // Fill width; height can scroll if needed. Allow scale-up.
-        s = (availW / planW) * zoom;
-      }
-      setFitScale(Number.isFinite(s) && s > 0 ? s : 1);
+      setVpSize({ w: el.clientWidth, h: el.clientHeight });
+      const s = Math.min(availW / planW, availH / planH) * zoom;
+      const next = Number.isFinite(s) && s > 0 ? s : 1;
+      setFitScale((prev) => (Math.abs(next - prev) < 0.002 ? prev : next));
     };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [isPicker, isFit, planW, planH, zoom, space.id]);
+  }, [isPicker, isFit, planW, planH, zoom, space.id, focusTableId]);
 
-  useEffect(() => {
-    if (!selectedSeatId || !canvasRef.current) return;
-    const el = canvasRef.current.querySelector(
-      `[data-seat-id="${CSS.escape(selectedSeatId)}"]`
-    );
-    el?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
-  }, [selectedSeatId, space.id]);
+  const scaledW = planW * fitScale;
+  const scaledH = planH * fitScale;
+  const fitOffsetX = isPicker
+    ? Math.max(0, (vpSize.w - scaledW) / 2)
+    : 0;
+  const fitOffsetY = isPicker
+    ? Math.max(0, (vpSize.h - scaledH) / 2)
+    : 0;
+  /** Overview ~20px seats; focused table ~36px — not huge on the full plan, readable after zoom. */
+  const touchChipPx = !touchMode
+    ? 28
+    : focusTableId
+      ? Math.max(28, Math.min(72, Math.round(36 / Math.max(fitScale, 0.25))))
+      : Math.max(14, Math.min(22, Math.round(18 / Math.max(fitScale, 0.25))));
 
   const posOf = (id: string, x: number, y: number) =>
     localPos[id] || { x, y };
@@ -194,8 +260,8 @@ export function FloorPlanCanvas({
     const rect = el.getBoundingClientRect();
     const scale = isPicker ? fitScale : zoom || 1;
     return {
-      x: (clientX - rect.left) / scale + (isPicker ? bounds.minX : 0),
-      y: (clientY - rect.top) / scale + (isPicker ? bounds.minY : 0),
+      x: (clientX - rect.left) / scale + (isPicker ? view.minX : 0),
+      y: (clientY - rect.top) / scale + (isPicker ? view.minY : 0),
     };
   };
 
@@ -242,18 +308,20 @@ export function FloorPlanCanvas({
         isFit
           ? "h-full min-h-[240px] overflow-hidden"
           : isPicker
-            ? "min-h-[min(52vh,520px)] overflow-auto"
+            ? "min-h-[min(52vh,520px)] overflow-hidden"
             : "min-h-[420px] overflow-auto",
         className
       )}
     >
       <div
-        className={cn(isPicker && "mx-auto")}
+        className={cn(isPicker && "absolute overflow-hidden")}
         style={
           isPicker
             ? {
-                width: Math.ceil(planW * fitScale),
-                height: Math.ceil(planH * fitScale),
+                left: fitOffsetX,
+                top: fitOffsetY,
+                width: Math.max(1, scaledW),
+                height: Math.max(1, scaledH),
               }
             : { minWidth: "100%" }
         }
@@ -270,10 +338,12 @@ export function FloorPlanCanvas({
             ? `url(${space.floorPlanUrl})`
             : undefined,
           backgroundColor: space.floorPlanUrl ? undefined : "#e8eef5",
-          width: isPicker ? planW + bounds.minX : undefined,
-          height: isPicker ? planH + bounds.minY : Math.max(planH + bounds.minY, 560),
+          width: isPicker ? bounds.width + bounds.minX : undefined,
+          height: isPicker
+            ? bounds.height + bounds.minY
+            : Math.max(bounds.height + bounds.minY, 560),
           transform: isPicker
-            ? `translate(${-bounds.minX * fitScale}px, ${-bounds.minY * fitScale}px) scale(${fitScale})`
+            ? `translate(${-view.minX * fitScale}px, ${-view.minY * fitScale}px) scale(${fitScale})`
             : zoom !== 1
               ? `scale(${zoom})`
               : undefined,
@@ -447,6 +517,7 @@ export function FloorPlanCanvas({
                 selectedTableId === table.id
                   ? "border-primary ring-2 ring-primary/30"
                   : "border-slate-300",
+                !editMode && "cursor-pointer",
                 editMode &&
                   tool === "select" &&
                   "cursor-grab active:cursor-grabbing"
@@ -460,6 +531,7 @@ export function FloorPlanCanvas({
               }}
               onPointerDown={(e) => {
                 if (!editMode) {
+                  e.stopPropagation();
                   onSelectTable?.(table);
                   return;
                 }
@@ -481,23 +553,15 @@ export function FloorPlanCanvas({
                 onSelectTable?.(table);
               }}
             >
-              {table.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={table.imageUrl}
-                  alt={table.name}
-                  className="h-full w-full rounded-md object-cover opacity-90"
-                  draggable={false}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center bg-slate-50 text-xs font-semibold text-slate-600">
-                  {table.name}
-                </div>
-              )}
+              <div className="flex h-full items-center justify-center bg-slate-50 text-xs font-semibold text-slate-600">
+                {table.name}
+              </div>
               <div className="absolute -top-5 left-0 truncate text-[10px] font-bold text-slate-700">
                 {table.name}
               </div>
               {(table.seats || []).map((seat) => {
+                if (focusTableId === "__loose__") return null;
+                if (focusTable && table.id !== focusTable.id) return null;
                 if (localPos[seat.id] && dragRef.current?.id === seat.id) {
                   return null;
                 }
@@ -505,6 +569,7 @@ export function FloorPlanCanvas({
                   <SeatChip
                     key={seat.id}
                     seat={seat}
+                    size={touchChipPx}
                     occupied={booked.has(seat.label)}
                     selected={
                       selectedSeatId === seat.id ||
@@ -534,6 +599,7 @@ export function FloorPlanCanvas({
                     }}
                     onClick={(ev) => {
                       ev.stopPropagation();
+                      if (!editMode && booked.has(seat.label)) return;
                       onSelectSeat?.(seat);
                     }}
                   />
@@ -551,11 +617,15 @@ export function FloorPlanCanvas({
             )
           ),
         ].map((seat) => {
+          const isLoose = !seat.tableId;
+          if (focusTable && isLoose) return null;
+          if (focusTableId === "__loose__" && !isLoose) return null;
           const pos = posOf(seat.id, seat.offsetX, seat.offsetY);
           return (
             <SeatChip
               key={`abs-${seat.id}`}
               seat={seat}
+              size={touchChipPx}
               occupied={booked.has(seat.label)}
               selected={
                 selectedSeatId === seat.id ||
@@ -582,6 +652,7 @@ export function FloorPlanCanvas({
               }}
               onClick={(ev) => {
                 ev.stopPropagation();
+                if (!editMode && booked.has(seat.label)) return;
                 onSelectSeat?.(seat);
               }}
             />
@@ -598,6 +669,7 @@ function SeatChip({
   occupied,
   selected,
   editMode,
+  size = 28,
   style,
   onClick,
   onPointerDown,
@@ -606,10 +678,12 @@ function SeatChip({
   occupied: boolean;
   selected?: boolean;
   editMode?: boolean;
+  size?: number;
   style?: React.CSSProperties;
   onClick: (e: React.MouseEvent) => void;
   onPointerDown?: (e: React.PointerEvent) => void;
 }) {
+  const font = Math.max(10, Math.round(size * 0.36));
   return (
     <button
       type="button"
@@ -619,7 +693,7 @@ function SeatChip({
       onPointerDown={onPointerDown}
       title={`${seat.label}${seat.isOverflow ? " (overflow)" : ""}`}
       className={cn(
-        "absolute z-20 flex h-7 min-w-[1.75rem] items-center justify-center rounded-full border px-1 text-[9px] font-bold shadow transition-transform touch-manipulation",
+        "absolute z-20 flex items-center justify-center rounded-full border px-1 font-bold shadow transition-transform touch-manipulation",
         seat.isOverflow
           ? occupied
             ? "border-rose-500 bg-rose-500 text-white"
@@ -627,15 +701,22 @@ function SeatChip({
           : occupied
             ? "border-amber-500 bg-amber-500 text-white"
             : "border-emerald-400 bg-emerald-50 text-emerald-900",
-        selected && "z-30 scale-125 ring-2 ring-primary ring-offset-1",
+        selected && "z-30 ring-2 ring-primary ring-offset-1",
         editMode && "cursor-grab active:cursor-grabbing"
       )}
-      style={style}
+      style={{
+        width: size,
+        height: size,
+        minWidth: size,
+        fontSize: font,
+        ...style,
+      }}
     >
       {selected ? (
         <span
           aria-hidden
-          className="seat-pulse-ring pointer-events-none absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary"
+          className="seat-pulse-ring pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-primary"
+          style={{ width: size + 12, height: size + 12 }}
         />
       ) : null}
       {seat.isOverflow ? "X" : seat.label.split("-").pop()}
