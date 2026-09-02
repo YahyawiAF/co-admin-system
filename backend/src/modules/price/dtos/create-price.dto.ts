@@ -67,6 +67,28 @@ export class CreatePriceDto {
   spaceId?: string;
 
   @ApiPropertyOptional({
+    description: 'Spaces where this forfait can be chosen',
+    type: [String],
+  })
+  @IsOptional()
+  @IsString({ each: true })
+  spaceIds?: string[];
+
+  @ApiPropertyOptional({
+    description: 'Forfait can be sold per seat',
+  })
+  @IsOptional()
+  @IsBoolean()
+  occupySeat?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Forfait can book the entire linked space',
+  })
+  @IsOptional()
+  @IsBoolean()
+  occupyWhole?: boolean;
+
+  @ApiPropertyOptional({
     description:
       'When true, an active subscription of this tarif keeps a dedicated seat until the period ends',
   })

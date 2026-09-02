@@ -40,6 +40,7 @@ import { GalleryUpload } from "@/components/admin/GalleryUpload";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
 import { PRICE_CATEGORY_LABEL } from "@/lib/tarif-labels";
+import { SPACE_RESERVE_MODE_LABEL } from "@/lib/space-occupy";
 import { isActiveVisit } from "@/lib/journal-utils";
 
 type TableFormState = {
@@ -1652,6 +1653,32 @@ export default function FacilityPage() {
                       />
                       Réservation mobile
                     </label>
+                    <Select
+                      value={space.reserveMode || "BOTH"}
+                      onValueChange={(v) =>
+                        updateSpace.mutate({
+                          id: space.id,
+                          data: {
+                            reserveMode: v as "SEAT" | "WHOLE" | "BOTH",
+                          },
+                        })
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-[220px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="SEAT">
+                          {SPACE_RESERVE_MODE_LABEL.SEAT}
+                        </SelectItem>
+                        <SelectItem value="WHOLE">
+                          {SPACE_RESERVE_MODE_LABEL.WHOLE}
+                        </SelectItem>
+                        <SelectItem value="BOTH">
+                          {SPACE_RESERVE_MODE_LABEL.BOTH}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"

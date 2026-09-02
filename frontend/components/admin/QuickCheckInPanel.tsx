@@ -290,6 +290,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-history"] });
       reset();
       if (closeAfterCheckIn) setOpen(false);
       onDone?.();

@@ -53,6 +53,18 @@ export class PriceEntity {
   @ApiPropertyOptional()
   spaceName?: string | null;
 
+  @ApiPropertyOptional({ type: [String] })
+  spaceIds?: string[];
+
+  @ApiPropertyOptional({ type: [String] })
+  spaceNames?: string[];
+
+  @ApiPropertyOptional()
+  occupySeat?: boolean;
+
+  @ApiPropertyOptional()
+  occupyWhole?: boolean;
+
   @ApiPropertyOptional()
   reserveSeat?: boolean;
 

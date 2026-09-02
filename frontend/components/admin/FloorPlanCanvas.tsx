@@ -46,6 +46,8 @@ type Props = {
   /** Zoom the viewport onto this table (mobile table → seat flow). */
   focusTableId?: string | null;
   onSelectSeat?: (seat: SpaceSeat) => void;
+  /** Allow clicking occupied seats (inspect occupancy, not assign). */
+  selectOccupied?: boolean;
   onMoveTable?: (tableId: string, x: number, y: number) => void;
   onMoveSeat?: (
     seatId: string,
@@ -158,6 +160,7 @@ export function FloorPlanCanvas({
   variant = "editor",
   zoom = 1,
   onSelectSeat,
+  selectOccupied = false,
   onMoveTable,
   onMoveSeat,
   onMoveWall,
@@ -576,6 +579,7 @@ export function FloorPlanCanvas({
                       selectedSeatIds?.includes(seat.id)
                     }
                     editMode={editMode && tool === "select"}
+                    inspect={selectOccupied}
                     style={{ left: seat.offsetX, top: seat.offsetY }}
                     onPointerDown={(ev) => {
                       if (!editMode || tool !== "select") return;
@@ -599,7 +603,8 @@ export function FloorPlanCanvas({
                     }}
                     onClick={(ev) => {
                       ev.stopPropagation();
-                      if (!editMode && booked.has(seat.label)) return;
+                      if (!editMode && booked.has(seat.label) && !selectOccupied)
+                        return;
                       onSelectSeat?.(seat);
                     }}
                   />
@@ -632,6 +637,7 @@ export function FloorPlanCanvas({
                 selectedSeatIds?.includes(seat.id)
               }
               editMode={editMode && tool === "select"}
+              inspect={selectOccupied}
               style={{ left: pos.x, top: pos.y }}
               onPointerDown={(ev) => {
                 if (!editMode || tool !== "select") return;
@@ -652,7 +658,8 @@ export function FloorPlanCanvas({
               }}
               onClick={(ev) => {
                 ev.stopPropagation();
-                if (!editMode && booked.has(seat.label)) return;
+                if (!editMode && booked.has(seat.label) && !selectOccupied)
+                  return;
                 onSelectSeat?.(seat);
               }}
             />
@@ -669,6 +676,7 @@ function SeatChip({
   occupied,
   selected,
   editMode,
+  inspect,
   size = 28,
   style,
   onClick,
@@ -678,6 +686,7 @@ function SeatChip({
   occupied: boolean;
   selected?: boolean;
   editMode?: boolean;
+  inspect?: boolean;
   size?: number;
   style?: React.CSSProperties;
   onClick: (e: React.MouseEvent) => void;
@@ -691,7 +700,9 @@ function SeatChip({
       data-seat-id={seat.id}
       onClick={onClick}
       onPointerDown={onPointerDown}
-      title={`${seat.label}${seat.isOverflow ? " (overflow)" : ""}`}
+      title={`${seat.label}${seat.isOverflow ? " (overflow)" : ""}${
+        occupied && inspect ? " — cliquer pour le détail" : ""
+      }`}
       className={cn(
         "absolute z-20 flex items-center justify-center rounded-full border px-1 font-bold shadow transition-transform touch-manipulation",
         seat.isOverflow
@@ -702,7 +713,8 @@ function SeatChip({
             ? "border-amber-500 bg-amber-500 text-white"
             : "border-emerald-400 bg-emerald-50 text-emerald-900",
         selected && "z-30 ring-2 ring-primary ring-offset-1",
-        editMode && "cursor-grab active:cursor-grabbing"
+        editMode && "cursor-grab active:cursor-grabbing",
+        !editMode && inspect && "cursor-pointer"
       )}
       style={{
         width: size,

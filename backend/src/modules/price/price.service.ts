@@ -4,6 +4,7 @@ import { PriceEntity } from './entities/price.entity';
 import { PrismaService } from 'database/prisma.service';
 import { CreatePriceDto } from './dtos/create-price.dto';
 import { UpdatePriceDto } from './dtos/update-price.dto';
+import { defaultOccupy } from '../mobile/space-occupy';
 
 const COLLABORA_HUB_TARIFS: Array<{
   name: string;
@@ -169,6 +170,11 @@ const COLLABORA_HUB_TARIFS: Array<{
 export class PriceService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly priceInclude = {
+    space: { select: { id: true, name: true } },
+    offerSpaces: { include: { space: { select: { id: true, name: true } } } },
+  } as const;
+
   private toEntity(price: {
     id: string;
     name: string;
@@ -180,6 +186,8 @@ export class PriceService {
     billingUnit: BillingUnit | null;
     periodDays: number | null;
     spaceId?: string | null;
+    occupySeat?: boolean;
+    occupyWhole?: boolean;
     reserveSeat?: boolean;
     reserveSeatFromHour?: number | null;
     reserveSeatToHour?: number | null;
@@ -187,16 +195,67 @@ export class PriceService {
     createdAt: Date;
     updatedAt: Date;
     space?: { id: string; name: string } | null;
+    offerSpaces?: {
+      spaceId: string;
+      space: { id: string; name: string };
+    }[];
   }): PriceEntity {
+    const offerNames = (price.offerSpaces || []).map((o) => o.space.name);
+    const offerIds = (price.offerSpaces || []).map((o) => o.spaceId);
+    const spaceIds = offerIds.length
+      ? offerIds
+      : price.spaceId
+        ? [price.spaceId]
+        : [];
+    const spaceNames = offerNames.length
+      ? offerNames
+      : price.space?.name
+        ? [price.space.name]
+        : [];
     return new PriceEntity({
       ...price,
-      spaceId: price.spaceId ?? null,
-      spaceName: price.space?.name ?? null,
+      spaceId: spaceIds[0] ?? price.spaceId ?? null,
+      spaceName: spaceNames[0] ?? price.space?.name ?? null,
+      spaceIds,
+      spaceNames,
+      occupySeat: price.occupySeat !== false,
+      occupyWhole: !!price.occupyWhole,
       reserveSeat: !!price.reserveSeat,
       reserveSeatFromHour: price.reserveSeatFromHour ?? null,
       reserveSeatToHour: price.reserveSeatToHour ?? null,
       isActive: price.isActive !== false,
       timePeriod: price.timePeriod as { start: string; end: string },
+    });
+  }
+
+  private normalizeSpaceIds(dto: {
+    spaceId?: string | null;
+    spaceIds?: string[];
+  }) {
+    const raw = [
+      ...(dto.spaceIds || []),
+      ...(dto.spaceId ? [dto.spaceId] : []),
+    ];
+    return [...new Set(raw.map((id) => id.trim()).filter(Boolean))];
+  }
+
+  private occupyFromDto(
+    category: PriceCategory | null | undefined,
+    occupySeat?: boolean,
+    occupyWhole?: boolean,
+  ) {
+    const fallback = defaultOccupy(category);
+    const seat = occupySeat ?? fallback.occupySeat;
+    const whole = occupyWhole ?? fallback.occupyWhole;
+    if (!seat && !whole) return fallback;
+    return { occupySeat: seat, occupyWhole: whole };
+  }
+
+  private async syncOfferSpaces(priceId: string, spaceIds: string[]) {
+    await this.prisma.priceSpace.deleteMany({ where: { priceId } });
+    if (!spaceIds.length) return;
+    await this.prisma.priceSpace.createMany({
+      data: spaceIds.map((spaceId) => ({ priceId, spaceId })),
     });
   }
 
@@ -211,6 +270,9 @@ export class PriceService {
       billingUnit,
       periodDays,
       spaceId,
+      spaceIds,
+      occupySeat,
+      occupyWhole,
       reserveSeat,
       reserveSeatFromHour,
       reserveSeatToHour,
@@ -224,6 +286,9 @@ export class PriceService {
       throw new Error('Time period must have start and end times');
     }
 
+    const linked = this.normalizeSpaceIds({ spaceId, spaceIds });
+    const occupy = this.occupyFromDto(category, occupySeat, occupyWhole);
+
     const priceEntity = await this.prisma.price.create({
       data: {
         name,
@@ -235,6 +300,8 @@ export class PriceService {
         billingUnit,
         periodDays,
         isActive: isActive !== false,
+        occupySeat: occupy.occupySeat,
+        occupyWhole: occupy.occupyWhole,
         reserveSeat: !!reserveSeat,
         reserveSeatFromHour:
           reserveSeat && reserveSeatFromHour != null
@@ -244,7 +311,7 @@ export class PriceService {
           reserveSeat && reserveSeatToHour != null
             ? Number(reserveSeatToHour)
             : null,
-        ...(spaceId ? { space: { connect: { id: spaceId } } } : {}),
+        ...(linked[0] ? { space: { connect: { id: linked[0] } } } : {}),
         ...((createPriceDto as { organizationId?: string }).organizationId
           ? {
               organization: {
@@ -256,10 +323,15 @@ export class PriceService {
             }
           : {}),
       },
-      include: { space: { select: { id: true, name: true } } },
+      include: this.priceInclude,
     });
 
-    return this.toEntity(priceEntity);
+    await this.syncOfferSpaces(priceEntity.id, linked);
+    const withOffers = await this.prisma.price.findUnique({
+      where: { id: priceEntity.id },
+      include: this.priceInclude,
+    });
+    return this.toEntity(withOffers || priceEntity);
   }
 
   async findAll(
@@ -279,7 +351,7 @@ export class PriceService {
         ...(opts?.activeOnly ? { isActive: true } : {}),
       },
       orderBy: [{ category: 'asc' }, { price: 'asc' }],
-      include: { space: { select: { id: true, name: true } } },
+      include: this.priceInclude,
     });
     return prices.map((p) => this.toEntity(p));
   }
@@ -287,7 +359,7 @@ export class PriceService {
   async findOne(id: string): Promise<PriceEntity> {
     const price = await this.prisma.price.findUnique({
       where: { id },
-      include: { space: { select: { id: true, name: true } } },
+      include: this.priceInclude,
     });
     if (!price) {
       throw new NotFoundException(`Price with ID ${id} not found`);
@@ -306,7 +378,8 @@ export class PriceService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    const { spaceId, timePeriod, ...rest } = updatePriceDto;
+    const { spaceId, spaceIds, timePeriod, occupySeat, occupyWhole, ...rest } =
+      updatePriceDto;
     const updateData: Prisma.PriceUpdateInput = {
       ...rest,
       ...(timePeriod && {
@@ -316,19 +389,37 @@ export class PriceService {
         },
       }),
     };
-    if (spaceId) {
-      updateData.space = { connect: { id: spaceId } };
-    } else if (spaceId === '' || spaceId === null) {
-      updateData.space = { disconnect: true };
+    const linked =
+      spaceIds !== undefined || spaceId !== undefined
+        ? this.normalizeSpaceIds({ spaceId, spaceIds })
+        : null;
+    if (linked) {
+      updateData.space = linked[0]
+        ? { connect: { id: linked[0] } }
+        : { disconnect: true };
+    }
+    if (occupySeat !== undefined || occupyWhole !== undefined) {
+      const occupy = this.occupyFromDto(
+        updatePriceDto.category ?? existingPrice.category,
+        occupySeat ?? existingPrice.occupySeat,
+        occupyWhole ?? existingPrice.occupyWhole,
+      );
+      updateData.occupySeat = occupy.occupySeat;
+      updateData.occupyWhole = occupy.occupyWhole;
     }
 
     const updatedPrice = await this.prisma.price.update({
       where: { id },
       data: updateData,
-      include: { space: { select: { id: true, name: true } } },
+      include: this.priceInclude,
+    });
+    if (linked) await this.syncOfferSpaces(id, linked);
+    const withOffers = await this.prisma.price.findUnique({
+      where: { id },
+      include: this.priceInclude,
     });
 
-    return this.toEntity(updatedPrice);
+    return this.toEntity(withOffers || updatedPrice);
   }
 
   async remove(id: string): Promise<void> {

@@ -37,6 +37,7 @@ import type {
   BookingRequest,
   DebtorMember,
   AwayArrivalsResponse,
+  SeatHistoryDay,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -456,6 +457,13 @@ export const expensesApi = {
   },
 };
 
+export const opsEventsApi = {
+  seatHistory(date: Date | string) {
+    const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
+    return http.get<SeatHistoryDay>(`/ops-events/seat-history?date=${d}`);
+  },
+};
+
 export const bookingApi = {
   list() {
     return http.get<SeatBooking[]>("/booking");
@@ -479,7 +487,7 @@ export const visitRequestsApi = {
       "/mobile/admin/visit-requests?status=PENDING",
     );
   },
-  approve(id: string, data?: { seatLabel?: string; spaceId?: string }) {
+  approve(id: string, data?: { seatLabel?: string; spaceId?: string; occupyWhole?: boolean }) {
     return http.patch<{ request: VisitRequest; result: unknown }>(
       `/mobile/admin/visit-requests/${id}/approve`,
       data || {},
@@ -657,6 +665,7 @@ export const mobileApi = {
     type: "DAY" | "SUBSCRIPTION";
     seatLabel?: string;
     spaceId?: string;
+    occupyWhole?: boolean;
   }) {
     return http.post<
       VisitRequest & {

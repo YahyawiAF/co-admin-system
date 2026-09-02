@@ -54,4 +54,9 @@ export const queryKeys = {
   events: ["events"] as const,
   organization: (slug: string) => ["organization", slug] as const,
   debtors: ["debtors"] as const,
+  seatHistory: (date: Date | string) =>
+    [
+      "seat-history",
+      typeof date === "string" ? date : format(date, "yyyy-MM-dd"),
+    ] as const,
 };

@@ -141,6 +141,9 @@ model Price {
   periodDays     Int?
   spaceId        String?
   space          Space?         @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  occupySeat     Boolean        @default(true)
+  occupyWhole    Boolean        @default(false)
+  offerSpaces    PriceSpace[]
   reserveSeat    Boolean        @default(false)
   /// Hour 0-23 when dedicated seat starts (null = all day if reserveSeat)
   reserveSeatFromHour Int?
@@ -158,6 +161,18 @@ model Price {
   @@index([spaceId])
   @@index([isActive])
   @@map("prices")
+}
+
+model PriceSpace {
+  id      String @id @default(uuid())
+  priceId String
+  spaceId String
+  price   Price  @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  space   Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+
+  @@unique([priceId, spaceId])
+  @@index([spaceId])
+  @@map("price_spaces")
 }
 
 model Journal {
@@ -286,6 +301,13 @@ enum MobileSeatMode {
   AUTO_ASSIGN // auto free seat; auto-approve when receptionAway
 }
 
+/// How a space can be reserved (advance booking + forfait occupy).
+enum SpaceReserveMode {
+  SEAT /// one seat / place only
+  WHOLE /// entire space only (e.g. salle de réunion)
+  BOTH /// seat or entire space
+}
+
 model Organization {
   id            String     @id @default(uuid())
   name          String
@@ -375,6 +397,7 @@ model Space {
   wifiSsid            String?
   wifiPassword        String?
   openForReservation  Boolean         @default(false)
+  reserveMode         SpaceReserveMode @default(BOTH)
   galleryUrls         String[]        @default([])
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -384,6 +407,7 @@ model Space {
   fixtures            SpaceFixture[]
   bookings            SeatBooking[]
   prices              Price[]
+  priceOffers         PriceSpace[]
 
   @@map("spaces")
 }
@@ -568,6 +592,7 @@ model VisitRequest {
   status       VisitRequestStatus @default(PENDING)
   seatLabel    String?
   spaceId      String?
+  occupyWhole  Boolean            @default(false)
   autoApproved Boolean            @default(false)
   member       Member             @relation(fields: [memberId], references: [id])
   price        Price              @relation(fields: [priceId], references: [id])

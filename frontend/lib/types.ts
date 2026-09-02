@@ -115,6 +115,11 @@ export interface Price {
   periodDays?: number | null;
   spaceId?: string | null;
   spaceName?: string | null;
+  spaceIds?: string[];
+  spaceNames?: string[];
+  offerSpaces?: { spaceId: string }[];
+  occupySeat?: boolean;
+  occupyWhole?: boolean;
   reserveSeat?: boolean;
   reserveSeatFromHour?: number | null;
   reserveSeatToHour?: number | null;
@@ -295,6 +300,7 @@ export interface Space {
   wifiSsid?: string | null;
   wifiPassword?: string | null;
   openForReservation?: boolean;
+  reserveMode?: "SEAT" | "WHOLE" | "BOTH" | null;
   galleryUrls?: string[];
   tables?: SpaceTable[];
   seats?: SpaceSeat[];
@@ -404,6 +410,7 @@ export interface VisitRequest {
   status: VisitRequestStatus;
   seatLabel?: string | null;
   spaceId?: string | null;
+  occupyWhole?: boolean;
   autoApproved?: boolean;
   createdAt: string;
   member?: Member & { phone?: string | null; visitorNumber?: number | null };
@@ -559,6 +566,29 @@ export interface EventAttendee {
   bio?: string | null;
   showInDirectory?: boolean;
 }
+
+export type LastSeatUsed = {
+  seatId: string;
+  spaceId?: string | null;
+  spaceName?: string | null;
+};
+
+export type SeatStay = {
+  seatId: string;
+  spaceId?: string | null;
+  spaceName?: string | null;
+  memberId?: string | null;
+  memberName: string;
+  journalId?: string | null;
+  from: string;
+  to: string | null;
+};
+
+export type SeatHistoryDay = {
+  lastByJournalId: Record<string, LastSeatUsed>;
+  lastByMemberId: Record<string, LastSeatUsed>;
+  stays: SeatStay[];
+};
 
 export type LedgerKind = "CREDIT" | "ECHEANCE";
 

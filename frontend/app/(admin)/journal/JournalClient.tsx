@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -95,6 +95,7 @@ import {
   journalApi,
   membersApi,
   mobileApi,
+  opsEventsApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import {
@@ -118,7 +119,8 @@ import {
   buildDayWhatsAppText,
   openDayPrintView,
 } from "@/lib/journal-export";
-import type { Abonnement, Journal, Member } from "@/lib/types";
+import type { Abonnement, Journal, Member, Space } from "@/lib/types";
+import { compareNaturalLabel } from "@/lib/seat-booking";
 import {
   activeSubByMember,
   daysLeft,
@@ -161,6 +163,8 @@ export default function JournalClient() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
   const [payFilter, setPayFilter] = useState("all");
+  const [spaceFilter, setSpaceFilter] = useState("all");
+  const [tableFilter, setTableFilter] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editRow, setEditRow] = useState<Journal | null>(null);
@@ -186,7 +190,21 @@ export default function JournalClient() {
   // Clear selection when date or filters change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [selectedDate, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search]);
+  }, [
+    selectedDate,
+    statusFilter,
+    typeFilter,
+    personFilter,
+    payFilter,
+    spaceFilter,
+    tableFilter,
+    quickFilter,
+    search,
+  ]);
+
+  useEffect(() => {
+    setTableFilter("all");
+  }, [spaceFilter]);
 
   const tomorrow = useMemo(() => addDays(startOfDay(new Date()), 1), []);
 
@@ -215,6 +233,18 @@ export default function JournalClient() {
   const { data: bookings = [] } = useQuery({
     queryKey: ["bookings"],
     queryFn: () => bookingApi.list(),
+    refetchInterval: 15_000,
+  });
+
+  const { data: layout } = useQuery({
+    queryKey: ["facility-layout"],
+    queryFn: () => facilityApi.layout(),
+  });
+
+  const { data: seatHistory } = useQuery({
+    queryKey: queryKeys.seatHistory(selectedDate),
+    queryFn: () => opsEventsApi.seatHistory(selectedDate),
+    refetchInterval: 30_000,
   });
 
   const { data: dailyProducts = [] } = useQuery({
@@ -262,6 +292,103 @@ export default function JournalClient() {
     for (const [id, v] of seatByMember) map.set(id, v.seatId);
     return map;
   }, [seatByMember]);
+
+  const journalSpaces: Space[] = layout?.spaces || [];
+
+  const seatMetaByKey = useMemo(() => {
+    const map = new Map<
+      string,
+      { spaceId: string; spaceName: string; tableName: string | null }
+    >();
+    for (const space of journalSpaces) {
+      for (const t of space.tables || []) {
+        for (const seat of t.seats || []) {
+          map.set(`${space.id}:${seat.label}`, {
+            spaceId: space.id,
+            spaceName: space.name,
+            tableName: t.name || null,
+          });
+        }
+      }
+      for (const seat of space.seats || []) {
+        if (seat.tableId) continue;
+        map.set(`${space.id}:${seat.label}`, {
+          spaceId: space.id,
+          spaceName: space.name,
+          tableName: null,
+        });
+      }
+    }
+    return map;
+  }, [journalSpaces]);
+
+  const lookupSeatMeta = useCallback(
+    (seatId: string, spaceId?: string | null) => {
+      if (spaceId) {
+        const keyed = seatMetaByKey.get(`${spaceId}:${seatId}`);
+        if (keyed) return keyed;
+      }
+      for (const [key, meta] of seatMetaByKey) {
+        if (key.endsWith(`:${seatId}`)) return meta;
+      }
+      return null;
+    },
+    [seatMetaByKey]
+  );
+
+  type ResolvedSeat = {
+    seatId: string;
+    spaceId: string | null;
+    spaceName: string | null;
+    tableName: string | null;
+    live: boolean;
+  };
+
+  const resolveSeat = useCallback(
+    (row: Journal): ResolvedSeat | null => {
+      const status = visitStatus(row);
+      const mid = row.memberID || memberOf(row)?.id || null;
+      if (status === "present" || status === "reservation") {
+        const live =
+          (mid && seatByMember.get(mid)) ||
+          (row.memberID && seatByMember.get(row.memberID)) ||
+          null;
+        if (!live) return null;
+        const meta = lookupSeatMeta(live.seatId, live.spaceId);
+        return {
+          seatId: live.seatId,
+          spaceId: live.spaceId || meta?.spaceId || null,
+          spaceName: meta?.spaceName || null,
+          tableName: meta?.tableName || null,
+          live: true,
+        };
+      }
+      const hist =
+        seatHistory?.lastByJournalId[row.id] ||
+        (mid ? seatHistory?.lastByMemberId[mid] : undefined);
+      if (!hist?.seatId) return null;
+      const meta = lookupSeatMeta(hist.seatId, hist.spaceId);
+      return {
+        seatId: hist.seatId,
+        spaceId: hist.spaceId || meta?.spaceId || null,
+        spaceName: hist.spaceName || meta?.spaceName || null,
+        tableName: meta?.tableName || null,
+        live: false,
+      };
+    },
+    [seatByMember, seatHistory, lookupSeatMeta]
+  );
+
+  const tablesForFilter = useMemo(() => {
+    const spaces =
+      spaceFilter === "all"
+        ? journalSpaces
+        : journalSpaces.filter((s) => s.id === spaceFilter);
+    const names = spaces.flatMap((s) =>
+      (s.tables || []).map((t) => t.name).filter(Boolean)
+    );
+    return [...new Set(names)].sort(compareNaturalLabel);
+  }, [journalSpaces, spaceFilter]);
 
   /** Coffee orders for journal day: memberId -> { qty, allPaid } */
   const coffeeByMember = useMemo(() => {
@@ -377,10 +504,33 @@ export default function JournalClient() {
     return list;
   }, [rows, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search, now, subByMember]);
 
-  const displayRows = useMemo(
-    () => groupJournalByPerson(filtered),
-    [filtered]
-  );
+  const displayRows = useMemo(() => {
+    let grouped = groupJournalByPerson(filtered);
+    if (spaceFilter !== "all") {
+      grouped = grouped.filter((r) => resolveSeat(r)?.spaceId === spaceFilter);
+    }
+    if (tableFilter !== "all") {
+      grouped = grouped.filter(
+        (r) => (resolveSeat(r)?.tableName || "sans-table") === tableFilter
+      );
+    }
+    if (quickFilter === "first_out") return grouped;
+    return [...grouped].sort((a, b) => {
+      const sa = resolveSeat(a);
+      const sb = resolveSeat(b);
+      if (!sa && !sb) return 0;
+      if (!sa) return 1;
+      if (!sb) return -1;
+      const sp = compareNaturalLabel(sa.spaceName || "", sb.spaceName || "");
+      if (sp !== 0) return sp;
+      const t = compareNaturalLabel(
+        sa.tableName || "\uffff",
+        sb.tableName || "\uffff"
+      );
+      if (t !== 0) return t;
+      return compareNaturalLabel(sa.seatId, sb.seatId);
+    });
+  }, [filtered, spaceFilter, tableFilter, quickFilter, resolveSeat]);
 
   const reservations = rows.filter(isPendingReservation).length;
   const present = rows.filter(isActiveVisit).length;
@@ -430,6 +580,8 @@ export default function JournalClient() {
   const invalidateJournal = () => {
     queryClient.invalidateQueries({ queryKey: ["journal"] });
     queryClient.invalidateQueries({ queryKey: ["bookings"] });
+    queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+    queryClient.invalidateQueries({ queryKey: ["seat-history"] });
   };
 
   const checkout = useMutation({
@@ -943,6 +1095,39 @@ export default function JournalClient() {
               <SelectItem value="unpaid">Non payé</SelectItem>
             </SelectContent>
           </Select>
+          {journalSpaces.length > 0 ? (
+            <Select
+              value={spaceFilter}
+              onValueChange={setSpaceFilter}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Espace" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les espaces</SelectItem>
+                {journalSpaces.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+          {tablesForFilter.length > 0 ? (
+            <Select value={tableFilter} onValueChange={setTableFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Table" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes les tables</SelectItem>
+                {tablesForFilter.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
         </div>
       </div>
 
@@ -1014,10 +1199,7 @@ export default function JournalClient() {
                   const status = visitStatus(row);
                   const rem = remainingLabel(row);
                   const selected = selectedIds.has(row.id);
-                  const seatInfo =
-                    (m?.id && seatByMember.get(m.id)) ||
-                    (row.memberID && seatByMember.get(row.memberID)) ||
-                    null;
+                  const seatInfo = resolveSeat(row);
                   const seat = seatInfo?.seatId || null;
                   return (
                     <TableRow
@@ -1172,7 +1354,15 @@ export default function JournalClient() {
                             {seat || "Assigner"}
                           </Button>
                         ) : seat ? (
-                          <span className="text-xs text-muted-foreground">
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md border border-dashed border-muted-foreground/35 bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground"
+                            title={
+                              seatInfo?.tableName
+                                ? `Place libérée · ${seatInfo.tableName}`
+                                : "Place utilisée aujourd'hui — libérée du plan"
+                            }
+                          >
+                            <MapPin className="h-3 w-3 opacity-40" />
                             {seat}
                           </span>
                         ) : (
@@ -1326,7 +1516,7 @@ export default function JournalClient() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  title="Compte visiteur"
+                                  title="Compte"
                                 >
                                   <Banknote className="h-4 w-4" />
                                 </Button>

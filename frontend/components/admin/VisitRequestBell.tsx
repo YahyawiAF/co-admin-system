@@ -29,6 +29,10 @@ import {
 import { queryKeys } from "@/lib/query-client";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import type { MobileSeatMode, SpaceSeat, VisitRequest } from "@/lib/types";
+import {
+  priceAllowsWholeIn,
+  spacesForPrice,
+} from "@/lib/space-occupy";
 
 function isHoursPoolRequest(req: VisitRequest | null) {
   return (
@@ -45,8 +49,16 @@ function skipsSeat(req: VisitRequest | null) {
   if (!req) return false;
   if (isHoursPoolRequest(req)) return true;
   if (isPeriodSubRequest(req)) return false;
+  if (req.occupyWhole) return true;
+  if (req.price?.occupyWhole && req.price?.occupySeat === false) return true;
+  return false;
+}
+
+function wantsWholeSpace(req: VisitRequest | null) {
+  if (!req) return false;
   return (
-    req.price?.category === "OPEN_SPACE" && req.price?.billingUnit !== "HOURLY"
+    !!req.occupyWhole ||
+    (!!req.price?.occupyWhole && req.price?.occupySeat === false)
   );
 }
 
@@ -94,19 +106,21 @@ export function VisitRequestBell() {
     isPeriodSubRequest(current) ||
     (seatMode === "ADMIN_ASSIGN" && !skipsSeat(current));
   const autoSeat = seatMode === "AUTO_ASSIGN";
-  const visitorChooses = seatMode === "VISITOR_CHOOSE";
 
   const spaces = layout?.spaces || [];
+  const visibleSpaces = current?.price
+    ? spacesForPrice(spaces, current.price)
+    : spaces;
 
   useEffect(() => {
-    if (!spaces.length) {
+    if (!visibleSpaces.length) {
       setSpaceId(null);
       return;
     }
-    if (!spaceId || !spaces.some((s) => s.id === spaceId)) {
-      setSpaceId(spaces[0].id);
+    if (!spaceId || !visibleSpaces.some((s) => s.id === spaceId)) {
+      setSpaceId(visibleSpaces[0].id);
     }
-  }, [spaces, spaceId]);
+  }, [visibleSpaces, spaceId]);
 
   useEffect(() => {
     if (!socket) return;
@@ -147,7 +161,7 @@ export function VisitRequestBell() {
   const showOverflow = isFull || allowOverflow;
 
   const spaceStats = useMemo(() => {
-    return spaces.map((space) => {
+    return visibleSpaces.map((space) => {
       const seats = [
         ...(space.seats || []).filter((s) => s.isActive),
         ...(space.tables || []).flatMap((t) =>
@@ -171,10 +185,11 @@ export function VisitRequestBell() {
         overflowTotal: overflow.length,
       };
     });
-  }, [spaces, bookedBySeat]);
+  }, [visibleSpaces, bookedBySeat]);
 
   const activeSpace = useMemo(() => {
-    const raw = spaces.find((s) => s.id === spaceId) || spaces[0] || null;
+    const raw =
+      visibleSpaces.find((s) => s.id === spaceId) || visibleSpaces[0] || null;
     if (!raw) return null;
     if (showOverflow) return raw;
     return {
@@ -185,7 +200,13 @@ export function VisitRequestBell() {
         seats: (t.seats || []).filter((s) => !s.isOverflow),
       })),
     };
-  }, [spaces, spaceId, showOverflow]);
+  }, [visibleSpaces, spaceId, showOverflow]);
+
+  const canBookWhole =
+    !!current?.price &&
+    !!activeSpace &&
+    (wantsWholeSpace(current) ||
+      priceAllowsWholeIn(current.price, activeSpace));
 
   const selectedSeatId = useMemo(() => {
     if (!seatLabel || !activeSpace) return null;
@@ -200,14 +221,17 @@ export function VisitRequestBell() {
     mutationFn: ({
       id,
       seatLabel: seat,
+      occupyWhole,
     }: {
       id: string;
       seatLabel?: string;
+      occupyWhole?: boolean;
     }) =>
-      visitRequestsApi.approve(
-        id,
-        seat ? { seatLabel: seat, spaceId: spaceId || undefined } : undefined
-      ),
+      visitRequestsApi.approve(id, {
+        seatLabel: occupyWhole ? undefined : seat,
+        spaceId: spaceId || undefined,
+        occupyWhole,
+      }),
     onSuccess: (_d, vars) => {
       toast.success(
         vars.seatLabel
@@ -486,7 +510,21 @@ export function VisitRequestBell() {
               Refuser
             </Button>
             <div className="flex flex-wrap gap-2">
-              {!needsAdminSeat ? (
+              {canBookWhole && current ? (
+                <Button
+                  variant={wantsWholeSpace(current) ? "default" : "secondary"}
+                  disabled={busy || !(spaceId || current.spaceId)}
+                  onClick={() =>
+                    approve.mutate({
+                      id: current.id,
+                      occupyWhole: true,
+                    })
+                  }
+                >
+                  Réserver tout l’espace
+                </Button>
+              ) : null}
+              {!needsAdminSeat && !wantsWholeSpace(current) ? (
                 <Button
                   disabled={busy || !current}
                   onClick={() => current && approve.mutate({ id: current.id })}
@@ -494,7 +532,7 @@ export function VisitRequestBell() {
                   {autoSeat ? "Confirmer (place auto)" : "Confirmer"}
                 </Button>
               ) : null}
-              {needsAdminSeat || seatLabel ? (
+              {!wantsWholeSpace(current) && (needsAdminSeat || seatLabel) ? (
                 <Button
                   disabled={busy || !current || (needsAdminSeat && !seatLabel)}
                   onClick={() => {

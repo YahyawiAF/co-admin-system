@@ -54,6 +54,9 @@ import {
   spaceCategoryOf,
   tarifSubtitle,
 } from "@/lib/tarif-labels";
+import {
+  defaultOccupyForCategory,
+} from "@/lib/space-occupy";
 
 const schema = z.object({
   name: z.string().min(1),
@@ -66,6 +69,9 @@ const schema = z.object({
   ),
   periodDays: z.coerce.number().optional().nullable(),
   spaceId: z.string().optional(),
+  spaceIds: z.array(z.string()).optional(),
+  occupySeat: z.boolean().optional(),
+  occupyWhole: z.boolean().optional(),
   reserveSeat: z.boolean().optional(),
   reserveSeatFromHour: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
@@ -110,6 +116,9 @@ function PriceFormDialog({
       durationHours: 2,
       periodDays: 7,
       spaceId: "",
+      spaceIds: [],
+      occupySeat: true,
+      occupyWhole: false,
       reserveSeat: false,
       reserveSeatFromHour: null,
       reserveSeatToHour: null,
@@ -131,6 +140,17 @@ function PriceFormDialog({
           : price?.durationHours ?? 2,
       periodDays: price?.periodDays ?? 7,
       spaceId: price?.spaceId || "",
+      spaceIds: price?.spaceIds?.length
+        ? price.spaceIds
+        : price?.spaceId
+          ? [price.spaceId]
+          : [],
+      occupySeat:
+        price?.occupySeat ??
+        defaultOccupyForCategory(price?.category).occupySeat,
+      occupyWhole:
+        price?.occupyWhole ??
+        defaultOccupyForCategory(price?.category).occupyWhole,
       reserveSeat: !!price?.reserveSeat,
       reserveSeatFromHour: price?.reserveSeatFromHour ?? null,
       reserveSeatToHour: price?.reserveSeatToHour ?? null,
@@ -141,6 +161,9 @@ function PriceFormDialog({
   const billingUnit = form.watch("billingUnit");
   const category = form.watch("category");
   const reserveSeat = form.watch("reserveSeat");
+  const occupySeat = form.watch("occupySeat");
+  const occupyWhole = form.watch("occupyWhole");
+  const spaceIds = form.watch("spaceIds") || [];
   const isActive = form.watch("isActive");
 
   const save = useMutation({
@@ -164,7 +187,10 @@ function PriceFormDialog({
                 : v.durationHours,
         periodDays:
           v.billingUnit === BillingUnit.PERIOD ? v.periodDays : null,
-        spaceId: v.spaceId || "",
+        spaceId: (v.spaceIds && v.spaceIds[0]) || v.spaceId || "",
+        spaceIds: v.spaceIds || [],
+        occupySeat: v.occupySeat !== false,
+        occupyWhole: !!v.occupyWhole,
         reserveSeat:
           v.category === PriceCategory.ABONNEMENT ? !!v.reserveSeat : false,
         reserveSeatFromHour:
@@ -210,9 +236,12 @@ function PriceFormDialog({
               <Label>Catégorie</Label>
               <Select
                 value={category}
-                onValueChange={(v) =>
-                  form.setValue("category", v as PriceCategory)
-                }
+                onValueChange={(v) => {
+                  form.setValue("category", v as PriceCategory);
+                  const occupy = defaultOccupyForCategory(v);
+                  form.setValue("occupySeat", occupy.occupySeat);
+                  form.setValue("occupyWhole", occupy.occupyWhole);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -301,36 +330,88 @@ function PriceFormDialog({
             </Label>
             <Input type="number" step="0.1" {...form.register("price")} />
           </div>
+          {category !== PriceCategory.ABONNEMENT ? (
+            <div className="space-y-3 rounded-lg border px-3 py-3">
+              <div>
+                <Label>Comment ce forfait occupe l’espace</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Salle de réunion = souvent l’espace entier. Open space = une
+                  place, ou tout l’espace.
+                </p>
+              </div>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Par place</span>
+                <Switch
+                  checked={occupySeat !== false}
+                  onCheckedChange={(on) => {
+                    form.setValue("occupySeat", on);
+                    if (!on && !form.getValues("occupyWhole")) {
+                      form.setValue("occupyWhole", true);
+                    }
+                  }}
+                />
+              </label>
+              <label className="flex items-center justify-between gap-3 text-sm">
+                <span>Espace entier</span>
+                <Switch
+                  checked={!!occupyWhole}
+                  onCheckedChange={(on) => {
+                    form.setValue("occupyWhole", on);
+                    if (!on && form.getValues("occupySeat") === false) {
+                      form.setValue("occupySeat", true);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
           <div className="space-y-2">
-            <Label>Espace lié (optionnel)</Label>
-            <Select
-              value={form.watch("spaceId") || "none"}
-              onValueChange={(v) =>
-                form.setValue("spaceId", v === "none" ? "" : v)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Aucun" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Aucun</SelectItem>
-                {spaces
-                  .filter(
-                    (s) =>
-                      category === PriceCategory.ABONNEMENT ||
-                      spaceCategoryOf(s) === category
-                  )
-                  .map((s) => (
-                    <SelectItem key={s.id} value={s.id}>
-                      {s.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            <Label>Visible dans ces espaces</Label>
             <p className="text-xs text-muted-foreground">
-              Ex. tarif horaire salle de réunion → cet espace sera réservé au
-              check-in.
+              Cochez les espaces où ce forfait peut être choisi. Aucun = tous
+              les espaces de la même catégorie. Un espace peut avoir plusieurs
+              forfaits.
             </p>
+            <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+              {spaces
+                .filter(
+                  (s) =>
+                    category === PriceCategory.ABONNEMENT ||
+                    spaceCategoryOf(s) === category
+                )
+                .map((s) => {
+                  const checked = spaceIds.includes(s.id);
+                  return (
+                    <label
+                      key={s.id}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-muted/60"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={checked}
+                        onChange={() => {
+                          const next = checked
+                            ? spaceIds.filter((id) => id !== s.id)
+                            : [...spaceIds, s.id];
+                          form.setValue("spaceIds", next);
+                          form.setValue("spaceId", next[0] || "");
+                        }}
+                      />
+                      <span>{s.name}</span>
+                    </label>
+                  );
+                })}
+              {!spaces.filter(
+                (s) =>
+                  category === PriceCategory.ABONNEMENT ||
+                  spaceCategoryOf(s) === category
+              ).length ? (
+                <p className="text-xs text-muted-foreground">
+                  Aucun espace de cette catégorie. Créez-en dans Facility.
+                </p>
+              ) : null}
+            </div>
           </div>
           {category === PriceCategory.ABONNEMENT ? (
             <div className="space-y-3 rounded-lg border px-3 py-3">
@@ -501,8 +582,20 @@ export default function TarifsPage() {
               {tarifSubtitle(p) ? (
                 <Badge variant="outline">{tarifSubtitle(p)}</Badge>
               ) : null}
-              {p.spaceName ? (
-                <Badge variant="outline">{p.spaceName}</Badge>
+              {p.spaceNames?.length
+                ? p.spaceNames.map((n) => (
+                    <Badge key={n} variant="outline">
+                      {n}
+                    </Badge>
+                  ))
+                : p.spaceName ? (
+                    <Badge variant="outline">{p.spaceName}</Badge>
+                  ) : null}
+              {p.occupyWhole ? (
+                <Badge variant="outline">Espace entier</Badge>
+              ) : null}
+              {p.occupySeat !== false && p.category !== PriceCategory.ABONNEMENT ? (
+                <Badge variant="outline">Par place</Badge>
               ) : null}
               {p.reserveSeat ? (
                 <Badge variant="outline">Place dédiée</Badge>

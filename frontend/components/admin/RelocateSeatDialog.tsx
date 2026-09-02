@@ -88,6 +88,7 @@ export function RelocateSeatDialog({
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
       queryClient.invalidateQueries({ queryKey: ["journal"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-history"] });
       setTargets({});
       onMoved?.();
     },

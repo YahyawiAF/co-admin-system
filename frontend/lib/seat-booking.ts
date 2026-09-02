@@ -39,3 +39,7 @@ export function bookingForSeatInSpace(
 export function seatBookKey(spaceId: string, label: string) {
   return `${spaceId}:${label}`;
 }
+
+export function compareNaturalLabel(a: string, b: string) {
+  return a.localeCompare(b, "fr", { numeric: true, sensitivity: "base" });
+}

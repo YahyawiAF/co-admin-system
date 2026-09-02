@@ -45,6 +45,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.visitRequestsPending });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-history"] });
     };
 
     s.on("connect", () => setConnected(true));

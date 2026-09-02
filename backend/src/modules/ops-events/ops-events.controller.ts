@@ -5,6 +5,11 @@ import { OpsEventsService } from './ops-events.service';
 export class OpsEventsController {
   constructor(private readonly opsEvents: OpsEventsService) {}
 
+  @Get('seat-history')
+  seatHistory(@Query('date') date?: string) {
+    return this.opsEvents.seatHistory(date);
+  }
+
   @Get()
   list(
     @Query('from') from?: string,

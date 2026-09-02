@@ -295,6 +295,11 @@ export class CreateVisitRequestDto {
   @IsOptional()
   @IsString()
   spaceId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  occupyWhole?: boolean;
 }
 
 export class ClaimSeatDto {

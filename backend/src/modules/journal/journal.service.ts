@@ -219,7 +219,6 @@ export class JournalService {
     try {
       const { priceId } = updateJournalDto;
 
-      // Vérifier si le prix existe
       if (priceId) {
         const existingPrice = await this.prisma.price.findUnique({
           where: { id: priceId },
@@ -234,16 +233,57 @@ export class JournalService {
         }
       }
 
-      return await this.prisma.journal.update({
+      const existing = await this.prisma.journal.findUnique({ where: { id } });
+      const updated = await this.prisma.journal.update({
         where: { id },
         data: updateJournalDto,
       });
+      if (
+        existing?.memberID &&
+        !existing.leaveTime &&
+        updated.leaveTime
+      ) {
+        await this.releaseDaySeats(existing.memberID, existing.id);
+      }
+      return updated;
     } catch (error) {
       throw new GeneralException(
         HttpStatus.BAD_REQUEST,
         ErrorCode.UPDATE_FAILED,
         (error as Error).message,
       );
+    }
+  }
+
+  private async releaseDaySeats(memberId: string, journalId: string) {
+    const current = await this.prisma.seatBooking.findMany({
+      where: {
+        memberId,
+        isBooked: true,
+        isPermanent: false,
+        eventKey: 'collabora-hub',
+      },
+      include: { space: { select: { name: true } } },
+    });
+    for (const b of current) {
+      await this.prisma.opsEvent.create({
+        data: {
+          type: 'seat.released',
+          memberId,
+          seatId: b.seatId,
+          journalId,
+          meta: {
+            spaceId: b.spaceId,
+            spaceName: b.space?.name || null,
+            reason: 'checkout',
+          },
+        },
+      });
+    }
+    if (current.length) {
+      await this.prisma.seatBooking.deleteMany({
+        where: { id: { in: current.map((b) => b.id) } },
+      });
     }
   }
 

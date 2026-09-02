@@ -149,6 +149,7 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
       toast.success("Place assignée");
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-history"] });
       setSeatLabel(null);
       onOpenChange(false);
     },
@@ -164,6 +165,7 @@ export function AssignSeatDialog({ journal, open, onOpenChange }: Props) {
       toast.success("Place libérée");
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["seat-history"] });
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),

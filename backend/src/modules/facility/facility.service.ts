@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, PriceCategory, FixtureKind } from '@prisma/client';
+import { Prisma, PriceCategory, FixtureKind, SpaceReserveMode } from '@prisma/client';
 import { startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { FacilityEntity } from './entities/facility.entitie';
+import { defaultReserveMode } from '../mobile/space-occupy';
 import { UpdateFacilityDto } from './dtos/updateFac.dto';
 
 @Injectable()
@@ -485,13 +486,15 @@ export class FacilityService {
     capacityNormal?: number;
     category?: PriceCategory;
   }) {
+    const category = data.category || this.inferSpaceCategory(data.name);
     const space = await this.prisma.space.create({
       data: {
         facilityId: data.facilityId,
         name: data.name,
         floorPlanUrl: data.floorPlanUrl,
         capacityNormal: data.capacityNormal ?? 0,
-        category: data.category || this.inferSpaceCategory(data.name),
+        category,
+        reserveMode: defaultReserveMode(category),
       },
       include: { tables: true, seats: true },
     });
@@ -511,6 +514,7 @@ export class FacilityService {
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;
+      reserveMode: SpaceReserveMode;
       galleryUrls: string[];
     }>,
   ) {

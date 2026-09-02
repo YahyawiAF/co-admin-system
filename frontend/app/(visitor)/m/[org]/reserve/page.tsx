@@ -24,6 +24,7 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import type { Space, SpaceSeat } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { spaceAllowsSeat, spaceAllowsWhole } from "@/lib/space-occupy";
 
 export default function ReservePage() {
   const { slug, href } = useOrg();
@@ -62,18 +63,16 @@ export default function ReservePage() {
     [layout?.spaces]
   );
   const rooms = useMemo(
-    () =>
-      bookable.filter(
-        (s) => s.category === "SALLE" || s.category === "OPEN_SPACE"
-      ),
+    () => bookable.filter((s) => spaceAllowsWhole(s)),
     [bookable]
   );
   const seatSpaces = useMemo(
     () =>
       bookable.filter(
         (s) =>
-          (s.seats?.length || 0) > 0 ||
-          (s.tables || []).some((t) => (t.seats || []).length > 0)
+          spaceAllowsSeat(s) &&
+          ((s.seats?.length || 0) > 0 ||
+            (s.tables || []).some((t) => (t.seats || []).length > 0))
       ),
     [bookable]
   );
@@ -87,6 +86,15 @@ export default function ReservePage() {
         ? s.id === selectedRoomId
         : s.id === selectedSeatSpaceId
     ) || bookable[0];
+
+  useEffect(() => {
+    if (kind === "ROOM" && !rooms.length && seatSpaces.length) {
+      setKind("SEAT");
+    }
+    if (kind === "SEAT" && !seatSpaces.length && rooms.length) {
+      setKind("ROOM");
+    }
+  }, [kind, rooms.length, seatSpaces.length]);
 
   useEffect(() => {
     if (kind === "ROOM" && !spaceId && roomOptions[0]) {
@@ -156,32 +164,38 @@ export default function ReservePage() {
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <button
-          type="button"
-          className={cn(
-            "flex flex-col items-center gap-1.5 rounded-2xl border bg-white px-3 py-3 text-sm font-medium shadow-sm",
-            kind === "ROOM"
-              ? "border-primary bg-sky-50 text-primary"
-              : "border-transparent text-slate-500"
-          )}
-          onClick={() => setKind("ROOM")}
-        >
-          <DoorOpen className="h-6 w-6" />
-          Salle / open space
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "flex flex-col items-center gap-1.5 rounded-2xl border bg-white px-3 py-3 text-sm font-medium shadow-sm",
-            kind === "SEAT"
-              ? "border-primary bg-sky-50 text-primary"
-              : "border-transparent text-slate-500"
-          )}
-          onClick={() => setKind("SEAT")}
-        >
-          <Armchair className="h-6 w-6" />
-          Place
-        </button>
+        {rooms.length ? (
+          <button
+            type="button"
+            className={cn(
+              "flex flex-col items-center gap-1.5 rounded-2xl border bg-white px-3 py-3 text-sm font-medium shadow-sm",
+              kind === "ROOM"
+                ? "border-primary bg-sky-50 text-primary"
+                : "border-transparent text-slate-500",
+              !seatSpaces.length && "col-span-2"
+            )}
+            onClick={() => setKind("ROOM")}
+          >
+            <DoorOpen className="h-6 w-6" />
+            Espace entier
+          </button>
+        ) : null}
+        {seatSpaces.length ? (
+          <button
+            type="button"
+            className={cn(
+              "flex flex-col items-center gap-1.5 rounded-2xl border bg-white px-3 py-3 text-sm font-medium shadow-sm",
+              kind === "SEAT"
+                ? "border-primary bg-sky-50 text-primary"
+                : "border-transparent text-slate-500",
+              !rooms.length && "col-span-2"
+            )}
+            onClick={() => setKind("SEAT")}
+          >
+            <Armchair className="h-6 w-6" />
+            Par place
+          </button>
+        ) : null}
       </div>
 
       {!bookable.length ? (

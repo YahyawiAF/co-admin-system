@@ -6,8 +6,6 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import {
-  ArrowDownLeft,
-  ArrowUpRight,
   CalendarDays,
   Check,
   Plus,
@@ -44,22 +42,22 @@ type Props = {
 const AVOIR_REASONS = [
   {
     id: "unused_today",
-    label: "Forfait d’aujourd’hui payé mais non utilisé",
-    hint: "Le visiteur a payé, il n’est pas venu (ou presque pas). On lui doit cet avoir.",
+    label: "Payé aujourd’hui, mais pas utilisé",
+    hint: "Il a payé le forfait et n’est pas resté. On lui crédite le montant.",
   },
   {
     id: "overpay",
-    label: "Trop-perçu / solde en sa faveur",
-    hint: "Il a payé plus que le forfait du jour. La différence reste à son crédit.",
+    label: "Il a trop payé",
+    hint: "La différence reste sur son compte pour une prochaine fois.",
   },
   {
     id: "unused_previous",
-    label: "Ancien forfait payé non consommé",
-    hint: "Un forfait d’un jour précédent n’a pas été utilisé. On lui doit un avoir.",
+    label: "Ancien forfait payé, non consommé",
+    hint: "Un jour précédent a été payé sans venue.",
   },
   {
     id: "other",
-    label: "Autre avoir",
+    label: "Autre crédit",
     hint: "Geste commercial, correction, etc.",
   },
 ] as const;
@@ -173,44 +171,44 @@ export function MemberLedgerDialog({
         <DialogTrigger asChild>
           <Button type="button" size="sm" variant="outline">
             <Wallet className="mr-1.5 h-4 w-4" />
-            Compte visiteur
+            Compte
           </Button>
         </DialogTrigger>
       ) : null}
       <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-2xl">
         <DialogHeader className="border-b px-6 py-4">
-          <DialogTitle className="text-xl">Compte visiteur</DialogTitle>
+          <DialogTitle className="text-xl">
+            Compte{memberName ? ` · ${memberName}` : ""}
+          </DialogTitle>
           <p className="text-sm text-muted-foreground">
-            {memberName || "Membre"} — forfaits du jour, dettes et avoirs
+            Ce qui reste à payer, et le crédit à déduire plus tard.
           </p>
         </DialogHeader>
 
         <div className="space-y-5 px-6 py-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-rose-800">
-                <ArrowDownLeft className="h-3.5 w-3.5" />
-                Il nous doit
+              <p className="text-xs font-semibold uppercase tracking-wide text-rose-800">
+                Reste à payer
               </p>
               <p className="mt-1 text-3xl font-bold text-rose-950">
                 {(data?.owedByMember ?? 0).toFixed(1)}{" "}
                 <span className="text-base font-medium">DT</span>
               </p>
               <p className="mt-1 text-xs text-rose-800/80">
-                Forfaits ou abonnements non encaissés
+                Forfaits ou abonnements pas encore encaissés
               </p>
             </div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-sky-800">
-                <ArrowUpRight className="h-3.5 w-3.5" />
-                Nous lui devons
+              <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">
+                Crédit disponible
               </p>
               <p className="mt-1 text-3xl font-bold text-sky-950">
                 {(data?.owedToMember ?? 0).toFixed(1)}{" "}
                 <span className="text-base font-medium">DT</span>
               </p>
               <p className="mt-1 text-xs text-sky-800/80">
-                Avoirs : forfait payé non utilisé, trop-perçu
+                À déduire sur une prochaine visite
               </p>
             </div>
           </div>
@@ -288,20 +286,19 @@ export function MemberLedgerDialog({
 
           <section className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Avoirs (nous lui devons)</h3>
+              <h3 className="text-sm font-semibold">Crédit (à déduire plus tard)</h3>
               <Button
                 size="sm"
                 variant={showAvoir ? "secondary" : "outline"}
                 onClick={() => setShowAvoir((v) => !v)}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />
-                Enregistrer un avoir
+                Ajouter un crédit
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Un avoir, c’est de l’argent que le coworking doit au visiteur :
-              forfait payé sans venue, trop-perçu, geste commercial. Il sera
-              déduit plus tard.
+              Un crédit, c’est de l’argent déjà payé (ou offert) qui sera
+              déduit sur une prochaine visite.
             </p>
             {showAvoir ? (
               <div className="space-y-3 rounded-2xl border bg-sky-50/60 p-4">
@@ -369,7 +366,7 @@ export function MemberLedgerDialog({
                   }
                   onClick={() => saveAvoir.mutate()}
                 >
-                  Enregistrer l’avoir
+                  Enregistrer le crédit
                 </Button>
               </div>
             ) : null}
@@ -405,7 +402,7 @@ export function MemberLedgerDialog({
                 ))}
               </div>
             ) : !showAvoir ? (
-              <p className="text-sm text-muted-foreground">Aucun avoir ouvert.</p>
+              <p className="text-sm text-muted-foreground">Aucun crédit ouvert.</p>
             ) : null}
           </section>
 
@@ -420,7 +417,7 @@ export function MemberLedgerDialog({
                   >
                     <span>
                       {format(new Date(e.createdAt), "d MMM", { locale: fr })}{" "}
-                      · {e.kind === "ECHEANCE" ? "Avoir" : "Dette"}{" "}
+                      · {e.kind === "ECHEANCE" ? "Crédit" : "À payer"}{" "}
                       {e.forfaitName ? `· ${e.forfaitName}` : ""}
                       {e.note ? ` · ${e.note}` : ""}
                     </span>

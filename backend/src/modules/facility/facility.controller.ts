@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { FacilityService } from './facility.service';
 import { UpdateFacilityDto } from './dtos/updateFac.dto';
-import { PriceCategory } from '@prisma/client';
+import { PriceCategory, SpaceReserveMode } from '@prisma/client';
 
 @Controller('facilities')
 export class FacilityController {
@@ -64,6 +64,7 @@ export class FacilityController {
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;
+      reserveMode: SpaceReserveMode;
       galleryUrls: string[];
     }>,
   ) {

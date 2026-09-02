@@ -18,6 +18,7 @@ type Props = {
   seatMode?: MobileSeatMode | null;
   canPick?: boolean;
   pickOnly?: boolean;
+  allowedSpaceIds?: string[];
   onPicked?: (seat: SpaceSeat) => void;
   className?: string;
 };
@@ -29,6 +30,7 @@ export function VisitorSeatMap({
   seatMode,
   canPick = false,
   pickOnly = false,
+  allowedSpaceIds,
   onPicked,
   className,
 }: Props) {
@@ -46,7 +48,9 @@ export function VisitorSeatMap({
     refetchInterval: poll,
   });
 
-  const spaces = (data?.spaces || []) as Space[];
+  const spaces = ((data?.spaces || []) as Space[]).filter(
+    (s) => !allowedSpaceIds?.length || allowedSpaceIds.includes(s.id)
+  );
   const bookings = (data?.bookings || []) as SeatBooking[];
 
   /** Space that contains the visitor's seat — only that one is shown when assigned. */

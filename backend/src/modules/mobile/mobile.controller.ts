@@ -314,12 +314,13 @@ export class MobileController {
   @Patch('admin/visit-requests/:id/approve')
   approveVisitRequest(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body?: { seatLabel?: string; spaceId?: string },
+    @Body() body?: { seatLabel?: string; spaceId?: string; occupyWhole?: boolean },
   ) {
     return this.mobileService.approveVisitRequest(
       id,
       body?.seatLabel,
       body?.spaceId,
+      body?.occupyWhole,
     );
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Map as MapIcon, Timer } from "lucide-react";
@@ -15,12 +15,19 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { FloorPlanCanvas } from "@/components/admin/FloorPlanCanvas";
-import { bookingApi, facilityApi, journalApi, abonnementsApi } from "@/lib/api/resources";
+import {
+  bookingApi,
+  facilityApi,
+  journalApi,
+  abonnementsApi,
+  opsEventsApi,
+} from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
-import type { Abonnement, Journal, Space, SpaceSeat } from "@/lib/types";
+import type { Abonnement, Journal, SeatStay, Space, SpaceSeat } from "@/lib/types";
 import {
   expectedEndMs,
   isActiveVisit,
+  isAbonnementVisit,
   isOverstay,
   priceOf,
   remainingMs,
@@ -28,6 +35,7 @@ import {
   groupOf,
 } from "@/lib/journal-utils";
 import { cn } from "@/lib/utils";
+import { compareNaturalLabel } from "@/lib/seat-booking";
 import {
   activeSubByMember,
   daysLeft,
@@ -48,6 +56,56 @@ function formatRemain(ms: number | null) {
   else if (m <= 0) core = `${h} h`;
   else core = `${h} h ${String(m).padStart(2, "0")} min`;
   return ms < 0 ? `+${core}` : core;
+}
+
+function SeatTodayHistory({
+  stays,
+  occupied,
+  excludeJournalId,
+  excludeMemberId,
+}: {
+  stays: SeatStay[];
+  occupied: boolean;
+  excludeJournalId?: string | null;
+  excludeMemberId?: string | null;
+}) {
+  const previous = stays
+    .filter((s) => !!s.to)
+    .filter((s) => !excludeJournalId || s.journalId !== excludeJournalId)
+    .filter(
+      (s) =>
+        !excludeMemberId || !s.memberId || s.memberId !== excludeMemberId
+    )
+    .sort(
+      (a, b) =>
+        new Date(b.to as string).getTime() - new Date(a.to as string).getTime()
+    )
+    .slice(0, 3);
+  if (!previous.length) return null;
+  return (
+    <div className="mt-3 border-t border-dashed pt-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {occupied ? "Avant sur cette place" : "Plus tôt aujourd'hui"}
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {previous.map((s, i) => (
+          <li
+            key={`${s.memberId || s.memberName}-${s.from}-${i}`}
+            className="text-[11px] text-muted-foreground"
+          >
+            <span className="font-medium text-foreground/70">
+              {s.memberName}
+            </span>
+            <span className="tabular-nums">
+              {" "}
+              {format(new Date(s.from), "HH:mm")}–
+              {format(new Date(s.to as string), "HH:mm")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 type OccupancyRow = {
@@ -95,6 +153,11 @@ export function SeatOccupancyBoard({
     null
   );
   const [relocateOpen, setRelocateOpen] = useState(false);
+  const [personFilter, setPersonFilter] = useState<"all" | "abonnement" | "visitor">(
+    "all"
+  );
+  const [tableFilter, setTableFilter] = useState<string>("all");
+  const listItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [now, setNow] = useState(Date.now());
   const day = date || new Date();
 
@@ -130,6 +193,12 @@ export function SeatOccupancyBoard({
   const { data: abonnementsRaw } = useQuery({
     queryKey: queryKeys.abonnements,
     queryFn: () => abonnementsApi.list(),
+    enabled: open,
+    refetchInterval: open ? 30_000 : false,
+  });
+  const { data: seatHistory } = useQuery({
+    queryKey: queryKeys.seatHistory(day),
+    queryFn: () => opsEventsApi.seatHistory(day),
     enabled: open,
     refetchInterval: open ? 30_000 : false,
   });
@@ -274,22 +343,32 @@ export function SeatOccupancyBoard({
       });
     }
     return list.sort((a, b) => {
-      const ra = a.remaining;
-      const rb = b.remaining;
-      if (ra == null && rb == null) return a.seatLabel.localeCompare(b.seatLabel);
-      if (ra == null) return 1;
-      if (rb == null) return -1;
-      return ra - rb;
+      const ta = a.tableName || "\uffff";
+      const tb = b.tableName || "\uffff";
+      const t = compareNaturalLabel(ta, tb);
+      if (t !== 0) return t;
+      return compareNaturalLabel(a.seatLabel, b.seatLabel);
     });
   }, [bookings, presentByMember, anonymousPresent, seatMeta, now]);
 
   const activeSpace: Space | null =
     spaces.find((s) => s.id === spaceId) || spaces[0] || null;
 
-  const spaceRows = useMemo(
-    () => rows.filter((r) => !spaceId || r.spaceId === spaceId || !r.spaceId),
-    [rows, spaceId]
-  );
+  const spaceRows = useMemo(() => {
+    let list = rows.filter(
+      (r) => !spaceId || r.spaceId === spaceId || !r.spaceId
+    );
+    if (tableFilter !== "all") {
+      list = list.filter((r) => (r.tableName || "sans-table") === tableFilter);
+    }
+    if (personFilter === "abonnement") {
+      list = list.filter((r) => isAbonnementVisit(r.journal, subByMember));
+    }
+    if (personFilter === "visitor") {
+      list = list.filter((r) => !isAbonnementVisit(r.journal, subByMember));
+    }
+    return list;
+  }, [rows, spaceId, tableFilter, personFilter, subByMember]);
 
   const selectedRow =
     rows.find(
@@ -349,6 +428,32 @@ export function SeatOccupancyBoard({
     focusSpaceId,
     focusSeatLabel,
   ]);
+
+  const tablesInSpace = useMemo(() => {
+    if (!activeSpace) return [];
+    const names = (activeSpace.tables || [])
+      .map((t) => t.name)
+      .filter(Boolean);
+    const extra = rows
+      .filter((r) => r.spaceId === activeSpace.id && r.tableName)
+      .map((r) => r.tableName as string);
+    return [...new Set([...names, ...extra])].sort(compareNaturalLabel);
+  }, [activeSpace, rows]);
+
+  const previousStays: SeatStay[] = useMemo(() => {
+    if (!selectedSeatLabel) return [];
+    return (seatHistory?.stays || []).filter(
+      (s) =>
+        s.seatId === selectedSeatLabel &&
+        (!spaceId || !s.spaceId || s.spaceId === spaceId)
+    );
+  }, [seatHistory, selectedSeatLabel, spaceId]);
+
+  useEffect(() => {
+    if (!selectedSeatLabel) return;
+    const el = listItemRefs.current[selectedSeatLabel];
+    el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [selectedSeatLabel, spaceId, tableFilter, personFilter]);
 
   const freeInSpace = useMemo(() => {
     if (!activeSpace) return { free: 0, total: 0 };
@@ -414,6 +519,7 @@ export function SeatOccupancyBoard({
                 onClick={() => {
                   setSpaceId(s.id);
                   setSelectedSeatLabel(null);
+                  setTableFilter("all");
                 }}
               >
                 {s.name}
@@ -434,7 +540,7 @@ export function SeatOccupancyBoard({
           <div className="flex min-h-0 flex-col gap-2 overflow-hidden">
             <p className="text-xs text-muted-foreground">
               {activeSpace?.name || "Espace"} — {freeInSpace.free}/
-              {freeInSpace.total} libres · cliquez une place pour le détail
+              {freeInSpace.total} libres · cliquez une place (occupée ou libre)
             </p>
             <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20 p-1">
               {activeSpace ? (
@@ -445,7 +551,33 @@ export function SeatOccupancyBoard({
                   variant="fit"
                   className="h-full min-h-[min(60vh,560px)]"
                   selectedSeatId={selectedSeatId}
-                  onSelectSeat={(seat) => setSelectedSeatLabel(seat.label)}
+                  selectOccupied
+                  onSelectSeat={(seat) => {
+                    setSelectedSeatLabel(seat.label);
+                    const row = rows.find(
+                      (r) =>
+                        r.seatLabel === seat.label &&
+                        (!spaceId || !r.spaceId || r.spaceId === spaceId)
+                    );
+                    if (!row) return;
+                    if (
+                      tableFilter !== "all" &&
+                      (row.tableName || "sans-table") !== tableFilter
+                    ) {
+                      setTableFilter("all");
+                    }
+                    if (
+                      personFilter === "abonnement" &&
+                      !isAbonnementVisit(row.journal, subByMember)
+                    ) {
+                      setPersonFilter("all");
+                    } else if (
+                      personFilter === "visitor" &&
+                      isAbonnementVisit(row.journal, subByMember)
+                    ) {
+                      setPersonFilter("all");
+                    }
+                  }}
                 />
               ) : (
                 <p className="p-6 text-sm text-muted-foreground">
@@ -488,10 +620,57 @@ export function SeatOccupancyBoard({
               </>
             ) : (
             <>
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Timer className="h-4 w-4" />
-              Départs (premier → dernier)
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Timer className="h-4 w-4" />
+                Places occupées
+              </div>
+              <div className="ml-auto flex flex-wrap gap-1">
+                {(
+                  [
+                    ["all", "Tous"],
+                    ["abonnement", "Abonnés"],
+                    ["visitor", "Visiteurs"],
+                  ] as const
+                ).map(([id, label]) => (
+                  <Button
+                    key={id}
+                    type="button"
+                    size="sm"
+                    variant={personFilter === id ? "default" : "outline"}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setPersonFilter(id)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
             </div>
+            {tablesInSpace.length > 1 ? (
+              <div className="flex flex-wrap gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={tableFilter === "all" ? "secondary" : "ghost"}
+                  className="h-6 px-2 text-[11px]"
+                  onClick={() => setTableFilter("all")}
+                >
+                  Toutes tables
+                </Button>
+                {tablesInSpace.map((name) => (
+                  <Button
+                    key={name}
+                    type="button"
+                    size="sm"
+                    variant={tableFilter === name ? "secondary" : "ghost"}
+                    className="h-6 px-2 text-[11px]"
+                    onClick={() => setTableFilter(name)}
+                  >
+                    {name}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto rounded-lg border p-2">
               {spaceRows.length === 0 ? (
                 <p className="p-3 text-sm text-muted-foreground">
@@ -516,9 +695,20 @@ export function SeatOccupancyBoard({
                   const selected =
                     selectedSeatLabel === row.seatLabel &&
                     (!spaceId || !row.spaceId || row.spaceId === spaceId);
+                  const prevTable = spaceRows[i - 1]?.tableName || null;
+                  const showTableHead =
+                    !!row.tableName && row.tableName !== prevTable;
                   return (
+                    <Fragment key={`${row.seatLabel}-${row.journal.id}`}>
+                      {showTableHead ? (
+                        <p className="px-1 pt-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          {row.tableName}
+                        </p>
+                      ) : null}
                     <button
-                      key={`${row.seatLabel}-${row.journal.id}`}
+                      ref={(el) => {
+                        listItemRefs.current[row.seatLabel] = el;
+                      }}
                       type="button"
                       onClick={() => {
                         setSelectedSeatLabel(row.seatLabel);
@@ -535,9 +725,6 @@ export function SeatOccupancyBoard({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground">
-                              #{i + 1}
-                            </span>
                             <span className="font-semibold">
                               {visitorLabel(row.journal)}
                             </span>
@@ -601,6 +788,7 @@ export function SeatOccupancyBoard({
                         </div>
                       </div>
                     </button>
+                    </Fragment>
                   );
                 })
               )}
@@ -701,6 +889,12 @@ export function SeatOccupancyBoard({
                     })()}
                   </div>
                 ) : null}
+                <SeatTodayHistory
+                  stays={previousStays}
+                  occupied
+                  excludeJournalId={selectedRow.journal.id}
+                  excludeMemberId={selectedRow.journal.memberID}
+                />
                 <Button
                   size="sm"
                   className="mt-3"
@@ -724,10 +918,12 @@ export function SeatOccupancyBoard({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Absent du journal aujourd&apos;hui
                 </p>
+                <SeatTodayHistory stays={previousStays} occupied={false} />
               </div>
             ) : selectedSeatLabel ? (
               <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
                 Place {selectedSeatLabel} — libre
+                <SeatTodayHistory stays={previousStays} occupied={false} />
               </div>
             ) : null}
 

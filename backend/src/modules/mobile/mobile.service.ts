@@ -37,6 +37,12 @@ import {
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { PushService } from '../push/push.service';
+import {
+  assertPriceCanOccupy,
+  linkedSpaceIds,
+  spaceAllowsSeat,
+  spaceAllowsWhole,
+} from './space-occupy';
 
 export const roundsOfHashing = 10;
 
@@ -1611,25 +1617,15 @@ export class MobileService {
     }
 
     if (journal.memberID) {
-      const keepDaySeat =
-        this.isFullDayPack(journal.prices || {}) || kind === 'FULL_DAY';
       const keepDedicated =
         isSubscriptionVisit &&
         this.seatPrivilegeActiveNow(activeSub?.price as any) &&
         !!activeSub?.reservedSeatLabel;
-      if (this.isPeriodKind(kind) || kind === 'HOURS_POOL') {
-        await this.snapshotAndReleaseSeats(
-          journal.memberID,
-          keepDedicated ? { isPermanent: false } : {},
-          journal.id,
-        );
-      } else if (this.isOpenSpaceDay(journal.prices || {}) || !keepDaySeat) {
-        await this.snapshotAndReleaseSeats(
-          journal.memberID,
-          { isPermanent: false },
-          journal.id,
-        );
-      }
+      await this.snapshotAndReleaseSeats(
+        journal.memberID,
+        keepDedicated ? { isPermanent: false } : {},
+        journal.id,
+      );
     }
 
     const durationMs = Math.max(
@@ -2140,12 +2136,14 @@ export class MobileService {
     });
   }
 
-  async applyVisitSpaceBooking(
+    async applyVisitSpaceBooking(
     memberId: string,
     price: {
       spaceId?: string | null;
       category?: string | null;
       billingUnit?: string | null;
+      occupySeat?: boolean;
+      occupyWhole?: boolean;
     },
     opts?: {
       spaceId?: string;
@@ -2153,6 +2151,7 @@ export class MobileService {
       tableId?: string;
       seatLabel?: string;
       seatLabels?: string[];
+      occupyWhole?: boolean;
     },
   ) {
     const labels = [
@@ -2172,6 +2171,14 @@ export class MobileService {
       return;
     }
     if (opts?.reserveKind === 'none') return;
+    const wholeSpaceId = opts?.spaceId || price.spaceId || undefined;
+    const bookWhole =
+      opts?.occupyWhole ||
+      (!!price.occupyWhole && price.occupySeat === false);
+    if (bookWhole && wholeSpaceId) {
+      await this.bookSeatsForMemberByKind(memberId, { spaceId: wholeSpaceId });
+      return;
+    }
     if (opts?.reserveKind) {
       await this.bookSeatsForMemberByKind(memberId, {
         kind: opts.reserveKind,
@@ -2619,6 +2626,7 @@ export class MobileService {
 
     const price = await this.prisma.price.findUnique({
       where: { id: dto.priceId },
+      include: { offerSpaces: true },
     });
     if (!price) throw new NotFoundException('Price not found');
 
@@ -2667,14 +2675,32 @@ export class MobileService {
       );
     }
 
+    const occupyWhole = !!dto.occupyWhole;
+    if (occupyWhole || dto.spaceId) {
+      const spaceId = dto.spaceId;
+      if (!spaceId) {
+        throw new BadRequestException('Choisissez l’espace à réserver');
+      }
+      const space = await this.prisma.space.findUnique({
+        where: { id: spaceId },
+      });
+      if (!space) throw new NotFoundException('Espace introuvable');
+      assertPriceCanOccupy({
+        price,
+        space,
+        mode: occupyWhole ? 'whole' : 'seat',
+      });
+    }
+
     const request = await this.prisma.visitRequest.create({
         data: {
           memberId: dto.memberId,
           priceId: dto.priceId,
           type: dto.type,
           status: VisitRequestStatus.PENDING,
-          seatLabel: dto.seatLabel?.trim() || null,
+          seatLabel: occupyWhole ? null : dto.seatLabel?.trim() || null,
           spaceId: dto.spaceId || null,
+          occupyWhole,
         },
       include: {
         member: true,
@@ -2728,7 +2754,7 @@ export class MobileService {
   async listVisitRequests(status?: VisitRequestStatus) {
     return this.prisma.visitRequest.findMany({
       where: status ? { status } : undefined,
-      include: { member: true, price: true },
+      include: { member: true, price: { include: { offerSpaces: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
@@ -2739,14 +2765,19 @@ export class MobileService {
       where: { id },
       include: {
         member: { include: { organization: { select: { slug: true } } } },
-        price: true,
+        price: { include: { offerSpaces: true } },
       },
     });
     if (!request) throw new NotFoundException('Visit request not found');
     return request;
   }
 
-  async approveVisitRequest(id: string, seatLabel?: string, spaceId?: string) {
+  async approveVisitRequest(
+    id: string,
+    seatLabel?: string,
+    spaceId?: string,
+    occupyWholeFlag?: boolean,
+  ) {
     const request = await this.getVisitRequest(id);
     if (request.status !== VisitRequestStatus.PENDING) {
       throw new ConflictException('Request already resolved');
@@ -2764,8 +2795,13 @@ export class MobileService {
     const wantsDedicatedSeat =
       request.type === VisitRequestType.SUBSCRIPTION &&
       !!(request.price as { reserveSeat?: boolean }).reserveSeat;
+    const occupyWhole =
+      !!occupyWholeFlag ||
+      !!request.occupyWhole ||
+      (!!request.price.occupyWhole && request.price.occupySeat === false);
     const skipSeat =
-      (hoursSub && !wantsDedicatedSeat) || this.isOpenSpaceDay(request.price);
+      occupyWhole ||
+      (hoursSub && !wantsDedicatedSeat);
 
     if (wantsDedicatedSeat) {
       if (!assignedLabel) {
@@ -2773,6 +2809,26 @@ export class MobileService {
           'Sélectionnez la place réservée pour cet abonnement',
         );
       }
+    } else if (occupyWhole) {
+      assignedLabel = null;
+      if (!assignedSpaceId) {
+        assignedSpaceId =
+          request.spaceId || linkedSpaceIds(request.price)[0] || undefined;
+      }
+      if (!assignedSpaceId) {
+        throw new BadRequestException(
+          'Choisissez l’espace entier à réserver',
+        );
+      }
+      const space = await this.prisma.space.findUnique({
+        where: { id: assignedSpaceId },
+      });
+      if (!space) throw new NotFoundException('Espace introuvable');
+      assertPriceCanOccupy({
+        price: request.price,
+        space,
+        mode: 'whole',
+      });
     } else if (skipSeat) {
       assignedLabel = null;
       assignedSpaceId = undefined;
@@ -2829,7 +2885,11 @@ export class MobileService {
       });
     }
 
-    if (assignedLabel && !this.isOpenSpaceDay(request.price)) {
+    if (occupyWhole && assignedSpaceId) {
+      await this.bookSeatsForMemberByKind(request.memberId, {
+        spaceId: assignedSpaceId,
+      });
+    } else if (assignedLabel && !this.isOpenSpaceDay(request.price)) {
       const activeSub = await this.getActiveSubscription(request.memberId);
       const memberKind = activeSub?.price
         ? this.subscriptionKind(activeSub.price)
@@ -4111,6 +4171,16 @@ export class MobileService {
     if (!space.openForReservation) {
       throw new BadRequestException(
         'Cet espace n’est pas ouvert aux réservations',
+      );
+    }
+    if (kind === BookingRequestKind.ROOM && !spaceAllowsWhole(space.reserveMode)) {
+      throw new BadRequestException(
+        `${space.name} se réserve uniquement par place`,
+      );
+    }
+    if (kind === BookingRequestKind.SEAT && !spaceAllowsSeat(space.reserveMode)) {
+      throw new BadRequestException(
+        `${space.name} se réserve entièrement, pas par place`,
       );
     }
     spaceName = space.name;

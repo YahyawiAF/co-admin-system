@@ -11,7 +11,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { loadVisitorCache } from "@/lib/visitorCache";
 import { isJournalPack } from "@/lib/journal-utils";
 import { VisitorAuthDialog } from "@/components/visitor/VisitorAuthDialog";
-import type { Member, Price, SpaceSeat } from "@/lib/types";
+import type { Member, Price, Space, SpaceSeat } from "@/lib/types";
 import { PriceCategory, PriceType } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
@@ -20,6 +20,11 @@ import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
+import {
+  priceAllowsSeatIn,
+  priceAllowsWholeIn,
+  spacesForPrice,
+} from "@/lib/space-occupy";
 
 function ChooseInner() {
   const router = useRouter();
@@ -33,6 +38,7 @@ function ChooseInner() {
   const [pickedPrice, setPickedPrice] = useState<Price | null>(null);
   const [seatLabel, setSeatLabel] = useState("");
   const [seatSpaceId, setSeatSpaceId] = useState("");
+  const [occupyWhole, setOccupyWhole] = useState(false);
   const { socket } = useRealtime();
   const pendingPoll = useVisibleInterval(pendingId ? 8_000 : false);
 
@@ -72,7 +78,15 @@ function ChooseInner() {
   });
   const autoAccept = !!seatSettings?.receptionAway;
   const visitorChoose = seatSettings?.mobileSeatMode === "VISITOR_CHOOSE";
-  const needSeatStep = autoAccept && visitorChoose;
+  const needPlaceStep = visitorChoose && mode === "day";
+
+  const { data: layout } = useQuery({
+    queryKey: ["mobile-floor-plan", slug],
+    queryFn: () => mobileApi.floorPlan(slug),
+    enabled: needPlaceStep,
+    staleTime: 60_000,
+  });
+  const layoutSpaces = (layout?.spaces || []) as Space[];
 
   const { data: pendingRequest } = useQuery({
     queryKey: ["visit-request", pendingId],
@@ -147,6 +161,7 @@ function ChooseInner() {
       priceId: string;
       seatLabel?: string;
       spaceId?: string;
+      occupyWhole?: boolean;
     }) =>
       mobileApi.createVisitRequest({
         memberId: memberId!,
@@ -154,6 +169,7 @@ function ChooseInner() {
         type: mode === "subscription" ? "SUBSCRIPTION" : "DAY",
         seatLabel: opts.seatLabel,
         spaceId: opts.spaceId,
+        occupyWhole: opts.occupyWhole,
       }),
     onSuccess: (req) => {
       if (req.status === "APPROVED" || req.autoApproved) {
@@ -296,21 +312,35 @@ function ChooseInner() {
 
   const hint = autoAccept
     ? visitorChoose
-      ? "Choisissez votre forfait puis votre place. L’entrée est confirmée tout de suite."
+      ? "Choisissez votre forfait puis l’espace ou la place. L’entrée est confirmée tout de suite."
       : "Choisissez votre forfait. Une place vous sera attribuée automatiquement."
-    : "L'accueil confirmera pour démarrer.";
+    : visitorChoose
+      ? "Choisissez votre forfait puis l’espace ou la place. L'accueil confirmera."
+      : "L'accueil confirmera pour démarrer.";
 
   const onPickTarif = (o: Price) => {
-    if (needSeatStep) {
+    if (needPlaceStep) {
       setPickedPrice(o);
       setSeatLabel("");
       setSeatSpaceId("");
+      setOccupyWhole(false);
       return;
     }
     create.mutate({ priceId: o.id });
   };
 
-  if (needSeatStep && pickedPrice && memberId) {
+  if (needPlaceStep && pickedPrice && memberId) {
+    const placeSpaces = spacesForPrice(layoutSpaces, pickedPrice);
+    const wholeSpaces = placeSpaces.filter((s) =>
+      priceAllowsWholeIn(pickedPrice, s)
+    );
+    const seatSpaces = placeSpaces.filter((s) =>
+      priceAllowsSeatIn(pickedPrice, s)
+    );
+    const wholeOnly = wholeSpaces.length > 0 && seatSpaces.length === 0;
+    const canConfirm = occupyWhole
+      ? !!seatSpaceId
+      : !!seatLabel;
     return (
       <div className="space-y-3">
         <MobileBackHome />
@@ -321,10 +351,16 @@ function ChooseInner() {
         >
           ← Changer de forfait
         </button>
-        <h1 className="text-2xl font-bold">Votre place</h1>
+        <h1 className="text-2xl font-bold">
+          {wholeOnly ? "Votre espace" : "Votre place"}
+        </h1>
         <p className="text-sm text-slate-500">
-          Forfait {pickedPrice.name} · {pickedPrice.price} DT. Touchez une
-          place libre.
+          Forfait {pickedPrice.name} · {pickedPrice.price} DT.
+          {wholeOnly
+            ? " Ce forfait réserve l’espace entier."
+            : wholeSpaces.length
+              ? " Choisissez une place, ou réservez tout l’espace."
+              : " Touchez une place libre."}
         </p>
         {create.isError ? (
           <Alert variant="destructive">
@@ -333,30 +369,68 @@ function ChooseInner() {
             </AlertDescription>
           </Alert>
         ) : null}
-        <VisitorSeatMap
-          memberId={memberId}
-          pickOnly
-          seatMode="VISITOR_CHOOSE"
-          onPicked={(seat: SpaceSeat) => {
-            setSeatLabel(seat.label);
-            setSeatSpaceId(seat.spaceId || "");
-          }}
-        />
-        {seatLabel ? (
+        {wholeSpaces.length ? (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Espace entier</p>
+            <div className="flex flex-wrap gap-2">
+              {wholeSpaces.map((s) => (
+                <Button
+                  key={s.id}
+                  type="button"
+                  size="sm"
+                  variant={
+                    occupyWhole && seatSpaceId === s.id ? "default" : "outline"
+                  }
+                  onClick={() => {
+                    setOccupyWhole(true);
+                    setSeatSpaceId(s.id);
+                    setSeatLabel("");
+                  }}
+                >
+                  Toute {s.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {seatSpaces.length ? (
+          <VisitorSeatMap
+            memberId={memberId}
+            pickOnly
+            seatMode="VISITOR_CHOOSE"
+            allowedSpaceIds={seatSpaces.map((s) => s.id)}
+            onPicked={(seat: SpaceSeat) => {
+              setOccupyWhole(false);
+              setSeatLabel(seat.label);
+              setSeatSpaceId(seat.spaceId || "");
+            }}
+          />
+        ) : null}
+        {occupyWhole && seatSpaceId ? (
+          <p className="text-sm font-medium">
+            Espace entier :{" "}
+            {placeSpaces.find((s) => s.id === seatSpaceId)?.name}
+          </p>
+        ) : seatLabel ? (
           <p className="text-sm font-medium">Place {seatLabel}</p>
         ) : null}
         <Button
           className="h-11 w-full rounded-full"
-          disabled={create.isPending || !seatLabel}
+          disabled={create.isPending || !canConfirm}
           onClick={() =>
             create.mutate({
               priceId: pickedPrice.id,
-              seatLabel,
+              seatLabel: occupyWhole ? undefined : seatLabel,
               spaceId: seatSpaceId || undefined,
+              occupyWhole,
             })
           }
         >
-          {create.isPending ? "Confirmation…" : "Confirmer forfait et place"}
+          {create.isPending
+            ? "Confirmation…"
+            : occupyWhole
+              ? "Confirmer forfait et espace"
+              : "Confirmer forfait et place"}
         </Button>
       </div>
     );
