@@ -19,18 +19,12 @@ import {
 
 type BeforeInstall = Event & { prompt: () => Promise<void> };
 
-function isIosSafari() {
-  if (!isIosDevice()) return false;
-  return !/CriOS|FxiOS|EdgiOS|OPiOS|DuckDuckGo/i.test(navigator.userAgent);
-}
-
 export function InstallAppButton({ className }: { className?: string }) {
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [deferred, setDeferred] = useState<BeforeInstall | null>(null);
   const [ios, setIos] = useState(false);
-  const [safari, setSafari] = useState(true);
   const touchX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -39,7 +33,6 @@ export function InstallAppButton({ className }: { className?: string }) {
       return;
     }
     setIos(isIosDevice());
-    setSafari(isIosSafari());
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstall);
@@ -92,7 +85,7 @@ export function InstallAppButton({ className }: { className?: string }) {
       <Button
         type="button"
         variant="outline"
-        className="h-11 w-full rounded-full border-primary/20 bg-sky-50 text-primary"
+        className="h-10 w-full rounded-full border-primary/20 bg-sky-50 text-primary"
         onClick={() => void onClick()}
       >
         <Download className="mr-1.5 h-4 w-4" />
@@ -111,21 +104,12 @@ export function InstallAppButton({ className }: { className?: string }) {
 
           <SheetHeader className="space-y-1 px-5 pb-3 text-left">
             <SheetTitle className="text-[17px] leading-tight">
-              {ios ? "Ajouter à l’écran d’accueil" : "Installer l’application"}
+              Installer l’application
             </SheetTitle>
             <SheetDescription className="text-[13px]">
-              {ios
-                ? "Safari uniquement — 3 gestes, environ 20 secondes."
-                : "Chrome — menu ⋮ puis Installer l’application."}
+              Ajoutez l’app à votre écran d’accueil pour un accès rapide.
             </SheetDescription>
           </SheetHeader>
-
-          {ios && !safari ? (
-            <p className="mx-5 mb-3 rounded-2xl bg-amber-50 px-3 py-2.5 text-[13px] leading-snug text-amber-900">
-              Sur iPhone, ouvrez cette page dans <strong>Safari</strong> (pas
-              Chrome) pour installer l’app.
-            </p>
-          ) : null}
 
           <div
             className="px-5"

@@ -18,7 +18,6 @@ import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 import { PinSetupGate } from "@/components/visitor/PinSetupGate";
-import { InstallAppNudge } from "@/components/visitor/InstallAppNudge";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 
 const FULL_NAV = [
@@ -90,17 +89,15 @@ export function MobileShell({ children }: { children: ReactNode }) {
           )}
         >
           {onboarded ? <PinSetupGate /> : null}
-          <InstallAppNudge />
           <div className="min-h-0 flex-1">{children}</div>
           {onboarded ? <StaffMessageModal /> : null}
         </div>
       ) : (
-        <div className="px-4 pb-4 pt-2">
+        <div className="px-3 pb-3 pt-1.5">
           <MobileHeader />
           <OfflineBanner />
           {onboarded ? <VisitorAlerts /> : null}
           {onboarded ? <PinSetupGate /> : null}
-          <InstallAppNudge />
           {children}
           {onboarded ? <StaffMessageModal /> : null}
         </div>

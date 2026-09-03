@@ -154,7 +154,7 @@ export default function MobileHomePage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-2.5">
       <WifiCredentialsModal
         seat={seat}
         forceOpen={wifiOpen}
@@ -171,7 +171,7 @@ export default function MobileHomePage() {
           subscriptionKind={subKind}
         />
       ) : (
-        <div className="relative overflow-hidden rounded-3xl bg-slate-800 text-white shadow-md">
+        <div className="relative overflow-hidden rounded-2xl bg-slate-800 text-white shadow-md">
           <div
             className="absolute inset-0 bg-cover bg-center opacity-50"
             style={{
@@ -179,17 +179,17 @@ export default function MobileHomePage() {
                 "url(https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=900&q=60)",
             }}
           />
-          <div className="relative p-4 pb-5">
+          <div className="relative px-3.5 py-3.5">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-lg font-bold">Bonjour {greetingName} 👋</p>
+                <p className="text-base font-bold">Bonjour {greetingName}</p>
                 <p className="text-xs text-white/80">{facilityName}</p>
                 <p className="mt-0.5 text-[11px] text-white/70">
                   {status?.hasActiveSubscription
                     ? "Abonnement actif"
                     : pending
                       ? "Demande en attente"
-                      : "Réservez un bureau ou un abonnement"}
+                      : "Forfait · abonnement · réservation"}
                 </p>
               </div>
               {member ? (
@@ -197,7 +197,7 @@ export default function MobileHomePage() {
                   <VisitorAvatar
                     name={displayName}
                     src={member.avatarUrl}
-                    className="h-10 w-10 border-2 border-white"
+                    className="h-9 w-9 border-2 border-white"
                   />
                 </Link>
               ) : null}
@@ -227,9 +227,9 @@ export default function MobileHomePage() {
       ) : null}
 
       {status?.hasActiveSubscription && !session ? (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-2xl bg-white px-3.5 py-3 shadow-sm">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
               Abonnement
             </p>
             <Link
@@ -239,10 +239,10 @@ export default function MobileHomePage() {
               Détail ›
             </Link>
           </div>
-          <p className="mt-2 text-lg font-bold">
+          <p className="mt-1 text-base font-bold">
             {status.subscription?.price?.name || "Abonnement actif"}
           </p>
-          <p className="mt-1 text-sm text-slate-500">
+          <p className="mt-0.5 text-xs text-slate-500">
             {status.subscription?.daysRemaining != null
               ? `${status.subscription.daysRemaining} j. restants`
               : "En cours"}
@@ -253,9 +253,6 @@ export default function MobileHomePage() {
               ? ` · place ${status.subscription.reservedSeatLabel}`
               : ""}
           </p>
-          <Button className="mt-3 h-11 w-full rounded-full" asChild>
-            <Link href={href("/subscription")}>Mon abonnement</Link>
-          </Button>
         </div>
       ) : null}
 
@@ -293,7 +290,7 @@ export default function MobileHomePage() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+            className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
             disabled={!canChooseForfait}
             onClick={goChooseDay}
           >
@@ -302,7 +299,7 @@ export default function MobileHomePage() {
           </Button>
           <Button
             variant="outline"
-            className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+            className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
             disabled={!!pending && pending.type === "SUBSCRIPTION"}
             onClick={goSubscription}
           >
@@ -313,7 +310,7 @@ export default function MobileHomePage() {
       ) : status?.hasActiveSubscription ? (
         <Button
           variant="outline"
-          className="h-11 w-full rounded-full"
+          className="h-10 w-full rounded-full"
           asChild
         >
           <Link href={href("/subscription")}>
@@ -326,7 +323,7 @@ export default function MobileHomePage() {
       <div className="flex gap-2">
         <Button
           variant="outline"
-          className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+          className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
           asChild
         >
           <Link href={href("/staff")}>
@@ -336,7 +333,7 @@ export default function MobileHomePage() {
         </Button>
         <Button
           variant="outline"
-          className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+          className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
           asChild
         >
           <Link href={href("/reserve")}>
@@ -350,7 +347,7 @@ export default function MobileHomePage() {
         {seat?.wifiSsid || seat?.wifiPassword ? (
           <Button
             variant="outline"
-            className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+            className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
             onClick={() => {
               if (seat?.spaceId) {
                 sessionStorage.removeItem(`wifi-seen:${seat.spaceId}`);
@@ -368,7 +365,7 @@ export default function MobileHomePage() {
       <div className="flex gap-2">
         <Button
           variant="outline"
-          className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+          className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
           asChild
         >
           <Link href={href("/cafe")}>
@@ -378,7 +375,7 @@ export default function MobileHomePage() {
         </Button>
         <Button
           variant="outline"
-          className="h-11 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
+          className="h-10 flex-1 rounded-full border-primary/20 bg-sky-50 text-primary"
           asChild
         >
           <Link href={href("/community")}>

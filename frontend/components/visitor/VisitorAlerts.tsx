@@ -8,7 +8,6 @@ import {
   Coffee,
   Clock,
   MessageCircle,
-  Share,
   XCircle,
 } from "lucide-react";
 import {
@@ -24,9 +23,7 @@ import {
   enableVisitorNotifications,
   ensurePushSubscription,
   hasSessionWarned,
-  isIosDevice,
   isNotifyOptIn,
-  isStandalonePwa,
   markSessionWarned,
   showVisitorNotification,
   unlockVisitorAudio,
@@ -70,7 +67,6 @@ export function VisitorAlerts() {
   const router = useRouter();
   const { memberId } = useVisitorSession();
   const [optIn, setOptIn] = useState(false);
-  const [needInstall, setNeedInstall] = useState(false);
   const [coffee, setCoffee] = useState<CoffeeReady | null>(null);
   const [visit, setVisit] = useState<VisitAlert | null>(null);
   const [inbox, setInbox] = useState<InboxAlert | null>(null);
@@ -80,7 +76,6 @@ export function VisitorAlerts() {
 
   useEffect(() => {
     setOptIn(isNotifyOptIn());
-    setNeedInstall(isIosDevice() && !isStandalonePwa());
   }, []);
 
   useEffect(() => {
@@ -327,7 +322,6 @@ export function VisitorAlerts() {
   const onEnable = async () => {
     const res = await enableVisitorNotifications(memberId);
     setOptIn(res.ok || isNotifyOptIn());
-    setNeedInstall(res.needInstall);
   };
 
   return (
@@ -336,28 +330,16 @@ export function VisitorAlerts() {
         <button
           type="button"
           onClick={() => void onEnable()}
-          className="mb-3 flex w-full items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-left text-sm text-amber-950"
+          className="mb-2 flex w-full items-center gap-2.5 rounded-xl border border-amber-200/80 bg-amber-50 px-3 py-2 text-left text-sm text-amber-950"
         >
-          <BellRing className="h-5 w-5 shrink-0 text-amber-600" />
-          <span className="flex-1">
-            Activer les notifications (café prêt, messages, fin de session)
+          <BellRing className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="flex-1 text-[13px] leading-snug">
+            Activer les notifications
           </span>
-          <span className="rounded-full bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white">
+          <span className="rounded-full bg-amber-600 px-2.5 py-0.5 text-[11px] font-semibold text-white">
             Activer
           </span>
         </button>
-      ) : needInstall ? (
-        <div className="mb-3 rounded-2xl border border-sky-200 bg-sky-50 px-3 py-2.5 text-sm text-sky-950">
-          <p className="flex items-start gap-2 font-medium">
-            <Share className="mt-0.5 h-4 w-4 shrink-0" />
-            iPhone : alertes hors Safari
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-sky-900/80">
-            Touchez Partager → « Sur l’écran d’accueil », ouvrez l’icône Collabora,
-            puis réactivez les notifications. Sans cette étape, iOS bloque les
-            alertes quand Safari est fermé.
-          </p>
-        </div>
       ) : null}
 
       <Dialog open={!!coffee} onOpenChange={(o) => !o && setCoffee(null)}>

@@ -20,6 +20,7 @@ import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
+import { SpaceGallery } from "@/components/visitor/SpaceGallery";
 import {
   priceAllowsSeatIn,
   priceAllowsWholeIn,
@@ -312,11 +313,11 @@ function ChooseInner() {
 
   const hint = autoAccept
     ? visitorChoose
-      ? "Choisissez votre forfait puis l’espace ou la place. L’entrée est confirmée tout de suite."
-      : "Choisissez votre forfait. Une place vous sera attribuée automatiquement."
+      ? "Forfait, puis place."
+      : "Choisissez un forfait — place auto."
     : visitorChoose
-      ? "Choisissez votre forfait puis l’espace ou la place. L'accueil confirmera."
-      : "L'accueil confirmera pour démarrer.";
+      ? "Forfait, puis place — l’accueil confirme."
+      : "L’accueil confirmera.";
 
   const onPickTarif = (o: Price) => {
     if (needPlaceStep) {
@@ -338,30 +339,33 @@ function ChooseInner() {
       priceAllowsSeatIn(pickedPrice, s)
     );
     const wholeOnly = wholeSpaces.length > 0 && seatSpaces.length === 0;
-    const canConfirm = occupyWhole
-      ? !!seatSpaceId
-      : !!seatLabel;
+    const canConfirm = occupyWhole ? !!seatSpaceId : !!seatLabel;
+    const selectedWhole = occupyWhole
+      ? wholeSpaces.find((s) => s.id === seatSpaceId)
+      : null;
     return (
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <MobileBackHome />
         <button
           type="button"
-          className="text-sm text-primary"
+          className="text-sm font-medium text-primary"
           onClick={() => setPickedPrice(null)}
         >
-          ← Changer de forfait
+          ← {pickedPrice.name}
         </button>
-        <h1 className="text-2xl font-bold">
-          {wholeOnly ? "Votre espace" : "Votre place"}
-        </h1>
-        <p className="text-sm text-slate-500">
-          Forfait {pickedPrice.name} · {pickedPrice.price} DT.
-          {wholeOnly
-            ? " Ce forfait réserve l’espace entier."
-            : wholeSpaces.length
-              ? " Choisissez une place, ou réservez tout l’espace."
-              : " Touchez une place libre."}
-        </p>
+        <div>
+          <h1 className="text-xl font-bold">
+            {wholeOnly ? "Votre espace" : "Votre place"}
+          </h1>
+          <p className="text-xs text-slate-500">
+            {pickedPrice.price} DT
+            {seatLabel
+              ? ` · place ${seatLabel}`
+              : selectedWhole
+                ? ` · ${selectedWhole.name}`
+                : " · touchez pour choisir"}
+          </p>
+        </div>
         {create.isError ? (
           <Alert variant="destructive">
             <AlertDescription>
@@ -370,49 +374,67 @@ function ChooseInner() {
           </Alert>
         ) : null}
         {wholeSpaces.length ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Espace entier</p>
-            <div className="flex flex-wrap gap-2">
-              {wholeSpaces.map((s) => (
-                <Button
-                  key={s.id}
-                  type="button"
-                  size="sm"
-                  variant={
-                    occupyWhole && seatSpaceId === s.id ? "default" : "outline"
-                  }
-                  onClick={() => {
-                    setOccupyWhole(true);
-                    setSeatSpaceId(s.id);
-                    setSeatLabel("");
-                  }}
-                >
-                  Toute {s.name}
-                </Button>
-              ))}
+          <div className="space-y-1.5">
+            <p className="text-[11px] font-medium text-slate-500">
+              Espace entier
+              {occupyWhole ? " — retouchez pour annuler" : ""}
+            </p>
+            <div className="grid gap-2">
+              {wholeSpaces.map((s) => {
+                const selected = occupyWhole && seatSpaceId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => {
+                      if (selected) {
+                        setOccupyWhole(false);
+                        setSeatSpaceId("");
+                        return;
+                      }
+                      setOccupyWhole(true);
+                      setSeatSpaceId(s.id);
+                      setSeatLabel("");
+                    }}
+                    className={cn(
+                      "overflow-hidden rounded-xl border text-left transition",
+                      selected
+                        ? "border-primary ring-2 ring-primary/30"
+                        : "border-slate-200"
+                    )}
+                  >
+                    <SpaceGallery space={s} className="rounded-none" />
+                    <div className="flex items-center justify-between bg-white px-3 py-2">
+                      <span className="text-sm font-semibold">{s.name}</span>
+                      <span className="text-xs text-primary">
+                        {selected ? "Sélectionné" : "Réserver tout"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         ) : null}
         {seatSpaces.length ? (
-          <VisitorSeatMap
-            memberId={memberId}
-            pickOnly
-            seatMode="VISITOR_CHOOSE"
-            allowedSpaceIds={seatSpaces.map((s) => s.id)}
-            onPicked={(seat: SpaceSeat) => {
-              setOccupyWhole(false);
-              setSeatLabel(seat.label);
-              setSeatSpaceId(seat.spaceId || "");
-            }}
-          />
-        ) : null}
-        {occupyWhole && seatSpaceId ? (
-          <p className="text-sm font-medium">
-            Espace entier :{" "}
-            {placeSpaces.find((s) => s.id === seatSpaceId)?.name}
-          </p>
-        ) : seatLabel ? (
-          <p className="text-sm font-medium">Place {seatLabel}</p>
+          <div className="space-y-1.5">
+            {wholeSpaces.length ? (
+              <p className="text-[11px] font-medium text-slate-500">
+                Ou une place
+              </p>
+            ) : null}
+            <VisitorSeatMap
+              memberId={memberId}
+              pickOnly
+              seatMode="VISITOR_CHOOSE"
+              allowedSpaceIds={seatSpaces.map((s) => s.id)}
+              onPicked={(seat: SpaceSeat) => {
+                setOccupyWhole(false);
+                setSeatLabel(seat.label);
+                setSeatSpaceId(seat.spaceId || "");
+              }}
+            />
+          </div>
         ) : null}
         <Button
           className="h-11 w-full rounded-full"
@@ -427,10 +449,12 @@ function ChooseInner() {
           }
         >
           {create.isPending
-            ? "Confirmation…"
+            ? "Envoi…"
             : occupyWhole
-              ? "Confirmer forfait et espace"
-              : "Confirmer forfait et place"}
+              ? "Confirmer l’espace"
+              : seatLabel
+                ? `Confirmer ${seatLabel}`
+                : "Choisir d’abord"}
         </Button>
       </div>
     );
@@ -439,10 +463,10 @@ function ChooseInner() {
   return (
     <div>
       <MobileBackHome />
-      <div className="mb-4 flex gap-2">
+      <div className="mb-3 flex gap-2">
         <Button
           type="button"
-          className="h-11 flex-1 rounded-full"
+          className="h-10 flex-1 rounded-full"
           variant={mode !== "subscription" ? "default" : "outline"}
           onClick={() => router.replace(href("/choose?mode=day"))}
         >
@@ -450,17 +474,17 @@ function ChooseInner() {
         </Button>
         <Button
           type="button"
-          className="h-11 flex-1 rounded-full"
+          className="h-10 flex-1 rounded-full"
           variant={mode === "subscription" ? "default" : "outline"}
           onClick={() => router.replace(href("/choose?mode=subscription"))}
         >
           Abonnement
         </Button>
       </div>
-      <h1 className="text-2xl font-bold">
+      <h1 className="text-xl font-bold">
         {mode === "subscription" ? "Abonnement" : "Forfait"}
       </h1>
-      <p className="mb-4 text-sm text-slate-500">{hint}</p>
+      <p className="mb-3 text-xs text-slate-500">{hint}</p>
       {create.isError ? (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>
@@ -476,7 +500,7 @@ function ChooseInner() {
             disabled={create.isPending}
             onClick={() => onPickTarif(o)}
             className={cn(
-              "flex w-full items-center justify-between rounded-xl border bg-white px-4 py-4 text-left",
+              "flex w-full items-center justify-between rounded-xl border bg-white px-4 py-3.5 text-left",
               "hover:border-primary/50"
             )}
           >

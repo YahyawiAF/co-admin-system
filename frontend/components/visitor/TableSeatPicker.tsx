@@ -92,27 +92,32 @@ export function TableSeatPicker({
 
   const pickTable = (id: string) => {
     if (lockSeatLabel) return;
-    if (id === tableId) return;
+    if (id === tableId) {
+      setTableId(null);
+      onTableChange?.();
+      return;
+    }
     setTableId(id);
     onTableChange?.();
   };
 
   return (
-    <div className={cn("space-y-3", className)}>
+    <div className={cn("space-y-2.5", className)}>
       {hasTableStep && !lockSeatLabel ? (
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-slate-500">
+        <div className="space-y-1.5">
+          <p className="text-[11px] font-medium text-slate-500">
             {tableId
-              ? "Changez de table, ou choisissez une place"
-              : "1. Choisissez une table — le plan zoome ensuite"}
+              ? "Table sélectionnée — retouchez pour revenir"
+              : "Choisissez une table"}
           </p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             {tables.map((t) => (
               <Button
                 key={t.id}
                 type="button"
                 size="sm"
                 variant={tableId === t.id ? "default" : "outline"}
+                className="h-9"
                 onClick={() => pickTable(t.id)}
               >
                 {t.name}
@@ -126,9 +131,10 @@ export function TableSeatPicker({
                 type="button"
                 size="sm"
                 variant={tableId === LOOSE ? "default" : "outline"}
+                className="h-9"
                 onClick={() => pickTable(LOOSE)}
               >
-                Autres places ({looseSeats.length})
+                Autres ({looseSeats.length})
               </Button>
             ) : null}
           </div>
@@ -174,11 +180,10 @@ export function TableSeatPicker({
 
       {tableId && visibleSeats.length > 0 && !lockSeatLabel ? (
         <div>
-          <p className="text-xs font-medium text-slate-500">
-            2. Choisissez une place
-            {activeTable ? ` · ${activeTable.name}` : ""}
+          <p className="text-[11px] font-medium text-slate-500">
+            Place libre{activeTable ? ` · ${activeTable.name}` : ""}
           </p>
-          <div className="mt-2 grid grid-cols-3 gap-2">
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
             {visibleSeats.map((s) => {
               const taken = booked.has(s.label);
               const active = selectedSeatId === s.id;

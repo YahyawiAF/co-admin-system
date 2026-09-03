@@ -118,11 +118,11 @@ export function ActiveSessionPanel({
   });
 
   return (
-    <div className="rounded-2xl bg-white p-4 text-center shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+    <div className="rounded-2xl bg-white p-3.5 text-center shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         Session en cours
       </p>
-      <h2 className="mt-1 text-lg font-bold">{forfaitName}</h2>
+      <h2 className="mt-0.5 text-base font-bold">{forfaitName}</h2>
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         {covered ? (
           <Badge>Abonnement actif</Badge>
@@ -247,13 +247,9 @@ export function ActiveSessionPanel({
           ) : null}
         </div>
       ) : canPickSeat ? (
-        <p className="mb-3 text-sm text-slate-500">
-          Choisissez votre place ci-dessous.
-        </p>
+        <p className="mb-2 text-xs text-slate-500">Choisissez votre place</p>
       ) : (
-        <p className="mb-3 text-sm text-slate-500">
-          Place : l’accueil s’en charge
-        </p>
+        <p className="mb-2 text-xs text-slate-500">Place gérée par l’accueil</p>
       )}
 
       {canPickSeat || seatLabel ? (

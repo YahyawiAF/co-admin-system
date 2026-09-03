@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { SpaceGallery } from "@/components/visitor/SpaceGallery";
 import { TableSeatPicker } from "@/components/visitor/TableSeatPicker";
 import { mobileApi, type SeatBooking } from "@/lib/api/resources";
 import type { MobileSeatMode, Space, SpaceSeat } from "@/lib/types";
@@ -20,6 +21,8 @@ type Props = {
   pickOnly?: boolean;
   allowedSpaceIds?: string[];
   onPicked?: (seat: SpaceSeat) => void;
+  /** When space selection changes (null = all spaces). */
+  onSpaceChange?: (spaceId: string | null) => void;
   className?: string;
 };
 
@@ -32,6 +35,7 @@ export function VisitorSeatMap({
   pickOnly = false,
   allowedSpaceIds,
   onPicked,
+  onSpaceChange,
   className,
 }: Props) {
   const { slug } = useOrg();
@@ -53,7 +57,6 @@ export function VisitorSeatMap({
   );
   const bookings = (data?.bookings || []) as SeatBooking[];
 
-  /** Space that contains the visitor's seat — only that one is shown when assigned. */
   const lockedSpaceId = useMemo(() => {
     if (assignedSpaceId && spaces.some((s) => s.id === assignedSpaceId)) {
       return assignedSpaceId;
@@ -70,6 +73,7 @@ export function VisitorSeatMap({
   }, [spaces, assignedSeatLabel, assignedSpaceId]);
 
   const showSpaceSwitcher = selectable && !lockedSpaceId && spaces.length > 1;
+  const browsingAll = showSpaceSwitcher && !spaceId;
 
   useEffect(() => {
     if (!spaces.length) {
@@ -80,18 +84,27 @@ export function VisitorSeatMap({
       setSpaceId(lockedSpaceId);
       return;
     }
-    if (!spaceId || !spaces.some((s) => s.id === spaceId)) {
+    if (spaceId && !spaces.some((s) => s.id === spaceId)) {
+      setSpaceId(null);
+    }
+    if (!showSpaceSwitcher && !spaceId && spaces[0]) {
       setSpaceId(spaces[0].id);
     }
-  }, [spaces, spaceId, lockedSpaceId]);
+  }, [spaces, spaceId, lockedSpaceId, showSpaceSwitcher]);
+
+  useEffect(() => {
+    onSpaceChange?.(lockedSpaceId || spaceId);
+  }, [lockedSpaceId, spaceId, onSpaceChange]);
 
   const activeSpace =
     spaces.find((s) => s.id === (lockedSpaceId || spaceId)) ||
-    spaces[0] ||
+    (!showSpaceSwitcher ? spaces[0] : null) ||
     null;
 
   const selectedSeatId = useMemo(() => {
-    const label = selectable ? pickedLabel || assignedSeatLabel : assignedSeatLabel;
+    const label = selectable
+      ? pickedLabel || assignedSeatLabel
+      : assignedSeatLabel;
     if (!label || !activeSpace) return null;
     const all = [
       ...(activeSpace.seats || []),
@@ -116,6 +129,17 @@ export function VisitorSeatMap({
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const pickSpace = (id: string) => {
+    if (lockedSpaceId) return;
+    if (spaceId === id) {
+      setSpaceId(null);
+      setPickedLabel(null);
+      return;
+    }
+    setSpaceId(id);
+    setPickedLabel(null);
+  };
 
   const onSelectSeat = (seat: SpaceSeat) => {
     if (!selectable) return;
@@ -149,28 +173,24 @@ export function VisitorSeatMap({
   }
 
   return (
-    <div className={cn("space-y-3 rounded-2xl border bg-white p-3", className)}>
-      {selectable ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Choisissez votre place
-            </p>
-            <p className="text-sm text-slate-500">
-              Touchez une table, puis une place libre.
-            </p>
-          </div>
-        </div>
+    <div className={cn("space-y-2.5 rounded-2xl border bg-white p-2.5", className)}>
+      {selectable && !browsingAll ? (
+        <p className="px-0.5 text-[11px] font-medium text-slate-500">
+          {showSpaceSwitcher
+            ? "Retouchez l’espace pour revenir · table pour dézoomer"
+            : "Table, puis place libre"}
+        </p>
       ) : null}
 
       {showSpaceSwitcher ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {spaces.map((s) => (
             <Button
               key={s.id}
               size="sm"
-              variant={activeSpace?.id === s.id ? "default" : "outline"}
-              onClick={() => setSpaceId(s.id)}
+              className="h-9"
+              variant={spaceId === s.id ? "default" : "outline"}
+              onClick={() => pickSpace(s.id)}
             >
               {s.name}
             </Button>
@@ -178,8 +198,27 @@ export function VisitorSeatMap({
         </div>
       ) : null}
 
-      <div className="overflow-hidden">
-        {activeSpace ? (
+      {browsingAll ? (
+        <div className="grid gap-2">
+          <p className="text-[11px] font-medium text-slate-500">
+            Choisissez un espace
+          </p>
+          {spaces.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => pickSpace(s.id)}
+              className="overflow-hidden rounded-xl border text-left transition active:scale-[0.99]"
+            >
+              <SpaceGallery space={s} className="rounded-none" />
+            </button>
+          ))}
+        </div>
+      ) : activeSpace ? (
+        <div className="space-y-2">
+          {selectable ? (
+            <SpaceGallery space={activeSpace} className="rounded-xl" />
+          ) : null}
           <TableSeatPicker
             space={activeSpace}
             bookings={bookings}
@@ -188,8 +227,8 @@ export function VisitorSeatMap({
             onTableChange={() => setPickedLabel(null)}
             lockSeatLabel={!selectable ? assignedSeatLabel : null}
           />
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {canPick && !pickOnly ? (
         <Button
@@ -200,8 +239,8 @@ export function VisitorSeatMap({
           {claim.isPending
             ? "Confirmation…"
             : pickedLabel
-              ? `Confirmer la place ${pickedLabel}`
-              : "Sélectionnez une place"}
+              ? `Confirmer ${pickedLabel}`
+              : "Choisir une place"}
         </Button>
       ) : null}
     </div>

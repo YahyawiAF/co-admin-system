@@ -68,14 +68,14 @@ export function SpaceGallery({ space, tableId, className }: Props) {
     <div className={cn("relative overflow-hidden rounded-2xl bg-slate-200", className)}>
       {current ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img
+          <img
           src={current}
           alt={caption}
-          className="aspect-[16/10] w-full object-cover"
+          className="aspect-[16/9] w-full object-cover"
         />
       ) : (
-        <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-700 to-slate-900 text-white">
-          <Building2 className="h-10 w-10 opacity-80" />
+        <div className="flex aspect-[16/9] w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-700 to-slate-900 text-white">
+          <Building2 className="h-9 w-9 opacity-80" />
           <p className="text-sm font-medium">{space.name}</p>
         </div>
       )}
@@ -117,13 +117,8 @@ export function SpaceGallery({ space, tableId, className }: Props) {
         </>
       ) : null}
 
-      <div className="absolute bottom-3 left-3 rounded-xl bg-white/95 px-3 py-1.5 shadow-sm backdrop-blur-sm">
-        <p className="text-sm font-semibold text-slate-900">{caption}</p>
-        {images.length ? (
-          <p className="text-[10px] text-slate-500">
-            {images.length} photo{images.length > 1 ? "s" : ""}
-          </p>
-        ) : null}
+      <div className="absolute bottom-2.5 left-2.5 rounded-lg bg-white/95 px-2.5 py-1 shadow-sm backdrop-blur-sm">
+        <p className="text-xs font-semibold text-slate-900">{caption}</p>
       </div>
     </div>
   );
