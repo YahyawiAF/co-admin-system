@@ -313,20 +313,13 @@ function ChooseInner() {
 
   const hint = autoAccept
     ? visitorChoose
-      ? "Forfait, puis place."
+      ? "Choisissez un forfait — votre place ensuite."
       : "Choisissez un forfait — place auto."
     : visitorChoose
-      ? "Forfait, puis place — l’accueil confirme."
+      ? "L’accueil confirme, puis vous choisissez votre place."
       : "L’accueil confirmera.";
 
   const onPickTarif = (o: Price) => {
-    if (needPlaceStep) {
-      setPickedPrice(o);
-      setSeatLabel("");
-      setSeatSpaceId("");
-      setOccupyWhole(false);
-      return;
-    }
     create.mutate({ priceId: o.id });
   };
 

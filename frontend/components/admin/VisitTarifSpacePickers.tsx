@@ -15,6 +15,7 @@ import {
   spaceCategoryOf,
   tarifSubtitle,
 } from "@/lib/tarif-labels";
+import { spacesForPrice } from "@/lib/space-occupy";
 import { PriceCategory, type Price, type Space } from "@/lib/types";
 
 export type ReserveKind = "none" | "open" | "salle" | "all" | "space";
@@ -96,7 +97,7 @@ export function VisitTarifSpacePickers({
     packs.find((p) => p.id === priceId) ||
     (!optionalPrice ? packs[0] : undefined);
 
-  const matchingSpaces = spaces;
+  const matchingSpaces = selected ? spacesForPrice(spaces, selected) : spaces;
 
   const effectiveId = priceId || (!optionalPrice ? packs[0]?.id : "");
   const openMeter =

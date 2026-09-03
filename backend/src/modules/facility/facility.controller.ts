@@ -46,6 +46,7 @@ export class FacilityController {
       floorPlanUrl?: string;
       capacityNormal?: number;
       category?: PriceCategory;
+      categories?: PriceCategory[];
     },
   ) {
     return this.facilityService.createSpace(body);
@@ -61,6 +62,7 @@ export class FacilityController {
       sortOrder: number;
       capacityNormal: number;
       category: PriceCategory;
+      categories: PriceCategory[];
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;

@@ -1374,6 +1374,26 @@ export class MobileService {
     if (!open) {
       throw new BadRequestException('Aucune session ouverte');
     }
+    const space = spaceId
+      ? await this.prisma.space.findUnique({ where: { id: spaceId } })
+      : await this.prisma.space.findFirst({
+          where: {
+            seats: { some: { label: seatLabel.trim() } },
+          },
+        });
+    if (open.prices && space) {
+      const price = await this.prisma.price.findUnique({
+        where: { id: open.prices.id },
+        include: { offerSpaces: true },
+      });
+      if (price) {
+        assertPriceCanOccupy({
+          price,
+          space,
+          mode: 'seat',
+        });
+      }
+    }
     const sub = await this.getActiveSubscription(memberId);
     const kind = sub?.price ? this.subscriptionKind(sub.price) : null;
     if (kind === 'HOURS_POOL') {
@@ -2725,10 +2745,15 @@ export class MobileService {
       createdAt: request.createdAt,
     };
 
-    this.eventsGateway.sendVisitRequest(payload);
-
     const settings = await this.getSeatSettings(member.organization?.slug);
-    if (settings.receptionAway) {
+    // Accueil absent only auto-approves when place is auto (not admin-assign).
+    // ADMIN_ASSIGN must stay PENDING so reception can pick the seat.
+    const needsAdminSeat =
+      settings.mobileSeatMode === MobileSeatMode.ADMIN_ASSIGN ||
+      (!!(price as { reserveSeat?: boolean }).reserveSeat &&
+        dto.type === VisitRequestType.SUBSCRIPTION);
+
+    if (settings.receptionAway && !needsAdminSeat) {
       const approved = await this.approveVisitRequest(
         request.id,
         request.seatLabel || undefined,
@@ -2742,6 +2767,8 @@ export class MobileService {
         receptionAway: settings.receptionAway,
       };
     }
+
+    this.eventsGateway.sendVisitRequest(payload);
 
     return {
       ...request,
@@ -2838,10 +2865,7 @@ export class MobileService {
     ) {
       assignedLabel = null;
       assignedSpaceId = undefined;
-    } else if (
-      settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN ||
-      settings.receptionAway
-    ) {
+    } else if (settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN) {
       if (!assignedLabel) {
         const free = await this.pickFreeSeat(true);
         assignedLabel = free?.label || null;
@@ -2911,7 +2935,9 @@ export class MobileService {
       where: { id },
       data: {
         status: VisitRequestStatus.APPROVED,
-        autoApproved: settings.receptionAway,
+        autoApproved:
+          settings.receptionAway &&
+          settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN,
         seatLabel: assignedLabel,
         spaceId: assignedSpaceId || request.spaceId || null,
       },
@@ -2929,7 +2955,27 @@ export class MobileService {
       memberId: updated.memberId,
       seat,
       mobileSeatMode: settings.mobileSeatMode,
+      autoApproved: updated.autoApproved,
     });
+    if (updated.autoApproved) {
+      this.eventsGateway.sendVisitArrival({
+        id: updated.id,
+        status: updated.status,
+        type: updated.type,
+        memberId: updated.memberId,
+        memberName:
+          [updated.member.firstName, updated.member.lastName]
+            .filter(Boolean)
+            .join(' ') || 'Visiteur',
+        memberPhone: updated.member.phone,
+        visitorNumber: updated.member.visitorNumber,
+        priceName: updated.price?.name,
+        seatLabel: updated.seatLabel,
+        spaceId: updated.spaceId,
+        seat,
+        createdAt: updated.createdAt,
+      });
+    }
     this.eventsGateway.sendTableUpdates({
       type: 'visit_approved',
       memberId: updated.memberId,
@@ -2949,6 +2995,40 @@ export class MobileService {
       seat,
       mobileSeatMode: settings.mobileSeatMode,
     };
+  }
+
+  /** Auto-approved arrivals not yet acknowledged by reception (today). */
+  async listUnackedArrivals() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return this.prisma.visitRequest.findMany({
+      where: {
+        status: VisitRequestStatus.APPROVED,
+        autoApproved: true,
+        receptionAckedAt: null,
+        createdAt: { gte: start },
+      },
+      include: { member: true, price: { include: { offerSpaces: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
+
+  async acknowledgeArrivals(ids?: string[]) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const where = {
+      status: VisitRequestStatus.APPROVED,
+      autoApproved: true,
+      receptionAckedAt: null,
+      createdAt: { gte: start },
+      ...(ids?.length ? { id: { in: ids } } : {}),
+    };
+    const result = await this.prisma.visitRequest.updateMany({
+      where,
+      data: { receptionAckedAt: new Date() },
+    });
+    return { acknowledged: result.count };
   }
 
   async rejectVisitRequest(id: string) {

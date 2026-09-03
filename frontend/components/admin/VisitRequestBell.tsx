@@ -62,10 +62,20 @@ function wantsWholeSpace(req: VisitRequest | null) {
   );
 }
 
+function memberLabel(req: VisitRequest) {
+  const name = req.member?.firstName || "Visiteur";
+  const num = req.member?.visitorNumber
+    ? ` #${req.member.visitorNumber}`
+    : "";
+  return `${name}${num}`;
+}
+
 export function VisitRequestBell() {
   const queryClient = useQueryClient();
   const { socket } = useRealtime();
   const [current, setCurrent] = useState<VisitRequest | null>(null);
+  const [arrivalsOpen, setArrivalsOpen] = useState(false);
+  const [focusArrivalId, setFocusArrivalId] = useState<string | null>(null);
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [seatLabel, setSeatLabel] = useState<string | null>(null);
   const [allowOverflow, setAllowOverflow] = useState(false);
@@ -76,40 +86,50 @@ export function VisitRequestBell() {
     refetchInterval: 10_000,
   });
 
+  const { data: arrivals = [] } = useQuery({
+    queryKey: queryKeys.visitArrivals,
+    queryFn: () => visitRequestsApi.arrivals(),
+    refetchInterval: 10_000,
+  });
+
   const { data: layout } = useQuery({
     queryKey: ["facility-layout"],
     queryFn: () => facilityApi.layout(),
-    enabled: !!current,
+    enabled: !!current || arrivalsOpen,
   });
   const { data: occupancy } = useQuery({
     queryKey: ["facility-occupancy"],
     queryFn: () => facilityApi.occupancy(),
-    enabled: !!current,
+    enabled: !!current || arrivalsOpen,
   });
   const { data: bookings = [] } = useQuery({
     queryKey: ["bookings"],
     queryFn: () => bookingApi.list(),
-    enabled: !!current,
+    enabled: !!current || arrivalsOpen,
   });
   const { data: seatSettings } = useQuery({
     queryKey: ["mobile-seat-settings"],
-    queryFn: () => facilityApi.list().then(async (list) => {
-      const f = list[0];
-      return {
-        mobileSeatMode: (f?.mobileSeatMode || "ADMIN_ASSIGN") as MobileSeatMode,
-        receptionAway: !!f?.receptionAway,
-      };
-    }),
+    queryFn: () =>
+      facilityApi.list().then(async (list) => {
+        const f = list[0];
+        return {
+          mobileSeatMode: (f?.mobileSeatMode ||
+            "ADMIN_ASSIGN") as MobileSeatMode,
+          receptionAway: !!f?.receptionAway,
+        };
+      }),
   });
-  const seatMode: MobileSeatMode = seatSettings?.mobileSeatMode || "ADMIN_ASSIGN";
+  const seatMode: MobileSeatMode =
+    seatSettings?.mobileSeatMode || "ADMIN_ASSIGN";
   const needsAdminSeat =
     isPeriodSubRequest(current) ||
     (seatMode === "ADMIN_ASSIGN" && !skipsSeat(current));
   const autoSeat = seatMode === "AUTO_ASSIGN";
 
   const spaces = layout?.spaces || [];
-  const visibleSpaces = current?.price
-    ? spacesForPrice(spaces, current.price)
+  const priceForSpaces = current?.price || arrivals[0]?.price;
+  const visibleSpaces = priceForSpaces
+    ? spacesForPrice(spaces, priceForSpaces)
     : spaces;
 
   useEffect(() => {
@@ -124,28 +144,84 @@ export function VisitRequestBell() {
 
   useEffect(() => {
     if (!socket) return;
+    const invalidateAll = () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.visitRequestsPending,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.visitArrivals });
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+    };
     const onRequest = (payload: VisitRequest) => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.visitRequestsPending });
+      invalidateAll();
+      if (payload.status && payload.status !== "PENDING") return;
       setCurrent(payload);
+      setArrivalsOpen(false);
       setSeatLabel(null);
       toast.info("Nouvelle demande de visite");
     };
+    const onArrival = (payload: VisitRequest) => {
+      invalidateAll();
+      setCurrent(null);
+      setArrivalsOpen(true);
+      setFocusArrivalId(payload.id);
+      if (payload.spaceId) setSpaceId(payload.spaceId);
+      toast.info("Nouvel arrivant (auto)");
+    };
+    const onResolved = (payload: {
+      id?: string;
+      status?: string;
+      autoApproved?: boolean;
+    }) => {
+      invalidateAll();
+      if (payload.autoApproved) {
+        setCurrent(null);
+        setArrivalsOpen(true);
+        if (payload.id) setFocusArrivalId(payload.id);
+      } else if (current?.id === payload.id) {
+        setCurrent(null);
+      }
+    };
     socket.on("visit_request", onRequest);
+    socket.on("visit_arrival", onArrival);
+    socket.on("visit_request_resolved", onResolved);
     return () => {
       socket.off("visit_request", onRequest);
+      socket.off("visit_arrival", onArrival);
+      socket.off("visit_request_resolved", onResolved);
     };
-  }, [socket, queryClient]);
+  }, [socket, queryClient, current?.id]);
 
   useEffect(() => {
     if (!pending.length) {
-      setCurrent(null);
+      setCurrent((prev) => (prev?.status === "PENDING" ? null : prev));
       return;
     }
     setCurrent((prev) => {
       if (prev && pending.some((p) => p.id === prev.id)) return prev;
+      if (arrivalsOpen) return prev;
       return pending[0];
     });
-  }, [pending]);
+  }, [pending, arrivalsOpen]);
+
+  useEffect(() => {
+    if (arrivals.length && !arrivalsOpen && !current) {
+      // keep closed until socket/user opens — don't force open on refresh
+    }
+    if (!arrivals.length && arrivalsOpen) {
+      setArrivalsOpen(false);
+      setFocusArrivalId(null);
+    }
+  }, [arrivals.length, arrivalsOpen, current]);
+
+  const focusArrival =
+    arrivals.find((a) => a.id === focusArrivalId) || arrivals[0] || null;
+
+  useEffect(() => {
+    if (!arrivalsOpen || !focusArrival) return;
+    if (focusArrival.spaceId) setSpaceId(focusArrival.spaceId);
+  }, [arrivalsOpen, focusArrival?.id, focusArrival?.spaceId]);
 
   const bookedBySeat = useMemo(() => {
     const map = new Map<string, (typeof bookings)[0]>();
@@ -168,7 +244,6 @@ export function VisitRequestBell() {
           (t.seats || []).filter((s) => s.isActive)
         ),
       ];
-      // unique by id
       const byId = new Map(seats.map((s) => [s.id, s]));
       const unique = [...byId.values()];
       const normal = unique.filter((s) => !s.isOverflow);
@@ -217,6 +292,30 @@ export function VisitRequestBell() {
     return all.find((s) => s.label === seatLabel)?.id || null;
   }, [seatLabel, activeSpace]);
 
+  const arrivalSeatIds = useMemo(() => {
+    if (!activeSpace || !arrivals.length) return [] as string[];
+    const labels = new Set(
+      arrivals
+        .filter((a) => !a.spaceId || a.spaceId === activeSpace.id)
+        .map((a) => a.seatLabel)
+        .filter(Boolean) as string[]
+    );
+    const all = [
+      ...(activeSpace.seats || []),
+      ...(activeSpace.tables || []).flatMap((t) => t.seats || []),
+    ];
+    return all.filter((s) => labels.has(s.label)).map((s) => s.id);
+  }, [activeSpace, arrivals]);
+
+  const focusArrivalSeatId = useMemo(() => {
+    if (!focusArrival?.seatLabel || !activeSpace) return null;
+    const all = [
+      ...(activeSpace.seats || []),
+      ...(activeSpace.tables || []).flatMap((t) => t.seats || []),
+    ];
+    return all.find((s) => s.label === focusArrival.seatLabel)?.id || null;
+  }, [focusArrival, activeSpace]);
+
   const approve = useMutation({
     mutationFn: ({
       id,
@@ -238,7 +337,9 @@ export function VisitRequestBell() {
           ? `Confirmé · place ${vars.seatLabel}`
           : "Demande confirmée"
       );
-      queryClient.invalidateQueries({ queryKey: queryKeys.visitRequestsPending });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.visitRequestsPending,
+      });
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
@@ -252,16 +353,38 @@ export function VisitRequestBell() {
     mutationFn: (id: string) => visitRequestsApi.reject(id),
     onSuccess: () => {
       toast.message("Demande refusée");
-      queryClient.invalidateQueries({ queryKey: queryKeys.visitRequestsPending });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.visitRequestsPending,
+      });
       setCurrent(null);
       setSeatLabel(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const busy = approve.isPending || reject.isPending;
+  const ackArrivals = useMutation({
+    mutationFn: (ids?: string[]) => visitRequestsApi.acknowledgeArrivals(ids),
+    onSuccess: (res, ids) => {
+      toast.success(
+        res.acknowledged > 1
+          ? `${res.acknowledged} arrivants marqués comme reçus`
+          : "Arrivant marqué comme reçu"
+      );
+      queryClient.invalidateQueries({ queryKey: queryKeys.visitArrivals });
+      if (!ids?.length || ids.length >= arrivals.length) {
+        setArrivalsOpen(false);
+        setFocusArrivalId(null);
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const busy =
+    approve.isPending || reject.isPending || ackArrivals.isPending;
+  const bellCount = pending.length + arrivals.length;
 
   const pickSeat = (seat: SpaceSeat) => {
+    if (arrivalsOpen) return;
     if (seat.isOverflow && !showOverflow) return;
     const booking = bookedBySeat.get(seat.label);
     if (booking) {
@@ -271,15 +394,18 @@ export function VisitRequestBell() {
     setSeatLabel(seat.label);
   };
 
+  const pendingDialogOpen =
+    !!current && current.status === "PENDING" && !arrivalsOpen;
+
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="relative">
             <Bell className="h-5 w-5" />
-            {pending.length > 0 ? (
+            {bellCount > 0 ? (
               <Badge className="absolute -right-1 -top-1 h-5 min-w-5 justify-center rounded-full px-1 text-[10px]">
-                {pending.length}
+                {bellCount}
               </Badge>
             ) : null}
           </Button>
@@ -288,9 +414,28 @@ export function VisitRequestBell() {
           <DropdownMenuLabel>
             {pending.length
               ? `${pending.length} demande(s) en attente`
-              : "Aucune demande"}
+              : "Aucune demande en attente"}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
+          {arrivals.length ? (
+            <>
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-2 py-2 text-left text-sm hover:bg-muted/60"
+                onClick={() => {
+                  setCurrent(null);
+                  setArrivalsOpen(true);
+                  setFocusArrivalId(arrivals[0]?.id || null);
+                }}
+              >
+                <span className="font-medium text-primary">
+                  {arrivals.length} arrivant(s) auto
+                </span>
+                <Badge variant="secondary">Voir</Badge>
+              </button>
+              <DropdownMenuSeparator />
+            </>
+          ) : null}
           {pending.map((req) => (
             <div
               key={req.id}
@@ -300,16 +445,12 @@ export function VisitRequestBell() {
                 type="button"
                 className="min-w-0 flex-1 text-left text-sm"
                 onClick={() => {
+                  setArrivalsOpen(false);
                   setCurrent(req);
                   setSeatLabel(null);
                 }}
               >
-                <p className="truncate font-medium">
-                  {req.member?.firstName || "Visiteur"}
-                  {req.member?.visitorNumber
-                    ? ` #${req.member.visitorNumber}`
-                    : ""}
-                </p>
+                <p className="truncate font-medium">{memberLabel(req)}</p>
                 <p className="truncate text-muted-foreground">
                   {req.price?.name} · {req.type}
                 </p>
@@ -321,10 +462,22 @@ export function VisitRequestBell() {
                   className="h-8 w-8 text-green-600"
                   disabled={busy}
                   onClick={() => {
-                    if (needsAdminSeat && !skipsSeat(req)) {
+                    if (
+                      seatMode === "ADMIN_ASSIGN" &&
+                      !skipsSeat(req) &&
+                      !isHoursPoolRequest(req)
+                    ) {
+                      setArrivalsOpen(false);
                       setCurrent(req);
                       setSeatLabel(null);
                       toast.message("Choisissez une place sur le plan");
+                      return;
+                    }
+                    if (isPeriodSubRequest(req)) {
+                      setArrivalsOpen(false);
+                      setCurrent(req);
+                      setSeatLabel(null);
+                      toast.message("Choisissez la place réservée");
                       return;
                     }
                     approve.mutate({ id: req.id });
@@ -347,8 +500,9 @@ export function VisitRequestBell() {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Pending approve / assign seat */}
       <Dialog
-        open={!!current && current.status === "PENDING"}
+        open={pendingDialogOpen}
         onOpenChange={(o) => {
           if (!o) {
             setCurrent(null);
@@ -435,10 +589,7 @@ export function VisitRequestBell() {
                 <div className="grid gap-1 sm:grid-cols-1">
                   <p>
                     <span className="text-muted-foreground">Visiteur : </span>
-                    {current.member?.firstName || "Visiteur"}
-                    {current.member?.visitorNumber
-                      ? ` #${current.member.visitorNumber}`
-                      : ""}
+                    {memberLabel(current)}
                   </p>
                   <p>
                     <span className="text-muted-foreground">Téléphone : </span>
@@ -547,10 +698,146 @@ export function VisitRequestBell() {
                     });
                   }}
                 >
-                  {needsAdminSeat ? "Confirmer + place" : "Confirmer avec cette place"}
+                  {needsAdminSeat
+                    ? "Confirmer + place"
+                    : "Confirmer avec cette place"}
                 </Button>
               ) : null}
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auto arrivals: acknowledge reception saw them */}
+      <Dialog
+        open={arrivalsOpen && arrivals.length > 0}
+        onOpenChange={(o) => {
+          if (!o) {
+            setArrivalsOpen(false);
+            setFocusArrivalId(null);
+          }
+        }}
+      >
+        <DialogContent className="flex h-[min(94vh,900px)] w-[96vw] max-w-6xl flex-col gap-3 overflow-hidden sm:max-w-6xl">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              Nouveaux arrivants
+              <Badge variant="secondary" className="font-normal">
+                Auto check-in
+              </Badge>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid min-h-0 flex-1 gap-4 overflow-hidden text-sm lg:grid-cols-[1.35fr_1fr]">
+            <div className="flex min-h-0 flex-col gap-2">
+              <div className="flex flex-wrap gap-2">
+                {spaces.map((space) => {
+                  const n = arrivals.filter(
+                    (a) => a.spaceId === space.id || (!a.spaceId && !spaceId)
+                  ).length;
+                  return (
+                    <Button
+                      key={space.id}
+                      size="sm"
+                      variant={
+                        activeSpace?.id === space.id ? "default" : "outline"
+                      }
+                      onClick={() => setSpaceId(space.id)}
+                    >
+                      {space.name}
+                      {n ? (
+                        <span className="ml-1 opacity-80">· {n}</span>
+                      ) : null}
+                    </Button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Places des arrivants mises en évidence sur le plan.
+                {focusArrival?.seatLabel ? (
+                  <span className="font-medium text-foreground">
+                    {" "}
+                    · focus : {focusArrival.seatLabel}
+                  </span>
+                ) : null}
+              </p>
+              <div className="min-h-0 flex-1 overflow-hidden rounded-lg border bg-muted/20 p-1">
+                {activeSpace ? (
+                  <FloorPlanCanvas
+                    space={activeSpace}
+                    bookings={bookings}
+                    editMode={false}
+                    variant="picker"
+                    className="h-full min-h-[min(50vh,480px)]"
+                    selectedSeatId={focusArrivalSeatId}
+                    selectedSeatIds={arrivalSeatIds}
+                    onSelectSeat={() => undefined}
+                  />
+                ) : (
+                  <p className="p-4 text-muted-foreground">
+                    Aucun plan d&apos;espace configuré.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+              <p className="text-xs text-muted-foreground">
+                Check-in déjà fait. Marquez « Reçu » quand l’accueil a vu le
+                visiteur.
+              </p>
+              <div className="space-y-2">
+                {arrivals.map((a) => {
+                  const active = focusArrival?.id === a.id;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                        active
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted/50"
+                      }`}
+                      onClick={() => {
+                        setFocusArrivalId(a.id);
+                        if (a.spaceId) setSpaceId(a.spaceId);
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {memberLabel(a)}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {a.price?.name || "—"}
+                            {a.member?.phone ? ` · ${a.member.phone}` : ""}
+                          </p>
+                        </div>
+                        <Badge variant="outline">
+                          {a.seatLabel || "Sans place"}
+                        </Badge>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              variant="outline"
+              disabled={busy || !focusArrival}
+              onClick={() =>
+                focusArrival && ackArrivals.mutate([focusArrival.id])
+              }
+            >
+              Reçu (celui-ci)
+            </Button>
+            <Button
+              disabled={busy || !arrivals.length}
+              onClick={() => ackArrivals.mutate(undefined)}
+            >
+              Tous reçus ({arrivals.length})
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

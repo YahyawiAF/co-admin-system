@@ -38,6 +38,9 @@ export class PriceEntity {
   @ApiPropertyOptional({ enum: PriceCategory })
   category?: PriceCategory | null;
 
+  @ApiPropertyOptional({ enum: PriceCategory, isArray: true })
+  categories?: PriceCategory[];
+
   @ApiPropertyOptional()
   durationHours?: number | null;
 

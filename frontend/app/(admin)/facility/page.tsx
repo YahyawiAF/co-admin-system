@@ -39,7 +39,7 @@ import { ImageUpload } from "@/components/admin/ImageUpload";
 import { GalleryUpload } from "@/components/admin/GalleryUpload";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
-import { PRICE_CATEGORY_LABEL } from "@/lib/tarif-labels";
+import { PRICE_CATEGORY_LABEL, spaceCategoriesOf } from "@/lib/tarif-labels";
 import { SPACE_RESERVE_MODE_LABEL } from "@/lib/space-occupy";
 import { isActiveVisit } from "@/lib/journal-utils";
 
@@ -58,6 +58,24 @@ const emptyTableForm = (): TableFormState => ({
   seatCount: 4,
   overflowCount: 1,
 });
+
+const SPACE_VISIT_CATS = [
+  PriceCategory.JOURNEE,
+  PriceCategory.OPEN_SPACE,
+  PriceCategory.SALLE,
+] as const;
+
+function toggleSpaceCategory(
+  current: PriceCategory[],
+  cat: PriceCategory
+): PriceCategory[] {
+  const on = current.includes(cat);
+  if (on) {
+    const next = current.filter((c) => c !== cat);
+    return next.length ? next : current;
+  }
+  return [...current, cat];
+}
 
 function SpaceWifiEditor({
   space,
@@ -142,8 +160,10 @@ export default function FacilityPage() {
   const [editMode, setEditMode] = useState(false);
   const [tool, setTool] = useState<EditTool>("select");
   const [fixtureKind, setFixtureKind] = useState<FixtureKind>("ARMCHAIR");
-  /** Space selected only for « Plan des places » (independent from Espaces tab). */
+  /** Space selected for Plan + Réglages (unified Espaces tab). */
   const [activeSpaceId, setActiveSpaceId] = useState<string | null>(null);
+  const [spacePanel, setSpacePanel] = useState<"plan" | "config">("plan");
+  const [showNewSpace, setShowNewSpace] = useState(false);
   const [selectedTable, setSelectedTable] = useState<SpaceTable | null>(null);
   const [selectedWall, setSelectedWall] = useState<SpaceWall | null>(null);
   const [selectedFixture, setSelectedFixture] = useState<SpaceFixture | null>(null);
@@ -176,8 +196,8 @@ export default function FacilityPage() {
   const [seatOverflow, setSeatOverflow] = useState(false);
 
   const [newSpaceName, setNewSpaceName] = useState("");
-  const [newSpaceCategory, setNewSpaceCategory] = useState<PriceCategory>(
-    PriceCategory.JOURNEE
+  const [newSpaceCategories, setNewSpaceCategories] = useState<PriceCategory[]>(
+    [PriceCategory.JOURNEE]
   );
   const [floorPlanUrl, setFloorPlanUrl] = useState<string | null>(null);
   const [tableForms, setTableForms] = useState<Record<string, TableFormState>>(
@@ -353,13 +373,16 @@ export default function FacilityPage() {
         facilityId: facility!.id,
         name: newSpaceName.trim(),
         floorPlanUrl: floorPlanUrl || undefined,
-        category: newSpaceCategory,
+        category: newSpaceCategories[0],
+        categories: newSpaceCategories,
       }),
     onSuccess: (s) => {
       toast.success("Espace créé");
       setNewSpaceName("");
-      setNewSpaceCategory(PriceCategory.JOURNEE);
+      setNewSpaceCategories([PriceCategory.JOURNEE]);
       setFloorPlanUrl(null);
+      setShowNewSpace(false);
+      setSpacePanel("plan");
       setActiveSpaceId(s.id);
       invalidate();
     },
@@ -369,8 +392,11 @@ export default function FacilityPage() {
   const updateSpace = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Space> }) =>
       facilityApi.updateSpace(id, data),
-    onSuccess: () => {
-      toast.success("Espace mis à jour");
+    onSuccess: (_data, vars) => {
+      const onlyCats =
+        vars.data &&
+        Object.keys(vars.data).every((k) => k === "categories" || k === "category");
+      if (!onlyCats) toast.success("Espace mis à jour");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -811,14 +837,139 @@ export default function FacilityPage() {
         ) : null}
       </div>
 
-      <Tabs defaultValue="map">
+      <Tabs defaultValue="espaces">
         <TabsList>
-          <TabsTrigger value="map">Plan des places</TabsTrigger>
-          <TabsTrigger value="spaces">Espaces & tables</TabsTrigger>
+          <TabsTrigger value="espaces">Espaces</TabsTrigger>
           <TabsTrigger value="profile">Profil & QR</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="map" className="mt-4 space-y-4">
+        <TabsContent value="espaces" className="mt-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+            <aside className="w-full shrink-0 space-y-3 lg:sticky lg:top-4 lg:w-60">
+              <div className="rounded-lg border bg-card p-2">
+                <p className="mb-2 px-1 text-xs font-medium text-muted-foreground">
+                  Espaces
+                </p>
+                <div className="flex max-h-64 flex-col gap-1 overflow-y-auto lg:max-h-[min(60vh,28rem)]">
+                  {spaces.map((s) => (
+                    <Button
+                      key={s.id}
+                      size="sm"
+                      variant={activeSpace?.id === s.id ? "default" : "ghost"}
+                      className="h-9 justify-start"
+                      onClick={() => setActiveSpaceId(s.id)}
+                    >
+                      {s.name}
+                    </Button>
+                  ))}
+                  {!spaces.length && !layoutError ? (
+                    <p className="px-1 text-xs text-muted-foreground">
+                      Aucun espace pour le moment
+                    </p>
+                  ) : null}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    setShowNewSpace((v) => !v);
+                    setSpacePanel("config");
+                  }}
+                >
+                  {showNewSpace ? "Fermer" : "+ Nouvel espace"}
+                </Button>
+              </div>
+              {showNewSpace ? (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Nouvel espace</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-1">
+                      <Label>Nom</Label>
+                      <Input
+                        value={newSpaceName}
+                        onChange={(e) => setNewSpaceName(e.target.value)}
+                        placeholder="Open Space"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label>Catégories</Label>
+                      <div className="flex flex-wrap gap-1">
+                        {SPACE_VISIT_CATS.map((c) => {
+                          const on = newSpaceCategories.includes(c);
+                          return (
+                            <Button
+                              key={c}
+                              type="button"
+                              size="sm"
+                              variant={on ? "default" : "outline"}
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                setNewSpaceCategories((prev) =>
+                                  toggleSpaceCategory(prev, c)
+                                )
+                              }
+                            >
+                              {PRICE_CATEGORY_LABEL[c]}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <ImageUpload
+                      label="Plan schématique"
+                      value={floorPlanUrl}
+                      onChange={setFloorPlanUrl}
+                    />
+                    <Button
+                      className="w-full"
+                      disabled={
+                        !facility ||
+                        !newSpaceName.trim() ||
+                        createSpace.isPending
+                      }
+                      onClick={() => createSpace.mutate()}
+                    >
+                      Créer
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : null}
+            </aside>
+
+            <div className="min-w-0 flex-1 space-y-4">
+              {activeSpace ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    {activeSpace.name}
+                  </h2>
+                  <div className="flex rounded-lg border p-0.5">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={spacePanel === "plan" ? "default" : "ghost"}
+                      className="h-8"
+                      onClick={() => setSpacePanel("plan")}
+                    >
+                      Plan des places
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={spacePanel === "config" ? "default" : "ghost"}
+                      className="h-8"
+                      onClick={() => setSpacePanel("config")}
+                    >
+                      Réglages & tables
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              {spacePanel === "plan" ? (
+                <div className="space-y-4">
           {layoutError ? (
             <Card>
               <CardContent className="p-4 text-sm text-destructive">
@@ -831,21 +982,6 @@ export default function FacilityPage() {
             </Card>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            {spaces.map((s) => (
-              <Button
-                key={s.id}
-                size="sm"
-                variant={activeSpace?.id === s.id ? "default" : "outline"}
-                onClick={() => setActiveSpaceId(s.id)}
-              >
-                {s.name}
-              </Button>
-            ))}
-            {!spaces.length && !layoutError ? (
-              <span className="text-sm text-muted-foreground">
-                Aucun espace — créez-en un dans « Espaces & tables »
-              </span>
-            ) : null}
             <div className="flex-1" />
             <Button
               size="sm"
@@ -923,7 +1059,8 @@ export default function FacilityPage() {
           {!activeSpace ? (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
-                Créez un espace dans l&apos;onglet Espaces & tables.
+                Sélectionnez un espace à gauche, ou créez-en un avec « Nouvel
+                espace ».
               </CardContent>
             </Card>
           ) : (
@@ -1541,106 +1678,53 @@ export default function FacilityPage() {
               </CardContent>
             </Card>
           ) : null}
-        </TabsContent>
-
-        <TabsContent value="spaces" className="mt-4 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Nouvel espace</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-wrap items-end gap-4">
-              <div className="space-y-2">
-                <Label>Nom</Label>
-                <Input
-                  value={newSpaceName}
-                  onChange={(e) => setNewSpaceName(e.target.value)}
-                  placeholder="Open Space"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Catégorie</Label>
-                <Select
-                  value={newSpaceCategory}
-                  onValueChange={(v) =>
-                    setNewSpaceCategory(v as PriceCategory)
-                  }
-                >
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={PriceCategory.JOURNEE}>
-                      {PRICE_CATEGORY_LABEL.JOURNEE}
-                    </SelectItem>
-                    <SelectItem value={PriceCategory.OPEN_SPACE}>
-                      {PRICE_CATEGORY_LABEL.OPEN_SPACE}
-                    </SelectItem>
-                    <SelectItem value={PriceCategory.SALLE}>
-                      {PRICE_CATEGORY_LABEL.SALLE}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <ImageUpload
-                className="min-w-[220px] flex-1"
-                label="Plan schématique"
-                value={floorPlanUrl}
-                onChange={setFloorPlanUrl}
-              />
-              <Button
-                disabled={
-                  !facility || !newSpaceName.trim() || createSpace.isPending
-                }
-                onClick={() => createSpace.mutate()}
-              >
-                Créer espace
-              </Button>
-            </CardContent>
-          </Card>
-
+                </div>
+              ) : (
+                <div className="space-y-4">
           {!spaces.length ? (
             <Card>
               <CardContent className="p-6 text-sm text-muted-foreground">
-                Aucun espace pour le moment. Créez le premier ci-dessus.
+                Aucun espace pour le moment. Créez le premier à gauche.
+              </CardContent>
+            </Card>
+          ) : !activeSpace ? (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Sélectionnez un espace dans la liste.
               </CardContent>
             </Card>
           ) : (
-            spaces.map((space) => {
+            [activeSpace].map((space) => {
               const form = getTableForm(space.id);
               return (
                 <Card key={space.id}>
                   <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
                     <CardTitle className="text-base">{space.name}</CardTitle>
-                    <Select
-                      value={
-                        space.category === PriceCategory.SALLE ||
-                        space.category === PriceCategory.OPEN_SPACE ||
-                        space.category === PriceCategory.JOURNEE
-                          ? space.category
-                          : PriceCategory.JOURNEE
-                      }
-                      onValueChange={(v) =>
-                        updateSpace.mutate({
-                          id: space.id,
-                          data: { category: v as PriceCategory },
-                        })
-                      }
-                    >
-                      <SelectTrigger className="h-8 w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={PriceCategory.JOURNEE}>
-                          {PRICE_CATEGORY_LABEL.JOURNEE}
-                        </SelectItem>
-                        <SelectItem value={PriceCategory.OPEN_SPACE}>
-                          {PRICE_CATEGORY_LABEL.OPEN_SPACE}
-                        </SelectItem>
-                        <SelectItem value={PriceCategory.SALLE}>
-                          {PRICE_CATEGORY_LABEL.SALLE}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {SPACE_VISIT_CATS.map((c) => {
+                        const cats = spaceCategoriesOf(space);
+                        const on = cats.includes(c);
+                        return (
+                          <Button
+                            key={c}
+                            type="button"
+                            size="sm"
+                            variant={on ? "default" : "outline"}
+                            className="h-8"
+                            onClick={() =>
+                              updateSpace.mutate({
+                                id: space.id,
+                                data: {
+                                  categories: toggleSpaceCategory(cats, c),
+                                },
+                              })
+                            }
+                          >
+                            {PRICE_CATEGORY_LABEL[c]}
+                          </Button>
+                        );
+                      })}
+                    </div>
                     <label className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs">
                       <Switch
                         checked={!!space.openForReservation}
@@ -1683,14 +1767,9 @@ export default function FacilityPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => {
-                          setActiveSpaceId(space.id);
-                          toast.message(
-                            `${space.name} sélectionné dans Plan des places`
-                          );
-                        }}
+                        onClick={() => setSpacePanel("plan")}
                       >
-                        Voir sur le plan
+                        Voir le plan
                       </Button>
                       <Button
                         size="sm"
@@ -2196,6 +2275,10 @@ export default function FacilityPage() {
               );
             })
           )}
+                </div>
+              )}
+            </div>
+          </div>
         </TabsContent>
 
         <TabsContent value="profile" className="mt-4 space-y-4">
@@ -2241,7 +2324,12 @@ export default function FacilityPage() {
                       name="mobileSeatMode"
                       checked={profile.mobileSeatMode === value}
                       onChange={() =>
-                        setProfile((p) => ({ ...p, mobileSeatMode: value }))
+                        setProfile((p) => ({
+                          ...p,
+                          mobileSeatMode: value,
+                          receptionAway:
+                            value === "AUTO_ASSIGN" ? p.receptionAway : false,
+                        }))
                       }
                     />
                     <span>

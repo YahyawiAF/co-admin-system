@@ -18,7 +18,7 @@ import { bookingApi, facilityApi, journalApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Journal, Price, SeatOccupant, Space, SpaceSeat } from "@/lib/types";
 import { PriceCategory } from "@/lib/types";
-import { spaceCategoryOf } from "@/lib/tarif-labels";
+import { spaceHasCategory } from "@/lib/tarif-labels";
 import { isActiveVisit, visitorLabel } from "@/lib/journal-utils";
 
 type Props = {
@@ -294,11 +294,11 @@ function seatLabelsForSelection(
   if (kind === "space" && spaceId) {
     target = spaces.filter((s) => s.id === spaceId);
   } else if (kind === "open") {
-    target = spaces.filter(
-      (s) => spaceCategoryOf(s) === PriceCategory.OPEN_SPACE
+    target = spaces.filter((s) =>
+      spaceHasCategory(s, PriceCategory.OPEN_SPACE)
     );
   } else if (kind === "salle") {
-    target = spaces.filter((s) => spaceCategoryOf(s) === PriceCategory.SALLE);
+    target = spaces.filter((s) => spaceHasCategory(s, PriceCategory.SALLE));
   } else if (kind !== "all") {
     return [];
   }

@@ -51,10 +51,44 @@ export function inferSpaceCategory(name: string): PriceCategory {
   return PriceCategory.JOURNEE;
 }
 
+export function spaceCategoriesOf(space: {
+  name?: string | null;
+  category?: string | null;
+  categories?: (string | null)[] | null;
+}): PriceCategory[] {
+  const raw = (space.categories || []).filter(
+    (c): c is PriceCategory =>
+      c === PriceCategory.SALLE ||
+      c === PriceCategory.OPEN_SPACE ||
+      c === PriceCategory.JOURNEE
+  );
+  if (raw.length) return [...new Set(raw)];
+  return [spaceCategoryOf(space)];
+}
+
+export function spaceHasCategory(
+  space: {
+    name?: string | null;
+    category?: string | null;
+    categories?: (string | null)[] | null;
+  },
+  category: string
+) {
+  return spaceCategoriesOf(space).includes(category as PriceCategory);
+}
+
 export function spaceCategoryOf(space: {
   name?: string | null;
   category?: string | null;
+  categories?: (string | null)[] | null;
 }): PriceCategory {
+  const fromList = (space.categories || []).find(
+    (c) =>
+      c === PriceCategory.SALLE ||
+      c === PriceCategory.OPEN_SPACE ||
+      c === PriceCategory.JOURNEE
+  );
+  if (fromList) return fromList as PriceCategory;
   if (
     space.category === PriceCategory.SALLE ||
     space.category === PriceCategory.OPEN_SPACE ||
@@ -65,10 +99,56 @@ export function spaceCategoryOf(space: {
   return inferSpaceCategory(space.name || "");
 }
 
+export function priceCategoriesOf(price: {
+  category?: string | null;
+  categories?: (string | null)[] | null;
+}): PriceCategory[] {
+  const raw = (price.categories || []).filter(
+    (c): c is PriceCategory =>
+      c === PriceCategory.SALLE ||
+      c === PriceCategory.OPEN_SPACE ||
+      c === PriceCategory.JOURNEE ||
+      c === PriceCategory.ABONNEMENT
+  );
+  if (raw.length) return [...new Set(raw)];
+  if (
+    price.category === PriceCategory.SALLE ||
+    price.category === PriceCategory.OPEN_SPACE ||
+    price.category === PriceCategory.JOURNEE ||
+    price.category === PriceCategory.ABONNEMENT
+  ) {
+    return [price.category];
+  }
+  return [];
+}
+
+export function priceMatchesSpace(
+  price: {
+    category?: string | null;
+    categories?: (string | null)[] | null;
+  },
+  space: {
+    name?: string | null;
+    category?: string | null;
+    categories?: (string | null)[] | null;
+  }
+) {
+  const pc = priceCategoriesOf(price);
+  if (!pc.length || pc.includes(PriceCategory.ABONNEMENT)) return true;
+  const sc = spaceCategoriesOf(space);
+  return pc.some((c) => sc.includes(c));
+}
+
 export function categoriesPresentInSpaces(
-  spaces: { name?: string | null; category?: string | null }[]
+  spaces: {
+    name?: string | null;
+    category?: string | null;
+    categories?: (string | null)[] | null;
+  }[]
 ): Set<string> {
   const set = new Set<string>();
-  for (const s of spaces) set.add(spaceCategoryOf(s));
+  for (const s of spaces) {
+    for (const c of spaceCategoriesOf(s)) set.add(c);
+  }
   return set;
 }

@@ -311,6 +311,16 @@ export class MobileController {
     return this.mobileService.listVisitRequests(status);
   }
 
+  @Get('admin/visit-arrivals')
+  listUnackedArrivals() {
+    return this.mobileService.listUnackedArrivals();
+  }
+
+  @Patch('admin/visit-arrivals/ack')
+  acknowledgeArrivals(@Body() body?: { ids?: string[] }) {
+    return this.mobileService.acknowledgeArrivals(body?.ids);
+  }
+
   @Patch('admin/visit-requests/:id/approve')
   approveVisitRequest(
     @Param('id', ParseUUIDPipe) id: string,

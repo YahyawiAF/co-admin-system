@@ -47,6 +47,7 @@ type Props = {
   seatSettings?: MobileSeatSettings | null;
   hasActiveSubscription?: boolean;
   subscriptionKind?: string | null;
+  allowedSpaceIds?: string[];
 };
 
 export function ActiveSessionPanel({
@@ -56,6 +57,7 @@ export function ActiveSessionPanel({
   seatSettings,
   hasActiveSubscription,
   subscriptionKind,
+  allowedSpaceIds,
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
@@ -118,7 +120,7 @@ export function ActiveSessionPanel({
   });
 
   return (
-    <div className="rounded-2xl bg-white p-3.5 text-center shadow-sm">
+    <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         Session en cours
       </p>
@@ -143,7 +145,7 @@ export function ActiveSessionPanel({
       {/* Timer + forfait on top */}
       {isHoursPool ? (
         <>
-          <div className="my-4 rounded-2xl border bg-slate-50 px-4 py-5">
+          <div className="my-2.5 rounded-2xl border bg-slate-50 px-3 py-3.5">
             <p className="text-xs uppercase tracking-wide text-slate-500">
               Temps de cette session
             </p>
@@ -154,7 +156,7 @@ export function ActiveSessionPanel({
               {elapsedMs != null ? formatDurationHm(elapsedMs) : "Chronomètre"}
             </p>
           </div>
-          <div className="mb-4 rounded-2xl border bg-slate-50 px-4 py-5">
+          <div className="mb-2.5 rounded-2xl border bg-slate-50 px-3 py-3.5">
             <p className="text-xs uppercase tracking-wide text-slate-500">
               Heures restantes (abonnement)
             </p>
@@ -191,9 +193,9 @@ export function ActiveSessionPanel({
           </div>
         </>
       ) : (
-        <div className="my-4 rounded-2xl border bg-slate-50 px-4 py-6">
+        <div className="my-2.5 rounded-2xl border bg-slate-50 px-3 py-4">
           <div
-            className={`font-mono text-5xl font-bold tabular-nums ${
+            className={`font-mono text-4xl font-bold tabular-nums ${
               overtime ? "text-red-600" : "text-primary"
             }`}
           >
@@ -223,19 +225,19 @@ export function ActiveSessionPanel({
 
       {!covered ? (
         <>
-          <div className="mb-1 text-3xl font-bold">{amount} DT</div>
-          <p className="mb-4 text-sm text-slate-500">
-            Statut : {session.isPayed ? "payé" : "non payé"}
+          <div className="mb-0.5 text-2xl font-bold">{amount} DT</div>
+          <p className="mb-2 text-xs text-slate-500">
+            {session.isPayed ? "Payé" : "Non payé"}
           </p>
         </>
       ) : null}
 
       {seatLabel ? (
-        <div className="mb-3 rounded-xl border bg-slate-50 px-4 py-3 text-left text-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <div className="mb-2 rounded-xl border bg-slate-50 px-3 py-2 text-left text-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
             Votre place
           </p>
-          <p className="mt-1 font-semibold">
+          <p className="mt-0.5 font-semibold">
             {[seat?.spaceName, seat?.tableName, seatLabel]
               .filter(Boolean)
               .join(" · ")}
@@ -246,20 +248,28 @@ export function ActiveSessionPanel({
             </Badge>
           ) : null}
         </div>
+      ) : canPickSeat && allowedSpaceIds && allowedSpaceIds.length === 0 ? (
+        <p className="mb-2 text-xs text-slate-500">
+          Aucun espace pour ce forfait — l’accueil vous placera.
+        </p>
       ) : canPickSeat ? (
-        <p className="mb-2 text-xs text-slate-500">Choisissez votre place</p>
+        <p className="mb-1.5 text-left text-xs font-medium text-slate-600">
+          Choisissez votre place
+        </p>
       ) : (
         <p className="mb-2 text-xs text-slate-500">Place gérée par l’accueil</p>
       )}
 
-      {canPickSeat || seatLabel ? (
-        <div className="mb-4 text-left">
+      {(canPickSeat && (!allowedSpaceIds || allowedSpaceIds.length > 0)) ||
+      seatLabel ? (
+        <div className="mb-3 text-left">
           <VisitorSeatMap
             memberId={memberId}
             assignedSeatLabel={seatLabel}
             assignedSpaceId={seat?.spaceId}
             seatMode={seatMode}
             canPick={canPickSeat}
+            allowedSpaceIds={allowedSpaceIds}
           />
         </div>
       ) : null}

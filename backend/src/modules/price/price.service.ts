@@ -182,6 +182,7 @@ export class PriceService {
     timePeriod: Prisma.JsonValue;
     type: PriceType;
     category: PriceCategory | null;
+    categories?: PriceCategory[];
     durationHours: number | null;
     billingUnit: BillingUnit | null;
     periodDays: number | null;
@@ -212,8 +213,16 @@ export class PriceService {
       : price.space?.name
         ? [price.space.name]
         : [];
+    const categories =
+      price.categories?.length
+        ? [...new Set(price.categories)]
+        : price.category
+          ? [price.category]
+          : [];
     return new PriceEntity({
       ...price,
+      category: categories[0] ?? price.category ?? null,
+      categories,
       spaceId: spaceIds[0] ?? price.spaceId ?? null,
       spaceName: spaceNames[0] ?? price.space?.name ?? null,
       spaceIds,
@@ -226,6 +235,21 @@ export class PriceService {
       isActive: price.isActive !== false,
       timePeriod: price.timePeriod as { start: string; end: string },
     });
+  }
+
+  private normalizeCategories(dto: {
+    category?: PriceCategory | null;
+    categories?: PriceCategory[];
+  }): PriceCategory[] {
+    const raw = [
+      ...(dto.categories || []),
+      ...(dto.category ? [dto.category] : []),
+    ];
+    const unique = [...new Set(raw.filter(Boolean))];
+    if (unique.includes(PriceCategory.ABONNEMENT)) {
+      return [PriceCategory.ABONNEMENT];
+    }
+    return unique;
   }
 
   private normalizeSpaceIds(dto: {
@@ -266,6 +290,7 @@ export class PriceService {
       timePeriod,
       type,
       category,
+      categories: categoriesDto,
       durationHours,
       billingUnit,
       periodDays,
@@ -287,7 +312,12 @@ export class PriceService {
     }
 
     const linked = this.normalizeSpaceIds({ spaceId, spaceIds });
-    const occupy = this.occupyFromDto(category, occupySeat, occupyWhole);
+    const categories = this.normalizeCategories({
+      category,
+      categories: categoriesDto,
+    });
+    const primary = categories[0] ?? category ?? null;
+    const occupy = this.occupyFromDto(primary, occupySeat, occupyWhole);
 
     const priceEntity = await this.prisma.price.create({
       data: {
@@ -295,7 +325,8 @@ export class PriceService {
         price,
         timePeriod: { start: timePeriod.start, end: timePeriod.end },
         type,
-        category,
+        category: primary,
+        categories,
         durationHours,
         billingUnit,
         periodDays,
@@ -378,7 +409,7 @@ export class PriceService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    const { spaceId, spaceIds, timePeriod, occupySeat, occupyWhole, ...rest } =
+    const { spaceId, spaceIds, timePeriod, occupySeat, occupyWhole, categories, category, ...rest } =
       updatePriceDto;
     const updateData: Prisma.PriceUpdateInput = {
       ...rest,
@@ -389,6 +420,16 @@ export class PriceService {
         },
       }),
     };
+    if (categories !== undefined || category !== undefined) {
+      const nextCats = this.normalizeCategories({
+        category: category ?? existingPrice.category,
+        categories:
+          categories ??
+          (existingPrice as { categories?: PriceCategory[] }).categories,
+      });
+      updateData.category = nextCats[0] ?? category ?? null;
+      updateData.categories = { set: nextCats };
+    }
     const linked =
       spaceIds !== undefined || spaceId !== undefined
         ? this.normalizeSpaceIds({ spaceId, spaceIds })
@@ -399,8 +440,12 @@ export class PriceService {
         : { disconnect: true };
     }
     if (occupySeat !== undefined || occupyWhole !== undefined) {
+      const occupyPrimary =
+        (updateData.category as PriceCategory | null | undefined) ??
+        updatePriceDto.category ??
+        existingPrice.category;
       const occupy = this.occupyFromDto(
-        updatePriceDto.category ?? existingPrice.category,
+        occupyPrimary,
         occupySeat ?? existingPrice.occupySeat,
         occupyWhole ?? existingPrice.occupyWhole,
       );

@@ -136,6 +136,7 @@ model Price {
   price          Float
   type           PriceType
   category       PriceCategory?
+  categories     PriceCategory[] @default([])
   durationHours  Float?
   billingUnit    BillingUnit?
   periodDays     Int?
@@ -391,6 +392,7 @@ model Space {
   facility            Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   name                String
   category            PriceCategory?
+  categories          PriceCategory[] @default([])
   floorPlanUrl        String?
   sortOrder           Int             @default(0)
   capacityNormal      Int             @default(0)
@@ -594,11 +596,14 @@ model VisitRequest {
   spaceId      String?
   occupyWhole  Boolean            @default(false)
   autoApproved Boolean            @default(false)
+  /// When set, reception has acknowledged seeing this (auto-)arrival
+  receptionAckedAt DateTime?
   member       Member             @relation(fields: [memberId], references: [id])
   price        Price              @relation(fields: [priceId], references: [id])
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
 
+  @@index([status, autoApproved, receptionAckedAt])
   @@map("visit_requests")
 }
 

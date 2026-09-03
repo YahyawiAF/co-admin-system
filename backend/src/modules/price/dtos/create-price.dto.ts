@@ -44,6 +44,15 @@ export class CreatePriceDto {
   @IsEnum(PriceCategory)
   category?: PriceCategory;
 
+  @ApiPropertyOptional({
+    description: 'One or more visit categories (JOURNEE, OPEN_SPACE, SALLE) or ABONNEMENT',
+    enum: PriceCategory,
+    isArray: true,
+  })
+  @IsOptional()
+  @IsEnum(PriceCategory, { each: true })
+  categories?: PriceCategory[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

@@ -47,6 +47,7 @@ export const queryKeys = {
   facility: ["facility"] as const,
   abonnements: ["abonnements"] as const,
   visitRequestsPending: ["visit-requests", "pending"] as const,
+  visitArrivals: ["visit-requests", "arrivals"] as const,
   bookingRequestsPending: ["booking-requests", "pending"] as const,
   productOrdersPending: ["product-orders", "pending"] as const,
   adminOrders: (date: string) => ["product-orders", "admin", date] as const,

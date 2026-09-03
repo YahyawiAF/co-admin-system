@@ -51,17 +51,41 @@ import {
   BILLING_UNIT_LABEL,
   formatTarifPrice,
   PRICE_CATEGORY_LABEL,
-  spaceCategoryOf,
+  priceCategoriesOf,
+  priceMatchesSpace,
   tarifSubtitle,
 } from "@/lib/tarif-labels";
 import {
   defaultOccupyForCategory,
 } from "@/lib/space-occupy";
 
+const VISIT_PRICE_CATS = [
+  PriceCategory.JOURNEE,
+  PriceCategory.OPEN_SPACE,
+  PriceCategory.SALLE,
+] as const;
+
+function togglePriceCategory(
+  current: PriceCategory[],
+  cat: PriceCategory
+): PriceCategory[] {
+  if (cat === PriceCategory.ABONNEMENT) {
+    return [PriceCategory.ABONNEMENT];
+  }
+  const withoutAbo = current.filter((c) => c !== PriceCategory.ABONNEMENT);
+  const on = withoutAbo.includes(cat);
+  if (on) {
+    const next = withoutAbo.filter((c) => c !== cat);
+    return next.length ? next : withoutAbo;
+  }
+  return [...withoutAbo, cat];
+}
+
 const schema = z.object({
   name: z.string().min(1),
   price: z.coerce.number().min(0),
   category: z.nativeEnum(PriceCategory),
+  categories: z.array(z.nativeEnum(PriceCategory)).min(1),
   billingUnit: z.nativeEnum(BillingUnit),
   durationHours: z.preprocess(
     (v) => (v === "" || v === null || v === undefined ? null : Number(v)),
@@ -112,6 +136,7 @@ function PriceFormDialog({
       name: "",
       price: 0,
       category: PriceCategory.JOURNEE,
+      categories: [PriceCategory.JOURNEE],
       billingUnit: BillingUnit.PACK,
       durationHours: 2,
       periodDays: 7,
@@ -128,14 +153,19 @@ function PriceFormDialog({
 
   useEffect(() => {
     if (!open) return;
+    const cats = priceCategoriesOf(price || {});
+    const categories = cats.length
+      ? cats
+      : [price?.category || PriceCategory.JOURNEE];
     form.reset({
       name: price?.name || "",
       price: price?.price || 0,
-      category: price?.category || PriceCategory.JOURNEE,
+      category: categories[0],
+      categories,
       billingUnit: price?.billingUnit || BillingUnit.PACK,
       durationHours:
         price?.billingUnit === BillingUnit.HOURLY &&
-        price?.category !== PriceCategory.ABONNEMENT
+        !categories.includes(PriceCategory.ABONNEMENT)
           ? price?.durationHours ?? null
           : price?.durationHours ?? 2,
       periodDays: price?.periodDays ?? 7,
@@ -147,10 +177,10 @@ function PriceFormDialog({
           : [],
       occupySeat:
         price?.occupySeat ??
-        defaultOccupyForCategory(price?.category).occupySeat,
+        defaultOccupyForCategory(categories[0]).occupySeat,
       occupyWhole:
         price?.occupyWhole ??
-        defaultOccupyForCategory(price?.category).occupyWhole,
+        defaultOccupyForCategory(categories[0]).occupyWhole,
       reserveSeat: !!price?.reserveSeat,
       reserveSeatFromHour: price?.reserveSeatFromHour ?? null,
       reserveSeatToHour: price?.reserveSeatToHour ?? null,
@@ -159,26 +189,43 @@ function PriceFormDialog({
   }, [open, price]);
 
   const billingUnit = form.watch("billingUnit");
-  const category = form.watch("category");
+  const categories = form.watch("categories") || [];
+  const category = categories[0] || form.watch("category");
+  const isAbo = categories.includes(PriceCategory.ABONNEMENT);
   const reserveSeat = form.watch("reserveSeat");
   const occupySeat = form.watch("occupySeat");
   const occupyWhole = form.watch("occupyWhole");
   const spaceIds = form.watch("spaceIds") || [];
   const isActive = form.watch("isActive");
 
+  const matchingSpaces = useMemo(
+    () =>
+      spaces.filter(
+        (s) =>
+          isAbo ||
+          priceMatchesSpace({ category, categories }, s)
+      ),
+    [spaces, isAbo, category, categories]
+  );
+
   const save = useMutation({
     mutationFn: (v: FormValues) => {
+      const cats = v.categories?.length
+        ? v.categories
+        : [v.category || PriceCategory.JOURNEE];
+      const primary = cats[0];
       const type =
-        v.category === PriceCategory.ABONNEMENT
+        primary === PriceCategory.ABONNEMENT
           ? PriceType.abonnement
           : PriceType.journal;
       const body = {
         name: v.name,
         price: v.price,
-        category: v.category,
+        category: primary,
+        categories: cats,
         billingUnit: v.billingUnit,
         durationHours:
-          v.category === PriceCategory.ABONNEMENT
+          primary === PriceCategory.ABONNEMENT
             ? v.durationHours
             : v.billingUnit === BillingUnit.PERIOD
               ? null
@@ -192,13 +239,13 @@ function PriceFormDialog({
         occupySeat: v.occupySeat !== false,
         occupyWhole: !!v.occupyWhole,
         reserveSeat:
-          v.category === PriceCategory.ABONNEMENT ? !!v.reserveSeat : false,
+          primary === PriceCategory.ABONNEMENT ? !!v.reserveSeat : false,
         reserveSeatFromHour:
-          v.category === PriceCategory.ABONNEMENT && v.reserveSeat
+          primary === PriceCategory.ABONNEMENT && v.reserveSeat
             ? v.reserveSeatFromHour
             : null,
         reserveSeatToHour:
-          v.category === PriceCategory.ABONNEMENT && v.reserveSeat
+          primary === PriceCategory.ABONNEMENT && v.reserveSeat
             ? v.reserveSeatToHour
             : null,
         isActive: v.isActive !== false,
@@ -219,62 +266,81 @@ function PriceFormDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+        <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
           <DialogTitle>{price ? "Modifier le tarif" : "Nouveau tarif"}</DialogTitle>
         </DialogHeader>
         <form
-          className="space-y-3"
+          className="flex min-h-0 flex-1 flex-col"
           onSubmit={form.handleSubmit((v) => save.mutate(v))}
         >
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-6 py-4">
           <div className="space-y-2">
             <Label>Nom</Label>
             <Input {...form.register("name")} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label>Catégorie</Label>
-              <Select
-                value={category}
-                onValueChange={(v) => {
-                  form.setValue("category", v as PriceCategory);
-                  const occupy = defaultOccupyForCategory(v);
-                  form.setValue("occupySeat", occupy.occupySeat);
-                  form.setValue("occupyWhole", occupy.occupyWhole);
+          <div className="space-y-2">
+            <Label>Catégories</Label>
+            <p className="text-xs text-muted-foreground">
+              Plusieurs catégories = visible pour les espaces qui en partagent
+              au moins une. Abonnement est exclusif.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {VISIT_PRICE_CATS.map((c) => {
+                const on = categories.includes(c);
+                return (
+                  <Button
+                    key={c}
+                    type="button"
+                    size="sm"
+                    variant={on ? "default" : "outline"}
+                    className="h-8"
+                    onClick={() => {
+                      const next = togglePriceCategory(categories, c);
+                      form.setValue("categories", next);
+                      form.setValue("category", next[0]);
+                      const occupy = defaultOccupyForCategory(next[0]);
+                      form.setValue("occupySeat", occupy.occupySeat);
+                      form.setValue("occupyWhole", occupy.occupyWhole);
+                    }}
+                  >
+                    {PRICE_CATEGORY_LABEL[c]}
+                  </Button>
+                );
+              })}
+              <Button
+                type="button"
+                size="sm"
+                variant={isAbo ? "default" : "outline"}
+                className="h-8"
+                onClick={() => {
+                  form.setValue("categories", [PriceCategory.ABONNEMENT]);
+                  form.setValue("category", PriceCategory.ABONNEMENT);
                 }}
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.values(PriceCategory).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {PRICE_CATEGORY_LABEL[c] || c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                {PRICE_CATEGORY_LABEL.ABONNEMENT}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label>Facturation</Label>
-              <Select
-                value={billingUnit}
-                onValueChange={(v) =>
-                  form.setValue("billingUnit", v as BillingUnit)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.values(BillingUnit).map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {BILLING_UNIT_LABEL[c] || c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Facturation</Label>
+            <Select
+              value={billingUnit}
+              onValueChange={(v) =>
+                form.setValue("billingUnit", v as BillingUnit)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.values(BillingUnit).map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {BILLING_UNIT_LABEL[c] || c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {billingUnit === BillingUnit.PERIOD ? (
             <div className="space-y-2">
@@ -287,7 +353,7 @@ function PriceFormDialog({
               </p>
             </div>
           ) : null}
-          {category === PriceCategory.ABONNEMENT ? (
+          {isAbo ? (
             <div className="space-y-2">
               <Label>
                 {billingUnit === BillingUnit.HOURLY
@@ -323,14 +389,13 @@ function PriceFormDialog({
           ) : null}
           <div className="space-y-2">
             <Label>
-              {billingUnit === BillingUnit.HOURLY &&
-              category !== PriceCategory.ABONNEMENT
+              {billingUnit === BillingUnit.HOURLY && !isAbo
                 ? "Prix / heure (DT)"
                 : "Prix (DT)"}
             </Label>
             <Input type="number" step="0.1" {...form.register("price")} />
           </div>
-          {category !== PriceCategory.ABONNEMENT ? (
+          {!isAbo ? (
             <div className="space-y-3 rounded-lg border px-3 py-3">
               <div>
                 <Label>Comment ce forfait occupe l’espace</Label>
@@ -369,17 +434,11 @@ function PriceFormDialog({
             <Label>Visible dans ces espaces</Label>
             <p className="text-xs text-muted-foreground">
               Cochez les espaces où ce forfait peut être choisi. Aucun = tous
-              les espaces de la même catégorie. Un espace peut avoir plusieurs
-              forfaits.
+              les espaces qui partagent une catégorie. Un espace peut avoir
+              plusieurs forfaits.
             </p>
             <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
-              {spaces
-                .filter(
-                  (s) =>
-                    category === PriceCategory.ABONNEMENT ||
-                    spaceCategoryOf(s) === category
-                )
-                .map((s) => {
+              {matchingSpaces.map((s) => {
                   const checked = spaceIds.includes(s.id);
                   return (
                     <label
@@ -402,18 +461,14 @@ function PriceFormDialog({
                     </label>
                   );
                 })}
-              {!spaces.filter(
-                (s) =>
-                  category === PriceCategory.ABONNEMENT ||
-                  spaceCategoryOf(s) === category
-              ).length ? (
+              {!matchingSpaces.length ? (
                 <p className="text-xs text-muted-foreground">
                   Aucun espace de cette catégorie. Créez-en dans Facility.
                 </p>
               ) : null}
             </div>
           </div>
-          {category === PriceCategory.ABONNEMENT ? (
+          {isAbo ? (
             <div className="space-y-3 rounded-lg border px-3 py-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -472,7 +527,8 @@ function PriceFormDialog({
               onCheckedChange={(v) => form.setValue("isActive", v)}
             />
           </div>
-          <DialogFooter>
+          </div>
+          <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annuler
             </Button>
@@ -503,14 +559,19 @@ export default function TarifsPage() {
       OTHER: [],
     };
     for (const p of prices) {
-      const key =
-        p.category === PriceCategory.JOURNEE ||
-        p.category === PriceCategory.SALLE ||
-        p.category === PriceCategory.OPEN_SPACE ||
-        p.category === PriceCategory.ABONNEMENT
-          ? p.category
-          : "OTHER";
-      map[key].push(p);
+      const cats = priceCategoriesOf(p);
+      if (!cats.length) {
+        map.OTHER.push(p);
+        continue;
+      }
+      let placed = false;
+      for (const c of cats) {
+        if (map[c]) {
+          map[c].push(p);
+          placed = true;
+        }
+      }
+      if (!placed) map.OTHER.push(p);
     }
     return map;
   }, [prices]);
@@ -571,6 +632,11 @@ export default function TarifsPage() {
               {formatTarifPrice(p)}
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
+              {priceCategoriesOf(p).map((c) => (
+                <Badge key={c} variant="outline">
+                  {PRICE_CATEGORY_LABEL[c] || c}
+                </Badge>
+              ))}
               <Badge variant={p.isActive === false ? "secondary" : "default"}>
                 {p.isActive === false ? "Inactif" : "Actif"}
               </Badge>
@@ -594,7 +660,8 @@ export default function TarifsPage() {
               {p.occupyWhole ? (
                 <Badge variant="outline">Espace entier</Badge>
               ) : null}
-              {p.occupySeat !== false && p.category !== PriceCategory.ABONNEMENT ? (
+              {p.occupySeat !== false &&
+              !priceCategoriesOf(p).includes(PriceCategory.ABONNEMENT) ? (
                 <Badge variant="outline">Par place</Badge>
               ) : null}
               {p.reserveSeat ? (

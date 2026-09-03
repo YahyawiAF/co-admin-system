@@ -159,20 +159,22 @@ export function TableSeatPicker({
           className="h-full min-h-0 rounded-none border-0"
           onSelectTable={(t) => pickTable(t.id)}
           onSelectSeat={(seat) => {
+            if (booked.has(seat.label)) return;
             if (!tableId && tables.length > 0) {
               const parent = tables.find((t) =>
                 (t.seats || []).some((s) => s.id === seat.id)
               );
               if (parent) {
-                pickTable(parent.id);
-                if (!booked.has(seat.label)) onSelectSeat(seat);
+                setTableId(parent.id);
+                onTableChange?.();
+                onSelectSeat(seat);
                 return;
               }
               if (looseSeats.some((s) => s.id === seat.id)) {
-                pickTable(LOOSE);
+                setTableId(LOOSE);
+                onTableChange?.();
               }
             }
-            if (booked.has(seat.label)) return;
             onSelectSeat(seat);
           }}
         />

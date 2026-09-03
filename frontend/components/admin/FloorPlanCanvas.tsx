@@ -534,6 +534,10 @@ export function FloorPlanCanvas({
               }}
               onPointerDown={(e) => {
                 if (!editMode) {
+                  const fromSeat = (e.target as HTMLElement).closest(
+                    "[data-seat-id]"
+                  );
+                  if (fromSeat) return;
                   e.stopPropagation();
                   onSelectTable?.(table);
                   return;
@@ -699,7 +703,10 @@ function SeatChip({
       data-floor-item
       data-seat-id={seat.id}
       onClick={onClick}
-      onPointerDown={onPointerDown}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+        onPointerDown?.(e);
+      }}
       title={`${seat.label}${seat.isOverflow ? " (overflow)" : ""}${
         occupied && inspect ? " — cliquer pour le détail" : ""
       }`}

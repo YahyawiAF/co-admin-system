@@ -74,7 +74,7 @@ export class FacilityService {
     let facilities = await this.prisma.facility.findMany({
       include: {
         spaces: {
-          orderBy: { sortOrder: 'asc' },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
           include: {
             tables: { orderBy: { sortOrder: 'asc' }, include: { seats: true } },
             seats: true,
@@ -99,7 +99,7 @@ export class FacilityService {
         facilities = await this.prisma.facility.findMany({
           include: {
             spaces: {
-              orderBy: { sortOrder: 'asc' },
+              orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
               include: {
                 tables: {
                   orderBy: { sortOrder: 'asc' },
@@ -124,7 +124,7 @@ export class FacilityService {
       where: { id },
       include: {
         spaces: {
-          orderBy: { sortOrder: 'asc' },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
           include: {
             tables: { orderBy: { sortOrder: 'asc' }, include: { seats: true } },
             seats: true,
@@ -386,7 +386,7 @@ export class FacilityService {
       include: {
         seats: { where: { isActive: true }, orderBy: { label: 'asc' } },
       },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
     const places: Record<string, unknown> = {};
     for (const space of spaces) {
@@ -441,7 +441,7 @@ export class FacilityService {
 
     const spaces = await this.prisma.space.findMany({
       where: { facilityId: facility.id },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       include: {
         tables: {
           orderBy: { sortOrder: 'asc' },
@@ -485,8 +485,18 @@ export class FacilityService {
     floorPlanUrl?: string;
     capacityNormal?: number;
     category?: PriceCategory;
+    categories?: PriceCategory[];
   }) {
-    const category = data.category || this.inferSpaceCategory(data.name);
+    const categories =
+      data.categories?.length
+        ? [...new Set(data.categories)]
+        : [data.category || this.inferSpaceCategory(data.name)];
+    const category = categories[0];
+    const maxSort = await this.prisma.space.aggregate({
+      where: { facilityId: data.facilityId },
+      _max: { sortOrder: true },
+    });
+    const sortOrder = (maxSort._max.sortOrder ?? -1) + 1;
     const space = await this.prisma.space.create({
       data: {
         facilityId: data.facilityId,
@@ -494,6 +504,8 @@ export class FacilityService {
         floorPlanUrl: data.floorPlanUrl,
         capacityNormal: data.capacityNormal ?? 0,
         category,
+        categories,
+        sortOrder,
         reserveMode: defaultReserveMode(category),
       },
       include: { tables: true, seats: true },
@@ -505,12 +517,13 @@ export class FacilityService {
 
   async updateSpace(
     id: string,
-    data: Partial<{
+    patch: Partial<{
       name: string;
       floorPlanUrl: string | null;
       sortOrder: number;
       capacityNormal: number;
       category: PriceCategory;
+      categories: PriceCategory[];
       wifiSsid: string | null;
       wifiPassword: string | null;
       openForReservation: boolean;
@@ -518,6 +531,10 @@ export class FacilityService {
       galleryUrls: string[];
     }>,
   ) {
+    const data = { ...patch };
+    if (data.categories?.length) {
+      data.category = data.categories[0];
+    }
     const space = await this.prisma.space.update({
       where: { id },
       data,

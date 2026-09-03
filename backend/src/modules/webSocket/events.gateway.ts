@@ -39,6 +39,10 @@ export class EventsGateway {
     this.server.sockets.emit('visit_request_resolved', data);
   }
 
+  sendVisitArrival(data: any) {
+    this.server.sockets.emit('visit_arrival', data);
+  }
+
   sendVisitorCheckout(data: any) {
     this.server.sockets.emit('visitor_checkout', data);
   }

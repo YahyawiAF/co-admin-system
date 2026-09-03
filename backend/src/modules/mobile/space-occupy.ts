@@ -38,11 +38,75 @@ export function linkedSpaceIds(price: {
   return [...new Set(ids.filter(Boolean))];
 }
 
+const VISIT_CATS = new Set<string>([
+  PriceCategory.JOURNEE,
+  PriceCategory.OPEN_SPACE,
+  PriceCategory.SALLE,
+]);
+
+const ALL_PRICE_CATS = new Set<string>([
+  ...VISIT_CATS,
+  PriceCategory.ABONNEMENT,
+]);
+
+export function spaceCategoriesOf(space: {
+  name?: string | null;
+  category?: PriceCategory | string | null;
+  categories?: (PriceCategory | string | null)[] | null;
+}): PriceCategory[] {
+  const fromList = (space.categories || []).filter((c): c is PriceCategory =>
+    VISIT_CATS.has(c || ''),
+  ) as PriceCategory[];
+  if (fromList.length) return [...new Set(fromList)];
+  if (space.category && VISIT_CATS.has(space.category)) {
+    return [space.category as PriceCategory];
+  }
+  if (/salle|r[ée]union|meeting/i.test(space.name || '')) {
+    return [PriceCategory.SALLE];
+  }
+  if (/open|ouvert/i.test(space.name || '')) {
+    return [PriceCategory.OPEN_SPACE];
+  }
+  return [PriceCategory.JOURNEE];
+}
+
+export function priceCategoriesOf(price: {
+  category?: PriceCategory | string | null;
+  categories?: (PriceCategory | string | null)[] | null;
+}): PriceCategory[] {
+  const fromList = (price.categories || []).filter((c): c is PriceCategory =>
+    ALL_PRICE_CATS.has(c || ''),
+  ) as PriceCategory[];
+  if (fromList.length) return [...new Set(fromList)];
+  if (price.category && ALL_PRICE_CATS.has(price.category)) {
+    return [price.category as PriceCategory];
+  }
+  return [];
+}
+
+export function priceMatchesSpaceCategories(
+  price: {
+    category?: PriceCategory | string | null;
+    categories?: (PriceCategory | string | null)[] | null;
+  },
+  space: {
+    name?: string | null;
+    category?: PriceCategory | string | null;
+    categories?: (PriceCategory | string | null)[] | null;
+  },
+): boolean {
+  const pc = priceCategoriesOf(price);
+  if (!pc.length || pc.includes(PriceCategory.ABONNEMENT)) return true;
+  const sc = spaceCategoriesOf(space);
+  return pc.some((c) => sc.includes(c));
+}
+
 export function assertPriceCanOccupy(opts: {
   price: {
     occupySeat?: boolean;
     occupyWhole?: boolean;
     category?: PriceCategory | string | null;
+    categories?: (PriceCategory | string | null)[] | null;
     spaceId?: string | null;
     offerSpaces?: { spaceId: string }[];
   };
@@ -50,6 +114,7 @@ export function assertPriceCanOccupy(opts: {
     id: string;
     name: string;
     category?: PriceCategory | string | null;
+    categories?: (PriceCategory | string | null)[] | null;
     reserveMode?: SpaceReserveMode | null;
   };
   mode: 'seat' | 'whole';
@@ -60,13 +125,7 @@ export function assertPriceCanOccupy(opts: {
       `Le forfait n’est pas proposé dans ${opts.space.name}`,
     );
   }
-  if (
-    !ids.length &&
-    opts.price.category &&
-    opts.price.category !== PriceCategory.ABONNEMENT &&
-    opts.space.category &&
-    opts.space.category !== opts.price.category
-  ) {
+  if (!ids.length && !priceMatchesSpaceCategories(opts.price, opts.space)) {
     throw new BadRequestException(
       `Ce forfait ne correspond pas à ${opts.space.name}`,
     );

@@ -110,6 +110,7 @@ export interface Price {
   timePeriod: TimeInterval;
   type: PriceType;
   category?: PriceCategory | null;
+  categories?: PriceCategory[];
   durationHours?: number | null;
   billingUnit?: BillingUnit | null;
   periodDays?: number | null;
@@ -294,6 +295,7 @@ export interface Space {
   facilityId: string;
   name: string;
   category?: PriceCategory | string | null;
+  categories?: (PriceCategory | string)[];
   floorPlanUrl?: string | null;
   sortOrder: number;
   capacityNormal: number;
@@ -412,6 +414,7 @@ export interface VisitRequest {
   spaceId?: string | null;
   occupyWhole?: boolean;
   autoApproved?: boolean;
+  receptionAckedAt?: string | null;
   createdAt: string;
   member?: Member & { phone?: string | null; visitorNumber?: number | null };
   price?: Price;

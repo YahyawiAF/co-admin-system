@@ -173,22 +173,20 @@ export function VisitorSeatMap({
   }
 
   return (
-    <div className={cn("space-y-2.5 rounded-2xl border bg-white p-2.5", className)}>
-      {selectable && !browsingAll ? (
+    <div className={cn("space-y-2 rounded-2xl border bg-white p-2", className)}>
+      {selectable && !browsingAll && !showSpaceSwitcher ? (
         <p className="px-0.5 text-[11px] font-medium text-slate-500">
-          {showSpaceSwitcher
-            ? "Retouchez l’espace pour revenir · table pour dézoomer"
-            : "Table, puis place libre"}
+          Table, puis place libre
         </p>
       ) : null}
 
       {showSpaceSwitcher ? (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-2">
           {spaces.map((s) => (
             <Button
               key={s.id}
               size="sm"
-              className="h-9"
+              className="h-11 min-w-[7.5rem] px-4 text-sm font-semibold"
               variant={spaceId === s.id ? "default" : "outline"}
               onClick={() => pickSpace(s.id)}
             >
@@ -201,7 +199,7 @@ export function VisitorSeatMap({
       {browsingAll ? (
         <div className="grid gap-2">
           <p className="text-[11px] font-medium text-slate-500">
-            Choisissez un espace
+            Retouchez l’espace pour tout voir
           </p>
           {spaces.map((s) => (
             <div

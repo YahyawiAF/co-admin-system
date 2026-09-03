@@ -1,4 +1,5 @@
 import type { Price, Space } from "@/lib/types";
+import { priceMatchesSpace } from "@/lib/tarif-labels";
 
 export type SpaceReserveMode = "SEAT" | "WHOLE" | "BOTH";
 
@@ -31,17 +32,9 @@ export function priceLinkedSpaceIds(price: Price): string[] {
 
 export function spacesForPrice(spaces: Space[], price: Price): Space[] {
   const ids = priceLinkedSpaceIds(price);
-  const byCategory = spaces.filter(
-    (s) =>
-      !price.category ||
-      price.category === "ABONNEMENT" ||
-      s.category === price.category
-  );
   const pool = ids.length
     ? spaces.filter((s) => ids.includes(s.id))
-    : byCategory.length
-      ? byCategory
-      : spaces;
+    : spaces.filter((s) => priceMatchesSpace(price, s));
   return pool.filter((s) => {
     const seat = price.occupySeat !== false && spaceAllowsSeat(s);
     const whole = !!price.occupyWhole && spaceAllowsWhole(s);

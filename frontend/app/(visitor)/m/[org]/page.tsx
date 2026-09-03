@@ -26,6 +26,7 @@ import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal"
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import { ScanQrPresence } from "@/components/visitor/ScanQrPresence";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { spacesForPrice } from "@/lib/space-occupy";
 import {
   readLocalCache,
   writeLocalCache,
@@ -153,6 +154,12 @@ export default function MobileHomePage() {
     router.push(href("/choose?mode=subscription"));
   };
 
+  const sessionPrice = session?.prices || session?.price || null;
+  const allowedSpaceIds =
+    sessionPrice && layout?.spaces
+      ? spacesForPrice(layout.spaces, sessionPrice).map((s) => s.id)
+      : undefined;
+
   return (
     <div className="space-y-2.5">
       <WifiCredentialsModal
@@ -169,6 +176,7 @@ export default function MobileHomePage() {
           seatSettings={status?.seatSettings}
           hasActiveSubscription={!!status?.hasActiveSubscription}
           subscriptionKind={subKind}
+          allowedSpaceIds={allowedSpaceIds}
         />
       ) : (
         <div className="relative overflow-hidden rounded-2xl bg-slate-800 text-white shadow-md">

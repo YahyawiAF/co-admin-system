@@ -254,6 +254,7 @@ export const facilityApi = {
     name: string;
     floorPlanUrl?: string;
     category?: string;
+    categories?: string[];
   }) {
     return http.post<Space>("/facilities/spaces", data);
   },
@@ -485,6 +486,15 @@ export const visitRequestsApi = {
   pending() {
     return http.get<VisitRequest[]>(
       "/mobile/admin/visit-requests?status=PENDING",
+    );
+  },
+  arrivals() {
+    return http.get<VisitRequest[]>("/mobile/admin/visit-arrivals");
+  },
+  acknowledgeArrivals(ids?: string[]) {
+    return http.patch<{ acknowledged: number }>(
+      "/mobile/admin/visit-arrivals/ack",
+      ids?.length ? { ids } : {},
     );
   },
   approve(id: string, data?: { seatLabel?: string; spaceId?: string; occupyWhole?: boolean }) {
