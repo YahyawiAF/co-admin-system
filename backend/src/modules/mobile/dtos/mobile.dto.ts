@@ -37,7 +37,9 @@ export class MobileRegisterDto {
   @IsBoolean()
   requirePassword: boolean;
 
-  @ApiPropertyOptional({ description: 'Organization slug for tenant isolation' })
+  @ApiPropertyOptional({
+    description: 'Organization slug for tenant isolation',
+  })
   @IsOptional()
   @IsString()
   orgSlug?: string;

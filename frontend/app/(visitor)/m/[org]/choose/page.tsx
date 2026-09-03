@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -29,6 +29,7 @@ import {
 
 function ChooseInner() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { href, slug } = useOrg();
   const { memberId: sessionMemberId } = useVisitorSession();
   const searchParams = useSearchParams();
@@ -176,11 +177,21 @@ function ChooseInner() {
       if (req.status === "APPROVED" || req.autoApproved) {
         sessionStorage.removeItem("pendingVisitRequestId");
         setPendingId(null);
+        // Seed mobile-status cache so Accueil renders instantly
+        queryClient.setQueryData(
+          ["mobile-status", memberId],
+          (old: any) => old ? { ...old, pendingRequest: null, hasOpenSession: true } : old
+        );
         router.push(
           req.type === "SUBSCRIPTION" ? href("/subscription") : href()
         );
         return;
       }
+      // Seed pending request into cache for immediate UI feedback
+      queryClient.setQueryData(
+        ["mobile-status", memberId],
+        (old: any) => old ? { ...old, pendingRequest: req } : old
+      );
       sessionStorage.setItem("pendingVisitRequestId", req.id);
       setPendingId(req.id);
     },
