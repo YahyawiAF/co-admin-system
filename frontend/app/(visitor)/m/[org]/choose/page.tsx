@@ -383,9 +383,10 @@ function ChooseInner() {
               {wholeSpaces.map((s) => {
                 const selected = occupyWhole && seatSpaceId === s.id;
                 return (
-                  <button
+                  <div
                     key={s.id}
-                    type="button"
+                    role="button"
+                    tabIndex={0}
                     onClick={() => {
                       if (selected) {
                         setOccupyWhole(false);
@@ -396,21 +397,37 @@ function ChooseInner() {
                       setSeatSpaceId(s.id);
                       setSeatLabel("");
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter" && e.key !== " ") return;
+                      e.preventDefault();
+                      if (selected) {
+                        setOccupyWhole(false);
+                        setSeatSpaceId("");
+                        return;
+                      }
+                      setOccupyWhole(true);
+                      setSeatSpaceId(s.id);
+                      setSeatLabel("");
+                    }}
                     className={cn(
-                      "overflow-hidden rounded-xl border text-left transition",
+                      "cursor-pointer overflow-hidden rounded-xl border text-left transition",
                       selected
                         ? "border-primary ring-2 ring-primary/30"
                         : "border-slate-200"
                     )}
                   >
-                    <SpaceGallery space={s} className="rounded-none" />
+                    <SpaceGallery
+                      space={s}
+                      className="rounded-none"
+                      interactive={false}
+                    />
                     <div className="flex items-center justify-between bg-white px-3 py-2">
                       <span className="text-sm font-semibold">{s.name}</span>
                       <span className="text-xs text-primary">
                         {selected ? "Sélectionné" : "Réserver tout"}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

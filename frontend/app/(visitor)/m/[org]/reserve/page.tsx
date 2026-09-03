@@ -230,18 +230,29 @@ export default function ReservePage() {
           {browsingAll ? (
             <div className="grid gap-2">
               {options.map((s) => (
-                <button
+                <div
                   key={s.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => pickSpace(s.id)}
-                  className="overflow-hidden rounded-xl border bg-white text-left shadow-sm transition active:scale-[0.99]"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      pickSpace(s.id);
+                    }
+                  }}
+                  className="cursor-pointer overflow-hidden rounded-xl border bg-white text-left shadow-sm transition active:scale-[0.99]"
                 >
-                  <SpaceGallery space={s} className="rounded-none" />
+                  <SpaceGallery
+                    space={s}
+                    className="rounded-none"
+                    interactive={false}
+                  />
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className="text-sm font-semibold">{s.name}</span>
                     <span className="text-xs text-primary">Choisir ›</span>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           ) : (

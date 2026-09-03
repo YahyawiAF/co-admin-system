@@ -46,9 +46,16 @@ type Props = {
   space: Space | null | undefined;
   tableId?: string | null;
   className?: string;
+  /** When false, no carousel controls (safe inside clickable cards). */
+  interactive?: boolean;
 };
 
-export function SpaceGallery({ space, tableId, className }: Props) {
+export function SpaceGallery({
+  space,
+  tableId,
+  className,
+  interactive = true,
+}: Props) {
   const { urls: images, caption } = useMemo(
     () => spaceImages(space, tableId),
     [space, tableId]
@@ -68,7 +75,7 @@ export function SpaceGallery({ space, tableId, className }: Props) {
     <div className={cn("relative overflow-hidden rounded-2xl bg-slate-200", className)}>
       {current ? (
         // eslint-disable-next-line @next/next/no-img-element
-          <img
+        <img
           src={current}
           alt={caption}
           className="aspect-[16/9] w-full object-cover"
@@ -80,15 +87,16 @@ export function SpaceGallery({ space, tableId, className }: Props) {
         </div>
       )}
 
-      {images.length > 1 ? (
+      {interactive && images.length > 1 ? (
         <>
           <button
             type="button"
             aria-label="Photo précédente"
             className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
-            onClick={() =>
-              setIdx((i) => (i - 1 + images.length) % images.length)
-            }
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i - 1 + images.length) % images.length);
+            }}
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
@@ -96,7 +104,10 @@ export function SpaceGallery({ space, tableId, className }: Props) {
             type="button"
             aria-label="Photo suivante"
             className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
-            onClick={() => setIdx((i) => (i + 1) % images.length)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIdx((i) => (i + 1) % images.length);
+            }}
           >
             <ChevronRight className="h-4 w-4" />
           </button>
@@ -106,7 +117,10 @@ export function SpaceGallery({ space, tableId, className }: Props) {
                 key={i}
                 type="button"
                 aria-label={`Photo ${i + 1}`}
-                onClick={() => setIdx(i)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIdx(i);
+                }}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
                   i === safeIdx ? "w-5 bg-white" : "w-1.5 bg-white/50"

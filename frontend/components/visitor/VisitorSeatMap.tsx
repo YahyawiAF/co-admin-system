@@ -204,14 +204,25 @@ export function VisitorSeatMap({
             Choisissez un espace
           </p>
           {spaces.map((s) => (
-            <button
+            <div
               key={s.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => pickSpace(s.id)}
-              className="overflow-hidden rounded-xl border text-left transition active:scale-[0.99]"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  pickSpace(s.id);
+                }
+              }}
+              className="cursor-pointer overflow-hidden rounded-xl border text-left transition active:scale-[0.99]"
             >
-              <SpaceGallery space={s} className="rounded-none" />
-            </button>
+              <SpaceGallery
+                space={s}
+                className="rounded-none"
+                interactive={false}
+              />
+            </div>
           ))}
         </div>
       ) : activeSpace ? (
