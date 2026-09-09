@@ -1095,11 +1095,14 @@ export class MobileService {
 
   async getActiveSubscription(memberId: string) {
     const now = new Date();
+    // Inclusive calendar day: leaveDate on day D is valid until end of D
+    // (UI shows "1 j. restant" on that day; timestamp `gt: now` expired at midnight).
+    const dayStart = startOfDay(now);
     const candidates = await this.prisma.abonnement.findMany({
       where: {
         memberID: memberId,
         registredDate: { lte: now },
-        OR: [{ leaveDate: null }, { leaveDate: { gt: now } }],
+        OR: [{ leaveDate: null }, { leaveDate: { gte: dayStart } }],
       },
       include: { price: true },
       orderBy: { leaveDate: 'desc' },
@@ -1846,6 +1849,80 @@ export class MobileService {
       seatLabels: dto.seatLabels,
       groupVisitId: dto.groupVisitId,
     });
+  }
+
+  /**
+   * Clear non-permanent (or all) seats in a space, optionally converting
+   * each unique occupant to a day forfait (journal) with the given price.
+   */
+  async clearSpaceToForfait(dto: {
+    spaceId: string;
+    priceId: string;
+    includePermanent?: boolean;
+    convert?: boolean;
+  }) {
+    const space = await this.prisma.space.findUnique({
+      where: { id: dto.spaceId },
+    });
+    if (!space) throw new NotFoundException('Espace introuvable');
+    const where = {
+      spaceId: dto.spaceId,
+      isBooked: true,
+      eventKey: 'collabora-hub',
+      ...(dto.includePermanent ? {} : { isPermanent: false }),
+    };
+    const before = await this.prisma.seatBooking.findMany({
+      where,
+      select: { memberId: true, seatId: true },
+    });
+    const memberIds = [
+      ...new Set(
+        before.map((b) => b.memberId).filter((id): id is string => !!id),
+      ),
+    ];
+    await this.prisma.seatBooking.deleteMany({ where });
+
+    const converted: { memberId: string; ok: boolean; error?: string }[] = [];
+    if (dto.convert !== false && dto.priceId) {
+      for (const memberId of memberIds) {
+        try {
+          const open = await this.getOpenSession(memberId);
+          if (open) {
+            converted.push({
+              memberId,
+              ok: false,
+              error: 'Session déjà ouverte',
+            });
+            continue;
+          }
+          await this.startDaySession({
+            memberId,
+            priceId: dto.priceId,
+          });
+          converted.push({ memberId, ok: true });
+        } catch (e) {
+          converted.push({
+            memberId,
+            ok: false,
+            error: e instanceof Error ? e.message : 'Erreur',
+          });
+        }
+      }
+    }
+
+    this.eventsGateway.sendTableUpdates({
+      type: 'space_cleared',
+      spaceId: dto.spaceId,
+    });
+
+    return {
+      spaceId: dto.spaceId,
+      spaceName: space.name,
+      cleared: before.length,
+      seats: before.map((b) => b.seatId),
+      memberIds,
+      converted,
+    };
   }
 
   async groupVisitCheckIn(dto: QuickCheckInDto) {
@@ -2746,14 +2823,13 @@ export class MobileService {
     };
 
     const settings = await this.getSeatSettings(member.organization?.slug);
-    // Accueil absent only auto-approves when place is auto (not admin-assign).
-    // ADMIN_ASSIGN must stay PENDING so reception can pick the seat.
-    const needsAdminSeat =
-      settings.mobileSeatMode === MobileSeatMode.ADMIN_ASSIGN ||
-      (!!(price as { reserveSeat?: boolean }).reserveSeat &&
-        dto.type === VisitRequestType.SUBSCRIPTION);
+    // Auto-accepter forfaits: DAY only — never auto-activate abonnements.
+    const canAutoAccept =
+      settings.receptionAway &&
+      dto.type === VisitRequestType.DAY &&
+      settings.mobileSeatMode !== MobileSeatMode.ADMIN_ASSIGN;
 
-    if (settings.receptionAway && !needsAdminSeat) {
+    if (canAutoAccept) {
       const approved = await this.approveVisitRequest(
         request.id,
         request.seatLabel || undefined,
@@ -2922,7 +2998,16 @@ export class MobileService {
         request.type === VisitRequestType.DAY &&
         this.isPeriodKind(memberKind)
       ) {
-        // Keep dedicated desk; do not reassign for extra forfait.
+        // Keep permanent dedicated desk, but drop leftover room/day seats
+        // so reservation→forfait does not leave the member’s name everywhere.
+        await this.prisma.seatBooking.deleteMany({
+          where: {
+            memberId: request.memberId,
+            isBooked: true,
+            eventKey: 'collabora-hub',
+            isPermanent: false,
+          },
+        });
       } else {
         await this.bookSeatForMember(request.memberId, assignedLabel, {
           permanent: wantsDedicatedSeat,
@@ -4218,6 +4303,12 @@ export class MobileService {
       throw new BadRequestException('Choisissez une place');
     }
     const day = startOfDay(new Date(`${dto.date}T12:00:00`));
+    const tomorrow = startOfDay(addDays(new Date(), 1));
+    if (day.getTime() < tomorrow.getTime()) {
+      throw new BadRequestException(
+        'Réservation mobile à partir de demain — pour aujourd’hui, appelez l’accueil',
+      );
+    }
     const startAt = new Date(`${dto.date}T${dto.startTime}:00`);
     const endAt = new Date(`${dto.date}T${dto.endTime}:00`);
     if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {

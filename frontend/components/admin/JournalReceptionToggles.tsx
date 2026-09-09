@@ -92,7 +92,7 @@ export function JournalReceptionToggles() {
       ) : null}
       <label className="flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-sm">
         <Pause className="h-3.5 w-3.5 text-muted-foreground" />
-        <span>Auto-accepter forfaits</span>
+        <span>Auto-accepter forfaits (jour)</span>
         <Switch
           checked={autoAccept}
           disabled={save.isPending}

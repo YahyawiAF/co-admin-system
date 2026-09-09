@@ -1,0 +1,53 @@
+---
+description: Mobile PWA (visitor app) design system — light, card-based, one accent color
+globs: frontend/app/(visitor)/**/*.tsx,frontend/components/visitor/**/*.tsx
+alwaysApply: false
+---
+
+# Mobile PWA design system
+
+Light, calm, card-based UI (reference: Collabora Hub mockups). One accent color, generous whitespace, minimal buttons per screen.
+
+## Layout & surfaces
+
+- Page background: `#f3f6fb` (set in MobileShell) — never put color blocks directly on it.
+- Content = stacked **white cards**: `rounded-3xl bg-white shadow-sm` with `px-4 py-3.5` padding. Page stack spacing `space-y-3`.
+- Max 3–4 cards visible per screen; secondary actions collapse into text links, not more pill buttons.
+- Hero (photo header) is compact: fixed height (~`h-28`), `rounded-3xl`, dark gradient overlay `from-slate-900/70`, white text.
+
+## Color
+
+- Single accent: **indigo-600** (`bg-indigo-600`, `text-indigo-600`). Hover `indigo-700`.
+- Never mix two different accent blues in one screen (no `primary` + `indigo` side by side).
+- Text: titles `text-slate-900 font-bold`, body `text-slate-500`, hints `text-slate-400`.
+- Destructive: rose/red only for errors and overtime.
+
+## Typography
+
+- Card section label: `text-[10px] font-semibold uppercase tracking-wide text-slate-400` (e.g. "SUIVI DU FORFAIT", "VOTRE ACCÈS").
+- Key figures: `text-2xl font-bold tabular-nums` (+ `text-indigo-600` when accent).
+- Hints/footnotes: `text-[11px] text-slate-500`.
+
+## Buttons
+
+- One **primary** filled button per screen max: `h-12 rounded-full bg-indigo-600 text-sm font-semibold`.
+- Secondary: `variant="outline"` `h-11 rounded-full border-slate-200 text-slate-700` (or `border-indigo-200 text-indigo-700` when related to accent).
+- Tertiary: plain text links `text-xs font-medium text-slate-500` with a small icon — never a third pill row.
+- Café / Communauté / Événements / Profil live in the bottom nav — do not duplicate them as buttons on Accueil.
+
+## Progress & badges
+
+- Progress bar: `h-2`–`h-2.5` rounded-full, indigo fill on `bg-slate-200`; caption row underneath (`text-[11px] text-slate-500`) with left/right labels (e.g. "Utilisé aujourd'hui" / "Expiration à minuit").
+- Badges: soft tints (`bg-indigo-50 text-indigo-700`), rounded-md, small (`text-[10px]`).
+
+## Patterns
+
+- Announcement slot: `AnnouncementBanner` right under the hero — white card, sparkles icon in `bg-indigo-50` circle, one-line truncated text, dismissible (sessionStorage).
+- Wi-Fi: circular glass button (`bg-white/20 backdrop-blur-sm`) in hero top-right; modal via `WifiCredentialsModal`.
+- Scan QR stays the visually dominant action when the visitor has no session.
+- Empty/pending states use a white card with centered slate text, never a bare `<Alert>` with default border.
+
+## React
+
+- All hooks before any early `return` (Rules of Hooks — this page previously broke on `!ready` early return).
+- Card components must render `null` cleanly when they have no data (e.g. no announcement, no Wi-Fi).

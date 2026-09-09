@@ -107,6 +107,18 @@ export function ActiveSessionPanel({
     return Math.min(100, Math.max(0, (used / session.hoursQuota) * 100));
   }, [isHoursPool, session, elapsedMs]);
 
+  const dayProgress = useMemo(() => {
+    if (isHoursPool || remainingMs == null || elapsedMs == null) return null;
+    const total = elapsedMs + Math.max(0, remainingMs);
+    if (total <= 0) return null;
+    const remainingPct = Math.min(
+      100,
+      Math.max(0, (Math.max(0, remainingMs) / total) * 100)
+    );
+    const usedPct = 100 - remainingPct;
+    return { remainingPct, usedPct, totalMs: total };
+  }, [isHoursPool, remainingMs, elapsedMs]);
+
   const overtime = remainingMs !== null && remainingMs < 0;
   const covered = session.coveredBySubscription || hasActiveSubscription;
   const amount = covered ? 0 : session.amountDue ?? session.payedAmount ?? 0;
@@ -193,25 +205,65 @@ export function ActiveSessionPanel({
           </div>
         </>
       ) : (
-        <div className="my-2.5 rounded-2xl border bg-slate-50 px-3 py-4">
-          <div
-            className={`font-mono text-4xl font-bold tabular-nums ${
-              overtime ? "text-red-600" : "text-primary"
-            }`}
-          >
-            {remainingMs === null
-              ? "—"
-              : overtime
-                ? `+${formatClock(remainingMs)}`
-                : formatClock(remainingMs)}
+        <div className="my-2.5 rounded-2xl border bg-white px-3.5 py-3.5 text-left shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Suivi du forfait
+            </p>
+            <Badge
+              variant="secondary"
+              className="rounded-md bg-indigo-50 text-indigo-700"
+            >
+              Heures
+            </Badge>
           </div>
-          <p className="mt-2 text-slate-500">
-            {overtime
-              ? `Temps dépassé · ${formatDurationHm(remainingMs!, { signed: true })}`
-              : remainingMs != null
-                ? `Temps restant · ${formatDurationHm(remainingMs)}`
-                : "Temps restant"}
-          </p>
+          <div className="mt-2 flex items-end justify-between gap-2">
+            <p
+              className={`text-lg font-bold leading-tight ${
+                overtime ? "text-red-600" : "text-slate-900"
+              }`}
+            >
+              {remainingMs == null
+                ? "—"
+                : overtime
+                  ? `+${formatDurationHm(remainingMs)}`
+                  : `${formatDurationHm(remainingMs)} restantes`}
+            </p>
+            {dayProgress ? (
+              <p className="shrink-0 text-xs text-slate-500">
+                sur {formatDurationHm(dayProgress.totalMs)} disponibles
+              </p>
+            ) : null}
+          </div>
+          {dayProgress ? (
+            <div className="mt-3 space-y-2">
+              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                <div
+                  className="h-full rounded-full bg-indigo-600 transition-all"
+                  style={{ width: `${dayProgress.remainingPct}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-slate-500">
+                <span>
+                  Utilisé aujourd&apos;hui ·{" "}
+                  {elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
+                </span>
+                <span>Expiration à minuit</span>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`mt-3 font-mono text-3xl font-bold tabular-nums ${
+                overtime ? "text-red-600" : "text-primary"
+              }`}
+            >
+              {remainingMs === null
+                ? "—"
+                : overtime
+                  ? `+${formatClock(remainingMs)}`
+                  : formatClock(remainingMs)}
+            </div>
+          )}
         </div>
       )}
 

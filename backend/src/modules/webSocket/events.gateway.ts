@@ -71,6 +71,16 @@ export class EventsGateway {
     this.server.sockets.emit('booking_request_resolved', data);
   }
 
+  /** Admin deleted/ended abo or forfait — mobile should refresh status. */
+  sendMemberStatusChanged(data: {
+    memberId?: string | null;
+    reason: string;
+    journalId?: string;
+    abonnementId?: string;
+  }) {
+    this.server.sockets.emit('member_status_changed', data);
+  }
+
   @SubscribeMessage('identity')
   async identity(@MessageBody() data: number): Promise<number> {
     return data;

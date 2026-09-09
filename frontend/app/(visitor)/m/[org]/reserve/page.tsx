@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { Armchair, CalendarClock, DoorOpen } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -31,7 +31,9 @@ export default function ReservePage() {
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [seatLabel, setSeatLabel] = useState("");
   const [focusTableId, setFocusTableId] = useState<string | null>(null);
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [date, setDate] = useState(
+    format(addDays(new Date(), 1), "yyyy-MM-dd")
+  );
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const visitorNumber = status?.member?.visitorNumber;
@@ -154,7 +156,7 @@ export default function ReservePage() {
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-bold">Réserver</h1>
+        <h1 className="text-lg font-bold">Réserver pour un autre jour</h1>
         <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
           <Link href={href("/reservations")}>
             <CalendarClock className="mr-1 h-4 w-4" />
@@ -266,7 +268,14 @@ export default function ReservePage() {
               ) : null}
 
               <div className="space-y-2.5 rounded-2xl bg-white p-3 shadow-sm">
-                <DayScroller value={date} onChange={setDate} />
+                <DayScroller
+                  value={date}
+                  onChange={setDate}
+                  minDate={format(addDays(new Date(), 1), "yyyy-MM-dd")}
+                />
+                <p className="text-[11px] text-slate-500">
+                  Aujourd&apos;hui : réservez par téléphone auprès de l&apos;accueil.
+                </p>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">

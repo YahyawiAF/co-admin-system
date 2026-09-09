@@ -29,6 +29,7 @@ import {
 import { queryKeys } from "@/lib/query-client";
 import { type Member, type Abonnement, type SeatOccupant } from "@/lib/types";
 import { isJournalPack } from "@/lib/journal-utils";
+import { isActiveSub } from "@/lib/subscription-utils";
 import { isHourlyVisitTarif } from "@/lib/tarif-labels";
 import {
   VisitTarifSpacePickers,
@@ -110,17 +111,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
 
   const selectedSub = useMemo(() => {
     if (!member) return null;
-    const now = new Date();
     return (
-      abos.find((a) => {
-        if (a.memberID !== member.id) return false;
-        if (a.leaveDate && new Date(a.leaveDate) < now) return false;
-        if (a.price?.billingUnit === "HOURLY") {
-          const quota = a.hoursQuota || a.price.durationHours || 0;
-          if ((a.hoursUsed || 0) >= quota) return false;
-        }
-        return true;
-      }) || null
+      abos.find((a) => a.memberID === member.id && isActiveSub(a)) || null
     );
   }, [abos, member]);
 
@@ -166,9 +158,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     });
   }, [prices, layout?.spaces]);
 
-  const selectedPack =
-    journeePacks.find((p) => p.id === priceId) ||
-    (!periodMember && !hoursPoolMember ? journeePacks[0] : undefined);
+  const selectedPack = journeePacks.find((p) => p.id === priceId);
 
   const memberDiscount = useMemo(() => {
     if (!member || !selectedPack) return null;
@@ -225,7 +215,10 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
       if (mode === "existing" && member && periodMember && !priceId) {
         return mobileApi.scanIn(member.id);
       }
-      const packId = priceId || journeePacks[0]?.id;
+      const packId = priceId;
+      if (!packId && !(mode === "existing" && member && (hoursPoolMember || periodMember))) {
+        throw new Error("Choisissez un forfait");
+      }
       if (!packId) throw new Error("Choisissez un forfait");
       const pack = journeePacks.find((p) => p.id === packId);
       if (occupyMode === "group" && seatLabels.length < 2) {
@@ -307,8 +300,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   });
 
   const canSubmit =
-    (mode === "existing" && !!member && (hoursPoolMember || periodMember)) ||
-    (!!(priceId || journeePacks[0]?.id) &&
+    (mode === "existing" && !!member && (hoursPoolMember || periodMember) && !priceId) ||
+    (!!priceId &&
       (mode === "anonymous" ||
         (mode === "existing" ? !!member : !!newPhone)));
 
@@ -401,12 +394,40 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
               {mode === "existing" ? (
                 <div className="space-y-2">
                   <Label>Rechercher</Label>
-                  <Input
-                    placeholder="Nom, téléphone ou #visiteur"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    autoFocus
-                  />
+                  {member ? (
+                    <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                      <div>
+                        <p className="text-sm font-semibold">
+                          {member.firstName || "Visiteur"}
+                          {member.lastName ? ` ${member.lastName}` : ""}
+                          {member.visitorNumber
+                            ? ` #${member.visitorNumber}`
+                            : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {member.phone || "Sélectionné"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setMember(null);
+                          setSearch("");
+                        }}
+                      >
+                        Changer
+                      </Button>
+                    </div>
+                  ) : (
+                    <Input
+                      placeholder="Nom, téléphone ou #visiteur"
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      autoFocus
+                    />
+                  )}
                   {aboFastPath && member ? (
                     <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
                       <p className="text-sm font-medium">
@@ -428,50 +449,44 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                       </Button>
                     </div>
                   ) : null}
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-1">
-                    {filteredMembers.map((m) => (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setMember(m)}
-                        className={cn(
-                          "flex w-full flex-col rounded-md px-3 py-2.5 text-left text-sm hover:bg-background",
-                          member?.id === m.id &&
-                            "bg-primary text-primary-foreground hover:bg-primary"
-                        )}
-                      >
-                        <span className="font-medium">
-                          {m.firstName || "Visiteur"}
-                          {m.visitorNumber ? ` #${m.visitorNumber}` : ""}
-                        </span>
-                        <UnpaidDebtBadge amount={debtByMember.get(m.id)} />
-                        <span
-                          className={cn(
-                            "text-xs",
-                            member?.id === m.id
-                              ? "text-primary-foreground/80"
-                              : "text-muted-foreground"
-                          )}
+                  {!member ? (
+                    <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-1">
+                      {filteredMembers.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => {
+                            setMember(m);
+                            setSearch("");
+                          }}
+                          className="flex w-full flex-col rounded-md px-3 py-2.5 text-left text-sm hover:bg-background"
                         >
-                          {m.phone}
-                        </span>
-                        {m.group?.name ? (
-                          <span className="text-[10px] opacity-80">
-                            {m.group.name}
-                            {(m.discountForfait ?? m.group.discountForfait)
-                              ? ` −${m.discountForfait ?? m.group.discountForfait}%`
-                              : ""}
+                          <span className="font-medium">
+                            {m.firstName || "Visiteur"}
+                            {m.visitorNumber ? ` #${m.visitorNumber}` : ""}
                           </span>
-                        ) : null}
-                      </button>
-                    ))}
-                    {!filteredMembers.length ? (
-                      <p className="p-3 text-sm text-muted-foreground">
-                        Aucun membre disponible — passez en « Nouveau » ou
-                        « Anonyme »
-                      </p>
-                    ) : null}
-                  </div>
+                          <UnpaidDebtBadge amount={debtByMember.get(m.id)} />
+                          <span className="text-xs text-muted-foreground">
+                            {m.phone}
+                          </span>
+                          {m.group?.name ? (
+                            <span className="text-[10px] opacity-80">
+                              {m.group.name}
+                              {(m.discountForfait ?? m.group.discountForfait)
+                                ? ` −${m.discountForfait ?? m.group.discountForfait}%`
+                                : ""}
+                            </span>
+                          ) : null}
+                        </button>
+                      ))}
+                      {!filteredMembers.length ? (
+                        <p className="p-3 text-sm text-muted-foreground">
+                          Aucun membre disponible — passez en « Nouveau » ou
+                          « Anonyme »
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

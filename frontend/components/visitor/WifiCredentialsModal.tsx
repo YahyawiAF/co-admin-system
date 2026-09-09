@@ -13,8 +13,17 @@ import {
 import { Button } from "@/components/ui/button";
 import type { SeatAssignmentInfo } from "@/lib/types";
 
+type WifiSource = {
+  wifiSsid?: string | null;
+  wifiPassword?: string | null;
+  spaceId?: string | null;
+  spaceName?: string | null;
+};
+
 type Props = {
   seat?: SeatAssignmentInfo | null;
+  /** Fallback when no seat Wi‑Fi (e.g. Accueil before check-in) */
+  fallback?: WifiSource | null;
   /** Show when visit just approved or user taps Wi‑Fi */
   forceOpen?: boolean;
   onClose?: () => void;
@@ -22,12 +31,18 @@ type Props = {
 
 const seenKey = (spaceId: string) => `wifi-seen:${spaceId}`;
 
-export function WifiCredentialsModal({ seat, forceOpen, onClose }: Props) {
+export function WifiCredentialsModal({
+  seat,
+  fallback,
+  forceOpen,
+  onClose,
+}: Props) {
   const [open, setOpen] = useState(false);
 
-  const ssid = seat?.wifiSsid?.trim() || "";
-  const password = seat?.wifiPassword?.trim() || "";
-  const spaceId = seat?.spaceId || "";
+  const ssid = (seat?.wifiSsid || fallback?.wifiSsid || "").trim();
+  const password = (seat?.wifiPassword || fallback?.wifiPassword || "").trim();
+  const spaceId = seat?.spaceId || fallback?.spaceId || "";
+  const spaceName = seat?.spaceName || fallback?.spaceName || "";
   const hasWifi = !!(ssid || password);
 
   useEffect(() => {
@@ -65,7 +80,7 @@ export function WifiCredentialsModal({ seat, forceOpen, onClose }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wifi className="h-5 w-5 text-primary" />
-            Wi‑Fi {seat?.spaceName ? `· ${seat.spaceName}` : ""}
+            Wi‑Fi {spaceName ? `· ${spaceName}` : ""}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">

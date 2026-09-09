@@ -74,6 +74,7 @@ import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
+import { SubscriptionRequestsPanel } from "@/components/admin/SubscriptionRequestsPanel";
 import {
   daysLeft,
   hoursLeft,
@@ -140,6 +141,7 @@ function AbonnementsInner() {
   const [moveSeat, setMoveSeat] = useState<string | null>(null);
   const [moveSpaceId, setMoveSpaceId] = useState<string | null>(null);
   const [ending, setEnding] = useState<Abonnement | null>(null);
+  const [deleting, setDeleting] = useState<Abonnement | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
   const [ledgerAbo, setLedgerAbo] = useState<Abonnement | null>(null);
 
@@ -405,6 +407,8 @@ function AbonnementsInner() {
     queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
     queryClient.invalidateQueries({ queryKey: queryKeys.members });
     queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["caisse-month"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
   };
 
   const endNow = useMutation({
@@ -413,6 +417,16 @@ function AbonnementsInner() {
     onSuccess: () => {
       toast.success("Abonnement terminé — place libérée");
       setEnding(null);
+      invalidateAbo();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteAbo = useMutation({
+    mutationFn: (a: Abonnement) => abonnementsApi.remove(a.id),
+    onSuccess: () => {
+      toast.success("Abonnement supprimé");
+      setDeleting(null);
       invalidateAbo();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -684,6 +698,8 @@ function AbonnementsInner() {
         ))}
       </div>
 
+      <SubscriptionRequestsPanel />
+
       <div className="space-y-3">
         <Input
           placeholder="Rechercher membre, téléphone, formule…"
@@ -919,6 +935,12 @@ function AbonnementsInner() {
                                 </DropdownMenuItem>
                               </>
                             ) : null}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleting(a)}
+                            >
+                              Supprimer définitivement
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -1002,6 +1024,34 @@ function AbonnementsInner() {
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={() => ending && endNow.mutate(ending)}>
               Terminer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!deleting}
+        onOpenChange={(o) => {
+          if (!o) setDeleting(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer définitivement ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              L&apos;abonnement de{" "}
+              {deleting?.members?.firstName || "ce membre"} sera effacé (erreur
+              de saisie). Il disparaît du journal Impayés et du chiffre
+              d&apos;affaires (caisse / finance). Action irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleting && deleteAbo.mutate(deleting)}
+            >
+              Supprimer
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

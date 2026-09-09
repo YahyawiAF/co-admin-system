@@ -831,6 +831,46 @@ export class FacilityService {
     };
   }
 
+  /**
+   * Release non-permanent (or all) seat bookings in a space.
+   * Returns affected member ids for optional convert-to-forfait.
+   */
+  async clearSpaceSeats(
+    spaceId: string,
+    opts?: { includePermanent?: boolean },
+  ) {
+    const space = await this.prisma.space.findUnique({ where: { id: spaceId } });
+    if (!space) throw new NotFoundException('Espace introuvable');
+    const where = {
+      spaceId,
+      isBooked: true,
+      eventKey: 'collabora-hub',
+      ...(opts?.includePermanent ? {} : { isPermanent: false }),
+    };
+    const before = await this.prisma.seatBooking.findMany({
+      where,
+      select: {
+        id: true,
+        memberId: true,
+        seatId: true,
+        isPermanent: true,
+      },
+    });
+    await this.prisma.seatBooking.deleteMany({ where });
+    const memberIds = [
+      ...new Set(
+        before.map((b) => b.memberId).filter((id): id is string => !!id),
+      ),
+    ];
+    return {
+      spaceId,
+      spaceName: space.name,
+      cleared: before.length,
+      seats: before.map((b) => b.seatId),
+      memberIds,
+    };
+  }
+
   private async recalcNbrPlaces(facilityId: string) {
     const normal = await this.prisma.seat.count({
       where: {

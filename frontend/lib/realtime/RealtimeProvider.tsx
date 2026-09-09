@@ -113,7 +113,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     });
 
     s.on("visitor_checkout", () => {
-      debouncedInvalidate(qcRef.current, [
+      const qc = qcRef.current;
+      qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      debouncedInvalidate(qc, [
         ["journal"],
         ["bookings"],
         ["facility-occupancy"],
@@ -121,8 +123,62 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       ]);
     });
 
-    s.on("table_updates", () => {
-      debouncedInvalidate(qcRef.current, [
+    s.on("member_status_changed", (payload?: {
+      memberId?: string | null;
+      reason?: string;
+    }) => {
+      const qc = qcRef.current;
+      const mid = payload?.memberId || null;
+      const reason = payload?.reason || "";
+
+      // Optimistic clear so Accueil updates before refetch returns
+      if (mid) {
+        qc.setQueryData(["mobile-status", mid], (old: Record<string, unknown> | undefined) => {
+          if (!old) return old;
+          if (reason === "journal_deleted") {
+            return {
+              ...old,
+              session: null,
+              hasOpenSession: false,
+              seat: null,
+              pendingRequest: null,
+            };
+          }
+          if (reason === "abonnement_deleted") {
+            return {
+              ...old,
+              subscription: null,
+              hasActiveSubscription: false,
+              canChooseForfait: true,
+            };
+          }
+          return old;
+        });
+      }
+
+      qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      debouncedInvalidate(qc, [
+        ["journal"],
+        queryKeys.abonnements,
+        queryKeys.debtors,
+        ["bookings"],
+        ["facility-occupancy"],
+        ["caisse-summary"],
+      ]);
+    });
+
+    s.on("table_updates", (payload?: { type?: string }) => {
+      const qc = qcRef.current;
+      const type = payload?.type || "";
+      if (
+        type.includes("abonnement") ||
+        type.includes("journal") ||
+        type === "visitor_checkout" ||
+        type === "payment_updated"
+      ) {
+        qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      }
+      debouncedInvalidate(qc, [
         ["bookings"],
         ["facility-occupancy"],
         ["seat-history"],
@@ -130,7 +186,9 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     });
 
     s.on("payment_updated", () => {
-      debouncedInvalidate(qcRef.current, [["journal"]]);
+      const qc = qcRef.current;
+      qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      debouncedInvalidate(qc, [["journal"]]);
     });
 
     s.on("booking_request", () => {

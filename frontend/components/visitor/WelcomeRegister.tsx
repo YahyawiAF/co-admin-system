@@ -21,21 +21,36 @@ import {
   loadPendingRegister,
   markInstallNudgePending,
 } from "@/lib/visitorCache";
+import { isStandalonePwa } from "@/lib/visitor-notify";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Mode = "welcome" | "signup" | "login" | "code";
+
+function splitFullName(full: string): { firstName: string; lastName: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: parts[0] };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
 
 export function WelcomeRegister() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { confirm } = useVisitorSession();
   const [mode, setMode] = useState<Mode>("welcome");
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState<string | undefined>();
   const [loginPin, setLoginPin] = useState("");
   const [shortCode, setShortCode] = useState("");
+  const [isPwa, setIsPwa] = useState(false);
+
+  useEffect(() => {
+    setIsPwa(isStandalonePwa());
+  }, []);
 
   const finish = (
     member: Member,
@@ -59,13 +74,15 @@ export function WelcomeRegister() {
   }, [slug]);
 
   const register = useMutation({
-    mutationFn: () =>
-      mobileApi.quickRegister({
+    mutationFn: () => {
+      const { firstName, lastName } = splitFullName(fullName);
+      return mobileApi.quickRegister({
         orgSlug: slug,
-        firstName: firstName.trim(),
-        lastName: lastName.trim(),
+        firstName,
+        lastName,
         phone: phone || "",
-      }),
+      });
+    },
     onSuccess: (res) => {
       toast.success("Profil créé");
       finish(res.member, res.accessToken, true);
@@ -76,6 +93,7 @@ export function WelcomeRegister() {
   const continueSignup = async () => {
     try {
       const found = await mobileApi.lookupPhone(phone || "", slug);
+      // Old users with PIN: always offer PIN login (browser + PWA)
       if (found.exists && found.hasPin) {
         toast.message(
           found.firstName
@@ -127,17 +145,19 @@ export function WelcomeRegister() {
         </p>
         <h1 className="mt-1 text-2xl font-bold">Chez {org.name}</h1>
         <p className="mt-2 text-sm text-slate-500">
-          Première visite ? Créez votre profil en quelques secondes.
+          {isPwa
+            ? "Créez votre profil, puis un PIN pour vous reconnecter."
+            : "Nom complet + téléphone, puis choisissez votre place. Votre profil reste sur cet appareil."}
         </p>
         <div className="mt-5 space-y-2">
           <Button
             className="h-12 w-full rounded-full"
             onClick={() => setMode("signup")}
           >
-            Créer mon profil
+            Continuer
           </Button>
           <p className="pt-2 text-center text-xs font-medium uppercase tracking-wide text-slate-400">
-            Déjà inscrit ?
+            Déjà un PIN ?
           </p>
           <Button
             variant="outline"
@@ -205,7 +225,15 @@ export function WelcomeRegister() {
             >
               Créer un profil
             </button>
-            PIN oublié ? Demandez un lien à l&apos;accueil.
+            {" · "}
+            PIN oublié ?{" "}
+            <button
+              type="button"
+              className="font-medium text-primary"
+              onClick={() => setMode("code")}
+            >
+              Code accueil
+            </button>
           </p>
         </div>
       </div>
@@ -271,10 +299,7 @@ export function WelcomeRegister() {
     );
   }
 
-  const valid =
-    firstName.trim().length > 0 &&
-    lastName.trim().length > 0 &&
-    isTunisiaPhone(phone);
+  const valid = fullName.trim().length > 1 && isTunisiaPhone(phone);
 
   return (
     <div className="rounded-3xl bg-white p-5 shadow-sm">
@@ -285,25 +310,19 @@ export function WelcomeRegister() {
       >
         ← Retour
       </button>
-      <h1 className="mt-2 text-2xl font-bold">Nouveau profil</h1>
+      <h1 className="mt-2 text-2xl font-bold">Votre profil</h1>
       <p className="mt-1 text-sm text-slate-500">
-        Nom, prénom et téléphone tunisien.
+        Nom complet et téléphone tunisien — ensuite choisissez votre place.
       </p>
       <div className="mt-4 space-y-3">
         <div>
-          <Label>Prénom</Label>
+          <Label>Nom complet</Label>
           <Input
             className="mt-1 h-11"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label>Nom</Label>
-          <Input
-            className="mt-1 h-11"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Prénom Nom"
+            autoComplete="name"
           />
         </div>
         <div>

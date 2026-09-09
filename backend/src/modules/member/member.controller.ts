@@ -120,6 +120,12 @@ export class MemberController {
     return this.memberService.settleLedger(entryId, body.settled !== false);
   }
 
+  @Delete('ledger/:entryId')
+  @ApiBearerAuth()
+  removeLedger(@Param('entryId', ParseUUIDPipe) entryId: string) {
+    return this.memberService.removeLedger(entryId);
+  }
+
   @Get(':id')
   // @Roles([Role.ADMIN, Role.USER])
   // @UseGuards(JwtAuthGuard, RolesGuard)

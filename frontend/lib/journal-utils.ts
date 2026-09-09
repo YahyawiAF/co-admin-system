@@ -71,6 +71,8 @@ export function isActiveVisit(row: Journal) {
 export type JournalListRow = Journal & {
   visitCount: number;
   checkoutCount: number;
+  /** All same-day visits for this person (for per-passage pay/delete). */
+  passages: Journal[];
 };
 
 export function journalPersonKey(row: Journal): string {
@@ -102,10 +104,16 @@ export function groupJournalByPerson(rows: Journal[]): JournalListRow[] {
         new Date(a.registredTime).getTime()
     )[0];
     const primary = present || latest;
+    const passages = (visits.length ? visits : items).sort(
+      (a, b) =>
+        new Date(a.registredTime).getTime() -
+        new Date(b.registredTime).getTime()
+    );
     return {
       ...primary,
       visitCount: visits.length || items.length,
       checkoutCount: visits.filter((r) => !!r.leaveTime).length,
+      passages,
     };
   });
 }

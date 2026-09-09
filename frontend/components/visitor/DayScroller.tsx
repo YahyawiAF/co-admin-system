@@ -25,12 +25,18 @@ type Props = {
   value: string;
   onChange: (isoDate: string) => void;
   className?: string;
+  /** Inclusive minimum selectable day (defaults to today). */
+  minDate?: string;
 };
 
 const WEEKDAYS = ["L", "M", "M", "J", "V", "S", "D"];
 
-export function DayScroller({ value, onChange, className }: Props) {
+export function DayScroller({ value, onChange, className, minDate }: Props) {
   const today = useMemo(() => startOfDay(new Date()), []);
+  const min = useMemo(
+    () => (minDate ? startOfDay(parseISO(minDate)) : today),
+    [minDate, today]
+  );
   const selected = useMemo(() => parseISO(value), [value]);
   const [mode, setMode] = useState<Mode>("native");
   const [month, setMonth] = useState(() => startOfMonth(parseISO(value)));
@@ -46,6 +52,7 @@ export function DayScroller({ value, onChange, className }: Props) {
   }, [month]);
 
   const padStart = (month.getDay() + 6) % 7; // Monday-first
+  const minIso = format(min, "yyyy-MM-dd");
 
   return (
     <div className={cn("space-y-2", className)}>
@@ -82,7 +89,7 @@ export function DayScroller({ value, onChange, className }: Props) {
           type="date"
           className="h-12 text-base"
           value={value}
-          min={format(today, "yyyy-MM-dd")}
+          min={minIso}
           onChange={(e) => {
             if (e.target.value) onChange(e.target.value);
           }}
@@ -125,7 +132,7 @@ export function DayScroller({ value, onChange, className }: Props) {
             ))}
             {days.map((d) => {
               const iso = format(d, "yyyy-MM-dd");
-              const disabled = isBefore(d, today);
+              const disabled = isBefore(d, min);
               const active = isSameDay(d, selected);
               return (
                 <button

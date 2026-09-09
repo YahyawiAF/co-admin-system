@@ -10,6 +10,8 @@
     "dev:frontend-legacy": "cd Front-end && npm run dev"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^26.4.1",
     "concurrently": "^8.2.2"
   },
   "dependencies": {

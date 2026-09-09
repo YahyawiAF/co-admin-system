@@ -8,10 +8,14 @@ import { AddAbonnementDto } from './dtos/createAbonnement.dto';
 import { HttpStatus } from '@nestjs/common';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { AbonnementEntity } from './entities/abonnement.entity';
+import { EventsGateway } from '../webSocket/events.gateway';
 
 @Injectable()
 export class AbonnementService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
 
   async create(createAbonnementDto: AddAbonnementDto) {
     try {
@@ -208,6 +212,16 @@ export class AbonnementService {
         updated.reservedSeatSpaceId,
       );
       await this.refreshMemberPlan(updated.memberID);
+      this.eventsGateway.sendMemberStatusChanged({
+        memberId: updated.memberID,
+        reason: 'abonnement_updated',
+        abonnementId: updated.id,
+      });
+      this.eventsGateway.sendTableUpdates({
+        type: 'abonnement_updated',
+        memberId: updated.memberID,
+        abonnementId: updated.id,
+      });
       return updated;
     } catch (error) {
       throw new GeneralException(
@@ -247,6 +261,16 @@ export class AbonnementService {
         });
       }
       await this.refreshMemberPlan(existing.memberID);
+      this.eventsGateway.sendMemberStatusChanged({
+        memberId: existing.memberID,
+        reason: 'abonnement_deleted',
+        abonnementId: existing.id,
+      });
+      this.eventsGateway.sendTableUpdates({
+        type: 'abonnement_deleted',
+        memberId: existing.memberID,
+        abonnementId: existing.id,
+      });
     }
     return deleted;
   }

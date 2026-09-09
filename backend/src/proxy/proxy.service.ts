@@ -1,5 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { BookingResponse } from './dtos/BookingResponseDto';
 import { BookSeatsDto } from './dtos/books.dtos';
@@ -247,7 +248,7 @@ export class ProxyService {
       where: {
         memberID: memberId,
         registredDate: { lte: now },
-        OR: [{ leaveDate: null }, { leaveDate: { gte: now } }],
+        OR: [{ leaveDate: null }, { leaveDate: { gte: startOfDay(now) } }],
       },
       include: { price: true },
       orderBy: { leaveDate: 'desc' },

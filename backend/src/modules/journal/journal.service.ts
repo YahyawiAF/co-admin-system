@@ -8,6 +8,7 @@ import { AddJournalDto } from './dtos/createJournal.dto';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { JournalEntity } from './entities/journal.entity';
 import { endOfDay, startOfDay } from 'date-fns';
+import { EventsGateway } from '../webSocket/events.gateway';
 
 export const roundsOfHashing = 10;
 
@@ -18,7 +19,10 @@ type SearchCriteria = {
 
 @Injectable()
 export class JournalService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private readonly eventsGateway: EventsGateway,
+  ) {}
   async create(createJournalDto: AddJournalDto) {
     try {
       const { memberID, priceId } = createJournalDto;
@@ -324,6 +328,24 @@ export class JournalService {
       }
       await tx.journal.delete({ where: { id } });
     });
+
+    this.eventsGateway.sendMemberStatusChanged({
+      memberId: journal.memberID,
+      reason: 'journal_deleted',
+      journalId: id,
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'journal_deleted',
+      memberId: journal.memberID,
+      journalId: id,
+    });
+    if (journal.memberID) {
+      this.eventsGateway.sendVisitorCheckout({
+        journalId: id,
+        memberId: journal.memberID,
+        reason: 'deleted',
+      });
+    }
 
     return { id, deleted: true };
   }

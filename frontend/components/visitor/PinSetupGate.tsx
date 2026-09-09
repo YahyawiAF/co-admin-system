@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -9,22 +9,39 @@ import { Label } from "@/components/ui/label";
 import { mobileApi } from "@/lib/api/resources";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { isStandalonePwa } from "@/lib/visitor-notify";
 
-/** Blocks the visitor app until a PIN is set. */
+/**
+ * PIN setup — only when the app is installed as a PWA.
+ * Browser tabs keep memberId in local storage and never block on PIN.
+ */
 export function PinSetupGate() {
   const { memberId, confirm } = useVisitorSession();
   const { data: status, refetch, isLoading } = useMobileStatus();
   const [pin, setPin] = useState("");
   const [pin2, setPin2] = useState("");
-  const [skipped, setSkipped] = useState(false);
+  const [isPwa, setIsPwa] = useState(false);
+
+  useEffect(() => {
+    setIsPwa(isStandalonePwa());
+  }, []);
+
+  // Browser: permanently skip PIN gate for this member
+  useEffect(() => {
+    if (!memberId || isPwa) return;
+    try {
+      sessionStorage.setItem(`visitor-skip-pin:${memberId}`, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [memberId, isPwa]);
 
   const member = status?.member;
-  const skipPin =
-    skipped ||
-    (typeof window !== "undefined" &&
-      !!memberId &&
-      sessionStorage.getItem(`visitor-skip-pin:${memberId}`) === "1");
-  const needsPin = !!memberId && !!member && member.hasPin === false && !skipPin;
+  const needsPin =
+    isPwa &&
+    !!memberId &&
+    !!member &&
+    member.hasPin === false;
 
   const save = useMutation({
     mutationFn: () => mobileApi.setPin({ memberId: memberId!, pin }),
@@ -45,14 +62,13 @@ export function PinSetupGate() {
     <div className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-900/50 p-4 sm:items-center">
       <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-xl">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-          Reconnexion plus simple
+          Application installée
         </p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">
           Configurez votre code PIN
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          4 chiffres pour vous reconnecter (téléphone + PIN). Vous pouvez
-          aussi le faire plus tard.
+          4 chiffres pour vous reconnecter sur l&apos;app (téléphone + PIN).
         </p>
         <div className="mt-4 space-y-3">
           <div>
@@ -91,21 +107,6 @@ export function PinSetupGate() {
             onClick={() => save.mutate()}
           >
             Enregistrer mon PIN
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            className="h-11 w-full rounded-full text-slate-500"
-            onClick={() => {
-              try {
-                sessionStorage.setItem(`visitor-skip-pin:${memberId}`, "1");
-              } catch {
-                /* ignore */
-              }
-              setSkipped(true);
-            }}
-          >
-            Plus tard
           </Button>
         </div>
       </div>

@@ -19,7 +19,14 @@ import {
 
 type BeforeInstall = Event & { prompt: () => Promise<void> };
 
-export function InstallAppButton({ className }: { className?: string }) {
+export function InstallAppButton({
+  className,
+  variant = "button",
+}: {
+  className?: string;
+  /** "button" = pill button; "link" = discreet text link */
+  variant?: "button" | "link";
+}) {
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -82,15 +89,26 @@ export function InstallAppButton({ className }: { className?: string }) {
 
   return (
     <div className={className}>
-      <Button
-        type="button"
-        variant="outline"
-        className="h-10 w-full rounded-full border-primary/20 bg-sky-50 text-primary"
-        onClick={() => void onClick()}
-      >
-        <Download className="mr-1.5 h-4 w-4" />
-        Installer l’app
-      </Button>
+      {variant === "link" ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+          onClick={() => void onClick()}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Installer l’app
+        </button>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          className="h-10 w-full rounded-full border-primary/20 bg-sky-50 text-primary"
+          onClick={() => void onClick()}
+        >
+          <Download className="mr-1.5 h-4 w-4" />
+          Installer l’app
+        </Button>
+      )}
 
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent

@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, Fragment } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Map as MapIcon, Timer } from "lucide-react";
+import { Map as MapIcon, Timer, Eraser } from "lucide-react";
+import { toast } from "sonner";
 import { RelocateSeatDialog } from "@/components/admin/RelocateSeatDialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -21,6 +24,8 @@ import {
   journalApi,
   abonnementsApi,
   opsEventsApi,
+  mobileApi,
+  pricesApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Abonnement, Journal, SeatStay, Space, SpaceSeat } from "@/lib/types";
@@ -33,6 +38,7 @@ import {
   remainingMs,
   visitorLabel,
   groupOf,
+  isJournalPack,
 } from "@/lib/journal-utils";
 import { cn } from "@/lib/utils";
 import { compareNaturalLabel } from "@/lib/seat-booking";
@@ -153,6 +159,9 @@ export function SeatOccupancyBoard({
     null
   );
   const [relocateOpen, setRelocateOpen] = useState(false);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [convertToForfait, setConvertToForfait] = useState(true);
+  const [clearPriceId, setClearPriceId] = useState("");
   const [personFilter, setPersonFilter] = useState<"all" | "abonnement" | "visitor">(
     "all"
   );
@@ -160,6 +169,7 @@ export function SeatOccupancyBoard({
   const listItemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [now, setNow] = useState(Date.now());
   const day = date || new Date();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     if (!open) return;
@@ -184,6 +194,15 @@ export function SeatOccupancyBoard({
     enabled: open,
     refetchInterval: open ? 15_000 : false,
   });
+  const { data: prices = [] } = useQuery({
+    queryKey: queryKeys.prices,
+    queryFn: () => pricesApi.list(),
+    enabled: open && clearOpen,
+  });
+  const dayPacks = useMemo(
+    () => (prices || []).filter((p) => isJournalPack(p)),
+    [prices]
+  );
   const { data: journalPage } = useQuery({
     queryKey: queryKeys.journal(day),
     queryFn: () => journalApi.list({ journalDate: day, perPage: 200 }),
@@ -474,6 +493,47 @@ export function SeatOccupancyBoard({
     return { free, total: unique.length };
   }, [activeSpace, bookings]);
 
+  const occupiedInSpace = useMemo(
+    () =>
+      bookings.filter(
+        (b) =>
+          b.isBooked &&
+          b.spaceId === spaceId &&
+          !b.isPermanent
+      ),
+    [bookings, spaceId]
+  );
+
+  const clearSpace = useMutation({
+    mutationFn: async () => {
+      if (!spaceId) throw new Error("Choisissez un espace");
+      if (convertToForfait) {
+        const priceId = clearPriceId || dayPacks[0]?.id;
+        if (!priceId) throw new Error("Choisissez un forfait");
+        return mobileApi.clearSpaceToForfait({
+          spaceId,
+          priceId,
+          convert: true,
+        });
+      }
+      return facilityApi.clearSpaceSeats(spaceId);
+    },
+    onSuccess: (res) => {
+      toast.success(
+        `${res.cleared} place(s) libérée(s)${
+          "converted" in res && Array.isArray(res.converted)
+            ? ` · ${res.converted.filter((c) => c.ok).length} forfait(s)`
+            : ""
+        }`
+      );
+      setClearOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -508,7 +568,7 @@ export function SeatOccupancyBoard({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {spaces.map((s) => {
             const taken = rows.filter((r) => r.spaceId === s.id).length;
             return (
@@ -527,6 +587,72 @@ export function SeatOccupancyBoard({
               </Button>
             );
           })}
+          {spaceId ? (
+            <Dialog open={clearOpen} onOpenChange={setClearOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-rose-700"
+                  disabled={!occupiedInSpace.length}
+                >
+                  <Eraser className="h-3.5 w-3.5" />
+                  Libérer l&apos;espace
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>
+                    Libérer {activeSpace?.name || "cet espace"}
+                  </DialogTitle>
+                </DialogHeader>
+                <p className="text-sm text-muted-foreground">
+                  {occupiedInSpace.length} place(s) non permanente(s) seront
+                  libérées. Les bureaux d&apos;abonnement permanents sont
+                  conservés.
+                </p>
+                <label className="mt-3 flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={convertToForfait}
+                    onChange={(e) => setConvertToForfait(e.target.checked)}
+                  />
+                  Convertir les occupants en forfait jour
+                </label>
+                {convertToForfait ? (
+                  <div className="mt-2 space-y-1">
+                    <Label>Forfait</Label>
+                    <select
+                      className="h-10 w-full rounded-md border px-2 text-sm"
+                      value={clearPriceId || dayPacks[0]?.id || ""}
+                      onChange={(e) => setClearPriceId(e.target.value)}
+                    >
+                      {dayPacks.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} · {p.price} DT
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
+                <DialogFooter className="mt-4 gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => setClearOpen(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    disabled={clearSpace.isPending}
+                    onClick={() => clearSpace.mutate()}
+                  >
+                    Confirmer
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          ) : null}
         </div>
 
         <div

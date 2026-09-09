@@ -633,6 +633,12 @@ export class MemberService {
     });
   }
 
+  async removeLedger(id: string) {
+    const row = await this.prisma.memberLedger.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Écriture introuvable');
+    return this.prisma.memberLedger.delete({ where: { id } });
+  }
+
   async listDebtors(organizationId?: string, includeSettled = false) {
     const memberWhere = organizationId ? { organizationId } : undefined;
     const [journals, abos, ledgers] = await Promise.all([

@@ -172,6 +172,9 @@ export const membersApi = {
       settled,
     });
   },
+  removeLedger(entryId: string) {
+    return http.delete<void>(`/members/ledger/${entryId}`);
+  },
   debtors(includeSettled = false) {
     const path = includeSettled
       ? "/members/debtors?includeSettled=1"
@@ -245,6 +248,15 @@ export const facilityApi = {
   },
   occupancy() {
     return http.get<OccupancyStats>("/facilities/occupancy");
+  },
+  clearSpaceSeats(spaceId: string, data?: { includePermanent?: boolean }) {
+    return http.post<{
+      spaceId: string;
+      spaceName: string;
+      cleared: number;
+      seats: string[];
+      memberIds: string[];
+    }>(`/facilities/spaces/${spaceId}/clear-seats`, data || {});
   },
   awayArrivals(id: string) {
     return http.get<AwayArrivalsResponse>(`/facilities/${id}/away-arrivals`);
@@ -527,6 +539,21 @@ export const mobileApi = {
     groupVisitId?: string;
   }) {
     return http.post("/mobile/admin/quick-checkin", data);
+  },
+  clearSpaceToForfait(data: {
+    spaceId: string;
+    priceId: string;
+    includePermanent?: boolean;
+    convert?: boolean;
+  }) {
+    return http.post<{
+      spaceId: string;
+      spaceName: string;
+      cleared: number;
+      seats: string[];
+      memberIds: string[];
+      converted: { memberId: string; ok: boolean; error?: string }[];
+    }>("/mobile/admin/clear-space-to-forfait", data);
   },
   bookSpace(data: {
     memberId: string;

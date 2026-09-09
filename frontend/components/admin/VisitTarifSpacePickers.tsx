@@ -93,13 +93,11 @@ export function VisitTarifSpacePickers({
     return map;
   }, [packs]);
 
-  const selected =
-    packs.find((p) => p.id === priceId) ||
-    (!optionalPrice ? packs[0] : undefined);
+  const selected = packs.find((p) => p.id === priceId);
 
   const matchingSpaces = selected ? spacesForPrice(spaces, selected) : spaces;
 
-  const effectiveId = priceId || (!optionalPrice ? packs[0]?.id : "");
+  const effectiveId = priceId;
   const openMeter =
     selected && isHourlyVisitTarif(selected) && !selected.durationHours;
 
@@ -142,7 +140,7 @@ export function VisitTarifSpacePickers({
             <p className="text-xs text-muted-foreground">
               {optionalPrice
                 ? "Forfait extra optionnel — ou laissez vide pour pointer l’abonnement."
-                : "Les forfaits journée (2h / 4h / 9h) s’affichent dès qu’il y a des places, quel que soit l’espace."}
+                : "Choisissez un tarif (aucun n’est pré-sélectionné)."}
             </p>
           </div>
           {!spaces.length ? (

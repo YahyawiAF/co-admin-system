@@ -279,6 +279,19 @@ export class MobileController {
     return this.mobileService.quickCheckIn(dto);
   }
 
+  @Post('admin/clear-space-to-forfait')
+  clearSpaceToForfait(
+    @Body()
+    body: {
+      spaceId: string;
+      priceId: string;
+      includePermanent?: boolean;
+      convert?: boolean;
+    },
+  ) {
+    return this.mobileService.clearSpaceToForfait(body);
+  }
+
   @Post('admin/book-space')
   bookSpace(@Body() dto: BookSpaceDto) {
     if (!dto.spaceId && !dto.kind && !dto.tableId) {

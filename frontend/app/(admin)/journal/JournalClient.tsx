@@ -167,6 +167,9 @@ export default function JournalClient() {
   const [tableFilter, setTableFilter] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [expandedPassages, setExpandedPassages] = useState<Set<string>>(
+    new Set()
+  );
   const [editRow, setEditRow] = useState<Journal | null>(null);
   const [seatRow, setSeatRow] = useState<Journal | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
@@ -551,18 +554,30 @@ export default function JournalClient() {
     capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
 
   const selectedRows = useMemo(
-    () => displayRows.filter((r) => selectedIds.has(r.id)),
+    () =>
+      displayRows.filter((r) => {
+        const ids = r.passages?.length ? r.passages.map((p) => p.id) : [r.id];
+        return ids.some((id) => selectedIds.has(id));
+      }),
     [displayRows, selectedIds]
   );
   const selectedPresent = selectedRows.filter(isActiveVisit);
   const allFilteredSelected =
-    displayRows.length > 0 && displayRows.every((r) => selectedIds.has(r.id));
+    displayRows.length > 0 &&
+    displayRows.every((r) => {
+      const ids = r.passages?.length ? r.passages.map((p) => p.id) : [r.id];
+      return ids.every((id) => selectedIds.has(id));
+    });
 
-  const toggleSelect = (id: string) => {
+  const toggleSelect = (id: string, passageIds?: string[]) => {
+    const ids = passageIds?.length ? passageIds : [id];
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      const allSelected = ids.every((x) => next.has(x));
+      for (const x of ids) {
+        if (allSelected) next.delete(x);
+        else next.add(x);
+      }
       return next;
     });
   };
@@ -571,7 +586,10 @@ export default function JournalClient() {
     if (allFilteredSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(displayRows.map((r) => r.id)));
+      const ids = displayRows.flatMap((r) =>
+        r.passages?.length ? r.passages.map((p) => p.id) : [r.id]
+      );
+      setSelectedIds(new Set(ids));
     }
   };
 
@@ -1198,7 +1216,12 @@ export default function JournalClient() {
                   const soon = isLeavingSoon(row, now);
                   const status = visitStatus(row);
                   const rem = remainingLabel(row);
-                  const selected = selectedIds.has(row.id);
+                  const passageIds = row.passages?.length
+                    ? row.passages.map((p) => p.id)
+                    : [row.id];
+                  const selected = passageIds.every((id) =>
+                    selectedIds.has(id)
+                  );
                   const seatInfo = resolveSeat(row);
                   const seat = seatInfo?.seatId || null;
                   return (
@@ -1208,7 +1231,12 @@ export default function JournalClient() {
                       className={cn(
                         status === "reservation" &&
                           "bg-violet-50/60 dark:bg-violet-950/20",
-                        !row.isPayed && "bg-rose-50/80 dark:bg-rose-950/25",
+                        !row.isPayed &&
+                          !(
+                            row.passages?.length &&
+                            row.passages.every((p) => p.isPayed)
+                          ) &&
+                          "bg-rose-50/80 dark:bg-rose-950/25",
                         over && "bg-amber-50/70 dark:bg-amber-950/20",
                         soon && !over && row.isPayed && "bg-sky-50/50 dark:bg-sky-950/15",
                         selected && "bg-primary/5"
@@ -1217,7 +1245,9 @@ export default function JournalClient() {
                       <TableCell>
                         <Checkbox
                           checked={selected}
-                          onCheckedChange={() => toggleSelect(row.id)}
+                          onCheckedChange={() =>
+                            toggleSelect(row.id, passageIds)
+                          }
                           aria-label="Sélectionner"
                         />
                       </TableCell>
@@ -1418,23 +1448,103 @@ export default function JournalClient() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {visitAmountDue(row, now).toFixed(1)} DT
-                        {status === "present" &&
-                        p?.billingUnit === "HOURLY" &&
-                        p.category !== "ABONNEMENT" &&
-                        !p.durationHours ? (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            (compteur)
-                          </span>
-                        ) : null}
+                        {row.visitCount > 1 && row.passages?.length ? (
+                          <div className="space-y-1.5">
+                            <button
+                              type="button"
+                              className="text-left text-sm font-medium text-primary underline-offset-2 hover:underline"
+                              onClick={() =>
+                                setExpandedPassages((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(row.id)) next.delete(row.id);
+                                  else next.add(row.id);
+                                  return next;
+                                })
+                              }
+                            >
+                              {row.passages
+                                .reduce(
+                                  (sum, p) => sum + visitAmountDue(p, now),
+                                  0
+                                )
+                                .toFixed(1)}{" "}
+                              DT · {row.visitCount} passages
+                              {expandedPassages.has(row.id) ? " ▾" : " ▸"}
+                            </button>
+                            {expandedPassages.has(row.id)
+                              ? row.passages.map((p, i) => (
+                                  <div
+                                    key={p.id}
+                                    className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-2 py-1 text-xs"
+                                  >
+                                    <span>
+                                      #{i + 1} ·{" "}
+                                      {format(
+                                        new Date(p.registredTime),
+                                        "HH:mm"
+                                      )}{" "}
+                                      · {visitAmountDue(p, now).toFixed(1)} DT
+                                    </span>
+                                    <Switch
+                                      checked={p.isPayed}
+                                      onCheckedChange={(v) =>
+                                        setPayment.mutate({
+                                          id: p.id,
+                                          isPayed: v,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                ))
+                              : null}
+                          </div>
+                        ) : (
+                          <>
+                            {visitAmountDue(row, now).toFixed(1)} DT
+                            {status === "present" &&
+                            p?.billingUnit === "HOURLY" &&
+                            p.category !== "ABONNEMENT" &&
+                            !p.durationHours ? (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                (compteur)
+                              </span>
+                            ) : null}
+                          </>
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Switch
-                          checked={row.isPayed}
-                          onCheckedChange={(v) =>
-                            setPayment.mutate({ id: row.id, isPayed: v })
-                          }
-                        />
+                        {row.visitCount > 1 && row.passages?.length ? (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-[10px] text-muted-foreground">
+                              {
+                                row.passages.filter((p) => p.isPayed).length
+                              }
+                              /{row.passages.length} payés
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() =>
+                                setExpandedPassages((prev) => {
+                                  const next = new Set(prev);
+                                  next.add(row.id);
+                                  return next;
+                                })
+                              }
+                            >
+                              Détail
+                            </Button>
+                          </div>
+                        ) : (
+                          <Switch
+                            checked={row.isPayed}
+                            onCheckedChange={(v) =>
+                              setPayment.mutate({ id: row.id, isPayed: v })
+                            }
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         {status === "reservation" ? (
@@ -1542,13 +1652,19 @@ export default function JournalClient() {
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>
-                                  Supprimer cette entrée ?
+                                  {row.visitCount > 1
+                                    ? `Supprimer les ${row.visitCount} passages ?`
+                                    : "Supprimer cette entrée ?"}
                                 </AlertDialogTitle>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Annuler</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => remove.mutate(row.id)}
+                                  onClick={() => {
+                                    for (const id of passageIds) {
+                                      remove.mutate(id);
+                                    }
+                                  }}
                                 >
                                   Supprimer
                                 </AlertDialogAction>

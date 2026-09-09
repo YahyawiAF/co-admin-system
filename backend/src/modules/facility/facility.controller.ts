@@ -37,6 +37,14 @@ export class FacilityController {
     return this.facilityService.occupancy();
   }
 
+  @Post('spaces/:id/clear-seats')
+  clearSpaceSeats(
+    @Param('id') id: string,
+    @Body() body?: { includePermanent?: boolean },
+  ) {
+    return this.facilityService.clearSpaceSeats(id, body);
+  }
+
   @Post('spaces')
   createSpace(
     @Body()
