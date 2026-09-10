@@ -78,8 +78,8 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiOkResponse({ description: 'Logout successful' })
   async logout(@Req() req: Request) {
-    const user = req.user as { userId?: string; sub?: string };
-    const userId = user.userId ?? user.sub;
+    const user = req.user as { id?: string; userId?: string; sub?: string };
+    const userId = user.id ?? user.userId ?? user.sub;
     await this.authService.logout(userId);
     return { message: 'Logout successful' };
   }

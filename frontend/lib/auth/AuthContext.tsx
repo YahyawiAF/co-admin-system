@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -38,6 +39,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
+  /** Single-flight: parallel 401s share one refresh call. */
+  const refreshInFlight = useRef<Promise<string | null> | null>(null);
 
   const persistUser = useCallback((next: User) => {
     setUser(next);
@@ -50,15 +53,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const refreshToken = authApi.getStoredRefreshToken();
       if (!refreshToken) return null;
       if (!force && authApi.getStoredToken()) return authApi.getStoredToken();
-      try {
-        const next = await authApi.refresh(refreshToken);
-        persistUser(next);
-        return next.accessToken;
-      } catch {
-        authApi.clearTokens();
-        setUser(null);
-        return null;
-      }
+
+      if (refreshInFlight.current) return refreshInFlight.current;
+
+      refreshInFlight.current = (async () => {
+        try {
+          const next = await authApi.refresh(refreshToken);
+          persistUser(next);
+          return next.accessToken;
+        } catch {
+          // Keep session if another request already rotated the RT
+          // and we still have a usable access token.
+          const stillValid = authApi.getStoredToken();
+          if (stillValid) return stillValid;
+          authApi.clearTokens();
+          setUser(null);
+          return null;
+        } finally {
+          refreshInFlight.current = null;
+        }
+      })();
+
+      return refreshInFlight.current;
     },
     [persistUser]
   );

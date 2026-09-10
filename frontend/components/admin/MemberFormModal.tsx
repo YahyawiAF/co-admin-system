@@ -28,7 +28,6 @@ const schema = z.object({
   lastName: z.string().optional(),
   phone: z.string().min(4, "Téléphone requis"),
   email: z.string().email().optional().or(z.literal("")),
-  password: z.string().optional(),
   groupId: z.string().optional(),
   discountForfait: z.string().optional(),
   discountSalle: z.string().optional(),
@@ -72,7 +71,6 @@ export function MemberFormModal({
       lastName: "",
       phone: "",
       email: "",
-      password: "",
       groupId: "",
       discountForfait: "",
       discountSalle: "",
@@ -87,7 +85,6 @@ export function MemberFormModal({
       lastName: member?.lastName || "",
       phone: member?.phone || "",
       email: member?.email || "",
-      password: "",
       groupId: member?.groupId || "",
       discountForfait:
         member?.discountForfait != null ? String(member.discountForfait) : "",
@@ -109,7 +106,6 @@ export function MemberFormModal({
         lastName: values.lastName || undefined,
         phone: values.phone,
         email: values.email || undefined,
-        password: values.password || undefined,
         groupId: values.groupId || null,
         discountForfait: num(values.discountForfait),
         discountSalle: num(values.discountSalle),
@@ -139,7 +135,7 @@ export function MemberFormModal({
             {isEdit ? "Modifier le membre" : "Nouveau membre"}
           </DialogTitle>
           <DialogDescription>
-            Téléphone obligatoire. Mot de passe seulement si abonnement mobile.
+            Téléphone obligatoire. Email optionnel — pas de mot de passe.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -166,12 +162,8 @@ export function MemberFormModal({
             ) : null}
           </div>
           <div className="space-y-2">
-            <Label>Email</Label>
+            <Label>Email (optionnel)</Label>
             <Input type="email" {...form.register("email")} />
-          </div>
-          <div className="space-y-2">
-            <Label>Mot de passe (optionnel)</Label>
-            <Input type="password" {...form.register("password")} />
           </div>
           <div className="space-y-2">
             <Label>Groupe</Label>

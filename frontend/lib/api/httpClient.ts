@@ -115,8 +115,8 @@ export async function httpClient<T = unknown>(
 
   if (response.status === 401 && !skipAutoRefresh && globalTokenRefreshCallback) {
     try {
-      await globalTokenRefreshCallback(true);
-      const refreshed = getStoredToken();
+      const newToken = await globalTokenRefreshCallback(true);
+      const refreshed = newToken || getStoredToken();
       if (refreshed) {
         response = await fetch(fullUrl, {
           ...fetchOptions,
