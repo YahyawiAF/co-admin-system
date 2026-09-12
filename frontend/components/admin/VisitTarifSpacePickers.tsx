@@ -35,6 +35,9 @@ type Props = {
   optionalPrice?: boolean;
   showTarif?: boolean;
   showSpace?: boolean;
+  /** Member/group remise % applied to displayed prices */
+  discountPercent?: number;
+  discountLabel?: string;
 };
 
 export function VisitTarifSpacePickers({
@@ -51,6 +54,8 @@ export function VisitTarifSpacePickers({
   optionalPrice,
   showTarif = true,
   showSpace = true,
+  discountPercent = 0,
+  discountLabel,
 }: Props) {
   const presentCats = useMemo(
     () => categoriesPresentInSpaces(spaces),
@@ -174,6 +179,11 @@ export function VisitTarifSpacePickers({
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {list.map((p) => {
                       const isSelected = effectiveId === p.id;
+                      const remised =
+                        discountPercent > 0
+                          ? Math.round(p.price * (1 - discountPercent / 100) * 100) /
+                            100
+                          : null;
                       return (
                         <button
                           key={p.id}
@@ -193,10 +203,26 @@ export function VisitTarifSpacePickers({
                           <div className="font-semibold">{p.name}</div>
                           <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-sm text-muted-foreground">
                             <span>{tarifSubtitle(p)}</span>
-                            <span className="font-bold text-primary">
-                              {formatTarifPrice(p)}
-                            </span>
+                            {remised != null ? (
+                              <span className="text-right font-bold text-primary">
+                                <span className="mr-1 text-xs font-normal line-through opacity-60">
+                                  {formatTarifPrice(p)}
+                                </span>
+                                {isHourlyVisitTarif(p)
+                                  ? `${remised} DT / h`
+                                  : `${remised} DT`}
+                              </span>
+                            ) : (
+                              <span className="font-bold text-primary">
+                                {formatTarifPrice(p)}
+                              </span>
+                            )}
                           </div>
+                          {remised != null && discountLabel ? (
+                            <p className="mt-1 text-[10px] text-amber-800">
+                              {discountLabel} −{discountPercent}%
+                            </p>
+                          ) : null}
                           {p.spaceName ? (
                             <div className="mt-1 text-xs text-muted-foreground">
                               Lié à {p.spaceName}

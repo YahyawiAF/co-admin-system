@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, differenceInCalendarDays } from "date-fns";
 import { fr } from "date-fns/locale";
-import { KeyRound, Send } from "lucide-react";
+import { KeyRound, Send, GitMerge } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -24,6 +24,7 @@ import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { MemberInviteShare } from "@/components/admin/MemberInviteShare";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { membersApi, mobileApi } from "@/lib/api/resources";
+import { queryKeys } from "@/lib/query-client";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { subscriptionExpiryLabel } from "@/lib/subscription-utils";
@@ -198,6 +199,16 @@ type Props = {
 export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState("");
+  const [mergeSearch, setMergeSearch] = useState("");
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [showMerge, setShowMerge] = useState(false);
+
+  const { data: allMembers = [] } = useQuery({
+    queryKey: queryKeys.members,
+    queryFn: () => membersApi.list(),
+    enabled: open && showMerge,
+  });
+
   const { data, isLoading } = useQuery({
     queryKey: ["member-insights", member?.id],
     queryFn: () => membersApi.insights(member!.id),
@@ -216,6 +227,44 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const merge = useMutation({
+    mutationFn: () => membersApi.merge(member!.id, mergeSourceId),
+    onSuccess: () => {
+      toast.success("Profils fusionnés — les données sont sur cette fiche");
+      setShowMerge(false);
+      setMergeSourceId("");
+      setMergeSearch("");
+      queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["member-insights", member!.id] });
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.abonnements });
+      queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const mergeCandidates = useMemo(() => {
+    if (!showMerge || !member?.id) return [];
+    const list = Array.isArray(allMembers) ? allMembers : [];
+    const q = mergeSearch.trim().toLowerCase();
+    return list
+      .filter((m) => m.id !== member.id)
+      .filter((m) => {
+        if (!q || q.length < 2) return true;
+        const hay = [
+          m.firstName,
+          m.lastName,
+          m.phone,
+          m.visitorNumber != null ? String(m.visitorNumber) : "",
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 8);
+  }, [allMembers, member?.id, mergeSearch, showMerge]);
 
   const m = {
     ...member,
@@ -283,6 +332,70 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                   memberName={name}
                   source="member"
                 />
+                <div className="rounded-xl border px-3 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold">Fusionner un profil</p>
+                      <p className="text-xs text-muted-foreground">
+                        Si la personne a deux comptes, fusionnez l’autre ici.
+                        Les visites, abos et dettes passent sur cette fiche.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setShowMerge((v) => !v)}
+                    >
+                      <GitMerge className="mr-1.5 h-3.5 w-3.5" />
+                      Fusionner
+                    </Button>
+                  </div>
+                  {showMerge ? (
+                    <div className="mt-3 space-y-2">
+                      <Input
+                        placeholder="Rechercher l’autre profil (nom, tél…)"
+                        value={mergeSearch}
+                        onChange={(e) => setMergeSearch(e.target.value)}
+                      />
+                      <div className="max-h-40 space-y-1 overflow-y-auto">
+                        {mergeCandidates.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => setMergeSourceId(m.id)}
+                            className={cn(
+                              "flex w-full flex-col rounded-md border px-3 py-2 text-left text-sm",
+                              mergeSourceId === m.id
+                                ? "border-primary bg-primary/5"
+                                : "hover:bg-muted/50"
+                            )}
+                          >
+                            <span className="font-medium">
+                              {[m.firstName, m.lastName]
+                                .filter(Boolean)
+                                .join(" ") || "Visiteur"}
+                              {m.visitorNumber ? ` #${m.visitorNumber}` : ""}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {m.phone || "—"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      <Button
+                        type="button"
+                        disabled={!mergeSourceId || merge.isPending}
+                        onClick={() => merge.mutate()}
+                        className="w-full"
+                      >
+                        {merge.isPending
+                          ? "Fusion…"
+                          : "Fusionner dans cette fiche"}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </>
             ) : null}
 

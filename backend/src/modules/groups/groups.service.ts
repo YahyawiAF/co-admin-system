@@ -69,6 +69,7 @@ export class GroupsService {
         name: dto.name.trim(),
         maxMembers: dto.maxMembers ?? 15,
         discountForfait: dto.discountForfait ?? 0,
+        discountAbonnement: dto.discountAbonnement ?? 0,
         discountSalle: dto.discountSalle ?? 0,
         discountOpenSpace: dto.discountOpenSpace ?? 0,
       },
@@ -85,6 +86,9 @@ export class GroupsService {
         ...(dto.maxMembers != null ? { maxMembers: dto.maxMembers } : {}),
         ...(dto.discountForfait != null
           ? { discountForfait: dto.discountForfait }
+          : {}),
+        ...(dto.discountAbonnement != null
+          ? { discountAbonnement: dto.discountAbonnement }
           : {}),
         ...(dto.discountSalle != null
           ? { discountSalle: dto.discountSalle }

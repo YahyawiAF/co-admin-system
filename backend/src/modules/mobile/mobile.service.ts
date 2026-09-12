@@ -266,9 +266,10 @@ export class MobileService {
 
   private discountKind(price: {
     category?: string | null;
-  }): 'forfait' | 'salle' | 'open' {
+  }): 'forfait' | 'abonnement' | 'salle' | 'open' {
     if (price.category === PriceCategory.SALLE) return 'salle';
     if (price.category === PriceCategory.OPEN_SPACE) return 'open';
+    if (price.category === PriceCategory.ABONNEMENT) return 'abonnement';
     return 'forfait';
   }
 
@@ -292,8 +293,10 @@ export class MobileService {
       kind === 'salle'
         ? member.discountSalle
         : kind === 'open'
-        ? member.discountOpenSpace
-        : member.discountForfait;
+          ? member.discountOpenSpace
+          : kind === 'abonnement'
+            ? member.discountAbonnement
+            : member.discountForfait;
     if (override != null) {
       return { percent: override, groupName: member.group?.name || null };
     }
@@ -302,8 +305,10 @@ export class MobileService {
       kind === 'salle'
         ? member.group.discountSalle
         : kind === 'open'
-        ? member.group.discountOpenSpace
-        : member.group.discountForfait;
+          ? member.group.discountOpenSpace
+          : kind === 'abonnement'
+            ? member.group.discountAbonnement
+            : member.group.discountForfait;
     return { percent: percent || 0, groupName: member.group.name };
   }
 
@@ -1735,6 +1740,9 @@ export class MobileService {
     const periodDays = price.periodDays || 30;
     const leaveDate = addDays(now, periodDays - 1);
 
+    const discount = await this.resolveVisitDiscount(dto.memberId, price);
+    const remisedPrice = this.applyPercentOff(price.price, discount.percent);
+    const isPayed = dto.isPayed ?? true;
     const abonnement = await this.prisma.abonnement.create({
       data: {
         memberID: dto.memberId,
@@ -1742,9 +1750,10 @@ export class MobileService {
         registredDate: now,
         leaveDate,
         stayedPeriode: `${periodDays} days`,
-        isPayed: dto.isPayed ?? true,
+        isPayed,
         isReservation: false,
-        payedAmount: price.price,
+        // When unpaid: payedAmount = already received (0). When paid: full remised.
+        payedAmount: isPayed ? remisedPrice : 0,
         hoursQuota:
           price.billingUnit === BillingUnit.HOURLY ? price.durationHours : null,
         hoursUsed: 0,
@@ -1808,6 +1817,7 @@ export class MobileService {
             organizationId,
             phone,
             firstName: dto.firstName || this.todayVisitLabel(),
+            lastName: dto.lastName || null,
             visitorNumber,
             credits: 0,
             isActive: true,

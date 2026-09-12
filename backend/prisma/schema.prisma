@@ -51,9 +51,10 @@ model Member {
   userId        Int?
   groupId       String?
   group         MemberGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  discountForfait    Float?
-  discountSalle      Float?
-  discountOpenSpace  Float?
+  discountForfait     Float?
+  discountAbonnement  Float?
+  discountSalle       Float?
+  discountOpenSpace   Float?
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
@@ -117,9 +118,10 @@ model MemberGroup {
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name               String
   maxMembers         Int      @default(15)
-  discountForfait    Float    @default(0)
-  discountSalle      Float    @default(0)
-  discountOpenSpace  Float    @default(0)
+  discountForfait     Float    @default(0)
+  discountAbonnement  Float    @default(0)
+  discountSalle       Float    @default(0)
+  discountOpenSpace   Float    @default(0)
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   members            Member[]

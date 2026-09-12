@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { journalApi, mobileApi, pricesApi } from "@/lib/api/resources";
+import { journalApi, membersApi, mobileApi, pricesApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Journal } from "@/lib/types";
 import { isJournalPack } from "@/lib/journal-utils";
@@ -111,8 +111,20 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
   }, [registredTime, selectedPrice?.durationHours]);
 
   const update = useMutation({
-    mutationFn: (values: FormValues) =>
-      journalApi.update(journal!.id, {
+    mutationFn: async (values: FormValues) => {
+      const catalog = selectedPrice?.price ?? journal?.payedAmount ?? 0;
+      const paid = values.payedAmount;
+      const mid =
+        journal?.memberID || journal?.members?.id || journal?.member?.id;
+      const samePrice =
+        values.priceId === (journal?.priceId || journal?.prices?.id);
+      // Unpaid remised visits store due in payedAmount — don't treat remise as underpay
+      const expected =
+        samePrice && !journal?.isPayed
+          ? Number(journal?.payedAmount || catalog)
+          : catalog;
+
+      await journalApi.update(journal!.id, {
         priceId: values.priceId,
         registredTime: new Date(values.registredTime).toISOString(),
         leaveTime: values.leaveTime
@@ -121,11 +133,35 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
         isPayed: values.isPayed,
         payedAmount: values.payedAmount,
         isReservation: values.isReservation,
-      }),
+      });
+
+      if (values.isPayed && mid && expected > 0) {
+        const diff = Math.round((paid - expected) * 100) / 100;
+        if (diff > 0.009) {
+          await membersApi.addLedger(mid, {
+            kind: "ECHEANCE",
+            amount: diff,
+            note: `Trop-perçu visite (${paid} vs ${expected} DT)`,
+            source: "journal-edit",
+            journalId: journal!.id,
+          });
+        } else if (diff < -0.009) {
+          await membersApi.addLedger(mid, {
+            kind: "CREDIT",
+            amount: Math.abs(diff),
+            note: `Reste après paiement partiel (${paid} / ${expected} DT)`,
+            source: "journal-edit",
+            journalId: journal!.id,
+          });
+        }
+      }
+    },
     onSuccess: () => {
       toast.success("Journal mis à jour");
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: ["visitor-day"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
+      queryClient.invalidateQueries({ queryKey: ["member-ledger"] });
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -436,13 +472,24 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="payedAmount">Montant (DT)</Label>
+              <Label htmlFor="payedAmount">Montant encaissé (DT)</Label>
               <Input
                 id="payedAmount"
                 type="number"
                 step="0.1"
                 {...form.register("payedAmount")}
               />
+              {selectedPrice ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Tarif catalogue : {selectedPrice.price} DT.
+                  {isPayed && Number(form.watch("payedAmount")) < selectedPrice.price
+                    ? " Moins → reste enregistré comme dette (il nous doit)."
+                    : ""}
+                  {isPayed && Number(form.watch("payedAmount")) > selectedPrice.price
+                    ? " Plus → crédit enregistré (nous lui devons)."
+                    : ""}
+                </p>
+              ) : null}
             </div>
 
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">

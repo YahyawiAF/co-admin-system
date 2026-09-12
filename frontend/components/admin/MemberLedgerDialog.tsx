@@ -57,8 +57,8 @@ const AVOIR_REASONS = [
   },
   {
     id: "other",
-    label: "Autre crédit",
-    hint: "Geste commercial, correction, etc.",
+    label: "Autre — nous lui devons",
+    hint: "Geste commercial, correction, acompte en trop, etc.",
   },
 ] as const;
 
@@ -78,11 +78,14 @@ export function MemberLedgerDialog({
   const dialogOpen = open ?? internalOpen;
   const setOpen = onOpenChange ?? setInternalOpen;
   const [showAvoir, setShowAvoir] = useState(false);
+  const [showDebt, setShowDebt] = useState(false);
   const [reason, setReason] = useState<(typeof AVOIR_REASONS)[number]["id"]>(
     "unused_today"
   );
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [debtAmount, setDebtAmount] = useState("");
+  const [debtNote, setDebtNote] = useState("");
 
   const { data } = useQuery({
     queryKey: ["member-ledger", memberId],
@@ -122,7 +125,7 @@ export function MemberLedgerDialog({
         abonnementId,
       }),
     onSuccess: () => {
-      toast.success("Avoir enregistré — nous lui devons cette somme");
+      toast.success("Crédit enregistré — nous lui devons cette somme");
       setAmount("");
       setNote("");
       setShowAvoir(false);
@@ -131,10 +134,30 @@ export function MemberLedgerDialog({
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const saveDebt = useMutation({
+    mutationFn: () =>
+      membersApi.addLedger(memberId, {
+        kind: "CREDIT",
+        amount: Number(debtAmount || 0),
+        note: debtNote.trim() || "Reste à payer (manuel)",
+        source,
+        journalId,
+        abonnementId,
+      }),
+    onSuccess: () => {
+      toast.success("Dette enregistrée — il nous doit cette somme");
+      setDebtAmount("");
+      setDebtNote("");
+      setShowDebt(false);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const settle = useMutation({
     mutationFn: (id: string) => membersApi.settleLedger(id, true),
     onSuccess: () => {
-      toast.success("Avoir soldé");
+      toast.success("Écriture soldée");
       invalidate();
     },
   });
@@ -161,6 +184,9 @@ export function MemberLedgerDialog({
   const openAvoirs = (data?.entries || []).filter(
     (e) => e.kind === "ECHEANCE" && !e.settled
   );
+  const openDebts = (data?.entries || []).filter(
+    (e) => e.kind === "CREDIT" && !e.settled
+  );
   const history = (data?.entries || []).filter((e) => e.settled);
 
   return (
@@ -181,7 +207,7 @@ export function MemberLedgerDialog({
             Compte{memberName ? ` · ${memberName}` : ""}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
-            Ce qui reste à payer, et le crédit à déduire plus tard.
+            Impayés (il nous doit) et crédit (nous lui devons).
           </p>
         </DialogHeader>
 
@@ -189,26 +215,26 @@ export function MemberLedgerDialog({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-rose-800">
-                Reste à payer
+                Il nous doit
               </p>
               <p className="mt-1 text-3xl font-bold text-rose-950">
                 {(data?.owedByMember ?? 0).toFixed(1)}{" "}
                 <span className="text-base font-medium">DT</span>
               </p>
               <p className="mt-1 text-xs text-rose-800/80">
-                Forfaits ou abonnements pas encore encaissés
+                Forfaits, abonnements ou dettes manuelles non soldés
               </p>
             </div>
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-sky-800">
-                Crédit disponible
+                Nous lui devons
               </p>
               <p className="mt-1 text-3xl font-bold text-sky-950">
                 {(data?.owedToMember ?? 0).toFixed(1)}{" "}
                 <span className="text-base font-medium">DT</span>
               </p>
               <p className="mt-1 text-xs text-sky-800/80">
-                À déduire sur une prochaine visite
+                Crédit / avoir à déduire plus tard — bouton ci-dessous
               </p>
             </div>
           </div>
@@ -237,10 +263,6 @@ export function MemberLedgerDialog({
               <h3 className="text-sm font-semibold">
                 Forfaits précédents non payés
               </h3>
-              <p className="text-xs text-muted-foreground">
-                Visites d’autres jours encore dues. Le plan des places est
-                libéré, le compte reste.
-              </p>
               <div className="space-y-2">
                 {(data?.unpaidVisits || []).map((v) => (
                   <VisitCard
@@ -256,7 +278,7 @@ export function MemberLedgerDialog({
 
           {(data?.unpaidAbos || []).length ? (
             <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Abonnements non payés</h3>
+              <h3 className="text-sm font-semibold">Abonnements — reste à payer</h3>
               {(data?.unpaidAbos || []).map((a) => (
                 <div
                   key={a.id}
@@ -267,8 +289,18 @@ export function MemberLedgerDialog({
                     <p className="text-xs text-muted-foreground">
                       {format(new Date(a.registredDate), "d MMM yyyy", {
                         locale: fr,
-                      })}{" "}
-                      · {a.amount.toFixed(1)} DT
+                      })}
+                      {a.catalogPrice != null && a.payedAmount != null ? (
+                        <>
+                          {" · "}
+                          payé {a.payedAmount.toFixed(1)} /{" "}
+                          {a.catalogPrice.toFixed(1)} DT
+                          {" · reste "}
+                          {(a.remaining ?? a.amount).toFixed(1)} DT
+                        </>
+                      ) : (
+                        <> · {a.amount.toFixed(1)} DT</>
+                      )}
                     </p>
                   </div>
                   <Button
@@ -277,67 +309,74 @@ export function MemberLedgerDialog({
                     disabled={payAbo.isPending}
                     onClick={() => payAbo.mutate(a.id)}
                   >
-                    Marquer payé
+                    Marquer soldé
                   </Button>
                 </div>
               ))}
             </section>
           ) : null}
 
-          <section className="space-y-2">
+          <section className="space-y-2 rounded-2xl border border-sky-200 bg-sky-50/40 p-4">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Crédit (à déduire plus tard)</h3>
+              <div>
+                <h3 className="text-sm font-semibold text-sky-950">
+                  Nous lui devons (crédit / avoir)
+                </h3>
+                <p className="text-xs text-sky-900/80">
+                  Argent déjà payé en trop, ou non consommé — à déduire plus
+                  tard.
+                </p>
+              </div>
               <Button
                 size="sm"
-                variant={showAvoir ? "secondary" : "outline"}
-                onClick={() => setShowAvoir((v) => !v)}
+                variant={showAvoir ? "secondary" : "default"}
+                onClick={() => {
+                  setShowAvoir((v) => !v);
+                  setShowDebt(false);
+                }}
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Ajouter un crédit
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Un crédit, c’est de l’argent déjà payé (ou offert) qui sera
-              déduit sur une prochaine visite.
-            </p>
             {showAvoir ? (
-              <div className="space-y-3 rounded-2xl border bg-sky-50/60 p-4">
+              <div className="space-y-3 rounded-2xl border bg-white p-4">
                 <div className="grid gap-2 sm:grid-cols-2">
                   {AVOIR_REASONS.map((r) => {
                     const disabled =
                       r.id === "unused_today" && !!today && !today.isPayed;
                     return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => {
-                        setReason(r.id);
-                        if (r.id === "unused_today" && today?.isPayed) {
-                          setAmount(String(today.amount));
-                        }
-                      }}
-                      className={cn(
-                        "rounded-xl border px-3 py-2.5 text-left text-sm",
-                        disabled && "cursor-not-allowed opacity-40",
-                        reason === r.id
-                          ? "border-sky-500 bg-white shadow-sm"
-                          : "border-transparent bg-white/60 hover:bg-white"
-                      )}
-                    >
-                      <p className="font-medium">{r.label}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">
-                        {disabled
-                          ? "Le forfait du jour n’est pas payé — pas d’avoir."
-                          : r.hint}
-                      </p>
-                    </button>
+                      <button
+                        key={r.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => {
+                          setReason(r.id);
+                          if (r.id === "unused_today" && today?.isPayed) {
+                            setAmount(String(today.amount));
+                          }
+                        }}
+                        className={cn(
+                          "rounded-xl border px-3 py-2.5 text-left text-sm",
+                          disabled && "cursor-not-allowed opacity-40",
+                          reason === r.id
+                            ? "border-sky-500 bg-sky-50 shadow-sm"
+                            : "border-transparent bg-muted/40 hover:bg-muted"
+                        )}
+                      >
+                        <p className="font-medium">{r.label}</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {disabled
+                            ? "Le forfait du jour n’est pas payé — pas d’avoir."
+                            : r.hint}
+                        </p>
+                      </button>
                     );
                   })}
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label>Montant (DT)</Label>
+                    <Label>Montant que nous lui devons (DT)</Label>
                     <Input
                       type="number"
                       min={0}
@@ -354,7 +393,7 @@ export function MemberLedgerDialog({
                     <Input
                       value={note}
                       onChange={(e) => setNote(e.target.value)}
-                      placeholder="Ex. parti au bout d’1 h"
+                      placeholder="Ex. trop-perçu 20 DT"
                     />
                   </div>
                 </div>
@@ -366,7 +405,7 @@ export function MemberLedgerDialog({
                   }
                   onClick={() => saveAvoir.mutate()}
                 >
-                  Enregistrer le crédit
+                  Enregistrer — nous lui devons
                 </Button>
               </div>
             ) : null}
@@ -402,7 +441,96 @@ export function MemberLedgerDialog({
                 ))}
               </div>
             ) : !showAvoir ? (
-              <p className="text-sm text-muted-foreground">Aucun crédit ouvert.</p>
+              <p className="text-sm text-muted-foreground">
+                Aucun crédit ouvert. Cliquez « Ajouter un crédit » pour noter
+                ce que vous devez au visiteur.
+              </p>
+            ) : null}
+          </section>
+
+          <section className="space-y-2 rounded-2xl border border-rose-200 bg-rose-50/40 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-rose-950">
+                  Il nous doit (dette manuelle)
+                </h3>
+                <p className="text-xs text-rose-900/80">
+                  Paiement partiel, reste d’abonnement, correction — en plus
+                  des forfaits non payés ci-dessus.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant={showDebt ? "secondary" : "outline"}
+                onClick={() => {
+                  setShowDebt((v) => !v);
+                  setShowAvoir(false);
+                }}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Ajouter une dette
+              </Button>
+            </div>
+            {showDebt ? (
+              <div className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label>Montant qu’il nous doit (DT)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={debtAmount}
+                    onChange={(e) => setDebtAmount(e.target.value)}
+                    placeholder="ex. 50"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>Note</Label>
+                  <Input
+                    value={debtNote}
+                    onChange={(e) => setDebtNote(e.target.value)}
+                    placeholder="Ex. reste abo après acompte"
+                  />
+                </div>
+                <Button
+                  className="sm:col-span-2 sm:w-auto"
+                  disabled={saveDebt.isPending || !Number(debtAmount || 0)}
+                  onClick={() => saveDebt.mutate()}
+                >
+                  Enregistrer — il nous doit
+                </Button>
+              </div>
+            ) : null}
+            {openDebts.length ? (
+              <div className="space-y-2">
+                {openDebts.map((e) => (
+                  <div
+                    key={e.id}
+                    className="flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-white px-3 py-2.5"
+                  >
+                    <div>
+                      <p className="font-medium">{e.amount.toFixed(1)} DT</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(e.createdAt), "d MMM yyyy", {
+                          locale: fr,
+                        })}
+                        {e.note ? ` · ${e.note}` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={settle.isPending}
+                      onClick={() => settle.mutate(e.id)}
+                    >
+                      <Check className="mr-1 h-3.5 w-3.5" />
+                      Solder
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : !showDebt ? (
+              <p className="text-sm text-muted-foreground">Aucune dette manuelle.</p>
             ) : null}
           </section>
 
@@ -417,7 +545,7 @@ export function MemberLedgerDialog({
                   >
                     <span>
                       {format(new Date(e.createdAt), "d MMM", { locale: fr })}{" "}
-                      · {e.kind === "ECHEANCE" ? "Crédit" : "À payer"}{" "}
+                      · {e.kind === "ECHEANCE" ? "Crédit" : "Dette"}{" "}
                       {e.forfaitName ? `· ${e.forfaitName}` : ""}
                       {e.note ? ` · ${e.note}` : ""}
                     </span>
@@ -465,6 +593,12 @@ function VisitCard({
           </p>
         </div>
         <div className="text-right">
+          {visit.catalogPrice != null &&
+          visit.catalogPrice > visit.amount + 0.009 ? (
+            <p className="text-xs text-muted-foreground line-through">
+              {visit.catalogPrice.toFixed(1)} DT
+            </p>
+          ) : null}
           <p className="text-lg font-bold">{visit.amount.toFixed(1)} DT</p>
           <Badge
             variant={visit.isPayed ? "default" : "secondary"}
@@ -491,7 +625,7 @@ function VisitCard({
         </Button>
       ) : (
         <p className="mt-2 text-xs text-emerald-800">
-          Encaissé. S’il n’a pas consommé sa journée, enregistrez un avoir
+          Encaissé. S’il n’a pas consommé ou a trop payé, ajoutez un crédit
           ci-dessous.
         </p>
       )}

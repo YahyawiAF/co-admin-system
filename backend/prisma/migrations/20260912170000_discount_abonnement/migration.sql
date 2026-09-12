@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "discountAbonnement" DOUBLE PRECISION;
+ALTER TABLE "member_groups" ADD COLUMN IF NOT EXISTS "discountAbonnement" DOUBLE PRECISION NOT NULL DEFAULT 0;

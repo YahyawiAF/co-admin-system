@@ -442,6 +442,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
   const [name, setName] = useState("");
   const [maxMembers, setMaxMembers] = useState("15");
   const [discountForfait, setDiscountForfait] = useState("0");
+  const [discountAbonnement, setDiscountAbonnement] = useState("0");
   const [discountSalle, setDiscountSalle] = useState("0");
   const [discountOpenSpace, setDiscountOpenSpace] = useState("0");
   const [edit, setEdit] = useState<MemberGroup | null>(null);
@@ -460,6 +461,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
           name: name.trim() || edit.name,
           maxMembers: Number(maxMembers) || edit.maxMembers,
           discountForfait: Number(discountForfait),
+          discountAbonnement: Number(discountAbonnement),
           discountSalle: Number(discountSalle),
           discountOpenSpace: Number(discountOpenSpace),
         });
@@ -468,6 +470,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
         name: name.trim(),
         maxMembers: Number(maxMembers) || 15,
         discountForfait: Number(discountForfait) || 0,
+        discountAbonnement: Number(discountAbonnement) || 0,
         discountSalle: Number(discountSalle) || 0,
         discountOpenSpace: Number(discountOpenSpace) || 0,
       });
@@ -479,6 +482,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
       setName("");
       setMaxMembers("15");
       setDiscountForfait("0");
+      setDiscountAbonnement("0");
       setDiscountSalle("0");
       setDiscountOpenSpace("0");
       setEdit(null);
@@ -524,7 +528,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
           <h2 className="font-semibold">
             {edit ? `Modifier ${edit.name}` : "Nouveau groupe"}
           </h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div className="space-y-1">
               <Label>Nom</Label>
               <Input
@@ -550,6 +554,16 @@ function GroupsPanel({ members }: { members: Member[] }) {
                 max={100}
                 value={discountForfait}
                 onChange={(e) => setDiscountForfait(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Remise abo %</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                value={discountAbonnement}
+                onChange={(e) => setDiscountAbonnement(e.target.value)}
               />
             </div>
             <div className="space-y-1">
@@ -603,8 +617,8 @@ function GroupsPanel({ members }: { members: Member[] }) {
                 <h3 className="text-lg font-semibold">{g.name}</h3>
                 <p className="text-sm text-muted-foreground">
                   {g.members?.length || 0}/{g.maxMembers} membres · forfait −
-                  {g.discountForfait}% · salle −{g.discountSalle}% · open −
-                  {g.discountOpenSpace}%
+                  {g.discountForfait}% · abo −{g.discountAbonnement ?? 0}% ·
+                  salle −{g.discountSalle}% · open −{g.discountOpenSpace}%
                 </p>
               </div>
               <div className="flex gap-2">
@@ -616,6 +630,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
                     setName(g.name);
                     setMaxMembers(String(g.maxMembers));
                     setDiscountForfait(String(g.discountForfait));
+                    setDiscountAbonnement(String(g.discountAbonnement ?? 0));
                     setDiscountSalle(String(g.discountSalle));
                     setDiscountOpenSpace(String(g.discountOpenSpace));
                   }}

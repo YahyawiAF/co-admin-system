@@ -192,6 +192,11 @@ export class QuickCheckInDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  lastName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   createdbyUserID?: string;
 
   /** Walk-in with no Member row */

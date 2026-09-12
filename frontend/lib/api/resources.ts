@@ -175,6 +175,9 @@ export const membersApi = {
   removeLedger(entryId: string) {
     return http.delete<void>(`/members/ledger/${entryId}`);
   },
+  merge(targetId: string, sourceMemberId: string) {
+    return http.post<Member>(`/members/${targetId}/merge`, { sourceMemberId });
+  },
   debtors(includeSettled = false) {
     const path = includeSettled
       ? "/members/debtors?includeSettled=1"
@@ -528,6 +531,7 @@ export const mobileApi = {
     memberId?: string;
     phone?: string;
     firstName?: string;
+    lastName?: string;
     anonymous?: boolean;
     guestName?: string;
     spaceId?: string;

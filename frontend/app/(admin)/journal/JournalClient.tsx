@@ -214,7 +214,7 @@ export default function JournalClient() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: queryKeys.journal(selectedDate),
     queryFn: () =>
-      journalApi.list({ journalDate: selectedDate, perPage: 100 }),
+      journalApi.list({ journalDate: selectedDate, perPage: 300 }),
   });
 
   const { data: tomorrowPage } = useQuery({
@@ -510,7 +510,12 @@ export default function JournalClient() {
   const displayRows = useMemo(() => {
     let grouped = groupJournalByPerson(filtered);
     if (spaceFilter !== "all") {
-      grouped = grouped.filter((r) => resolveSeat(r)?.spaceId === spaceFilter);
+      grouped = grouped.filter((r) => {
+        const seat = resolveSeat(r);
+        // Keep visits without a seat visible (hours-pool / check-in without place)
+        if (!seat) return true;
+        return seat.spaceId === spaceFilter;
+      });
     }
     if (tableFilter !== "all") {
       grouped = grouped.filter(

@@ -29,8 +29,21 @@ export function visitorLabel(row: Journal) {
     return row.guestName?.trim() || "Visiteur anonyme";
   }
   const m = memberOf(row);
-  const name = m?.firstName || "Visiteur";
+  const name =
+    [m?.firstName, m?.lastName].filter(Boolean).join(" ").trim() || "Visiteur";
   return m?.visitorNumber ? `${name} #${m.visitorNumber}` : name;
+}
+
+/** Full person name for search lists / pickers. */
+export function memberDisplayName(m?: {
+  firstName?: string | null;
+  lastName?: string | null;
+  visitorNumber?: number | null;
+} | null) {
+  if (!m) return "Visiteur";
+  const name =
+    [m.firstName, m.lastName].filter(Boolean).join(" ").trim() || "Visiteur";
+  return m.visitorNumber != null ? `${name} #${m.visitorNumber}` : name;
 }
 
 export function groupOf(row: Journal) {

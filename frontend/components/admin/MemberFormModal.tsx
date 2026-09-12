@@ -30,6 +30,7 @@ const schema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   groupId: z.string().optional(),
   discountForfait: z.string().optional(),
+  discountAbonnement: z.string().optional(),
   discountSalle: z.string().optional(),
   discountOpenSpace: z.string().optional(),
 });
@@ -73,6 +74,7 @@ export function MemberFormModal({
       email: "",
       groupId: "",
       discountForfait: "",
+      discountAbonnement: "",
       discountSalle: "",
       discountOpenSpace: "",
     },
@@ -88,6 +90,10 @@ export function MemberFormModal({
       groupId: member?.groupId || "",
       discountForfait:
         member?.discountForfait != null ? String(member.discountForfait) : "",
+      discountAbonnement:
+        member?.discountAbonnement != null
+          ? String(member.discountAbonnement)
+          : "",
       discountSalle:
         member?.discountSalle != null ? String(member.discountSalle) : "",
       discountOpenSpace:
@@ -108,6 +114,7 @@ export function MemberFormModal({
         email: values.email || undefined,
         groupId: values.groupId || null,
         discountForfait: num(values.discountForfait),
+        discountAbonnement: num(values.discountAbonnement),
         discountSalle: num(values.discountSalle),
         discountOpenSpace: num(values.discountOpenSpace),
       };
@@ -179,44 +186,58 @@ export function MemberFormModal({
               ))}
             </select>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="space-y-2">
-              <Label>Remise forfait %</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                placeholder="groupe"
-                {...form.register("discountForfait")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Remise salle %</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                placeholder="groupe"
-                {...form.register("discountSalle")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Remise open %</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={1}
-                placeholder="groupe"
-                {...form.register("discountOpenSpace")}
-              />
+          <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
+            <p className="text-sm font-semibold">Remises par type (%)</p>
+            <p className="text-xs text-muted-foreground">
+              Spécifique à ce membre. Vide = remise du groupe (sinon 0).
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1">
+                <Label>Forfait / journée</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  placeholder="ex. 10"
+                  {...form.register("discountForfait")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Abonnement</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  placeholder="ex. 15"
+                  {...form.register("discountAbonnement")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Salle de réunion</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  placeholder="ex. 20"
+                  {...form.register("discountSalle")}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>Open space</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  placeholder="ex. 10"
+                  {...form.register("discountOpenSpace")}
+                />
+              </div>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Laisser vide = utiliser la remise du groupe (sinon 0).
-          </p>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annuler

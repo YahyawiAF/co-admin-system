@@ -95,6 +95,9 @@ export class MemberEntity implements Member {
   discountForfait: number | null;
 
   @ApiProperty({ required: false, nullable: true })
+  discountAbonnement: number | null;
+
+  @ApiProperty({ required: false, nullable: true })
   discountSalle: number | null;
 
   @ApiProperty({ required: false, nullable: true })

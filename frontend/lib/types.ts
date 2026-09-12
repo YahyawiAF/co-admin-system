@@ -74,6 +74,7 @@ export interface Member {
   groupId?: string | null;
   group?: MemberGroup | null;
   discountForfait?: number | null;
+  discountAbonnement?: number | null;
   discountSalle?: number | null;
   discountOpenSpace?: number | null;
   skills?: string[];
@@ -89,6 +90,7 @@ export interface MemberGroup {
   name: string;
   maxMembers: number;
   discountForfait: number;
+  discountAbonnement: number;
   discountSalle: number;
   discountOpenSpace: number;
   members?: Member[];
@@ -616,6 +618,7 @@ export interface MemberAccountVisit {
   id: string;
   forfait: string | null;
   amount: number;
+  catalogPrice?: number | null;
   isPayed: boolean;
   isOpen: boolean;
   registredTime: string;
@@ -633,6 +636,9 @@ export interface MemberLedgerSummary {
     id: string;
     name: string;
     amount: number;
+    catalogPrice?: number;
+    payedAmount?: number;
+    remaining?: number;
     registredDate: string;
   }[];
 }

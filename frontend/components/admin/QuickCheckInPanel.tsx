@@ -28,7 +28,7 @@ import {
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { type Member, type Abonnement, type SeatOccupant } from "@/lib/types";
-import { isJournalPack } from "@/lib/journal-utils";
+import { isJournalPack, memberDisplayName } from "@/lib/journal-utils";
 import { isActiveSub } from "@/lib/subscription-utils";
 import { isHourlyVisitTarif } from "@/lib/tarif-labels";
 import {
@@ -66,6 +66,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   const [priceId, setPriceId] = useState("");
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
+  const [newLastName, setNewLastName] = useState("");
   const [guestName, setGuestName] = useState("");
   const [reserveKind, setReserveKind] = useState<ReserveKind>("none");
   const [spaceId, setSpaceId] = useState("");
@@ -168,13 +169,17 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
         ? member.discountSalle
         : cat === "OPEN_SPACE"
           ? member.discountOpenSpace
-          : member.discountForfait;
+          : cat === "ABONNEMENT"
+            ? member.discountAbonnement
+            : member.discountForfait;
     const groupPct =
       cat === "SALLE"
         ? member.group?.discountSalle
         : cat === "OPEN_SPACE"
           ? member.group?.discountOpenSpace
-          : member.group?.discountForfait;
+          : cat === "ABONNEMENT"
+            ? member.group?.discountAbonnement
+            : member.group?.discountForfait;
     const percent = override ?? groupPct ?? 0;
     if (!percent) return member.group?.name
       ? { name: member.group.name, percent: 0 }
@@ -182,11 +187,21 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     return { name: member.group?.name || "Remise", percent };
   }, [member, selectedPack]);
 
+  const remisedPackPrice = useMemo(() => {
+    if (!selectedPack) return null;
+    const pct = memberDiscount?.percent || 0;
+    const original = selectedPack.price;
+    if (!pct) return { original, final: original, percent: 0 };
+    const final = Math.round(original * (1 - pct / 100) * 100) / 100;
+    return { original, final, percent: pct };
+  }, [selectedPack, memberDiscount]);
+
   const reset = () => {
     setMember(null);
     setSearch("");
     setNewPhone("");
     setNewName("");
+    setNewLastName("");
     setGuestName("");
     setPriceId("");
     setMode("existing");
@@ -252,6 +267,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
         memberId: mode === "existing" ? member?.id : undefined,
         phone: mode === "new" ? newPhone : undefined,
         firstName: mode === "new" ? newName : undefined,
+        lastName: mode === "new" ? newLastName || undefined : undefined,
       });
     },
     onSuccess: () => {
@@ -259,8 +275,9 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
         mode === "anonymous"
           ? guestName.trim() || "Anonyme"
           : mode === "new"
-            ? newName.trim() || newPhone
-            : member?.firstName || "Membre";
+            ? [newName.trim(), newLastName.trim()].filter(Boolean).join(" ") ||
+              newPhone
+            : memberDisplayName(member);
       setRecentCheckIns((prev) =>
         [
           {
@@ -398,11 +415,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                     <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
                       <div>
                         <p className="text-sm font-semibold">
-                          {member.firstName || "Visiteur"}
-                          {member.lastName ? ` ${member.lastName}` : ""}
-                          {member.visitorNumber
-                            ? ` #${member.visitorNumber}`
-                            : ""}
+                          {memberDisplayName(member)}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {member.phone || "Sélectionné"}
@@ -431,8 +444,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                   {aboFastPath && member ? (
                     <div className="rounded-lg border border-violet-200 bg-violet-50/60 p-3">
                       <p className="text-sm font-medium">
-                        {member.firstName}
-                        {member.visitorNumber ? ` #${member.visitorNumber}` : ""}
+                        {memberDisplayName(member)}
                         {" — "}
                         {hoursPoolMember ? "abonnement heures" : "abonnement période"}
                       </p>
@@ -451,7 +463,11 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                   ) : null}
                   {!member ? (
                     <div className="max-h-64 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-1">
-                      {filteredMembers.map((m) => (
+                      {filteredMembers.map((m) => {
+                        const activeAbo = abos.find(
+                          (a) => a.memberID === m.id && isActiveSub(a),
+                        );
+                        return (
                         <button
                           key={m.id}
                           type="button"
@@ -461,9 +477,13 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                           }}
                           className="flex w-full flex-col rounded-md px-3 py-2.5 text-left text-sm hover:bg-background"
                         >
-                          <span className="font-medium">
-                            {m.firstName || "Visiteur"}
-                            {m.visitorNumber ? ` #${m.visitorNumber}` : ""}
+                          <span className="flex flex-wrap items-center gap-1.5 font-medium">
+                            {memberDisplayName(m)}
+                            {activeAbo ? (
+                              <Badge className="h-5 bg-violet-600 text-[10px] hover:bg-violet-600">
+                                Abonné
+                              </Badge>
+                            ) : null}
                           </span>
                           <UnpaidDebtBadge amount={debtByMember.get(m.id)} />
                           <span className="text-xs text-muted-foreground">
@@ -478,7 +498,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                             </span>
                           ) : null}
                         </button>
-                      ))}
+                        );
+                      })}
                       {!filteredMembers.length ? (
                         <p className="p-3 text-sm text-muted-foreground">
                           Aucun membre disponible — passez en « Nouveau » ou
@@ -497,7 +518,16 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                     <Input
                       value={newName}
                       onChange={(e) => setNewName(e.target.value)}
-                      placeholder="Optionnel"
+                      placeholder="Prénom"
+                      autoFocus
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Nom</Label>
+                    <Input
+                      value={newLastName}
+                      onChange={(e) => setNewLastName(e.target.value)}
+                      placeholder="Nom"
                     />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
@@ -507,7 +537,6 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                       onChange={(e) => setNewPhone(e.target.value)}
                       inputMode="tel"
                       placeholder="ex: 20123456"
-                      autoFocus
                     />
                   </div>
                 </div>
@@ -566,7 +595,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
               ) : null}
             </TabsContent>
 
-            <TabsContent value="tarif" className="mt-0">
+            <TabsContent value="tarif" className="mt-0 space-y-3">
               <VisitTarifSpacePickers
                 prices={prices}
                 spaces={layout?.spaces || []}
@@ -581,7 +610,25 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                 optionalPrice={periodMember}
                 showTarif
                 showSpace={false}
+                discountPercent={memberDiscount?.percent || 0}
+                discountLabel={memberDiscount?.name || undefined}
               />
+              {remisedPackPrice && remisedPackPrice.percent > 0 ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm">
+                  <p className="font-medium text-amber-950">
+                    Tarif avec remise (−{remisedPackPrice.percent}%)
+                  </p>
+                  <p className="mt-1 text-amber-900/90">
+                    <span className="line-through opacity-70">
+                      {remisedPackPrice.original} DT
+                    </span>
+                    {" → "}
+                    <span className="text-base font-bold">
+                      {remisedPackPrice.final} DT
+                    </span>
+                  </p>
+                </div>
+              ) : null}
             </TabsContent>
 
             <TabsContent value="space" className="mt-0">

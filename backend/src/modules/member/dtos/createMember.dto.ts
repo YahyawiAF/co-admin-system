@@ -118,6 +118,11 @@ export class AddMemberDto {
 
   @IsOptional()
   @IsNumber()
+  @ApiProperty({ required: false, description: 'Remise % sur abonnements' })
+  public discountAbonnement?: number | null;
+
+  @IsOptional()
+  @IsNumber()
   @ApiProperty({ required: false })
   public discountSalle?: number | null;
 

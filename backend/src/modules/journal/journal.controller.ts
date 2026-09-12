@@ -63,7 +63,23 @@ export class JournalController {
         lt: endOfTheDay,
       },
       ...(organizationId
-        ? { members: { organizationId } }
+        ? {
+            OR: [
+              { members: { organizationId } },
+              // Anonymous / walk-in rows have no member — match via price org
+              {
+                AND: [
+                  { OR: [{ isAnonymous: true }, { memberID: null }] },
+                  {
+                    OR: [
+                      { prices: { organizationId } },
+                      { prices: { organizationId: null } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }
         : {}),
     };
     return await this.JournalService.findMany({ perPage, page, where });

@@ -311,7 +311,17 @@ function AbonnementsInner() {
   const fillFromPrice = (priceId: string, startStr: string) => {
     const p = subPrices.find((x) => x.id === priceId);
     if (!p) return;
-    form.setValue("payedAmount", p.price);
+    const memberId = form.getValues("memberID");
+    const m = members.find((x) => x.id === memberId);
+    const pct =
+      m?.discountAbonnement ??
+      m?.group?.discountAbonnement ??
+      0;
+    const remised =
+      pct > 0
+        ? Math.round(p.price * (1 - pct / 100) * 100) / 100
+        : p.price;
+    form.setValue("payedAmount", form.getValues("isPayed") ? remised : 0);
     const start = new Date(startStr || form.getValues("registredDate"));
     const leave = leaveDateFromPeriodStart(start, p.periodDays || 30);
     form.setValue("leaveDate", format(leave, "yyyy-MM-dd"));
@@ -370,13 +380,31 @@ function AbonnementsInner() {
       const leave = v.leaveDate
         ? new Date(v.leaveDate)
         : leaveDateFromPeriodStart(start, price?.periodDays || 30);
+      const m = members.find((x) => x.id === v.memberID);
+      const pct =
+        m?.discountAbonnement ?? m?.group?.discountAbonnement ?? 0;
+      const listPrice = price?.price || 0;
+      const catalog =
+        pct > 0
+          ? Math.round(listPrice * (1 - pct / 100) * 100) / 100
+          : listPrice;
+      let payedAmount = Number(v.payedAmount || 0);
+      let isPayed = v.isPayed;
+      // payedAmount = already received. Remaining = catalog − payedAmount.
+      if (isPayed) {
+        if (payedAmount < catalog - 0.009) {
+          isPayed = false;
+        } else if (payedAmount < catalog) {
+          payedAmount = catalog;
+        }
+      }
       const payload = {
         memberID: v.memberID,
         priceId: v.priceId,
         registredDate: start.toISOString(),
         leaveDate: leave.toISOString(),
-        isPayed: v.isPayed,
-        payedAmount: v.payedAmount || price?.price || 0,
+        isPayed,
+        payedAmount,
         isReservation: false,
         hoursQuota:
           price?.billingUnit === "HOURLY" ? price.durationHours : null,
@@ -613,19 +641,68 @@ function AbonnementsInner() {
                   </div>
                 </div>
                 <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-                  <Label>Payé</Label>
+                  <Label>Payé intégralement</Label>
                   <Switch
                     checked={form.watch("isPayed")}
-                    onCheckedChange={(v) => form.setValue("isPayed", v)}
+                    onCheckedChange={(v) => {
+                      form.setValue("isPayed", v);
+                      const p = subPrices.find(
+                        (x) => x.id === form.getValues("priceId"),
+                      );
+                      if (v && p) form.setValue("payedAmount", p.price);
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Montant</Label>
+                  <Label>Montant déjà reçu (DT)</Label>
                   <Input
                     type="number"
                     step="0.1"
                     {...form.register("payedAmount")}
                   />
+                  {(() => {
+                    const p = subPrices.find(
+                      (x) => x.id === form.watch("priceId"),
+                    );
+                    const m = members.find(
+                      (x) => x.id === form.watch("memberID"),
+                    );
+                    const pct =
+                      m?.discountAbonnement ??
+                      m?.group?.discountAbonnement ??
+                      0;
+                    const listPrice = p?.price || 0;
+                    const catalog =
+                      pct > 0
+                        ? Math.round(listPrice * (1 - pct / 100) * 100) / 100
+                        : listPrice;
+                    const received = Number(form.watch("payedAmount") || 0);
+                    const remaining = Math.max(0, catalog - received);
+                    if (!listPrice) return null;
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {pct > 0 ? (
+                          <>
+                            Tarif{" "}
+                            <span className="line-through opacity-70">
+                              {listPrice} DT
+                            </span>{" "}
+                            → {catalog} DT (−{pct}%)
+                          </>
+                        ) : (
+                          <>Tarif : {catalog} DT</>
+                        )}
+                        {remaining > 0.009 ? (
+                          <span className="font-medium text-rose-700">
+                            {" "}
+                            · reste à payer {remaining.toFixed(1)} DT
+                          </span>
+                        ) : (
+                          <span className="text-emerald-700"> · soldé</span>
+                        )}
+                      </p>
+                    );
+                  })()}
                 </div>
                 {isHoursPool ? (
                   <div className="space-y-2">
@@ -871,9 +948,29 @@ function AbonnementsInner() {
                       </TableCell>
                       <TableCell>{a.payedAmount} DT</TableCell>
                       <TableCell>
-                        <Badge variant={a.isPayed ? "default" : "secondary"}>
-                          {a.isPayed ? "Payé" : "Non payé"}
-                        </Badge>
+                        {(() => {
+                          const catalog = a.price?.price || 0;
+                          const received = a.payedAmount || 0;
+                          const remaining = Math.max(0, catalog - received);
+                          if (a.isPayed) {
+                            return (
+                              <Badge variant="default">Payé</Badge>
+                            );
+                          }
+                          if (remaining > 0.009 && received > 0.009) {
+                            return (
+                              <Badge
+                                variant="secondary"
+                                className="bg-amber-100 text-amber-900"
+                              >
+                                Reste {remaining.toFixed(0)} DT
+                              </Badge>
+                            );
+                          }
+                          return (
+                            <Badge variant="secondary">Non payé</Badge>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>

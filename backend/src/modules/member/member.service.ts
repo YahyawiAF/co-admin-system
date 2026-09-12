@@ -523,15 +523,22 @@ export class MemberService {
       }),
     ]);
 
-    const visitOf = (j: (typeof journals)[number]) => ({
-      id: j.id,
-      forfait: j.prices?.name || null,
-      amount: Number(j.prices?.price ?? j.payedAmount ?? 0),
-      isPayed: j.isPayed,
-      isOpen: !j.leaveTime,
-      registredTime: j.registredTime.toISOString(),
-      leaveTime: j.leaveTime ? j.leaveTime.toISOString() : null,
-    });
+    const visitOf = (j: (typeof journals)[number]) => {
+      const catalog = Number(j.prices?.price ?? 0);
+      const dueOrPaid = Number(j.payedAmount ?? catalog);
+      // Unpaid: payedAmount is the remised amount due. Paid: what was received.
+      const amount = j.isPayed ? dueOrPaid : dueOrPaid || catalog;
+      return {
+        id: j.id,
+        forfait: j.prices?.name || null,
+        amount,
+        catalogPrice: catalog || null,
+        isPayed: j.isPayed,
+        isOpen: !j.leaveTime,
+        registredTime: j.registredTime.toISOString(),
+        leaveTime: j.leaveTime ? j.leaveTime.toISOString() : null,
+      };
+    };
 
     const today = journals.find((j) =>
       isSameDay(j.registredTime, new Date()),
@@ -563,11 +570,21 @@ export class MemberService {
     );
     const unpaidVisitSum = journals
       .filter((j) => !j.isPayed && !linkedJournalIds.has(j.id))
-      .reduce((s, j) => s + Number(j.prices?.price ?? j.payedAmount ?? 0), 0);
-    const unpaidAboSum = abos.reduce(
-      (s, a) => s + Number(a.price?.price ?? a.payedAmount ?? 0),
-      0,
-    );
+      .reduce(
+        (s, j) => s + Number(j.payedAmount ?? j.prices?.price ?? 0),
+        0,
+      );
+    const unpaidAboSum = abos.reduce((s, a) => {
+      const catalog = Number(a.price?.price ?? 0);
+      const paid = Number(a.payedAmount ?? 0);
+      // payedAmount = already received; remaining = catalog − paid
+      const remaining = Math.max(0, catalog - paid);
+      // Legacy: unpaid with payedAmount == catalog means nothing received yet
+      if (!a.isPayed && paid > 0 && paid >= catalog - 0.009) {
+        return s + catalog;
+      }
+      return s + (a.isPayed ? 0 : remaining || catalog);
+    }, 0);
     const owedByMember = ledgerCredit + unpaidVisitSum + unpaidAboSum;
     const owedToMember = ledgerAvoir;
 
@@ -578,13 +595,152 @@ export class MemberService {
       net: owedByMember - owedToMember,
       todayVisit: today ? visitOf(today) : null,
       unpaidVisits,
-      unpaidAbos: abos.map((a) => ({
-        id: a.id,
-        name: a.price?.name || 'Abonnement',
-        amount: Number(a.price?.price ?? a.payedAmount ?? 0),
-        registredDate: a.registredDate.toISOString(),
-      })),
+      unpaidAbos: abos.map((a) => {
+        const catalog = Number(a.price?.price ?? 0);
+        const paid = Number(a.payedAmount ?? 0);
+        let remaining = Math.max(0, catalog - paid);
+        if (!a.isPayed && paid > 0 && paid >= catalog - 0.009) {
+          remaining = catalog;
+        } else if (!a.isPayed && paid <= 0) {
+          remaining = catalog;
+        }
+        return {
+          id: a.id,
+          name: a.price?.name || 'Abonnement',
+          amount: remaining || catalog,
+          catalogPrice: catalog,
+          payedAmount: paid,
+          remaining,
+          registredDate: a.registredDate.toISOString(),
+        };
+      }),
     };
+  }
+
+  /**
+   * Merge source member into target: move all related data, then delete source.
+   */
+  async mergeMembers(targetId: string, sourceId: string) {
+    if (targetId === sourceId) {
+      throw new BadRequestException('Choisissez deux profils différents');
+    }
+    const [target, source] = await Promise.all([
+      this.prisma.member.findUnique({ where: { id: targetId } }),
+      this.prisma.member.findUnique({ where: { id: sourceId } }),
+    ]);
+    if (!target || !source) {
+      throw new NotFoundException('Membre introuvable');
+    }
+    if (target.organizationId !== source.organizationId) {
+      throw new BadRequestException(
+        'Les deux profils doivent être dans la même organisation',
+      );
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.journal.updateMany({
+        where: { memberID: sourceId },
+        data: { memberID: targetId },
+      });
+      await tx.abonnement.updateMany({
+        where: { memberID: sourceId },
+        data: { memberID: targetId },
+      });
+      await tx.reservation.updateMany({
+        where: { memberID: sourceId },
+        data: { memberID: targetId },
+      });
+      await tx.seatBooking.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+      await tx.visitRequest.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+      await tx.dailyProduct.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+      await tx.memberLedger.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+      await tx.bookingRequest.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+      await tx.staffMessage.updateMany({
+        where: { toMemberId: sourceId },
+        data: { toMemberId: targetId },
+      });
+      await tx.communityMessage.updateMany({
+        where: { fromMemberId: sourceId },
+        data: { fromMemberId: targetId },
+      });
+      await tx.communityMessage.updateMany({
+        where: { toMemberId: sourceId },
+        data: { toMemberId: targetId },
+      });
+      // Event registrations: drop duplicates on unique(eventId, memberId)
+      const sourceRegs = await tx.eventRegistration.findMany({
+        where: { memberId: sourceId },
+      });
+      for (const reg of sourceRegs) {
+        const exists = await tx.eventRegistration.findFirst({
+          where: { eventId: reg.eventId, memberId: targetId },
+        });
+        if (exists) {
+          await tx.eventRegistration.delete({ where: { id: reg.id } });
+        } else {
+          await tx.eventRegistration.update({
+            where: { id: reg.id },
+            data: { memberId: targetId },
+          });
+        }
+      }
+      await tx.pushSubscription.deleteMany({ where: { memberId: sourceId } });
+      await tx.memberLoginToken.deleteMany({ where: { memberId: sourceId } });
+      await tx.opsEvent.updateMany({
+        where: { memberId: sourceId },
+        data: { memberId: targetId },
+      });
+
+      // Fill empty profile fields from source
+      await tx.member.update({
+        where: { id: targetId },
+        data: {
+          firstName: target.firstName || source.firstName,
+          lastName: target.lastName || source.lastName,
+          email: target.email || source.email,
+          bio: target.bio || source.bio,
+          avatarUrl: target.avatarUrl || source.avatarUrl,
+          functionality: target.functionality || source.functionality,
+          groupId: target.groupId || source.groupId,
+          discountForfait: target.discountForfait ?? source.discountForfait,
+          discountAbonnement:
+            target.discountAbonnement ?? source.discountAbonnement,
+          discountSalle: target.discountSalle ?? source.discountSalle,
+          discountOpenSpace:
+            target.discountOpenSpace ?? source.discountOpenSpace,
+          phone: target.phone || source.phone,
+          plan:
+            target.plan === Subscription.Membership ||
+            source.plan === Subscription.Membership
+              ? Subscription.Membership
+              : target.plan,
+        },
+      });
+
+      // Free unique constraints on source before delete
+      await tx.member.update({
+        where: { id: sourceId },
+        data: { phone: null, visitorNumber: null, email: null },
+      });
+      await tx.member.delete({ where: { id: sourceId } });
+    });
+
+    return this.findOne(targetId);
   }
 
   async addLedger(dto: {
@@ -749,7 +905,7 @@ export class MemberService {
     for (const j of journals) {
       if (!j.members || !j.memberID) continue;
       const row = ensure(j.members);
-      const amount = Number(j.prices?.price ?? j.payedAmount ?? 0);
+      const amount = Number(j.payedAmount ?? j.prices?.price ?? 0);
       row.owedFromVisits += amount;
       bumpDate(row, j.registredTime);
       row.items.push({
@@ -769,7 +925,11 @@ export class MemberService {
     for (const a of abos) {
       if (!a.members) continue;
       const row = ensure(a.members);
-      const amount = Number(a.price?.price ?? a.payedAmount ?? 0);
+      const catalog = Number(a.price?.price ?? 0);
+      const paid = Number(a.payedAmount ?? 0);
+      let amount = Math.max(0, catalog - paid);
+      if (paid <= 0) amount = catalog;
+      else if (paid >= catalog - 0.009) amount = catalog;
       row.owedFromAbos += amount;
       bumpDate(row, a.registredDate);
       row.items.push({

@@ -104,7 +104,22 @@ export class JournalService {
   findAll(organizationId?: string) {
     return this.prisma.journal.findMany({
       where: organizationId
-        ? { members: { organizationId } }
+        ? {
+            OR: [
+              { members: { organizationId } },
+              {
+                AND: [
+                  { OR: [{ isAnonymous: true }, { memberID: null }] },
+                  {
+                    OR: [
+                      { prices: { organizationId } },
+                      { prices: { organizationId: null } },
+                    ],
+                  },
+                ],
+              },
+            ],
+          }
         : undefined,
       include: {
         members: { include: { group: true } },
@@ -203,10 +218,15 @@ export class JournalService {
       map.set(id, cur);
     };
     for (const j of journals) {
-      add(j.memberID, Number(j.prices?.price ?? j.payedAmount ?? 0));
+      add(j.memberID, Number(j.payedAmount ?? j.prices?.price ?? 0));
     }
     for (const a of abos) {
-      add(a.memberID, Number(a.price?.price ?? a.payedAmount ?? 0));
+      const catalog = Number(a.price?.price ?? 0);
+      const paid = Number(a.payedAmount ?? 0);
+      let remaining = Math.max(0, catalog - paid);
+      if (paid <= 0) remaining = catalog;
+      else if (paid >= catalog - 0.009) remaining = catalog; // legacy unpaid full amount
+      add(a.memberID, remaining || catalog);
     }
     for (const l of ledgers) add(l.memberId, l.amount);
     return map;

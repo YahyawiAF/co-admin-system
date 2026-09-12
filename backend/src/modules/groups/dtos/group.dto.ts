@@ -33,6 +33,13 @@ export class CreateMemberGroupDto {
   @Type(() => Number)
   @IsNumber()
   @Min(0)
+  discountAbonnement?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
   discountSalle?: number;
 
   @ApiPropertyOptional({ default: 0 })
@@ -62,6 +69,13 @@ export class UpdateMemberGroupDto {
   @IsNumber()
   @Min(0)
   discountForfait?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  discountAbonnement?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

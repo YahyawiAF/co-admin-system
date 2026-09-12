@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { MemberService } from './member.service';
 import { AddMemberDto } from './dtos/createMember.dto';
@@ -124,6 +125,18 @@ export class MemberController {
   @ApiBearerAuth()
   removeLedger(@Param('entryId', ParseUUIDPipe) entryId: string) {
     return this.memberService.removeLedger(entryId);
+  }
+
+  @Post(':id/merge')
+  @ApiBearerAuth()
+  merge(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { sourceMemberId: string },
+  ) {
+    if (!body?.sourceMemberId) {
+      throw new BadRequestException('sourceMemberId requis');
+    }
+    return this.memberService.mergeMembers(id, body.sourceMemberId);
   }
 
   @Get(':id')
