@@ -67,6 +67,13 @@ function ChooseInner() {
     intervalMs: pendingId ? 10_000 : 20_000,
   });
 
+  useEffect(() => {
+    if (mode !== "subscription" || !memberId || !status) return;
+    if (!status.member?.hasPin) {
+      router.replace(href("/profile?upgrade=1"));
+    }
+  }, [mode, memberId, status, router, href]);
+
   const { data: tarifs = [] } = useQuery({
     queryKey: ["mobile-tarifs", slug],
     queryFn: () => mobileApi.tarifs(slug),

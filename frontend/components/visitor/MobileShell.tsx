@@ -13,14 +13,23 @@ import {
 import { cn } from "@/lib/utils";
 import { orgHref } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
-import { PinSetupGate } from "@/components/visitor/PinSetupGate";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 
-const FULL_NAV = [
+/** Light visitor (name+phone, no PIN): no community */
+const LIGHT_NAV = [
+  { path: "", label: "Accueil", icon: Home },
+  { path: "/events", label: "Événements", icon: CalendarDays },
+  { path: "/cafe", label: "Café", icon: Coffee },
+  { path: "/profile", label: "Profil", icon: UserRound },
+];
+
+/** Account (PIN / PWA): community unlocked */
+const ACCOUNT_NAV = [
   { path: "", label: "Accueil", icon: Home },
   { path: "/events", label: "Événements", icon: CalendarDays },
   { path: "/community", label: "Communauté", icon: Users },
@@ -28,36 +37,96 @@ const FULL_NAV = [
   { path: "/profile", label: "Profil", icon: UserRound },
 ];
 
-const GATED_NAV = [
+const GUEST_NAV = [
   { path: "", label: "Accueil", icon: Home },
   { path: "/profile", label: "Profil", icon: UserRound },
 ];
 
-export function MobileShell({ children }: { children: ReactNode }) {
-  const params = useParams<{ org: string }>();
-  const orgSlug = params.org;
-  const pathname = usePathname();
-  const router = useRouter();
-  const { ready, onboarded } = useVisitorSession();
-  const keyboardOpen = useMobileKeyboardOpen();
-  const nav = onboarded ? FULL_NAV : GATED_NAV;
-  const base = `/m/${orgSlug}`;
-  const rest = pathname === base ? "" : pathname.slice(base.length);
-  const allowed =
+function isLightAllowed(rest: string) {
+  return (
     rest === "" ||
     rest === "/" ||
     rest.startsWith("/entry") ||
     rest.startsWith("/profile") ||
     rest.startsWith("/recover") ||
     rest.startsWith("/join") ||
-    rest.startsWith("/signup");
+    rest.startsWith("/signup") ||
+    rest.startsWith("/choose") ||
+    rest.startsWith("/cafe") ||
+    rest.startsWith("/events") ||
+    rest.startsWith("/tarifs") ||
+    rest.startsWith("/history") ||
+    rest.startsWith("/session") ||
+    rest.startsWith("/reserve") ||
+    rest.startsWith("/reservations") ||
+    rest.startsWith("/staff")
+  );
+}
+
+function isGuestAllowed(rest: string) {
+  return (
+    rest === "" ||
+    rest === "/" ||
+    rest.startsWith("/entry") ||
+    rest.startsWith("/profile") ||
+    rest.startsWith("/recover") ||
+    rest.startsWith("/join") ||
+    rest.startsWith("/signup")
+  );
+}
+
+export function MobileShell({ children }: { children: ReactNode }) {
+  const params = useParams<{ org: string }>();
+  const orgSlug = params.org;
+  const pathname = usePathname();
+  const router = useRouter();
+  const { ready, onboarded, memberId } = useVisitorSession();
+  const { data: status, isFetched } = useMobileStatus({
+    enabled: !!memberId && onboarded,
+  });
+  const hasAccount = !!status?.member?.hasPin;
+  const keyboardOpen = useMobileKeyboardOpen();
+  const nav = !onboarded
+    ? GUEST_NAV
+    : hasAccount
+      ? ACCOUNT_NAV
+      : LIGHT_NAV;
+  const base = `/m/${orgSlug}`;
+  const rest = pathname === base ? "" : pathname.slice(base.length);
   const immersiveChat =
     rest.startsWith("/staff") || rest.startsWith("/chat/");
 
+  const accountOnly =
+    rest.startsWith("/community") ||
+    rest.startsWith("/chat/") ||
+    rest.startsWith("/u/");
+
   useEffect(() => {
-    if (!ready || onboarded || allowed) return;
-    router.replace(base);
-  }, [ready, onboarded, allowed, base, router]);
+    if (!ready) return;
+    if (!onboarded) {
+      if (!isGuestAllowed(rest)) router.replace(base);
+      return;
+    }
+    // Wait for status before gating account-only routes
+    if (memberId && !isFetched) return;
+    if (!hasAccount && accountOnly) {
+      router.replace(`${base}/profile?upgrade=1`);
+      return;
+    }
+    if (!hasAccount && !isLightAllowed(rest)) {
+      router.replace(base);
+    }
+  }, [
+    ready,
+    onboarded,
+    hasAccount,
+    accountOnly,
+    rest,
+    base,
+    router,
+    memberId,
+    isFetched,
+  ]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
@@ -88,18 +157,16 @@ export function MobileShell({ children }: { children: ReactNode }) {
               "pb-[calc(4.25rem+env(safe-area-inset-bottom))]"
           )}
         >
-          {onboarded ? <PinSetupGate /> : null}
           <div className="min-h-0 flex-1">{children}</div>
-          {onboarded ? <StaffMessageModal /> : null}
+          {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       ) : (
         <div className="px-3 pb-3 pt-1.5">
           <MobileHeader />
           <OfflineBanner />
           {onboarded ? <VisitorAlerts /> : null}
-          {onboarded ? <PinSetupGate /> : null}
           {children}
-          {onboarded ? <StaffMessageModal /> : null}
+          {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       )}
       <nav

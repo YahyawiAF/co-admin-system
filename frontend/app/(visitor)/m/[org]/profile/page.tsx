@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -32,6 +33,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
+import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -40,8 +42,10 @@ import {
   SKILL_SUGGESTIONS,
 } from "@/lib/directory-suggestions";
 
-export default function ProfilePage() {
+function ProfileInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const showUpgrade = searchParams.get("upgrade") === "1";
   const queryClient = useQueryClient();
   const { href, slug } = useOrg();
   const { memberId, onboarded, logout, ready } = useVisitorSession();
@@ -66,6 +70,7 @@ export default function ProfilePage() {
   });
 
   const member = data?.member;
+  const hasAccount = !!member?.hasPin;
   const subscribed = !!(data?.hasActiveSubscription || member?.isSubscribed);
   const displayName =
     [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
@@ -140,8 +145,7 @@ export default function ProfilePage() {
       <div className="rounded-2xl bg-white p-5 text-center shadow-sm">
         <p className="mb-2 text-lg font-semibold">Votre profil</p>
         <p className="mb-4 text-sm text-slate-500">
-          Indiquez votre nom et votre téléphone tunisien à l&apos;accueil pour
-          débloquer l&apos;espace.
+          Indiquez votre nom et votre téléphone pour commencer.
         </p>
         <Button className="h-11 rounded-full" onClick={() => router.push(href())}>
           Commencer
@@ -151,6 +155,79 @@ export default function ProfilePage() {
   }
 
   if (isLoading) return <p className="text-slate-500">Chargement…</p>;
+
+  // Light visitor: name + phone + upgrade CTA
+  if (!hasAccount) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-3xl bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Visiteur
+          </p>
+          <h1 className="mt-1 text-xl font-bold text-slate-900">{displayName}</h1>
+          <p className="mt-1 text-sm text-slate-500">{member?.phone || "—"}</p>
+          {member?.visitorNumber ? (
+            <p className="mt-1 text-xs text-slate-400">#{member.visitorNumber}</p>
+          ) : null}
+        </div>
+
+        <AccountUpgradeCard
+          title={
+            showUpgrade
+              ? "Compte requis"
+              : "Créer un compte ou télécharger l’app"
+          }
+          description={
+            showUpgrade
+              ? "Communauté et abonnement sont réservés aux comptes avec PIN (app installée)."
+              : "Même profil — ajoutez un PIN dans l’app pour l’abonnement, la communauté et les cadeaux."
+          }
+        />
+
+        <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
+          <Link
+            href={href("/tarifs")}
+            className="flex items-center gap-3 border-b px-4 py-3.5"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Tags className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">Tarifs</span>
+              <span className="block text-xs text-slate-500">Forfaits du jour</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          </Link>
+          <Link
+            href={href("/history")}
+            className="flex items-center gap-3 px-4 py-3.5"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <History className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">Historique</span>
+              <span className="block text-xs text-slate-500">Vos visites</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          </Link>
+        </div>
+
+        <Button
+          variant="outline"
+          className="h-12 w-full gap-2 bg-white text-slate-600"
+          onClick={() => {
+            logout();
+            router.push(href());
+            router.refresh();
+          }}
+        >
+          <LogOut className="h-4 w-4" />
+          Oublier ce profil sur cet appareil
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -189,16 +266,13 @@ export default function ProfilePage() {
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <Badge className={subscribed ? "bg-emerald-600" : ""}>
-              {subscribed ? "Abonné" : "Visiteur du jour"}
+              {subscribed ? "Abonné" : "Compte"}
             </Badge>
             {data?.hasOpenSession ? (
               <Badge variant="secondary">Session en cours</Badge>
             ) : null}
             {member?.showInDirectory ? (
               <Badge variant="outline">Annuaire</Badge>
-            ) : null}
-            {member?.openToCollaboration ? (
-              <Badge variant="outline">Ouvert à la collaboration</Badge>
             ) : null}
           </div>
           {(member?.skills || []).length ? (
@@ -349,81 +423,68 @@ export default function ProfilePage() {
               <TagInput
                 value={form.skills}
                 onChange={(skills) => setForm((f) => ({ ...f, skills }))}
-                placeholder="React, Node.js…"
                 suggestions={SKILL_SUGGESTIONS}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>Services</Label>
-              <TagInput
-                value={form.services}
-                onChange={(services) => setForm((f) => ({ ...f, services }))}
-                placeholder="Audit, formation…"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>LinkedIn / portfolio</Label>
-              <Input
-                placeholder="https://…"
-                value={form.linkedinUrl}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, linkedinUrl: e.target.value }))
-                }
+                placeholder="Ajouter…"
               />
             </div>
             <div className="space-y-1">
               <Label>Bio</Label>
               <Textarea
-                placeholder="Présentez-vous en quelques mots"
                 value={form.bio}
-                onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, bio: e.target.value }))
+                }
                 rows={3}
               />
             </div>
-            <label className="flex items-start justify-between gap-3 rounded-xl border p-3">
-              <span>
-                <span className="block text-sm font-medium">
-                  Ouvert à la collaboration
-                </span>
-                <span className="text-xs text-slate-500">
-                  Affiché sur votre carte si l&apos;annuaire est activé.
-                </span>
-              </span>
-              <Switch
-                checked={form.openToCollaboration}
-                onCheckedChange={(v) =>
-                  setForm((f) => ({ ...f, openToCollaboration: v }))
+            <div className="space-y-1">
+              <Label>LinkedIn</Label>
+              <Input
+                value={form.linkedinUrl}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, linkedinUrl: e.target.value }))
                 }
+                placeholder="https://…"
               />
-            </label>
-            <label className="flex items-start justify-between gap-3 rounded-xl border p-3">
-              <span>
-                <span className="block text-sm font-medium">
-                  Afficher mon profil dans l&apos;annuaire
-                </span>
-                <span className="text-xs text-slate-500">
-                  Les autres membres verront uniquement les champs que vous avez
-                  remplis.
-                </span>
-              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label>Visible dans l&apos;annuaire</Label>
               <Switch
                 checked={form.showInDirectory}
                 onCheckedChange={(v) =>
                   setForm((f) => ({ ...f, showInDirectory: v }))
                 }
               />
-            </label>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label>Ouvert à la collaboration</Label>
+              <Switch
+                checked={form.openToCollaboration}
+                onCheckedChange={(v) =>
+                  setForm((f) => ({ ...f, openToCollaboration: v }))
+                }
+              />
+            </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>
-              Annuler
-            </Button>
-            <Button disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? "…" : "Enregistrer"}
+            <Button
+              className="w-full rounded-full"
+              disabled={save.isPending}
+              onClick={() => save.mutate()}
+            >
+              Enregistrer
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <Suspense fallback={<p className="text-slate-500">Chargement…</p>}>
+      <ProfileInner />
+    </Suspense>
   );
 }

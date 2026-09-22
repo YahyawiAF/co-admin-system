@@ -103,9 +103,16 @@ export default function MobileHomePage() {
     if (!onboarded || !memberId || !statusReady || !status || entryHandled.current) {
       return;
     }
-    if (!consumeQrEntry(slug)) return;
+    // Already present or waiting — stay on Accueil
+    if (status.session || status.pendingRequest) {
+      entryHandled.current = true;
+      consumeQrEntry(slug);
+      return;
+    }
     entryHandled.current = true;
-    if (status.session || status.pendingRequest) return;
+    consumeQrEntry(slug);
+
+    // Active abonnement → mark presence directly
     if (status.hasActiveSubscription) {
       const rem =
         status.dailyCreditRemainingHours ??
@@ -118,6 +125,8 @@ export default function MobileHomePage() {
       scanInRef.current();
       return;
     }
+
+    // Known visitor without abo → forfait
     router.replace(href("/choose?mode=day"));
   }, [onboarded, memberId, statusReady, status, slug, router, href]);
 
@@ -194,6 +203,17 @@ export default function MobileHomePage() {
   if (!ready) return <p className="text-slate-500">Chargement…</p>;
   if (!onboarded) return <WelcomeRegister />;
 
+  // Returning visitor: wait for status then auto-route (abo → presence, else forfait)
+  const routingAway =
+    !statusReady ||
+    (!!status &&
+      !status.session &&
+      !status.pendingRequest &&
+      !entryHandled.current);
+  if (routingAway && !session && !pending) {
+    return <p className="text-slate-500">Chargement…</p>;
+  }
+
   const openWifi = () => {
     if (wifiFallback?.spaceId) {
       sessionStorage.removeItem(`wifi-seen:${wifiFallback.spaceId}`);
@@ -208,6 +228,11 @@ export default function MobileHomePage() {
   const goSubscription = () => {
     if (status?.hasActiveSubscription) {
       router.push(href("/subscription"));
+      return;
+    }
+    if (!status?.member?.hasPin) {
+      toast.message("Créez un compte (app + PIN) pour souscrire un abonnement");
+      router.push(href("/profile?upgrade=1"));
       return;
     }
     router.push(href("/choose?mode=subscription"));

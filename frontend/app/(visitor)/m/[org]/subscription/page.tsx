@@ -5,11 +5,14 @@ import { format, differenceInCalendarDays } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useOrg } from "@/lib/org";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
+import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 
 export default function SubscriptionPage() {
   const { href } = useOrg();
   const { data } = useMobileStatus();
+
+  const hasAccount = !!data?.member?.hasPin;
 
   const sub = data?.subscription as
     | (NonNullable<typeof data>["subscription"] & {
@@ -26,6 +29,19 @@ export default function SubscriptionPage() {
 
   const hasSession = !!data?.hasOpenSession;
   const seat = data?.seat;
+
+  if (!hasAccount && !sub) {
+    return (
+      <div className="space-y-4">
+        <MobileBackHome />
+        <h1 className="text-2xl font-bold">Abonnement</h1>
+        <AccountUpgradeCard
+          title="Compte requis"
+          description="Pour souscrire un abonnement, créez un compte avec PIN dans l’app installée (même profil)."
+        />
+      </div>
+    );
+  }
 
   if (!sub) {
     return (
@@ -78,25 +94,17 @@ export default function SubscriptionPage() {
         <p className="mt-4 rounded-xl border bg-slate-50 px-4 py-3 text-sm">
           Place :{" "}
           <span className="font-semibold">
-            {[seat.spaceName, seat.tableName, seat.seatLabel]
-              .filter(Boolean)
-              .join(" · ")}
+            {seat.seatLabel}
+            {seat.spaceName ? ` · ${seat.spaceName}` : ""}
           </span>
         </p>
       ) : null}
-      <p className="mt-4 text-sm text-slate-500">
-        {format(new Date(sub.registredDate), "dd/MM/yyyy")}
-        {sub.leaveDate
-          ? ` → ${format(new Date(sub.leaveDate), "dd/MM/yyyy")}`
-          : ""}
-      </p>
-      <Button asChild className="mt-6 h-12 w-full">
-        <Link href={href()}>
-          {hasSession
-            ? "Voir ma session à l’accueil"
-            : "Pointer depuis l’accueil"}
-        </Link>
-      </Button>
+      {sub.leaveDate ? (
+        <p className="mt-6 text-xs text-slate-400">
+          Jusqu&apos;au{" "}
+          {format(new Date(sub.leaveDate), "d MMMM yyyy")}
+        </p>
+      ) : null}
     </div>
   );
 }

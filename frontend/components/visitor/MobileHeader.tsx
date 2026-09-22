@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, MessageCircle } from "lucide-react";
+import { Bell, LogIn, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
+import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
 
 const TITLE_BY_SUFFIX: Record<string, string> = {
   "": "Accueil",
@@ -47,11 +48,17 @@ export function MobileHeader() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { memberId, onboarded } = useVisitorSession();
+  const [loginOpen, setLoginOpen] = useState(false);
   const base = `/m/${slug}`;
-  const suffix = pathname === base || pathname === `${base}/` ? "" : pathname.slice(base.length);
+  const suffix =
+    pathname === base || pathname === `${base}/`
+      ? ""
+      : pathname.slice(base.length);
   const inboxInterval = useVisibleInterval(45_000);
 
   const { data: status } = useMobileStatus();
+  const hasAccount = !!status?.member?.hasPin;
+
   const { data: inbox = [] } = useQuery({
     queryKey: ["mobile-inbox", memberId],
     queryFn: async () => {
@@ -59,7 +66,7 @@ export function MobileHeader() {
       writeLocalCache("inbox", data, memberId);
       return data;
     },
-    enabled: !!memberId && onboarded,
+    enabled: !!memberId && onboarded && hasAccount,
     staleTime: 30_000,
     refetchInterval: inboxInterval,
     placeholderData: () =>
@@ -121,80 +128,97 @@ export function MobileHeader() {
     return items;
   }, [status, href]);
 
-  const unread = inbox.filter((t) => t.unreadHint).length;
+  const unread = hasAccount ? inbox.filter((t) => t.unreadHint).length : 0;
   const notifCount = notices.length + unread;
+  const showLogin = !hasAccount;
 
   return (
-    <header className="sticky top-0 z-50 -mx-4 mb-3 border-b border-white/40 bg-white/90 px-3 py-2.5 backdrop-blur">
-      <div className="flex items-center gap-2.5">
-        <Link
-          href={href()}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm"
-          aria-label="Accueil"
-        >
-          {(org.name || "C").trim().charAt(0).toUpperCase()}
-        </Link>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold leading-tight">
-            {title}
-          </p>
-          <p className="truncate text-[11px] text-slate-500">{facilityName}</p>
-        </div>
-        {onboarded ? (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative h-10 w-10 rounded-full bg-slate-50"
-            onClick={() => router.push(href("/community"))}
-            aria-label="Messages"
+    <>
+      <header className="sticky top-0 z-50 -mx-4 mb-3 border-b border-white/40 bg-white/90 px-3 py-2.5 backdrop-blur">
+        <div className="flex items-center gap-2.5">
+          <Link
+            href={href()}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm"
+            aria-label="Accueil"
           >
-            <MessageCircle className="h-5 w-5 text-primary" />
-            {unread > 0 ? (
-              <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
-                {unread}
-              </span>
-            ) : null}
-          </Button>
-        ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+            {(org.name || "C").trim().charAt(0).toUpperCase()}
+          </Link>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-semibold leading-tight">
+              {title}
+            </p>
+            <p className="truncate text-[11px] text-slate-500">{facilityName}</p>
+          </div>
+          {showLogin ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 shrink-0 rounded-full border-slate-200 px-3 text-xs font-semibold"
+              onClick={() => setLoginOpen(true)}
+            >
+              <LogIn className="mr-1.5 h-3.5 w-3.5" />
+              Connexion
+            </Button>
+          ) : null}
+          {onboarded && hasAccount ? (
             <Button
               variant="ghost"
               size="icon"
               className="relative h-10 w-10 rounded-full bg-slate-50"
-              aria-label="Notifications"
+              onClick={() => router.push(href("/community"))}
+              aria-label="Messages"
             >
-              <Bell className="h-5 w-5 text-primary" />
-              {notifCount > 0 ? (
+              <MessageCircle className="h-5 w-5 text-primary" />
+              {unread > 0 ? (
                 <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
-                  {notifCount}
+                  {unread}
                 </span>
               ) : null}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-72">
-            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {notices.length === 0 && unread === 0 ? (
-              <p className="px-2 py-3 text-sm text-muted-foreground">
-                Rien de nouveau
-              </p>
-            ) : null}
-            {notices.map((n) => (
-              <DropdownMenuItem key={n.id} onClick={() => router.push(n.href)}>
-                {n.title}
-              </DropdownMenuItem>
-            ))}
-            {unread > 0 ? (
-              <DropdownMenuItem onClick={() => router.push(href("/community"))}>
-                {unread} nouveau{unread > 1 ? "x" : ""} message
-                {unread > 1 ? "s" : ""}
-              </DropdownMenuItem>
-            ) : null}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </header>
+          ) : null}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="relative h-10 w-10 rounded-full bg-slate-50"
+                aria-label="Notifications"
+              >
+                <Bell className="h-5 w-5 text-primary" />
+                {notifCount > 0 ? (
+                  <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
+                    {notifCount}
+                  </span>
+                ) : null}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-72">
+              <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              {notices.length === 0 && unread === 0 ? (
+                <p className="px-2 py-3 text-sm text-muted-foreground">
+                  Rien de nouveau
+                </p>
+              ) : null}
+              {notices.map((n) => (
+                <DropdownMenuItem key={n.id} onClick={() => router.push(n.href)}>
+                  {n.title}
+                </DropdownMenuItem>
+              ))}
+              {unread > 0 ? (
+                <DropdownMenuItem
+                  onClick={() => router.push(href("/community"))}
+                >
+                  {unread} nouveau{unread > 1 ? "x" : ""} message
+                  {unread > 1 ? "s" : ""}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+      <VisitorLoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
+    </>
   );
 }
 
