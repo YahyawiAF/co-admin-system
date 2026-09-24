@@ -11,11 +11,16 @@ import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
 import { formatDurationHm } from "@/lib/journal-utils";
 import { usePageVisible } from "@/lib/hooks/use-page-visible";
 import type {
+  AppInstallGlobalPromo,
+  AppInstallPromo,
   Journal,
   MobileSeatMode,
   MobileSeatSettings,
   SeatAssignmentInfo,
 } from "@/lib/types";
+import { pricedWithPromo } from "@/lib/promo-price";
+import { PromoPrice } from "@/components/visitor/PromoPrice";
+import { cn } from "@/lib/utils";
 
 function formatClock(ms: number) {
   const abs = Math.abs(ms);
@@ -48,6 +53,10 @@ type Props = {
   hasActiveSubscription?: boolean;
   subscriptionKind?: string | null;
   allowedSpaceIds?: string[];
+  /** Called after a successful check-out (web promo CTA). */
+  onCheckoutSuccess?: () => void;
+  promos?: AppInstallPromo[] | null;
+  globalPromo?: AppInstallGlobalPromo | null;
 };
 
 export function ActiveSessionPanel({
@@ -58,6 +67,9 @@ export function ActiveSessionPanel({
   hasActiveSubscription,
   subscriptionKind,
   allowedSpaceIds,
+  onCheckoutSuccess,
+  promos,
+  globalPromo,
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
@@ -121,39 +133,102 @@ export function ActiveSessionPanel({
 
   const overtime = remainingMs !== null && remainingMs < 0;
   const covered = session.coveredBySubscription || hasActiveSubscription;
-  const amount = covered ? 0 : session.amountDue ?? session.payedAmount ?? 0;
+  const isOptimistic =
+    !!(session as { _optimistic?: boolean })._optimistic ||
+    String(session.id || "").startsWith("optimistic");
+  const catalogPrice =
+    session.prices?.price ?? session.price?.price ?? null;
+  const priceId = session.priceId || session.prices?.id || session.price?.id;
+  const amountRaw = covered ? 0 : session.amountDue ?? session.payedAmount ?? 0;
+  const priced = !covered
+    ? pricedWithPromo(
+        catalogPrice != null && catalogPrice > 0 ? catalogPrice : amountRaw,
+        priceId,
+        { promos, globalPromo }
+      )
+    : null;
   const forfaitName = session.prices?.name || session.price?.name || "Forfait";
 
   const checkout = useMutation({
     mutationFn: () => mobileApi.checkout(session.id),
-    onSuccess: () => {
+    onSuccess: (res: {
+      pointsAwarded?: number;
+      newTrophies?: string[];
+      memberPoints?: number;
+    }) => {
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
+      queryClient.invalidateQueries({ queryKey: ["member-points", memberId] });
+      const awarded = res?.pointsAwarded ?? 0;
+      if (awarded > 0 && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("visitor-points-award", {
+            detail: {
+              amount: awarded,
+              credited: true,
+              pending: false,
+              points: res.memberPoints ?? awarded,
+              flash: true,
+              newTrophies: res.newTrophies ?? [],
+              message: `+${awarded} pts`,
+            },
+          })
+        );
+      }
+      onCheckoutSuccess?.();
     },
   });
 
   return (
-    <div className="rounded-2xl bg-white p-3 text-center shadow-sm">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+    <div className="rounded-3xl bg-white p-3 text-center shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
         Session en cours
       </p>
-      <h2 className="mt-0.5 text-base font-bold">{forfaitName}</h2>
+      <h2 className="mt-1 text-2xl font-bold leading-tight">{forfaitName}</h2>
+      {isOptimistic ? (
+        <p className="mt-1 text-xs font-medium text-amber-600">
+          Confirmation en cours…
+        </p>
+      ) : null}
       <div className="mt-2 flex flex-wrap justify-center gap-2">
         {covered ? (
-          <Badge>Abonnement actif</Badge>
+          <Badge className="px-2.5 py-1 text-sm">Abonnement actif</Badge>
         ) : (
-          <Badge variant={session.isPayed ? "default" : "secondary"}>
+          <Badge
+            variant={session.isPayed ? "default" : "secondary"}
+            className="px-2.5 py-1 text-sm"
+          >
             {session.isPayed ? "Payé" : "Non payé"}
           </Badge>
         )}
         {subKind === "SEMI_DAY" ? (
-          <Badge variant="outline">Demi-journée 6h</Badge>
+          <Badge variant="outline" className="px-2.5 py-1 text-sm">
+            Demi-journée 6h
+          </Badge>
         ) : null}
         {subKind === "FULL_DAY" ? (
-          <Badge variant="outline">Journée</Badge>
+          <Badge variant="outline" className="px-2.5 py-1 text-sm">
+            Journée
+          </Badge>
         ) : null}
-        {isHoursPool ? <Badge variant="outline">Heures</Badge> : null}
+        {isHoursPool ? (
+          <Badge variant="outline" className="px-2.5 py-1 text-sm">
+            Heures
+          </Badge>
+        ) : null}
       </div>
 
+      {!covered ? (
+        <p
+          className={cn(
+            "mx-auto mt-2 max-w-xs text-xs leading-snug",
+            session.isPayed ? "text-emerald-700" : "text-amber-700"
+          )}
+        >
+          {session.isPayed
+            ? "Payé ✓ — vos points s’ajoutent au check-out (vous ou l’accueil)."
+            : "Demandez à l’accueil de confirmer le paiement pour collecter vos points au check-out."}
+        </p>
+      ) : null}
       {/* Timer + forfait on top */}
       {isHoursPool ? (
         <>
@@ -275,11 +350,20 @@ export function ActiveSessionPanel({
         </Alert>
       ) : null}
 
-      {!covered ? (
+      {!covered && priced ? (
         <>
-          <div className="mb-0.5 text-2xl font-bold">{amount} DT</div>
+          <div className="mb-0.5 flex justify-center">
+            <PromoPrice
+              original={priced.original}
+              final={priced.hasPromo ? priced.final : amountRaw}
+              hasPromo={priced.hasPromo}
+              size="lg"
+              align="center"
+            />
+          </div>
           <p className="mb-2 text-xs text-slate-500">
             {session.isPayed ? "Payé" : "Non payé"}
+            {priced.hasPromo ? " · promo appliquée" : ""}
           </p>
         </>
       ) : null}
@@ -335,11 +419,15 @@ export function ActiveSessionPanel({
       ) : null}
 
       <Button
-        className="h-12 w-full rounded-full"
-        disabled={checkout.isPending || !!session.leaveTime}
+        className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold hover:bg-indigo-700"
+        disabled={checkout.isPending || !!session.leaveTime || isOptimistic}
         onClick={() => checkout.mutate()}
       >
-        Check-out
+        {isOptimistic
+          ? "Confirmation…"
+          : checkout.isPending
+            ? "Check-out…"
+            : "Check-out"}
       </Button>
     </div>
   );

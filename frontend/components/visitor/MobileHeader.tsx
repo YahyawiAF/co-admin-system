@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, LogIn, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
+import { isStandalonePwa } from "@/lib/visitor-notify";
 import {
   readLocalCache,
   writeLocalCache,
@@ -49,6 +50,7 @@ export function MobileHeader() {
   const { org, slug, href } = useOrg();
   const { memberId, onboarded } = useVisitorSession();
   const [loginOpen, setLoginOpen] = useState(false);
+  const [isApp, setIsApp] = useState(false);
   const base = `/m/${slug}`;
   const suffix =
     pathname === base || pathname === `${base}/`
@@ -58,6 +60,11 @@ export function MobileHeader() {
 
   const { data: status } = useMobileStatus();
   const hasAccount = !!status?.member?.hasPin;
+  const communityUnlocked = hasAccount && isApp;
+
+  useEffect(() => {
+    setIsApp(isStandalonePwa());
+  }, []);
 
   const { data: inbox = [] } = useQuery({
     queryKey: ["mobile-inbox", memberId],
@@ -66,7 +73,7 @@ export function MobileHeader() {
       writeLocalCache("inbox", data, memberId);
       return data;
     },
-    enabled: !!memberId && onboarded && hasAccount,
+    enabled: !!memberId && onboarded && communityUnlocked,
     staleTime: 30_000,
     refetchInterval: inboxInterval,
     placeholderData: () =>
@@ -130,7 +137,8 @@ export function MobileHeader() {
 
   const unread = hasAccount ? inbox.filter((t) => t.unreadHint).length : 0;
   const notifCount = notices.length + unread;
-  const showLogin = !hasAccount;
+  /** Connexion for guests + light profiles; PIN members stay in-session. */
+  const showLogin = !onboarded || !hasAccount;
 
   return (
     <>
@@ -160,7 +168,7 @@ export function MobileHeader() {
               Connexion
             </Button>
           ) : null}
-          {onboarded && hasAccount ? (
+          {onboarded && communityUnlocked ? (
             <Button
               variant="ghost"
               size="icon"

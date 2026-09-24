@@ -74,6 +74,7 @@ import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
+import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { SubscriptionRequestsPanel } from "@/components/admin/SubscriptionRequestsPanel";
 import {
   daysLeft,
@@ -866,7 +867,13 @@ function AbonnementsInner() {
                         >
                           {a.members?.firstName || a.memberID.slice(0, 8)}
                         </button>
-                        <div className="mt-1">
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <MemberRewardsBadges
+                            member={
+                              members.find((m) => m.id === a.memberID) ||
+                              a.members
+                            }
+                          />
                           <UnpaidDebtBadge
                             amount={visitDebt}
                             label="Crédit visites"

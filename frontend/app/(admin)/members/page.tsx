@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/select";
 import { MemberFormModal } from "@/components/admin/MemberFormModal";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
+import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
@@ -270,6 +271,7 @@ export default function MembersPage() {
                   <TableHead>Nom</TableHead>
                   <TableHead>Téléphone</TableHead>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Points / promo</TableHead>
                   <TableHead>Place</TableHead>
                   <TableHead>Groupe</TableHead>
                   <TableHead>Créé</TableHead>
@@ -304,6 +306,9 @@ export default function MembersPage() {
                       <Badge variant="secondary">
                         {m.plan === "Membership" ? "Abonné" : "Visiteur"}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <MemberRewardsBadges member={m} />
                     </TableCell>
                     <TableCell>
                       {(() => {

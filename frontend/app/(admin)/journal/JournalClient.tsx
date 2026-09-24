@@ -12,7 +12,7 @@ import {
   startOfDay,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import Fuse from "fuse.js";
+import { fuzzySearchByName } from "@/lib/fuzzy-search";
 import {
   AlarmClock,
   ChevronLeft,
@@ -81,6 +81,7 @@ import { ReservationPanel } from "@/components/admin/ReservationPanel";
 import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
 import { JournalReceptionToggles } from "@/components/admin/JournalReceptionToggles";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
+import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
@@ -135,6 +136,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import {
+  dtToRedeemPoints,
+  pointsToDt,
+} from "@/lib/points-catalog";
 
 type QuickFilter = "all" | "overstay" | "leaving_soon" | "first_out" | "unpaid_present";
 
@@ -179,6 +184,8 @@ export default function JournalClient() {
   const [identityMode, setIdentityMode] = useState<"link" | "create">("link");
   const [detailMember, setDetailMember] = useState<Member | null>(null);
   const [linkMemberId, setLinkMemberId] = useState("");
+  const [redeemRow, setRedeemRow] = useState<Journal | null>(null);
+  const [redeemPts, setRedeemPts] = useState("");
   const [promoteForm, setPromoteForm] = useState({
     firstName: "",
     phone: "",
@@ -279,6 +286,11 @@ export default function JournalClient() {
     () => (Array.isArray(membersRaw) ? membersRaw : []) as Member[],
     [membersRaw]
   );
+  const memberById = useMemo(() => {
+    const map = new Map<string, Member>();
+    for (const m of allMembers) map.set(m.id, m);
+    return map;
+  }, [allMembers]);
 
   const seatByMember = useMemo(() => {
     const map = new Map<string, { seatId: string; spaceId?: string | null }>();
@@ -488,21 +500,17 @@ export default function JournalClient() {
     }
 
     if (search.trim().length >= 2) {
-      const fuse = new Fuse(list, {
-        keys: [
-          "members.firstName",
-          "members.lastName",
-          "members.phone",
-          "members.visitorNumber",
-          "member.firstName",
-          "member.phone",
-          "prices.name",
-          "price.name",
-          "guestName",
-        ],
-        threshold: 0.35,
+      list = fuzzySearchByName(list, search, (r) => {
+        const m = memberOf(r);
+        return {
+          firstName: m?.firstName,
+          lastName: m?.lastName,
+          guestName: r.guestName,
+          phone: m?.phone,
+          visitorNumber: m?.visitorNumber,
+          extra: [r.prices?.name, r.price?.name],
+        };
       });
-      list = fuse.search(search).map((r) => r.item);
     }
     return list;
   }, [rows, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search, now, subByMember]);
@@ -607,11 +615,54 @@ export default function JournalClient() {
     queryClient.invalidateQueries({ queryKey: ["seat-history"] });
   };
 
+  const bumpMemberPoints = (
+    memberId: string | null | undefined,
+    delta: number,
+    absolute?: number
+  ) => {
+    if (!memberId || (delta === 0 && absolute == null)) return;
+    queryClient.setQueryData(queryKeys.members, (old: unknown) => {
+      const list = Array.isArray(old)
+        ? old
+        : (old as { data?: Member[] } | undefined)?.data;
+      if (!Array.isArray(list)) return old;
+      const next = list.map((m) => {
+        if (m.id !== memberId) return m;
+        const pts =
+          absolute != null
+            ? absolute
+            : Math.max(0, Number(m.points ?? 0) + delta);
+        return { ...m, points: pts };
+      });
+      return Array.isArray(old) ? next : { ...(old as object), data: next };
+    });
+  };
+
+  const memberIdForJournal = (journalId: string) => {
+    for (const r of rows) {
+      if (r.id === journalId) return r.memberID || r.members?.id;
+      const passage = r.passages?.find((p) => p.id === journalId);
+      if (passage) {
+        return passage.memberID || passage.members?.id || r.memberID || r.members?.id;
+      }
+    }
+    return undefined;
+  };
+
   const checkout = useMutation({
     mutationFn: (id: string) => mobileApi.checkout(id),
-    onSuccess: () => {
-      toast.success("Check-out effectué");
+    onSuccess: (res, id) => {
+      const awarded = res?.pointsAwarded ?? 0;
+      toast.success(
+        awarded > 0
+          ? `Check-out · +${awarded.toLocaleString("fr-FR")} pts`
+          : "Check-out effectué"
+      );
       invalidateJournal();
+      queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      if (awarded > 0) {
+        bumpMemberPoints(memberIdForJournal(id), awarded, res?.memberPoints);
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -619,11 +670,53 @@ export default function JournalClient() {
   const setPayment = useMutation({
     mutationFn: ({ id, isPayed }: { id: string; isPayed: boolean }) =>
       mobileApi.setPayment(id, isPayed),
-    onSuccess: () => {
+    onSuccess: (res, vars) => {
       invalidateJournal();
+      queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      const delta = res?.pointsAwarded ?? 0;
+      if (delta !== 0) {
+        toast.success(
+          delta > 0
+            ? `+${delta.toLocaleString("fr-FR")} pts`
+            : `−${Math.abs(delta).toLocaleString("fr-FR")} pts retirés`
+        );
+        bumpMemberPoints(
+          memberIdForJournal(vars.id),
+          delta,
+          res?.memberPoints
+        );
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const redeemVisit = useMutation({
+    mutationFn: ({ journalId, points }: { journalId: string; points: number }) =>
+      mobileApi.redeemVisitPoints({ journalId, points }),
+    onSuccess: (res) => {
+      toast.success(
+        res.fullyCovered
+          ? `Payé en points (−${res.pointsApplied} pts)`
+          : `−${res.pointsApplied} pts · reste ${res.remainingDue.toFixed(1)} DT`
+      );
+      setRedeemRow(null);
+      setRedeemPts("");
+      invalidateJournal();
+      queryClient.invalidateQueries({ queryKey: queryKeys.members });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openRedeem = (row: Journal) => {
+    const mid = row.memberID;
+    if (!mid || row.isPayed) return;
+    const member = memberById.get(mid) || row.members;
+    const balance = Number(member?.points ?? 0);
+    const due = visitAmountDue(row, now);
+    const maxPts = Math.min(balance, dtToRedeemPoints(due));
+    setRedeemRow(row);
+    setRedeemPts(maxPts > 0 ? String(maxPts) : "");
+  };
 
   const remove = useMutation({
     mutationFn: (id: string) => journalApi.remove(id),
@@ -1073,7 +1166,7 @@ export default function JournalClient() {
         <div className="flex flex-wrap gap-2">
           <Input
             className="max-w-xs"
-            placeholder="Rechercher nom / téléphone / #"
+            placeholder="Nom (approx.) / téléphone / #"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1314,6 +1407,12 @@ export default function JournalClient() {
                                   {groupOf(row)!.name}
                                 </Badge>
                               ) : null}
+                              <MemberRewardsBadges
+                                member={
+                                  (row.memberID && memberById.get(row.memberID)) ||
+                                  m
+                                }
+                              />
                               <UnpaidDebtBadge amount={row.openDebtAmount} />
                             </div>
                             <div className="text-xs text-muted-foreground">
@@ -1482,23 +1581,92 @@ export default function JournalClient() {
                                     key={p.id}
                                     className="flex items-center justify-between gap-2 rounded-md border bg-slate-50 px-2 py-1 text-xs"
                                   >
-                                    <span>
+                                    <span className="min-w-0 flex-1 truncate">
                                       #{i + 1} ·{" "}
                                       {format(
                                         new Date(p.registredTime),
                                         "HH:mm"
-                                      )}{" "}
+                                      )}
+                                      {p.leaveTime
+                                        ? ` → ${format(
+                                            new Date(p.leaveTime),
+                                            "HH:mm"
+                                          )}`
+                                        : " · en cours"}{" "}
                                       · {visitAmountDue(p, now).toFixed(1)} DT
                                     </span>
-                                    <Switch
-                                      checked={p.isPayed}
-                                      onCheckedChange={(v) =>
-                                        setPayment.mutate({
-                                          id: p.id,
-                                          isPayed: v,
-                                        })
-                                      }
-                                    />
+                                    <div className="flex shrink-0 items-center gap-0.5">
+                                      {!p.isPayed && p.memberID ? (
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-6 px-1.5 text-[10px]"
+                                          onClick={() => openRedeem(p)}
+                                        >
+                                          Pts
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="ghost"
+                                        className="h-6 w-6"
+                                        title="Modifier ce passage"
+                                        onClick={() => setEditRow(p)}
+                                      >
+                                        <Pencil className="h-3 w-3" />
+                                      </Button>
+                                      <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            size="icon"
+                                            variant="ghost"
+                                            className="h-6 w-6"
+                                            title="Supprimer ce passage"
+                                          >
+                                            <Trash2 className="h-3 w-3 text-destructive" />
+                                          </Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                          <AlertDialogHeader>
+                                            <AlertDialogTitle>
+                                              Supprimer le passage #{i + 1} ?
+                                            </AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                              {format(
+                                                new Date(p.registredTime),
+                                                "HH:mm"
+                                              )}{" "}
+                                              · {visitAmountDue(p, now).toFixed(1)}{" "}
+                                              DT — les autres passages restent.
+                                            </AlertDialogDescription>
+                                          </AlertDialogHeader>
+                                          <AlertDialogFooter>
+                                            <AlertDialogCancel>
+                                              Annuler
+                                            </AlertDialogCancel>
+                                            <AlertDialogAction
+                                              onClick={() =>
+                                                remove.mutate(p.id)
+                                              }
+                                            >
+                                              Supprimer
+                                            </AlertDialogAction>
+                                          </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                      </AlertDialog>
+                                      <Switch
+                                        checked={p.isPayed}
+                                        onCheckedChange={(v) =>
+                                          setPayment.mutate({
+                                            id: p.id,
+                                            isPayed: v,
+                                          })
+                                        }
+                                      />
+                                    </div>
                                   </div>
                                 ))
                               : null}
@@ -1543,12 +1711,28 @@ export default function JournalClient() {
                             </Button>
                           </div>
                         ) : (
-                          <Switch
-                            checked={row.isPayed}
-                            onCheckedChange={(v) =>
-                              setPayment.mutate({ id: row.id, isPayed: v })
-                            }
-                          />
+                          <div className="flex flex-col items-start gap-1.5">
+                            <Switch
+                              checked={row.isPayed}
+                              onCheckedChange={(v) =>
+                                setPayment.mutate({ id: row.id, isPayed: v })
+                              }
+                            />
+                            {!row.isPayed &&
+                            row.memberID &&
+                            !isAnonymousVisit(row) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 gap-1 px-2 text-[11px]"
+                                onClick={() => openRedeem(row)}
+                              >
+                                <Wallet className="h-3 w-3" />
+                                Points
+                              </Button>
+                            ) : null}
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>
@@ -1776,6 +1960,102 @@ export default function JournalClient() {
           if (!o) setEditRow(null);
         }}
       />
+      <Dialog
+        open={!!redeemRow}
+        onOpenChange={(o) => {
+          if (!o) {
+            setRedeemRow(null);
+            setRedeemPts("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Payer en points</DialogTitle>
+          </DialogHeader>
+          {redeemRow ? (
+            <div className="space-y-3">
+              {(() => {
+                const mid = redeemRow.memberID;
+                const member =
+                  (mid && memberById.get(mid)) || redeemRow.members;
+                const balance = Number(member?.points ?? 0);
+                const due = visitAmountDue(redeemRow, now);
+                const pts = Math.max(0, Math.floor(Number(redeemPts) || 0));
+                const maxPts = Math.min(balance, dtToRedeemPoints(due));
+                const cover = pointsToDt(Math.min(pts, maxPts));
+                const remaining = Math.max(0, due - cover);
+                return (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      {visitorLabel(redeemRow)} · dû{" "}
+                      <span className="font-medium text-foreground">
+                        {due.toFixed(1)} DT
+                      </span>
+                    </p>
+                    <p className="text-sm">
+                      Solde :{" "}
+                      <span className="font-semibold tabular-nums">
+                        {balance.toLocaleString("fr-FR")} pts
+                      </span>{" "}
+                      <span className="text-muted-foreground">
+                        (100 pts = 1 DT)
+                      </span>
+                    </p>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="redeem-pts">Points à utiliser</Label>
+                      <Input
+                        id="redeem-pts"
+                        type="number"
+                        min={0}
+                        max={maxPts}
+                        value={redeemPts}
+                        onChange={(e) => setRedeemPts(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Max {maxPts} · couvre {cover.toFixed(1)} DT
+                        {remaining > 0.009
+                          ? ` · reste ${remaining.toFixed(1)} DT`
+                          : " · paiement complet"}
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRedeemRow(null);
+                setRedeemPts("");
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              disabled={
+                redeemVisit.isPending ||
+                !redeemRow ||
+                Math.floor(Number(redeemPts) || 0) <= 0
+              }
+              onClick={() => {
+                if (!redeemRow) return;
+                const pts = Math.floor(Number(redeemPts) || 0);
+                if (pts <= 0) return;
+                redeemVisit.mutate({
+                  journalId: redeemRow.id,
+                  points: pts,
+                });
+              }}
+            >
+              Confirmer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <MemberDetailSheet
         member={detailMember}
         open={!!detailMember}

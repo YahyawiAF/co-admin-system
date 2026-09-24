@@ -112,9 +112,40 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       ]);
     });
 
-    s.on("visitor_checkout", () => {
+    s.on("visitor_checkout", (payload?: {
+      memberId?: string | null;
+      pointsAwarded?: number;
+      newTrophies?: string[];
+      memberPoints?: number;
+    }) => {
       const qc = qcRef.current;
       qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      qc.invalidateQueries({ queryKey: queryKeys.members });
+      qc.invalidateQueries({ queryKey: ["journal"] });
+      if (payload?.memberId) {
+        qc.invalidateQueries({
+          queryKey: ["member-points", payload.memberId],
+        });
+      }
+      if (
+        payload?.pointsAwarded &&
+        payload.pointsAwarded > 0 &&
+        typeof window !== "undefined"
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("visitor-points-award", {
+            detail: {
+              amount: payload.pointsAwarded,
+              credited: true,
+              pending: false,
+              points: payload.memberPoints ?? payload.pointsAwarded,
+              flash: true,
+              newTrophies: payload.newTrophies ?? [],
+              message: `+${payload.pointsAwarded} pts`,
+            },
+          })
+        );
+      }
       debouncedInvalidate(qc, [
         ["journal"],
         ["bookings"],
@@ -167,16 +198,23 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       ]);
     });
 
-    s.on("table_updates", (payload?: { type?: string }) => {
+    s.on("table_updates", (payload?: {
+      type?: string;
+      memberId?: string;
+      pointsAwarded?: number;
+    }) => {
       const qc = qcRef.current;
       const type = payload?.type || "";
       if (
         type.includes("abonnement") ||
         type.includes("journal") ||
         type === "visitor_checkout" ||
-        type === "payment_updated"
+        type === "payment_updated" ||
+        type === "journal_redeem_points"
       ) {
         qc.invalidateQueries({ queryKey: ["mobile-status"] });
+        qc.invalidateQueries({ queryKey: queryKeys.members });
+        qc.invalidateQueries({ queryKey: ["journal"] });
       }
       debouncedInvalidate(qc, [
         ["bookings"],
@@ -188,6 +226,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     s.on("payment_updated", () => {
       const qc = qcRef.current;
       qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      qc.invalidateQueries({ queryKey: queryKeys.members });
       debouncedInvalidate(qc, [["journal"]]);
     });
 

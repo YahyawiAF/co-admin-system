@@ -9,6 +9,50 @@ import {
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
 
+const OPTIMISTIC_SESSION_KEY = "visitorOptimisticSession";
+
+export type OptimisticSessionPayload = {
+  memberId: string;
+  at: number;
+  session?: Record<string, unknown> | null;
+  seat?: Record<string, unknown> | null;
+  pendingRequest?: Record<string, unknown> | null;
+};
+
+export function writeOptimisticSession(payload: OptimisticSessionPayload) {
+  try {
+    sessionStorage.setItem(OPTIMISTIC_SESSION_KEY, JSON.stringify(payload));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearOptimisticSession() {
+  try {
+    sessionStorage.removeItem(OPTIMISTIC_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readOptimisticSession(
+  memberId: string
+): OptimisticSessionPayload | null {
+  try {
+    const raw = sessionStorage.getItem(OPTIMISTIC_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as OptimisticSessionPayload;
+    if (parsed.memberId !== memberId) return null;
+    if (Date.now() - parsed.at > 45_000) {
+      sessionStorage.removeItem(OPTIMISTIC_SESSION_KEY);
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 /** Shared mobile status — one network poll for the whole shell. */
 export function useMobileStatus(opts?: {
   /** Override poll ms while visible (default 20s). */
@@ -28,6 +72,37 @@ export function useMobileStatus(opts?: {
     queryKey: ["mobile-status", memberId],
     queryFn: async () => {
       const data = await mobileApi.status(memberId!);
+      const opt = readOptimisticSession(memberId!);
+
+      // Server caught up — drop optimistic overlay
+      if (data.session || (data.pendingRequest && !opt?.session)) {
+        clearOptimisticSession();
+        writeLocalCache("mobile-status", data, memberId);
+        return data;
+      }
+
+      // Keep showing session UI while create/approve is still in flight
+      if (opt?.session && !data.session) {
+        const merged = {
+          ...data,
+          hasOpenSession: true,
+          pendingRequest: null,
+          session: opt.session,
+          seat: opt.seat ?? data.seat,
+        };
+        writeLocalCache("mobile-status", merged, memberId);
+        return merged;
+      }
+
+      if (opt?.pendingRequest && !data.pendingRequest && !data.session) {
+        const merged = {
+          ...data,
+          pendingRequest: opt.pendingRequest,
+        };
+        writeLocalCache("mobile-status", merged, memberId);
+        return merged;
+      }
+
       writeLocalCache("mobile-status", data, memberId);
       return data;
     },
@@ -36,7 +111,22 @@ export function useMobileStatus(opts?: {
     gcTime: 30 * 60_000,
     refetchInterval: interval,
     refetchOnReconnect: true,
-    placeholderData: () =>
-      memberId ? readLocalCache("mobile-status", memberId) ?? undefined : undefined,
+    placeholderData: () => {
+      if (!memberId) return undefined;
+      const cached = readLocalCache("mobile-status", memberId) ?? undefined;
+      const opt = readOptimisticSession(memberId);
+      if (
+        opt?.session &&
+        !(cached as { session?: unknown } | undefined)?.session
+      ) {
+        return {
+          ...(cached || {}),
+          hasOpenSession: true,
+          session: opt.session,
+          seat: opt.seat ?? (cached as { seat?: unknown } | undefined)?.seat,
+        } as typeof cached;
+      }
+      return cached;
+    },
   });
 }

@@ -45,6 +45,8 @@ import {
   BillingUnit,
   PriceCategory,
   PriceType,
+  PromoValueKind,
+  type AppInstallPromo,
   type Price,
 } from "@/lib/types";
 import {
@@ -545,9 +547,150 @@ function PriceFormDialog({
 export default function TarifsPage() {
   const queryClient = useQueryClient();
   const [edit, setEdit] = useState<Price | null>(null);
+  const [globalDraft, setGlobalDraft] = useState<{
+    active: boolean;
+    valueKind: PromoValueKind;
+    value: string;
+  }>({
+    active: false,
+    valueKind: PromoValueKind.FIXED_DT,
+    value: "",
+  });
+  const [promoDraft, setPromoDraft] = useState<{
+    priceId: string;
+    valueKind: PromoValueKind;
+    value: string;
+  }>({
+    priceId: "",
+    valueKind: PromoValueKind.FIXED_DT,
+    value: "",
+  });
   const { data: prices = [] } = useQuery({
     queryKey: queryKeys.prices,
     queryFn: () => pricesApi.list(),
+  });
+  const { data: layout } = useQuery({
+    queryKey: ["facility-layout"],
+    queryFn: () => facilityApi.layout(),
+  });
+  const facility = layout?.facility;
+
+  useEffect(() => {
+    if (!facility) return;
+    setGlobalDraft({
+      active: !!facility.appInstallGlobalPromoActive,
+      valueKind:
+        facility.appInstallGlobalPromoKind || PromoValueKind.FIXED_DT,
+      value:
+        facility.appInstallGlobalPromoValue != null &&
+        facility.appInstallGlobalPromoValue > 0
+          ? String(facility.appInstallGlobalPromoValue)
+          : "",
+    });
+  }, [
+    facility?.id,
+    facility?.appInstallGlobalPromoActive,
+    facility?.appInstallGlobalPromoKind,
+    facility?.appInstallGlobalPromoValue,
+  ]);
+
+  const { data: promos = [] } = useQuery({
+    queryKey: ["facility-promos", facility?.id],
+    queryFn: () => facilityApi.listPromos(facility!.id),
+    enabled: !!facility?.id,
+  });
+
+  const aboPrices = useMemo(
+    () =>
+      prices.filter(
+        (p) =>
+          priceCategoriesOf(p).includes(PriceCategory.ABONNEMENT) ||
+          p.type === PriceType.abonnement
+      ),
+    [prices]
+  );
+
+  const saveGlobalPromo = useMutation({
+    mutationFn: async () => {
+      if (!facility?.id) throw new Error("Facility introuvable");
+      const raw = globalDraft.value.trim();
+      const value = raw === "" ? null : Number(raw);
+      if (globalDraft.active) {
+        if (value == null || !Number.isFinite(value) || value < 0) {
+          throw new Error("Indiquez une valeur promo valide");
+        }
+        if (
+          globalDraft.valueKind === PromoValueKind.PERCENT &&
+          value > 100
+        ) {
+          throw new Error("Le pourcentage ne peut pas dépasser 100");
+        }
+      }
+      return facilityApi.update(facility.id, {
+        appInstallGlobalPromoActive: globalDraft.active,
+        appInstallGlobalPromoKind: globalDraft.active
+          ? globalDraft.valueKind
+          : null,
+        appInstallGlobalPromoValue: globalDraft.active ? value : null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Promo globale enregistrée");
+      queryClient.invalidateQueries({ queryKey: ["facility-layout"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const createPromo = useMutation({
+    mutationFn: async () => {
+      if (!facility?.id) throw new Error("Facility introuvable");
+      if (!promoDraft.priceId) throw new Error("Choisissez un tarif abonnement");
+      const value = Number(promoDraft.value);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error("Valeur invalide");
+      }
+      if (
+        promoDraft.valueKind === PromoValueKind.PERCENT &&
+        value > 100
+      ) {
+        throw new Error("Le pourcentage ne peut pas dépasser 100");
+      }
+      return facilityApi.createPromo(facility.id, {
+        priceId: promoDraft.priceId,
+        valueKind: promoDraft.valueKind,
+        value,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Promo créée");
+      setPromoDraft((d) => ({ ...d, value: "" }));
+      queryClient.invalidateQueries({
+        queryKey: ["facility-promos", facility?.id],
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const togglePromo = useMutation({
+    mutationFn: (p: AppInstallPromo) =>
+      facilityApi.updatePromo(p.id, { isActive: !p.isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["facility-promos", facility?.id],
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removePromo = useMutation({
+    mutationFn: (id: string) => facilityApi.deletePromo(id),
+    onSuccess: () => {
+      toast.success("Promo supprimée");
+      queryClient.invalidateQueries({
+        queryKey: ["facility-promos", facility?.id],
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
   const byCat = useMemo(() => {
@@ -593,6 +736,11 @@ export default function TarifsPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const formatPromoValue = (p: AppInstallPromo) =>
+    p.valueKind === PromoValueKind.PERCENT
+      ? `${p.value} %`
+      : `${p.value} DT`;
 
   const renderGrid = (list: Price[]) => (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -698,7 +846,7 @@ export default function TarifsPage() {
       </div>
 
       <Tabs defaultValue="JOURNEE">
-        <TabsList>
+        <TabsList className="inline-flex h-auto w-fit max-w-full flex-wrap justify-start gap-1">
           <TabsTrigger value="JOURNEE">
             Bureau / journée
             {byCat.JOURNEE.length ? ` (${byCat.JOURNEE.length})` : ""}
@@ -714,6 +862,12 @@ export default function TarifsPage() {
           <TabsTrigger value="ABONNEMENT">
             Abonnement
             {byCat.ABONNEMENT.length ? ` (${byCat.ABONNEMENT.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="PROMO">
+            Promo app
+            {promos.length || facility?.appInstallGlobalPromoActive
+              ? ` (${promos.length + (facility?.appInstallGlobalPromoActive ? 1 : 0)})`
+              : ""}
           </TabsTrigger>
           {byCat.OTHER.length ? (
             <TabsTrigger value="OTHER">
@@ -732,6 +886,299 @@ export default function TarifsPage() {
         </TabsContent>
         <TabsContent value="ABONNEMENT" className="mt-4">
           {renderGrid(byCat.ABONNEMENT)}
+        </TabsContent>
+        <TabsContent value="PROMO" className="mt-4">
+          <div className="mx-0 max-w-3xl space-y-8">
+            {/* 1 — Global one-time */}
+            <section className="space-y-4 rounded-xl border bg-card p-5 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <h2 className="flex items-center gap-2 text-base font-semibold">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Promo globale — téléchargement app
+                  </h2>
+                  <p className="max-w-xl text-sm text-muted-foreground">
+                    Offre unique affichée sur le web pour inciter à installer
+                    l&apos;app. Chaque membre ne peut en profiter qu&apos;une
+                    seule fois.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="global-promo-active" className="text-sm">
+                    Activer
+                  </Label>
+                  <Switch
+                    id="global-promo-active"
+                    checked={globalDraft.active}
+                    onCheckedChange={(v) =>
+                      setGlobalDraft((d) => ({ ...d, active: v }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div
+                className={
+                  globalDraft.active
+                    ? "grid gap-4 sm:grid-cols-[140px_120px_1fr] sm:items-end"
+                    : "pointer-events-none grid gap-4 opacity-50 sm:grid-cols-[140px_120px_1fr] sm:items-end"
+                }
+              >
+                <div className="space-y-1.5">
+                  <Label>Type</Label>
+                  <Select
+                    value={globalDraft.valueKind}
+                    onValueChange={(v) =>
+                      setGlobalDraft((d) => ({
+                        ...d,
+                        valueKind: v as PromoValueKind,
+                      }))
+                    }
+                    disabled={!globalDraft.active}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={PromoValueKind.FIXED_DT}>
+                        Montant (DT)
+                      </SelectItem>
+                      <SelectItem value={PromoValueKind.PERCENT}>
+                        Pourcentage (%)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="global-promo-value">
+                    {globalDraft.valueKind === PromoValueKind.PERCENT
+                      ? "Valeur %"
+                      : "Valeur DT"}
+                  </Label>
+                  <Input
+                    id="global-promo-value"
+                    type="number"
+                    min={0}
+                    max={
+                      globalDraft.valueKind === PromoValueKind.PERCENT
+                        ? 100
+                        : undefined
+                    }
+                    step={1}
+                    placeholder={
+                      globalDraft.valueKind === PromoValueKind.PERCENT
+                        ? "15"
+                        : "10"
+                    }
+                    value={globalDraft.value}
+                    disabled={!globalDraft.active}
+                    onChange={(e) =>
+                      setGlobalDraft((d) => ({ ...d, value: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <Badge variant="secondary">Une seule fois</Badge>
+                  <Button
+                    type="button"
+                    disabled={saveGlobalPromo.isPending || !facility?.id}
+                    onClick={() => saveGlobalPromo.mutate()}
+                  >
+                    Enregistrer
+                  </Button>
+                </div>
+              </div>
+            </section>
+
+            {/* 2 — Tarifs abonnement */}
+            <section className="space-y-4">
+              <div className="space-y-1">
+                <h2 className="text-base font-semibold">
+                  Promos liées aux abonnements
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Jusqu&apos;à 3 offres supplémentaires, chacune liée à un tarif
+                  abonnement (% ou DT). Affichées sous la promo globale.
+                </p>
+              </div>
+
+              <div className="rounded-xl border bg-muted/30 p-4">
+                <div className="grid gap-3 sm:grid-cols-[1fr_140px_100px_auto] sm:items-end">
+                  <div className="space-y-1.5">
+                    <Label>Tarif abonnement</Label>
+                    <Select
+                      value={promoDraft.priceId || undefined}
+                      onValueChange={(v) =>
+                        setPromoDraft((d) => ({ ...d, priceId: v }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir un abonnement…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {aboPrices.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name} — {formatTarifPrice(p)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Type</Label>
+                    <Select
+                      value={promoDraft.valueKind}
+                      onValueChange={(v) =>
+                        setPromoDraft((d) => ({
+                          ...d,
+                          valueKind: v as PromoValueKind,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={PromoValueKind.FIXED_DT}>
+                          DT
+                        </SelectItem>
+                        <SelectItem value={PromoValueKind.PERCENT}>
+                          %
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="abo-promo-value">Valeur</Label>
+                    <Input
+                      id="abo-promo-value"
+                      type="number"
+                      min={0}
+                      max={
+                        promoDraft.valueKind === PromoValueKind.PERCENT
+                          ? 100
+                          : undefined
+                      }
+                      step={1}
+                      value={promoDraft.value}
+                      onChange={(e) =>
+                        setPromoDraft((d) => ({ ...d, value: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={
+                      createPromo.isPending ||
+                      !facility?.id ||
+                      promos.length >= 3 ||
+                      !aboPrices.length
+                    }
+                    onClick={() => createPromo.mutate()}
+                  >
+                    Ajouter
+                  </Button>
+                </div>
+                {!aboPrices.length ? (
+                  <p className="mt-2 text-xs text-amber-600">
+                    Créez d&apos;abord un tarif dans l&apos;onglet Abonnement.
+                  </p>
+                ) : null}
+                {promos.length >= 3 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Maximum 3 promos abonnement atteint.
+                  </p>
+                ) : null}
+              </div>
+
+              {promos.length ? (
+                <div className="overflow-hidden rounded-xl border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-2.5 font-medium">Tarif</th>
+                        <th className="px-4 py-2.5 font-medium">Promo</th>
+                        <th className="px-4 py-2.5 font-medium">Statut</th>
+                        <th className="px-4 py-2.5 font-medium text-right">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {promos.map((p) => (
+                        <tr
+                          key={p.id}
+                          className={
+                            p.isActive === false ? "opacity-60" : undefined
+                          }
+                        >
+                          <td className="px-4 py-3">
+                            <div className="font-medium">
+                              {p.priceName || "Abonnement"}
+                            </div>
+                            {p.priceAmount != null ? (
+                              <div className="text-xs text-muted-foreground">
+                                Tarif {p.priceAmount} DT
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-semibold text-primary">
+                              {formatPromoValue(p)}
+                            </span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {p.valueKind === PromoValueKind.PERCENT
+                                ? "pourcentage"
+                                : "montant"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <Switch
+                                checked={p.isActive !== false}
+                                onCheckedChange={() => togglePromo.mutate(p)}
+                              />
+                              <span className="text-xs text-muted-foreground">
+                                {p.isActive === false ? "Off" : "On"}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button size="icon" variant="ghost">
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Supprimer cette promo ?
+                                  </AlertDialogTitle>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => removePromo.mutate(p.id)}
+                                  >
+                                    Supprimer
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Aucune promo abonnement pour l&apos;instant.
+                </p>
+              )}
+            </section>
+          </div>
         </TabsContent>
         {byCat.OTHER.length ? (
           <TabsContent value="OTHER" className="mt-4">

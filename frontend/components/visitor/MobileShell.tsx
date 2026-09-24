@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import { orgHref } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
+import { isStandalonePwa } from "@/lib/visitor-notify";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
@@ -28,7 +29,7 @@ const LIGHT_NAV = [
   { path: "/profile", label: "Profil", icon: UserRound },
 ];
 
-/** Account (PIN / PWA): community unlocked */
+/** Account + installed app: community unlocked */
 const ACCOUNT_NAV = [
   { path: "", label: "Accueil", icon: Home },
   { path: "/events", label: "Événements", icon: CalendarDays },
@@ -84,11 +85,13 @@ export function MobileShell({ children }: { children: ReactNode }) {
   const { data: status, isFetched } = useMobileStatus({
     enabled: !!memberId && onboarded,
   });
+  const [isApp, setIsApp] = useState(false);
   const hasAccount = !!status?.member?.hasPin;
+  const communityUnlocked = hasAccount && isApp;
   const keyboardOpen = useMobileKeyboardOpen();
   const nav = !onboarded
     ? GUEST_NAV
-    : hasAccount
+    : communityUnlocked
       ? ACCOUNT_NAV
       : LIGHT_NAV;
   const base = `/m/${orgSlug}`;
@@ -102,6 +105,10 @@ export function MobileShell({ children }: { children: ReactNode }) {
     rest.startsWith("/u/");
 
   useEffect(() => {
+    setIsApp(isStandalonePwa());
+  }, []);
+
+  useEffect(() => {
     if (!ready) return;
     if (!onboarded) {
       if (!isGuestAllowed(rest)) router.replace(base);
@@ -109,7 +116,8 @@ export function MobileShell({ children }: { children: ReactNode }) {
     }
     // Wait for status before gating account-only routes
     if (memberId && !isFetched) return;
-    if (!hasAccount && accountOnly) {
+    // Community (and peer chat / profiles) only in the installed app
+    if (accountOnly && !communityUnlocked) {
       router.replace(`${base}/profile?upgrade=1`);
       return;
     }
@@ -120,6 +128,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
     ready,
     onboarded,
     hasAccount,
+    communityUnlocked,
     accountOnly,
     rest,
     base,

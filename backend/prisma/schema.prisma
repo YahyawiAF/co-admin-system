@@ -55,6 +55,10 @@ model Member {
   discountAbonnement  Float?
   discountSalle       Float?
   discountOpenSpace   Float?
+  /// When the member already used the one-time app-install promo
+  appInstallPromoClaimedAt DateTime?
+  /// Gamification score — only credited when client is installed PWA
+  points        Int           @default(0)
   abonnements   Abonnement[]
   journals      Journal[]
   reservations  Reservation[]
@@ -74,12 +78,65 @@ model Member {
   pushSubscriptions      PushSubscription[]
   ledgerEntries          MemberLedger[]
   bookingRequests        BookingRequest[]
+  pointEntries           MemberPointEntry[]
+  trophies               MemberTrophy[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
   @@index([organizationId])
   @@index([groupId])
   @@map("members")
+}
+
+enum PointEvent {
+  CHECK_IN
+  CHECK_OUT
+  CAFE_ORDER
+  INSTALL_PWA
+  VISIT_PAID
+  PRODUCT_PAID
+  ADMIN_ADJUST
+  REDEEM_VISIT
+  REDEEM_ORDER
+}
+
+enum PointEntryStatus {
+  PENDING
+  CREDITED
+  EXPIRED
+}
+
+/// Point awards: PENDING in browser (expire if never claimed via PWA), CREDITED in PWA
+model MemberPointEntry {
+  id         String           @id @default(uuid())
+  memberId   String
+  member     Member           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  amount     Int
+  event      PointEvent
+  status     PointEntryStatus @default(PENDING)
+  /// Optional external ref (e.g. journalId) for idempotent awards
+  refId      String?
+  expiresAt  DateTime?
+  creditedAt DateTime?
+  createdAt  DateTime         @default(now())
+
+  @@index([memberId, status])
+  @@index([memberId, event, status])
+  @@index([memberId, event, refId])
+  @@index([expiresAt])
+  @@map("member_point_entries")
+}
+
+model MemberTrophy {
+  id         String   @id @default(uuid())
+  memberId   String
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  trophyId   String
+  unlockedAt DateTime @default(now())
+
+  @@unique([memberId, trophyId])
+  @@index([memberId])
+  @@map("member_trophies")
 }
 
 model MemberLoginToken {
@@ -156,9 +213,10 @@ model Price {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   timePeriod     Json
-  abonnements    Abonnement[]
-  journals       Journal[]
-  visitRequests  VisitRequest[]
+  abonnements      Abonnement[]
+  journals         Journal[]
+  visitRequests    VisitRequest[]
+  appInstallPromos AppInstallPromo[]
 
   @@index([organizationId])
   @@index([spaceId])
@@ -376,6 +434,10 @@ model Facility {
   mobileSeatMode          MobileSeatMode @default(ADMIN_ASSIGN)
   receptionAway           Boolean        @default(false)
   receptionAwayStartedAt  DateTime?
+  /// Global one-time promo for installing the app (DT or %)
+  appInstallGlobalPromoActive Boolean         @default(false)
+  appInstallGlobalPromoKind   PromoValueKind?
+  appInstallGlobalPromoValue  Float?
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())
@@ -383,9 +445,30 @@ model Facility {
   spaces         Space[]
   events         Event[]
   memberships    FacilityMembership[]
+  appInstallPromos AppInstallPromo[]
 
   @@index([organizationId])
   @@map("facilities")
+}
+
+/// App-install promo linked to an abonnement tarif (max ~3 per facility)
+model AppInstallPromo {
+  id         String        @id @default(uuid())
+  facilityId String
+  facility   Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  priceId    String
+  price      Price         @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  /// PERCENT (%) or FIXED_DT (dinars)
+  valueKind  PromoValueKind
+  value      Float
+  sortOrder  Int           @default(0)
+  isActive   Boolean       @default(true)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([facilityId])
+  @@index([priceId])
+  @@map("app_install_promos")
 }
 
 model Space {
@@ -721,6 +804,11 @@ enum PriceCategory {
   ABONNEMENT
   SALLE
   OPEN_SPACE
+}
+
+enum PromoValueKind {
+  PERCENT
+  FIXED_DT
 }
 
 enum BillingUnit {

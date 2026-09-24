@@ -22,6 +22,14 @@ import { AnnouncementBanner } from "@/components/visitor/AnnouncementBanner";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
+import { AppInstallPromo } from "@/components/visitor/AppInstallPromo";
+import {
+  PointsCard,
+} from "@/components/visitor/PointsCard";
+import {
+  isWithinPointageGrace,
+  PointageGraceWindow,
+} from "@/components/visitor/PointageGraceWindow";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import { ScanQrPresence } from "@/components/visitor/ScanQrPresence";
@@ -32,19 +40,26 @@ import {
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
 import { consumeQrEntry } from "@/lib/visitorCache";
+import { isStandalonePwa } from "@/lib/visitor-notify";
 
 export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
   const [wifiOpen, setWifiOpen] = useState(false);
-  const entryHandled = useRef(false);
+  const [isApp, setIsApp] = useState(true);
+  const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
+  const [graceDismissed, setGraceDismissed] = useState(false);
+
+  useEffect(() => {
+    setIsApp(isStandalonePwa());
+  }, []);
 
   const { data: status, refetch, isSuccess: statusReady } = useMobileStatus();
   const { data: layout } = useQuery({
-    queryKey: ["mobile-floor-plan", slug],
+    queryKey: ["mobile-floor-plan", slug, memberId],
     queryFn: async () => {
-      const data = await mobileApi.floorPlan(slug);
+      const data = await mobileApi.floorPlan(slug, memberId ?? undefined);
       writeLocalCache("floor-plan", data, slug);
       return data;
     },
@@ -52,9 +67,22 @@ export default function MobileHomePage() {
     placeholderData: () => readLocalCache("floor-plan", slug) ?? undefined,
   });
 
+  useEffect(() => {
+    if (status?.session) setShowCheckoutPromo(false);
+  }, [status?.session]);
+
+  useEffect(() => {
+    setGraceDismissed(false);
+  }, [status?.session?.id]);
+
   const cancel = useMutation({
-    mutationFn: () =>
-      mobileApi.cancelVisitRequest(status!.pendingRequest!.id, memberId!),
+    mutationFn: () => {
+      const id = status?.pendingRequest?.id;
+      if (!id || String(id).startsWith("optimistic")) {
+        return Promise.resolve(null);
+      }
+      return mobileApi.cancelVisitRequest(id, memberId!);
+    },
     onSuccess: () => {
       sessionStorage.removeItem("pendingVisitRequestId");
       refetch();
@@ -100,17 +128,35 @@ export default function MobileHomePage() {
   };
 
   useEffect(() => {
-    if (!onboarded || !memberId || !statusReady || !status || entryHandled.current) {
-      return;
-    }
-    // Already present or waiting — stay on Accueil
+    if (!onboarded || !memberId || !statusReady || !status) return;
+
+    const routedKey = `accueil_routed_${memberId}`;
+    const fromQr = consumeQrEntry(slug);
+
+    // Active session / pending — stay; remember we already landed here
     if (status.session || status.pendingRequest) {
-      entryHandled.current = true;
-      consumeQrEntry(slug);
+      try {
+        sessionStorage.setItem(routedKey, "1");
+      } catch {
+        /* ignore */
+      }
       return;
     }
-    entryHandled.current = true;
-    consumeQrEntry(slug);
+
+    // Returning to Accueil from Events/Café/etc. — do not force forfait again
+    if (!fromQr) {
+      try {
+        if (sessionStorage.getItem(routedKey) === "1") return;
+      } catch {
+        /* ignore */
+      }
+    }
+
+    try {
+      sessionStorage.setItem(routedKey, "1");
+    } catch {
+      /* ignore */
+    }
 
     // Active abonnement → mark presence directly
     if (status.hasActiveSubscription) {
@@ -126,12 +172,20 @@ export default function MobileHomePage() {
       return;
     }
 
-    // Known visitor without abo → forfait
+    // Known visitor without abo → forfait (first entry / QR only)
     router.replace(href("/choose?mode=day"));
   }, [onboarded, memberId, statusReady, status, slug, router, href]);
 
   const pending = status?.pendingRequest;
   const session = status?.session;
+  const isOptimisticSession =
+    !!(session as { _optimistic?: boolean } | null | undefined)?._optimistic ||
+    String(session?.id || "").startsWith("optimistic");
+  const showGrace =
+    !!session &&
+    !graceDismissed &&
+    !isOptimisticSession &&
+    isWithinPointageGrace(session.registredTime);
   const seat = session?.seat || status?.seat || null;
   const member = status?.member;
   const subKind = (status?.subscription as { kind?: string } | null)?.kind;
@@ -203,13 +257,21 @@ export default function MobileHomePage() {
   if (!ready) return <p className="text-slate-500">Chargement…</p>;
   if (!onboarded) return <WelcomeRegister />;
 
-  // Returning visitor: wait for status then auto-route (abo → presence, else forfait)
+  // First land only: wait for status / auto-route. Returning from Events stays put.
+  const alreadyRouted =
+    typeof window !== "undefined" &&
+    !!memberId &&
+    (() => {
+      try {
+        return sessionStorage.getItem(`accueil_routed_${memberId}`) === "1";
+      } catch {
+        return false;
+      }
+    })();
   const routingAway =
-    !statusReady ||
-    (!!status &&
-      !status.session &&
-      !status.pendingRequest &&
-      !entryHandled.current);
+    !alreadyRouted &&
+    (!statusReady ||
+      (!!status && !status.session && !status.pendingRequest));
   if (routingAway && !session && !pending) {
     return <p className="text-slate-500">Chargement…</p>;
   }
@@ -247,8 +309,38 @@ export default function MobileHomePage() {
         onClose={() => setWifiOpen(false)}
       />
 
-      {/* Hero — compact greeting */}
-      {session ? (
+      {memberId ? <PointsCard memberId={memberId} /> : null}
+
+      {/* App install promo — once only; hidden after claim */}
+      {(status?.member?.appInstallPromoEligible !== false &&
+        !status?.member?.appInstallPromoClaimedAt &&
+        layout?.facility?.appInstallPromoEligible !== false) ? (
+        <AppInstallPromo
+          globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
+          promos={layout?.facility?.appInstallPromos ?? null}
+          emphasize={showCheckoutPromo && !session}
+        />
+      ) : null}
+
+      {/* Hero — compact greeting / post-pointage grace */}
+      {session && showGrace ? (
+        <PointageGraceWindow
+          sessionId={session.id}
+          forfaitName={
+            session.prices?.name || session.price?.name || "Forfait"
+          }
+          registredTime={session.registredTime}
+          onExpired={() => setGraceDismissed(true)}
+          onCancelled={() => {
+            setGraceDismissed(true);
+            void refetch();
+          }}
+          onChangeTarif={() => {
+            setGraceDismissed(true);
+            router.push(href("/choose?mode=day"));
+          }}
+        />
+      ) : session ? (
         <ActiveSessionPanel
           memberId={memberId!}
           session={session}
@@ -257,6 +349,23 @@ export default function MobileHomePage() {
           hasActiveSubscription={!!status?.hasActiveSubscription}
           subscriptionKind={subKind}
           allowedSpaceIds={allowedSpaceIds}
+          promos={
+            status?.member?.appInstallPromoEligible === false ||
+            status?.member?.appInstallPromoClaimedAt ||
+            layout?.facility?.appInstallPromoEligible === false
+              ? null
+              : layout?.facility?.appInstallPromos ?? null
+          }
+          globalPromo={
+            status?.member?.appInstallPromoEligible === false ||
+            status?.member?.appInstallPromoClaimedAt ||
+            layout?.facility?.appInstallPromoEligible === false
+              ? null
+              : layout?.facility?.appInstallGlobalPromo ?? null
+          }
+          onCheckoutSuccess={() => {
+            if (!isStandalonePwa()) setShowCheckoutPromo(true);
+          }}
         />
       ) : (
         <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
@@ -306,7 +415,7 @@ export default function MobileHomePage() {
       {/* Announcement slot */}
       <AnnouncementBanner />
 
-      {/* Scan — main action */}
+      {/* Scan — main action (web pointage = check-in) */}
       {!session && !pending ? (
         <ScanQrPresence
           slug={slug}
@@ -327,8 +436,8 @@ export default function MobileHomePage() {
         />
       ) : null}
 
-      {/* Abonnement summary (idle) */}
-      {status?.hasActiveSubscription && !session ? (
+      {/* Abonnement summary (idle) — app only */}
+      {isApp && status?.hasActiveSubscription && !session ? (
         <div className="rounded-3xl bg-white px-4 py-3.5 shadow-sm">
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
@@ -381,10 +490,15 @@ export default function MobileHomePage() {
                 size="sm"
                 variant="outline"
                 className="rounded-full"
-                disabled={cancel.isPending}
+                disabled={
+                  cancel.isPending ||
+                  String(pending.id || "").startsWith("optimistic")
+                }
                 onClick={() => cancel.mutate()}
               >
-                Annuler
+                {String(pending.id || "").startsWith("optimistic")
+                  ? "Envoi…"
+                  : "Annuler"}
               </Button>
               <Button size="sm" className="rounded-full" asChild>
                 <Link
@@ -402,8 +516,8 @@ export default function MobileHomePage() {
         </Alert>
       ) : null}
 
-      {/* Main access card */}
-      {!session ? (
+      {/* Main access card — full booking CTAs in the installed app only */}
+      {isApp && !session ? (
         <div className="rounded-3xl bg-white p-4 shadow-sm">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
             Votre accès
@@ -443,7 +557,7 @@ export default function MobileHomePage() {
             Réservation pour aujourd&apos;hui : sur place ou par téléphone
           </p>
         </div>
-      ) : status?.hasActiveSubscription ? (
+      ) : isApp && status?.hasActiveSubscription ? (
         <Button
           variant="outline"
           className="h-11 w-full rounded-full border-slate-200 bg-white text-slate-700 shadow-sm"

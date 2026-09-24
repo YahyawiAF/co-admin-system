@@ -34,6 +34,7 @@ import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
+import { PointsCard } from "@/components/visitor/PointsCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -171,6 +172,10 @@ function ProfileInner() {
           ) : null}
         </div>
 
+        {memberId ? (
+          <PointsCard memberId={memberId} compact={false} />
+        ) : null}
+
         <AccountUpgradeCard
           title={
             showUpgrade
@@ -288,6 +293,10 @@ function ProfileInner() {
           )}
         </div>
       </div>
+
+      {memberId ? (
+        <PointsCard memberId={memberId} compact={false} />
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
         {[

@@ -490,3 +490,58 @@ export class MoveSeatDto {
   @IsString()
   toSpaceId?: string;
 }
+
+export class AwardPointsDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  memberId: string;
+
+  @ApiProperty({ enum: ['INSTALL_PWA'] })
+  @IsIn(['INSTALL_PWA'])
+  event: 'INSTALL_PWA';
+
+  @ApiProperty({
+    description: 'True when running as installed PWA (credits points to member)',
+  })
+  @IsBoolean()
+  isPwa: boolean;
+}
+
+export class ClaimPendingPointsDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  memberId: string;
+
+  @ApiProperty({ description: 'Must be true — only PWA can claim' })
+  @IsBoolean()
+  isPwa: boolean;
+}
+
+export class AdjustPointsDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  memberId: string;
+
+  @ApiProperty({ description: 'Positive to grant, negative to revoke' })
+  @IsNumber()
+  delta: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class RedeemVisitPointsDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  journalId: string;
+
+  @ApiProperty({ description: 'Points to apply (100 pts = 1 DT)' })
+  @IsNumber()
+  points: number;
+}

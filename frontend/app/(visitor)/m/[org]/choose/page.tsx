@@ -17,7 +17,11 @@ import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
-import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import {
+  useMobileStatus,
+  writeOptimisticSession,
+  clearOptimisticSession,
+} from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
 import { SpaceGallery } from "@/components/visitor/SpaceGallery";
@@ -26,6 +30,9 @@ import {
   priceAllowsWholeIn,
   spacesForPrice,
 } from "@/lib/space-occupy";
+import { pricedWithPromo } from "@/lib/promo-price";
+import { PromoPrice } from "@/components/visitor/PromoPrice";
+import { toast } from "sonner";
 
 function ChooseInner() {
   const router = useRouter();
@@ -90,12 +97,21 @@ function ChooseInner() {
   const needPlaceStep = visitorChoose && mode === "day";
 
   const { data: layout } = useQuery({
-    queryKey: ["mobile-floor-plan", slug],
-    queryFn: () => mobileApi.floorPlan(slug),
-    enabled: needPlaceStep,
+    queryKey: ["mobile-floor-plan", slug, memberId],
+    queryFn: () => mobileApi.floorPlan(slug, memberId ?? undefined),
     staleTime: 60_000,
   });
   const layoutSpaces = (layout?.spaces || []) as Space[];
+  const promoEligible =
+    layout?.facility?.appInstallPromoEligible !== false &&
+    !status?.member?.appInstallPromoClaimedAt &&
+    status?.member?.appInstallPromoEligible !== false;
+  const promoOpts = promoEligible
+    ? {
+        promos: layout?.facility?.appInstallPromos ?? null,
+        globalPromo: layout?.facility?.appInstallGlobalPromo ?? null,
+      }
+    : { promos: null, globalPromo: null };
 
   const { data: pendingRequest } = useQuery({
     queryKey: ["visit-request", pendingId],
@@ -184,39 +200,155 @@ function ChooseInner() {
       if (req.status === "APPROVED" || req.autoApproved) {
         sessionStorage.removeItem("pendingVisitRequestId");
         setPendingId(null);
-        // Seed mobile-status cache so Accueil renders instantly
-        queryClient.setQueryData(
-          ["mobile-status", memberId],
-          (old: any) => old ? { ...old, pendingRequest: null, hasOpenSession: true } : old
-        );
-        router.push(
+        clearOptimisticSession();
+        void queryClient.invalidateQueries({
+          queryKey: ["mobile-status", memberId],
+        });
+        router.replace(
           req.type === "SUBSCRIPTION" ? href("/subscription") : href()
         );
         return;
       }
-      // Seed pending request into cache for immediate UI feedback
+      clearOptimisticSession();
       queryClient.setQueryData(
         ["mobile-status", memberId],
-        (old: any) => old ? { ...old, pendingRequest: req } : old
+        (old: any) => (old ? { ...old, pendingRequest: req, session: null } : old)
       );
       sessionStorage.setItem("pendingVisitRequestId", req.id);
       setPendingId(req.id);
+      // Already on Accueil if we navigated optimistically; otherwise stay for pending UI
+      if (mode === "day") router.replace(href());
+    },
+    onError: (e: Error) => {
+      clearOptimisticSession();
+      void queryClient.invalidateQueries({
+        queryKey: ["mobile-status", memberId],
+      });
+      toast.error(e.message || "Impossible de démarrer la session");
+      router.replace(href(`/choose?mode=${mode === "subscription" ? "subscription" : "day"}`));
     },
   });
 
   const cancel = useMutation({
-    mutationFn: () =>
-      mobileApi.cancelVisitRequest(
-        pendingId || status!.pendingRequest!.id,
-        memberId!
-      ),
+    mutationFn: () => {
+      const id = pendingId || status?.pendingRequest?.id;
+      if (!id || String(id).startsWith("optimistic")) {
+        return Promise.resolve(null);
+      }
+      return mobileApi.cancelVisitRequest(id, memberId!);
+    },
     onSuccess: () => {
       sessionStorage.removeItem("pendingVisitRequestId");
+      clearOptimisticSession();
       setPendingId(null);
       refetch();
     },
   });
 
+  const seedOptimisticAndGo = (opts: {
+    price: Price;
+    seatLabel?: string;
+    spaceId?: string;
+    occupyWhole?: boolean;
+    expectAutoSession: boolean;
+  }) => {
+    if (!memberId) return;
+    const nowIso = new Date().toISOString();
+    const seat =
+      opts.seatLabel || opts.occupyWhole
+        ? {
+            label: opts.seatLabel || null,
+            spaceId: opts.spaceId || null,
+            occupyWhole: !!opts.occupyWhole,
+          }
+        : null;
+
+    if (opts.expectAutoSession && mode === "day") {
+      const session = {
+        id: `optimistic-${Date.now()}`,
+        memberID: memberId,
+        priceId: opts.price.id,
+        registredTime: nowIso,
+        leaveTime: null,
+        isPayed: false,
+        payedAmount: opts.price.price,
+        isReservation: false,
+        prices: opts.price,
+        price: opts.price,
+        amountDue: opts.price.price,
+        _optimistic: true,
+      };
+      writeOptimisticSession({
+        memberId,
+        at: Date.now(),
+        session,
+        seat,
+      });
+      queryClient.setQueryData(["mobile-status", memberId], (old: any) => ({
+        ...(old || {}),
+        pendingRequest: null,
+        hasOpenSession: true,
+        session,
+        seat: seat || old?.seat || null,
+      }));
+      router.replace(href());
+      return;
+    }
+
+    const pendingRequest = {
+      id: `optimistic-pending-${Date.now()}`,
+      status: "PENDING",
+      type: mode === "subscription" ? "SUBSCRIPTION" : "DAY",
+      priceId: opts.price.id,
+      price: opts.price,
+      createdAt: nowIso,
+      _optimistic: true,
+    };
+    writeOptimisticSession({
+      memberId,
+      at: Date.now(),
+      session: null,
+      seat,
+      pendingRequest,
+    });
+    queryClient.setQueryData(["mobile-status", memberId], (old: any) => ({
+      ...(old || {}),
+      session: null,
+      hasOpenSession: false,
+      pendingRequest,
+    }));
+    setPendingId(String(pendingRequest.id));
+    if (mode === "day") router.replace(href());
+  };
+
+  const submitVisit = (opts: {
+    priceId: string;
+    seatLabel?: string;
+    spaceId?: string;
+    occupyWhole?: boolean;
+  }) => {
+    const price =
+      pickedPrice?.id === opts.priceId
+        ? pickedPrice
+        : options.find((o) => o.id === opts.priceId) ||
+          tarifs.find((t) => t.id === opts.priceId);
+    if (!price || !memberId) return;
+
+    // Day + auto-accept: show session UI immediately, sync server in background
+    const expectAuto = mode === "day" && autoAccept;
+    seedOptimisticAndGo({
+      price,
+      seatLabel: opts.seatLabel,
+      spaceId: opts.spaceId,
+      occupyWhole: opts.occupyWhole,
+      expectAutoSession: expectAuto,
+    });
+    // Reception must confirm: still go Accueil with pending (day) / keep choose pending UI (sub)
+    if (!expectAuto && mode === "day") {
+      // already navigated with pending overlay
+    }
+    create.mutate(opts);
+  };
   if (!memberId) {
     return (
       <>
@@ -338,7 +470,14 @@ function ChooseInner() {
       : "L’accueil confirmera.";
 
   const onPickTarif = (o: Price) => {
-    create.mutate({ priceId: o.id });
+    if (needPlaceStep) {
+      setPickedPrice(o);
+      setSeatLabel("");
+      setSeatSpaceId("");
+      setOccupyWhole(false);
+      return;
+    }
+    submitVisit({ priceId: o.id });
   };
 
   if (needPlaceStep && pickedPrice && memberId) {
@@ -369,7 +508,13 @@ function ChooseInner() {
             {wholeOnly ? "Votre espace" : "Votre place"}
           </h1>
           <p className="text-xs text-slate-500">
-            {pickedPrice.price} DT
+            <span className="inline-flex align-middle">
+              <PromoPrice
+                {...pricedWithPromo(pickedPrice.price, pickedPrice.id, promoOpts)}
+                size="sm"
+                align="start"
+              />
+            </span>
             {seatLabel
               ? ` · place ${seatLabel}`
               : selectedWhole
@@ -468,7 +613,7 @@ function ChooseInner() {
           className="h-11 w-full rounded-full"
           disabled={create.isPending || !canConfirm}
           onClick={() =>
-            create.mutate({
+            submitVisit({
               priceId: pickedPrice.id,
               seatLabel: occupyWhole ? undefined : seatLabel,
               spaceId: seatSpaceId || undefined,
@@ -521,7 +666,9 @@ function ChooseInner() {
         </Alert>
       ) : null}
       <div className="space-y-2">
-        {options.map((o) => (
+        {options.map((o) => {
+          const priced = pricedWithPromo(o.price, o.id, promoOpts);
+          return (
           <button
             key={o.id}
             type="button"
@@ -540,11 +687,17 @@ function ChooseInner() {
                   : o.periodDays
                     ? `${o.periodDays} jours`
                     : ""}
+                {priced.hasPromo ? (
+                  <span className="ml-1.5 text-[11px] font-medium text-amber-600">
+                    Promo
+                  </span>
+                ) : null}
               </div>
             </div>
-            <div className="font-bold text-primary">{o.price} DT</div>
+            <PromoPrice {...priced} />
           </button>
-        ))}
+          );
+        })}
         {!options.length ? (
           <Alert>
             <AlertDescription>Aucun tarif disponible.</AlertDescription>

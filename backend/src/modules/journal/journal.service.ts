@@ -9,6 +9,7 @@ import { ErrorCode, GeneralException } from '@/exceptions';
 import { JournalEntity } from './entities/journal.entity';
 import { endOfDay, startOfDay } from 'date-fns';
 import { EventsGateway } from '../webSocket/events.gateway';
+import { maybeAwardVisitPaidPoints, maybeRevokeVisitPaidPoints } from '../mobile/visit-paid-points';
 
 export const roundsOfHashing = 10;
 
@@ -268,6 +269,11 @@ export class JournalService {
         updated.leaveTime
       ) {
         await this.releaseDaySeats(existing.memberID, existing.id);
+      }
+      if (existing?.isPayed && updateJournalDto.isPayed === false) {
+        await maybeRevokeVisitPaidPoints(this.prisma, updated.id);
+      } else {
+        await maybeAwardVisitPaidPoints(this.prisma, updated.id);
       }
       return updated;
     } catch (error) {

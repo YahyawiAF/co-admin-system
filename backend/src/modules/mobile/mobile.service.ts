@@ -33,10 +33,28 @@ import {
   BookingRequestKind,
   EventRegistrationStatus,
   EventStatus,
+  PointEvent,
+  PointEntryStatus,
+  PromoValueKind,
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { PushService } from '../push/push.service';
+import {
+  POINT_AMOUNTS,
+  PENDING_POINTS_TTL_DAYS,
+  TROPHY_CATALOG,
+  nextTrophyThreshold,
+  pointsToDt,
+  dtToRedeemPoints,
+} from './points';
+import { creditPoints, debitPoints } from './points-ledger';
+import {
+  maybeAwardVisitPaidPoints as creditVisitPaidPoints,
+  maybeAwardProductPaidPoints as creditProductPaidPoints,
+  maybeRevokeVisitPaidPoints as revokeVisitPaidPoints,
+  maybeRevokeProductPaidPoints as revokeProductPaidPoints,
+} from './visit-paid-points';
 import {
   assertPriceCanOccupy,
   linkedSpaceIds,
@@ -276,6 +294,94 @@ export class MobileService {
   private applyPercentOff(amount: number, percent: number) {
     if (!percent) return Math.round(amount * 100) / 100;
     return Math.round(amount * (1 - percent / 100) * 100) / 100;
+  }
+
+  private applyPromoValue(
+    amount: number,
+    valueKind: PromoValueKind,
+    value: number,
+  ) {
+    if (!Number.isFinite(amount) || amount < 0) return amount;
+    if (!Number.isFinite(value) || value <= 0) return amount;
+    let next =
+      valueKind === PromoValueKind.PERCENT
+        ? amount * (1 - value / 100)
+        : amount - value;
+    if (next < 0) next = 0;
+    return Math.round(next * 100) / 100;
+  }
+
+  /**
+   * One-time app-install promo (global or tarif-linked).
+   * Returns null if already claimed.
+   */
+  private async resolveAppInstallPromo(
+    memberId: string | null | undefined,
+    priceId: string,
+  ): Promise<{ valueKind: PromoValueKind; value: number } | null> {
+    if (!memberId) return null;
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: {
+        appInstallPromoClaimedAt: true,
+        organizationId: true,
+      },
+    });
+    if (!member || member.appInstallPromoClaimedAt) return null;
+
+    const facility = await this.prisma.facility.findFirst({
+      where: { organizationId: member.organizationId },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!facility) return null;
+
+    const linked = await this.prisma.appInstallPromo.findFirst({
+      where: {
+        facilityId: facility.id,
+        priceId,
+        isActive: true,
+        value: { gt: 0 },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    if (linked) {
+      return { valueKind: linked.valueKind, value: linked.value };
+    }
+
+    if (
+      facility.appInstallGlobalPromoActive &&
+      facility.appInstallGlobalPromoValue != null &&
+      facility.appInstallGlobalPromoValue > 0 &&
+      facility.appInstallGlobalPromoKind
+    ) {
+      return {
+        valueKind: facility.appInstallGlobalPromoKind,
+        value: facility.appInstallGlobalPromoValue,
+      };
+    }
+    return null;
+  }
+
+  /** Apply one-time install promo and mark member as claimed when discount lands. */
+  private async finalizeAmountWithAppPromo(
+    memberId: string | null | undefined,
+    priceId: string,
+    amountAfterGroupDiscount: number,
+  ): Promise<number> {
+    const promo = await this.resolveAppInstallPromo(memberId, priceId);
+    if (!promo || !memberId) return amountAfterGroupDiscount;
+    const next = this.applyPromoValue(
+      amountAfterGroupDiscount,
+      promo.valueKind,
+      promo.value,
+    );
+    if (next < amountAfterGroupDiscount - 0.001) {
+      await this.prisma.member.update({
+        where: { id: memberId },
+        data: { appInstallPromoClaimedAt: new Date() },
+      });
+    }
+    return next;
   }
 
   private async resolveVisitDiscount(
@@ -835,10 +941,15 @@ export class MobileService {
   async login(dto: MobileLoginDto) {
     const orgSlug = (dto as { orgSlug?: string }).orgSlug;
     const org = await this.resolveOrganizationBySlug(orgSlug);
-    const phone = this.normalizePhone(dto.phone);
     const member = await this.findMemberByPhone(dto.phone, org.id);
     if (!member) {
       throw new NotFoundException('Member not found');
+    }
+    // PIN accounts must use pin-login (not passwordless phone resume)
+    if (member.pinHash) {
+      throw new BadRequestException(
+        'Ce compte utilise un PIN — saisissez votre code PIN',
+      );
     }
     if (member.passwordHash) {
       if (!dto.password) {
@@ -882,6 +993,8 @@ export class MobileService {
     linkedinUrl?: string | null;
     openToCollaboration?: boolean | null;
     showInDirectory?: boolean | null;
+    appInstallPromoClaimedAt?: Date | null;
+    points?: number | null;
   }) {
     return {
       id: member.id,
@@ -903,6 +1016,12 @@ export class MobileService {
       linkedinUrl: member.linkedinUrl || null,
       openToCollaboration: !!member.openToCollaboration,
       showInDirectory: !!member.showInDirectory,
+      points: member.points ?? 0,
+      appInstallPromoClaimedAt: member.appInstallPromoClaimedAt
+        ? member.appInstallPromoClaimedAt.toISOString?.() ??
+          String(member.appInstallPromoClaimedAt)
+        : null,
+      appInstallPromoEligible: !member.appInstallPromoClaimedAt,
     };
   }
 
@@ -1315,7 +1434,7 @@ export class MobileService {
     return seat?.label || null;
   }
 
-  async getFloorPlanForVisitor(orgSlug?: string) {
+  async getFloorPlanForVisitor(orgSlug?: string, memberId?: string) {
     const resolved = orgSlug
       ? await this.resolveFacilityBySlug(orgSlug)
       : await this.prisma.facility.findFirst({
@@ -1344,6 +1463,29 @@ export class MobileService {
       where: { eventKey: 'collabora-hub', isBooked: true },
     });
     const settings = await this.getSeatSettings(orgSlug);
+    const promos = facility
+      ? await this.prisma.appInstallPromo.findMany({
+          where: { facilityId: facility.id, isActive: true },
+          include: { price: { select: { id: true, name: true, price: true } } },
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          take: 3,
+        })
+      : [];
+    const globalActive =
+      !!facility?.appInstallGlobalPromoActive &&
+      facility.appInstallGlobalPromoValue != null &&
+      facility.appInstallGlobalPromoValue > 0 &&
+      !!facility.appInstallGlobalPromoKind;
+
+    let promoEligible = true;
+    if (memberId) {
+      const m = await this.prisma.member.findUnique({
+        where: { id: memberId },
+        select: { appInstallPromoClaimedAt: true },
+      });
+      if (m?.appInstallPromoClaimedAt) promoEligible = false;
+    }
+
     return {
       facility: facility
         ? {
@@ -1351,6 +1493,25 @@ export class MobileService {
             name: facility.name,
             mobileSeatMode: facility.mobileSeatMode,
             receptionAway: facility.receptionAway,
+            appInstallGlobalPromo:
+              globalActive && promoEligible
+                ? {
+                    valueKind: facility.appInstallGlobalPromoKind,
+                    value: facility.appInstallGlobalPromoValue,
+                    oneTime: true,
+                  }
+                : null,
+            appInstallPromos: promoEligible
+              ? promos.map((p) => ({
+                  id: p.id,
+                  priceId: p.priceId,
+                  priceName: p.price.name,
+                  priceAmount: p.price.price,
+                  valueKind: p.valueKind,
+                  value: p.value,
+                }))
+              : [],
+            appInstallPromoEligible: promoEligible,
           }
         : null,
       spaces: facility?.spaces || [],
@@ -1493,7 +1654,12 @@ export class MobileService {
         : 0
       : price.price;
     const discount = await this.resolveVisitDiscount(dto.memberId, price);
-    const payedAmount = this.applyPercentOff(payedAmountRaw, discount.percent);
+    const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
+    const payedAmount = await this.finalizeAmountWithAppPromo(
+      dto.memberId,
+      dto.priceId,
+      afterGroup,
+    );
 
     const journal = await this.prisma.journal.create({
       data: {
@@ -1668,6 +1834,10 @@ export class MobileService {
         ? `${hours}h${minutes.toString().padStart(2, '0')}m`
         : `${minutes}min`;
 
+    const awarded = await this.maybeAwardVisitPaidPoints(updated.id);
+    const pointsAwarded = awarded?.amount ?? 0;
+    const newTrophies = awarded?.newTrophies ?? [];
+
     this.eventsGateway.sendVisitorCheckout({
       journalId: updated.id,
       memberId: updated.memberID,
@@ -1680,14 +1850,23 @@ export class MobileService {
       durationLabel,
       leaveTime: updated.leaveTime,
       registredTime: updated.registredTime,
+      pointsAwarded,
+      newTrophies,
+      memberPoints: awarded?.points,
     });
     this.eventsGateway.sendTableUpdates({
       type: 'visitor_checkout',
       journalId: updated.id,
       memberId: updated.memberID,
+      pointsAwarded,
     });
 
-    return updated;
+    return {
+      ...updated,
+      pointsAwarded,
+      newTrophies,
+      memberPoints: awarded?.points,
+    };
   }
 
   /** Mark payment without checking out — visitor can stay. */
@@ -1704,14 +1883,36 @@ export class MobileService {
       include: { prices: true, members: true },
     });
 
+    const pointsDelta = isPayed
+      ? await this.maybeAwardVisitPaidPoints(updated.id)
+      : await this.maybeRevokeVisitPaidPoints(updated.id);
+
     this.eventsGateway.sendTableUpdates({
       type: 'payment_updated',
       journalId: updated.id,
       memberId: updated.memberID,
       isPayed: updated.isPayed,
+      pointsAwarded: pointsDelta?.amount ?? 0,
     });
 
-    return updated;
+    if (pointsDelta && pointsDelta.amount !== 0 && updated.memberID) {
+      this.eventsGateway.sendVisitorCheckout({
+        journalId: updated.id,
+        memberId: updated.memberID,
+        pointsAwarded: pointsDelta.amount,
+        newTrophies: pointsDelta.newTrophies,
+        memberPoints: pointsDelta.points,
+        isPayed,
+        paymentOnly: true,
+      });
+    }
+
+    return {
+      ...updated,
+      pointsAwarded: pointsDelta?.amount ?? 0,
+      newTrophies: pointsDelta?.newTrophies ?? [],
+      memberPoints: pointsDelta?.points,
+    };
   }
 
   async startSubscription(dto: StartSubscriptionDto) {
@@ -1741,7 +1942,12 @@ export class MobileService {
     const leaveDate = addDays(now, periodDays - 1);
 
     const discount = await this.resolveVisitDiscount(dto.memberId, price);
-    const remisedPrice = this.applyPercentOff(price.price, discount.percent);
+    const afterGroup = this.applyPercentOff(price.price, discount.percent);
+    const remisedPrice = await this.finalizeAmountWithAppPromo(
+      dto.memberId,
+      dto.priceId,
+      afterGroup,
+    );
     const isPayed = dto.isPayed ?? true;
     const abonnement = await this.prisma.abonnement.create({
       data: {
@@ -2013,7 +2219,12 @@ export class MobileService {
       dto.bookForMemberId || dto.memberId,
       price,
     );
-    const payedAmount = this.applyPercentOff(payedAmountRaw, discount.percent);
+    const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
+    const payedAmount = await this.finalizeAmountWithAppPromo(
+      dto.bookForMemberId || dto.memberId,
+      dto.priceId,
+      afterGroup,
+    );
 
     const guestName =
       (dto.guestName || dto.firstName || '').trim() || 'Visiteur anonyme';
@@ -3700,6 +3911,14 @@ export class MobileService {
       data: { isPayed },
       include: { product: true },
     });
+    if (isPayed) {
+      const awarded = await creditProductPaidPoints(this.prisma, id);
+      if (awarded) {
+        await this.evaluateTrophies(awarded.memberId, PointEvent.PRODUCT_PAID);
+      }
+    } else {
+      await revokeProductPaidPoints(this.prisma, id);
+    }
     this.eventsGateway.sendTableUpdates({
       type: 'product_order_paid',
       orderId: id,
@@ -3710,14 +3929,34 @@ export class MobileService {
 
   async payMemberDayOrders(memberId: string, isPayed: boolean) {
     const now = new Date();
-    await this.prisma.dailyProduct.updateMany({
+    const dayFilter = {
+      OR: [{ memberId }, { externalRef: memberId }],
+      date: { gte: startOfDay(now), lt: endOfDay(now) },
+      status: { not: ProductOrderStatus.CANCELLED },
+    };
+    const targets = await this.prisma.dailyProduct.findMany({
       where: {
-        OR: [{ memberId }, { externalRef: memberId }],
-        date: { gte: startOfDay(now), lt: endOfDay(now) },
-        status: { not: ProductOrderStatus.CANCELLED },
+        ...dayFilter,
+        isPayed: isPayed ? false : true,
       },
+      select: { id: true },
+    });
+    await this.prisma.dailyProduct.updateMany({
+      where: dayFilter,
       data: { isPayed },
     });
+    if (isPayed) {
+      for (const row of targets) {
+        const awarded = await creditProductPaidPoints(this.prisma, row.id);
+        if (awarded) {
+          await this.evaluateTrophies(awarded.memberId, PointEvent.PRODUCT_PAID);
+        }
+      }
+    } else {
+      for (const row of targets) {
+        await revokeProductPaidPoints(this.prisma, row.id);
+      }
+    }
     this.eventsGateway.sendTableUpdates({
       type: 'product_orders_paid',
       memberId,
@@ -4524,5 +4763,510 @@ export class MobileService {
       url: '/m',
     });
     return this.serializeBooking(updated);
+  }
+
+  // ─── Gamification points / trophies ───────────────────────────────────────
+
+  /**
+   * Earn when visit finished (leaveTime) AND admin marked paid.
+   * Idempotent per journal via refId.
+   */
+  async maybeAwardVisitPaidPoints(journalId: string) {
+    const res = await creditVisitPaidPoints(this.prisma, journalId);
+    if (!res) return null;
+    const newTrophies = await this.evaluateTrophies(
+      res.memberId,
+      PointEvent.VISIT_PAID,
+    );
+    const member = await this.prisma.member.findUnique({
+      where: { id: res.memberId },
+      select: { points: true },
+    });
+    return {
+      memberId: res.memberId,
+      amount: res.amount,
+      points: member?.points ?? 0,
+      newTrophies,
+    };
+  }
+
+  /** Reverse VISIT_PAID when admin unmarks unpaid. */
+  async maybeRevokeVisitPaidPoints(journalId: string) {
+    const res = await revokeVisitPaidPoints(this.prisma, journalId);
+    if (!res) return null;
+    return {
+      memberId: res.memberId,
+      amount: res.amount,
+      points: res.points,
+      newTrophies: [] as string[],
+    };
+  }
+
+  /** Admin: grant or revoke points (clamped at 0). */
+  async adminAdjustPoints(dto: {
+    memberId: string;
+    delta: number;
+    note?: string;
+  }) {
+    const delta = Math.trunc(Number(dto.delta));
+    if (!Number.isFinite(delta) || delta === 0) {
+      throw new BadRequestException('Delta invalide');
+    }
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+      select: { id: true, points: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+
+    if (delta > 0) {
+      const result = await creditPoints(this.prisma, {
+        memberId: dto.memberId,
+        amount: delta,
+        event: PointEvent.ADMIN_ADJUST,
+        refId: dto.note ? `adj:${Date.now()}:${dto.note.slice(0, 40)}` : null,
+      });
+      await this.evaluateTrophies(dto.memberId, PointEvent.ADMIN_ADJUST);
+      return {
+        delta,
+        points: result?.points ?? member.points,
+        message: `+${delta} pts`,
+      };
+    }
+
+    const revoke = Math.min(member.points, Math.abs(delta));
+    if (revoke <= 0) {
+      return { delta: 0, points: member.points, message: 'Solde déjà à 0' };
+    }
+    const result = await debitPoints(this.prisma, {
+      memberId: dto.memberId,
+      amount: revoke,
+      event: PointEvent.ADMIN_ADJUST,
+      refId: dto.note ? `adj:${Date.now()}:${dto.note.slice(0, 40)}` : null,
+    });
+    return {
+      delta: -revoke,
+      points: result.points,
+      message: `−${revoke} pts`,
+    };
+  }
+
+  /**
+   * Redeem points against a journal visit (100 pts = 1 DT).
+   * Full cover → isPayed; partial → remainder unpaid (no visit earn on redeemed DT).
+   */
+  async adminRedeemVisitPoints(dto: { journalId: string; points: number }) {
+    const points = Math.floor(Number(dto.points));
+    if (!Number.isFinite(points) || points <= 0) {
+      throw new BadRequestException('Nombre de points invalide');
+    }
+
+    const journal = await this.prisma.journal.findUnique({
+      where: { id: dto.journalId },
+      select: {
+        id: true,
+        memberID: true,
+        isPayed: true,
+        payedAmount: true,
+        isReservation: true,
+        isAnonymous: true,
+      },
+    });
+    if (!journal) throw new NotFoundException('Visite introuvable');
+    if (!journal.memberID || journal.isAnonymous) {
+      throw new BadRequestException('Visite sans membre');
+    }
+    if (journal.isPayed) {
+      throw new BadRequestException('Visite déjà payée');
+    }
+
+    const due = Math.max(0, Number(journal.payedAmount || 0));
+    if (due <= 0) {
+      throw new BadRequestException('Montant dû invalide');
+    }
+
+    const maxPts = dtToRedeemPoints(due);
+    const member = await this.prisma.member.findUnique({
+      where: { id: journal.memberID },
+      select: { points: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+
+    const apply = Math.min(points, maxPts, member.points);
+    if (apply <= 0) {
+      throw new BadRequestException('Solde points insuffisant');
+    }
+
+    const debit = await debitPoints(this.prisma, {
+      memberId: journal.memberID,
+      amount: apply,
+      event: PointEvent.REDEEM_VISIT,
+      refId: journal.id,
+    });
+
+    const coveredDt = pointsToDt(apply);
+    const fullyCovered = coveredDt + 1e-9 >= due;
+    const updated = await this.prisma.journal.update({
+      where: { id: journal.id },
+      data: fullyCovered ? { isPayed: true } : {},
+      include: { members: true, prices: true },
+    });
+
+    // Full cover: maybeAward yields 0 earnable after redeem subtraction.
+    if (fullyCovered) {
+      await this.maybeAwardVisitPaidPoints(updated.id);
+    }
+
+    this.eventsGateway.sendTableUpdates({
+      type: 'journal_redeem_points',
+      journalId: journal.id,
+      points: apply,
+      isPayed: fullyCovered,
+    });
+
+    return {
+      journalId: journal.id,
+      pointsApplied: apply,
+      dtCovered: coveredDt,
+      fullyCovered,
+      isPayed: fullyCovered,
+      remainingDue: fullyCovered
+        ? 0
+        : Math.round((due - coveredDt) * 100) / 100,
+      memberPoints: debit.points,
+      journal: updated,
+    };
+  }
+
+  private async expirePendingPoints(memberId: string) {
+    const now = new Date();
+    await this.prisma.memberPointEntry.updateMany({
+      where: {
+        memberId,
+        status: PointEntryStatus.PENDING,
+        expiresAt: { lt: now },
+      },
+      data: { status: PointEntryStatus.EXPIRED },
+    });
+  }
+
+  async getMemberPoints(memberId: string, isPwa: boolean) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, points: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+
+    await this.expirePendingPoints(memberId);
+
+    const [pendingAgg, trophies, journalCount, cafeCount, checkoutCount] =
+      await Promise.all([
+        this.prisma.memberPointEntry.aggregate({
+          where: { memberId, status: PointEntryStatus.PENDING },
+          _sum: { amount: true },
+        }),
+        this.prisma.memberTrophy.findMany({
+          where: { memberId },
+          orderBy: { unlockedAt: 'asc' },
+        }),
+        this.prisma.journal.count({ where: { memberID: memberId } }),
+        this.prisma.dailyProduct.count({
+          where: {
+            OR: [{ memberId }, { externalRef: memberId }],
+            status: { not: ProductOrderStatus.CANCELLED },
+          },
+        }),
+        this.prisma.journal.count({
+          where: { memberID: memberId, leaveTime: { not: null } },
+        }),
+      ]);
+
+    const pendingPoints = pendingAgg._sum.amount || 0;
+    const unlockedIds = new Set(trophies.map((t) => t.trophyId));
+    const points = isPwa ? member.points : 0;
+    const next = isPwa ? nextTrophyThreshold(member.points) : null;
+
+    return {
+      locked: !isPwa,
+      points,
+      pendingPoints,
+      /** Browser teaser — shows what they risk losing */
+      displayHint: isPwa ? member.points : pendingPoints,
+      nextTrophy: next,
+      trophies: TROPHY_CATALOG.map((t) => ({
+        ...t,
+        unlocked: unlockedIds.has(t.id),
+        unlockedAt:
+          trophies.find((u) => u.trophyId === t.id)?.unlockedAt ?? null,
+      })),
+      stats: {
+        sessions: journalCount,
+        cafeOrders: cafeCount,
+        checkouts: checkoutCount,
+      },
+    };
+  }
+
+  async awardPoints(dto: {
+    memberId: string;
+    event: PointEvent | keyof typeof POINT_AMOUNTS;
+    isPwa: boolean;
+  }) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: dto.memberId },
+      select: { id: true, points: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+
+    const event = dto.event as PointEvent;
+    if (
+      event === PointEvent.VISIT_PAID ||
+      event === PointEvent.PRODUCT_PAID ||
+      event === PointEvent.CAFE_ORDER ||
+      event === PointEvent.CHECK_IN ||
+      event === PointEvent.CHECK_OUT ||
+      event === PointEvent.ADMIN_ADJUST ||
+      event === PointEvent.REDEEM_VISIT ||
+      event === PointEvent.REDEEM_ORDER
+    ) {
+      throw new BadRequestException(
+        'Ces points sont gérés côté serveur (paiement / admin)',
+      );
+    }
+    const amount = POINT_AMOUNTS[event];
+    if (!amount || amount <= 0) {
+      throw new BadRequestException('Événement points invalide');
+    }
+
+    // One-time install bonus
+    if (event === PointEvent.INSTALL_PWA) {
+      const already = await this.prisma.memberPointEntry.findFirst({
+        where: {
+          memberId: dto.memberId,
+          event: PointEvent.INSTALL_PWA,
+          status: {
+            in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
+          },
+        },
+      });
+      if (already) {
+        return {
+          amount: 0,
+          credited: already.status === PointEntryStatus.CREDITED,
+          pending: already.status === PointEntryStatus.PENDING,
+          points: member.points,
+          flash: false,
+          newTrophies: [] as string[],
+          message: 'Bonus installation déjà attribué',
+        };
+      }
+      if (!dto.isPwa) {
+        throw new BadRequestException(
+          'Le bonus installation nécessite l’app installée',
+        );
+      }
+    }
+
+    await this.expirePendingPoints(dto.memberId);
+
+    if (!dto.isPwa) {
+      const expiresAt = addDays(new Date(), PENDING_POINTS_TTL_DAYS);
+      await this.prisma.memberPointEntry.create({
+        data: {
+          memberId: dto.memberId,
+          amount,
+          event,
+          status: PointEntryStatus.PENDING,
+          expiresAt,
+        },
+      });
+      const pendingAgg = await this.prisma.memberPointEntry.aggregate({
+        where: {
+          memberId: dto.memberId,
+          status: PointEntryStatus.PENDING,
+        },
+        _sum: { amount: true },
+      });
+      return {
+        amount,
+        credited: false,
+        pending: true,
+        points: 0,
+        pendingPoints: pendingAgg._sum.amount || 0,
+        flash: true,
+        newTrophies: [] as string[],
+        message: `+${amount} pts en attente — installez l’app pour les garder`,
+      };
+    }
+
+    const now = new Date();
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.memberPointEntry.create({
+        data: {
+          memberId: dto.memberId,
+          amount,
+          event,
+          status: PointEntryStatus.CREDITED,
+          creditedAt: now,
+        },
+      }),
+      this.prisma.member.update({
+        where: { id: dto.memberId },
+        data: { points: { increment: amount } },
+        select: { points: true },
+      }),
+    ]);
+
+    const newTrophies = await this.evaluateTrophies(dto.memberId, event);
+
+    return {
+      amount,
+      credited: true,
+      pending: false,
+      points: updated.points,
+      pendingPoints: 0,
+      flash: true,
+      newTrophies,
+      message: `+${amount} pts`,
+    };
+  }
+
+  async claimPendingPoints(memberId: string, isPwa: boolean) {
+    if (!isPwa) {
+      throw new BadRequestException(
+        'Seule l’app installée peut sauvegarder les points',
+      );
+    }
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, points: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+
+    await this.expirePendingPoints(memberId);
+
+    const pending = await this.prisma.memberPointEntry.findMany({
+      where: { memberId, status: PointEntryStatus.PENDING },
+    });
+    const sum = pending.reduce((acc, e) => acc + e.amount, 0);
+    if (sum <= 0) {
+      // Still try install bonus if never claimed
+      const install = await this.awardPoints({
+        memberId,
+        event: PointEvent.INSTALL_PWA,
+        isPwa: true,
+      });
+      const snapshot = await this.getMemberPoints(memberId, true);
+      return {
+        claimed: install.amount,
+        points: snapshot.points,
+        flash: install.amount > 0,
+        newTrophies: install.newTrophies,
+        message:
+          install.amount > 0
+            ? `+${install.amount} pts (bonus app)`
+            : 'Aucun point en attente',
+      };
+    }
+
+    const now = new Date();
+    const ids = pending.map((p) => p.id);
+    const [, updated] = await this.prisma.$transaction([
+      this.prisma.memberPointEntry.updateMany({
+        where: { id: { in: ids } },
+        data: { status: PointEntryStatus.CREDITED, creditedAt: now },
+      }),
+      this.prisma.member.update({
+        where: { id: memberId },
+        data: { points: { increment: sum } },
+        select: { points: true },
+      }),
+    ]);
+
+    // Install bonus on first successful claim in PWA
+    const install = await this.awardPoints({
+      memberId,
+      event: PointEvent.INSTALL_PWA,
+      isPwa: true,
+    });
+    const newTrophies = [
+      ...(await this.evaluateTrophies(memberId)),
+      ...install.newTrophies,
+    ];
+    const uniqueTrophies = [...new Set(newTrophies)];
+    const totalFlash = sum + (install.amount || 0);
+    const finalPoints = updated.points + (install.amount || 0);
+
+    return {
+      claimed: totalFlash,
+      points: finalPoints,
+      flash: true,
+      newTrophies: uniqueTrophies,
+      message: `+${totalFlash} pts sauvegardés`,
+    };
+  }
+
+  private async evaluateTrophies(
+    memberId: string,
+    triggerEvent?: PointEvent,
+  ): Promise<string[]> {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { points: true },
+    });
+    if (!member) return [];
+
+    const [existing, journalCount, cafeCount, checkoutCount, hasInstall] =
+      await Promise.all([
+        this.prisma.memberTrophy.findMany({
+          where: { memberId },
+          select: { trophyId: true },
+        }),
+        this.prisma.journal.count({ where: { memberID: memberId } }),
+        this.prisma.dailyProduct.count({
+          where: {
+            OR: [{ memberId }, { externalRef: memberId }],
+            status: { not: ProductOrderStatus.CANCELLED },
+          },
+        }),
+        this.prisma.journal.count({
+          where: { memberID: memberId, leaveTime: { not: null } },
+        }),
+        this.prisma.memberPointEntry.findFirst({
+          where: {
+            memberId,
+            event: PointEvent.INSTALL_PWA,
+            status: PointEntryStatus.CREDITED,
+          },
+        }),
+      ]);
+
+    const have = new Set(existing.map((t) => t.trophyId));
+    const candidates: string[] = [];
+
+    if (journalCount >= 1) candidates.push('first_checkin');
+    if (hasInstall || triggerEvent === PointEvent.INSTALL_PWA) {
+      candidates.push('install_pwa');
+    }
+    if (journalCount >= 10) candidates.push('sessions_10');
+    if (member.points >= 500) candidates.push('points_500');
+    if (member.points >= 2500) candidates.push('points_2500');
+    if (member.points >= 10000) candidates.push('points_10000');
+    if (cafeCount >= 5) candidates.push('cafe_5');
+    if (checkoutCount >= 5) candidates.push('checkout_5');
+
+    const unlocked: string[] = [];
+    for (const trophyId of candidates) {
+      if (have.has(trophyId)) continue;
+      if (!TROPHY_CATALOG.some((t) => t.id === trophyId)) continue;
+      try {
+        await this.prisma.memberTrophy.create({
+          data: { memberId, trophyId },
+        });
+        unlocked.push(trophyId);
+      } catch {
+        /* unique race */
+      }
+    }
+    return unlocked;
   }
 }

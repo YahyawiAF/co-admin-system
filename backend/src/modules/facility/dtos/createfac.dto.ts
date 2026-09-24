@@ -17,6 +17,11 @@ export enum MobileSeatModeDto {
   AUTO_ASSIGN = 'AUTO_ASSIGN',
 }
 
+export enum PromoValueKindDto {
+  PERCENT = 'PERCENT',
+  FIXED_DT = 'FIXED_DT',
+}
+
 export class CreateFacilityDto {
   @ApiProperty({ required: true })
   @IsNotEmpty()
@@ -103,4 +108,23 @@ export class CreateFacilityDto {
   @IsOptional()
   @IsString()
   organizationId?: string | null;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsBoolean()
+  appInstallGlobalPromoActive?: boolean;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    enum: PromoValueKindDto,
+  })
+  @IsOptional()
+  @IsEnum(PromoValueKindDto)
+  appInstallGlobalPromoKind?: PromoValueKindDto | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  @IsOptional()
+  @IsNumber()
+  appInstallGlobalPromoValue?: number | null;
 }

@@ -110,6 +110,12 @@ export function saveVisitorCache(
 export function clearVisitorCache(org?: string) {
   if (typeof window === "undefined") return;
   const slug = org || getActiveOrg();
+  const mid =
+    (slug && sessionStorage.getItem(sessionMemberKey(slug))) ||
+    sessionStorage.getItem("memberId");
+  if (mid) {
+    sessionStorage.removeItem(`accueil_routed_${mid}`);
+  }
   if (slug) {
     localStorage.removeItem(cacheKey(slug));
     sessionStorage.removeItem(sessionMemberKey(slug));

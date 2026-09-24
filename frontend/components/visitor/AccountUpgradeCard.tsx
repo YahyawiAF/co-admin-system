@@ -21,12 +21,13 @@ type Props = {
 };
 
 /**
- * Same-member upgrade: create account = set PIN.
- * PIN only in the installed PWA. Browser shows download CTA.
+ * Same-member upgrade: create account = set PIN (optional, PWA).
+ * Soft security for communauté / abonnement — not required for pointage.
+ * Browser shows download CTA; PIN form only in installed PWA.
  */
 export function AccountUpgradeCard({
-  title = "Créer un compte",
-  description = "Abonnement, communauté et points fidélité — dans l’app installée, avec un PIN.",
+  title = "Sécuriser l’app (optionnel)",
+  description = "Ajoutez un PIN pour la communauté et l’abonnement. Le pointage reste possible sans PIN.",
   className,
 }: Props) {
   const queryClient = useQueryClient();
@@ -72,8 +73,8 @@ export function AccountUpgradeCard({
             <h3 className="font-bold text-slate-900">{title}</h3>
             <p className="mt-1 text-sm text-slate-500">{description}</p>
             <p className="mt-2 text-xs text-slate-400">
-              Installez l’app pour définir votre PIN, accéder à la communauté et
-              cumuler des points / cadeaux.
+              Installez l’app, puis choisissez un PIN quand vous voulez.
+              Pointage et forfait marchent déjà sans PIN.
             </p>
           </div>
         </div>

@@ -23,6 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { MemberInviteShare } from "@/components/admin/MemberInviteShare";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
+import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { membersApi, mobileApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Member } from "@/lib/types";
@@ -244,6 +245,19 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const adjustPoints = useMutation({
+    mutationFn: (payload: { memberId: string; delta: number }) =>
+      mobileApi.adjustPoints(payload),
+    onSuccess: (res) => {
+      toast.success(res.message);
+      queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({
+        queryKey: ["member-insights", member!.id],
+      });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const mergeCandidates = useMemo(() => {
     if (!showMerge || !member?.id) return [];
     const list = Array.isArray(allMembers) ? allMembers : [];
@@ -316,6 +330,72 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                 {m.group?.name ? (
                   <Badge className="ml-1 mt-1">{m.group.name}</Badge>
                 ) : null}
+                <div className="mt-1.5">
+                  <MemberRewardsBadges member={m} />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold">Points</p>
+                  <p className="text-2xl font-bold tabular-nums text-indigo-600">
+                    {Number(m.points ?? 0).toLocaleString("fr-FR")}
+                    <span className="ml-1 text-sm font-medium text-muted-foreground">
+                      pts
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    100 pts = 1 DT · gain = montant × 100
+                  </p>
+                </div>
+                <div className="flex gap-1.5">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={adjustPoints.isPending}
+                    onClick={() => {
+                      const raw = window.prompt(
+                        "Ajouter combien de points ?",
+                        "50"
+                      );
+                      if (raw == null) return;
+                      const n = Math.floor(Number(raw));
+                      if (!Number.isFinite(n) || n <= 0) {
+                        toast.error("Nombre invalide");
+                        return;
+                      }
+                      adjustPoints.mutate({ memberId: m.id, delta: n });
+                    }}
+                  >
+                    Ajouter
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={
+                      adjustPoints.isPending || Number(m.points ?? 0) <= 0
+                    }
+                    onClick={() => {
+                      const raw = window.prompt(
+                        "Retirer combien de points ?",
+                        "10"
+                      );
+                      if (raw == null) return;
+                      const n = Math.floor(Number(raw));
+                      if (!Number.isFinite(n) || n <= 0) {
+                        toast.error("Nombre invalide");
+                        return;
+                      }
+                      adjustPoints.mutate({ memberId: m.id, delta: -n });
+                    }}
+                  >
+                    Retirer
+                  </Button>
+                </div>
               </div>
             </div>
 

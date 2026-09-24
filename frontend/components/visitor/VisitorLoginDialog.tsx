@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -26,26 +26,64 @@ import type { Member } from "@/lib/types";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Prefill phone (e.g. from Welcome). */
+  initialPhone?: string;
 };
 
-/** Account login (téléphone + PIN) — for members who already upgraded. */
-export function VisitorLoginDialog({ open, onOpenChange }: Props) {
+type Step = "phone" | "pin" | "code";
+
+/**
+ * Easy PWA/web login:
+ * - Phone only → resume light profile (no PIN)
+ * - If account has PIN → ask PIN
+ * - Recovery code as fallback
+ */
+export function VisitorLoginDialog({
+  open,
+  onOpenChange,
+  initialPhone,
+}: Props) {
   const router = useRouter();
   const { slug, href } = useOrg();
   const { confirm } = useVisitorSession();
-  const [phone, setPhone] = useState<string | undefined>();
+  const [phone, setPhone] = useState<string | undefined>(initialPhone);
   const [loginPin, setLoginPin] = useState("");
   const [shortCode, setShortCode] = useState("");
-  const [mode, setMode] = useState<"pin" | "code">("pin");
+  const [step, setStep] = useState<Step>("phone");
+  const [greeting, setGreeting] = useState<string | null>(null);
+  const [lookingUp, setLookingUp] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setPhone(initialPhone);
+    setLoginPin("");
+    setShortCode("");
+    setStep("phone");
+    setGreeting(null);
+  }, [open, initialPhone]);
 
   const finish = (member: Member, accessToken?: string) => {
     confirm(member, accessToken);
     onOpenChange(false);
     setLoginPin("");
     setShortCode("");
-    // Accueil will route: abo → presence, else → forfait
+    setStep("phone");
     router.replace(href());
   };
+
+  const lightLogin = useMutation({
+    mutationFn: () =>
+      mobileApi.login({ phone: phone || "", orgSlug: slug }),
+    onSuccess: (res) => {
+      toast.success(
+        res.member.firstName
+          ? `Bonjour ${res.member.firstName}`
+          : "Connexion réussie"
+      );
+      finish(res.member, res.accessToken);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const pinLogin = useMutation({
     mutationFn: () =>
@@ -75,18 +113,53 @@ export function VisitorLoginDialog({ open, onOpenChange }: Props) {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const continueWithPhone = async () => {
+    if (!isTunisiaPhone(phone)) return;
+    setLookingUp(true);
+    try {
+      const found = await mobileApi.lookupPhone(phone || "", slug);
+      if (!found.exists) {
+        toast.message("Nouveau numéro — inscrivez-vous sur Accueil (nom + téléphone)");
+        onOpenChange(false);
+        return;
+      }
+      setGreeting(found.firstName || null);
+      if (found.hasPin) {
+        setStep("pin");
+        return;
+      }
+      lightLogin.mutate();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
+  const busy =
+    lookingUp ||
+    lightLogin.isPending ||
+    pinLogin.isPending ||
+    codeLogin.isPending;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {mode === "pin" ? "Connexion" : "Code de récupération"}
+            {step === "code"
+              ? "Code de récupération"
+              : step === "pin"
+                ? "Votre PIN"
+                : "Connexion"}
           </DialogTitle>
         </DialogHeader>
-        {mode === "pin" ? (
+
+        {step === "phone" ? (
           <div className="space-y-3">
             <p className="text-sm text-slate-500">
-              Compte avec PIN (app installée) — téléphone + 4 chiffres.
+              Entrez votre téléphone — pas besoin de PIN si vous n&apos;en avez
+              pas encore créé.
             </p>
             <div>
               <Label>Téléphone</Label>
@@ -96,6 +169,43 @@ export function VisitorLoginDialog({ open, onOpenChange }: Props) {
                 onChange={setPhone}
               />
             </div>
+            <Button
+              className="h-12 w-full rounded-full"
+              disabled={!isTunisiaPhone(phone) || busy}
+              onClick={() => void continueWithPhone()}
+            >
+              {busy ? "…" : "Continuer"}
+            </Button>
+            <p className="text-center text-xs text-slate-500">
+              PIN oublié ?{" "}
+              <button
+                type="button"
+                className="font-medium text-indigo-600"
+                onClick={() => setStep("code")}
+              >
+                Code accueil
+              </button>
+            </p>
+          </div>
+        ) : null}
+
+        {step === "pin" ? (
+          <div className="space-y-3">
+            <button
+              type="button"
+              className="text-sm text-indigo-600"
+              onClick={() => {
+                setStep("phone");
+                setLoginPin("");
+              }}
+            >
+              ← Retour
+            </button>
+            <p className="text-sm text-slate-500">
+              {greeting
+                ? `Bonjour ${greeting} — entrez votre PIN à 4 chiffres.`
+                : "Compte sécurisé — PIN à 4 chiffres."}
+            </p>
             <div>
               <Label>PIN</Label>
               <Input
@@ -107,15 +217,12 @@ export function VisitorLoginDialog({ open, onOpenChange }: Props) {
                   setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 4))
                 }
                 placeholder="••••"
+                autoFocus
               />
             </div>
             <Button
               className="h-12 w-full rounded-full"
-              disabled={
-                !isTunisiaPhone(phone) ||
-                !/^\d{4}$/.test(loginPin) ||
-                pinLogin.isPending
-              }
+              disabled={!/^\d{4}$/.test(loginPin) || pinLogin.isPending}
               onClick={() => pinLogin.mutate()}
             >
               Se connecter
@@ -125,18 +232,20 @@ export function VisitorLoginDialog({ open, onOpenChange }: Props) {
               <button
                 type="button"
                 className="font-medium text-indigo-600"
-                onClick={() => setMode("code")}
+                onClick={() => setStep("code")}
               >
                 Code accueil
               </button>
             </p>
           </div>
-        ) : (
+        ) : null}
+
+        {step === "code" ? (
           <div className="space-y-3">
             <button
               type="button"
               className="text-sm text-indigo-600"
-              onClick={() => setMode("pin")}
+              onClick={() => setStep("phone")}
             >
               ← Retour
             </button>
@@ -186,7 +295,7 @@ export function VisitorLoginDialog({ open, onOpenChange }: Props) {
               </Link>
             </p>
           </div>
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );

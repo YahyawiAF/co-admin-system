@@ -11,6 +11,10 @@ import {
 } from '@nestjs/common';
 import { FacilityService } from './facility.service';
 import { UpdateFacilityDto } from './dtos/updateFac.dto';
+import {
+  CreateAppInstallPromoDto,
+  UpdateAppInstallPromoDto,
+} from './dtos/app-install-promo.dto';
 import { PriceCategory, SpaceReserveMode } from '@prisma/client';
 
 @Controller('facilities')
@@ -247,6 +251,32 @@ export class FacilityController {
   @Get(':id/away-arrivals')
   awayArrivals(@Param('id') id: string) {
     return this.facilityService.listAwayArrivals(id);
+  }
+
+  @Get(':id/promos')
+  listPromos(@Param('id') id: string) {
+    return this.facilityService.listAppInstallPromos(id);
+  }
+
+  @Post(':id/promos')
+  createPromo(
+    @Param('id') id: string,
+    @Body() dto: CreateAppInstallPromoDto,
+  ) {
+    return this.facilityService.createAppInstallPromo(id, dto);
+  }
+
+  @Patch('promos/:promoId')
+  updatePromo(
+    @Param('promoId') promoId: string,
+    @Body() dto: UpdateAppInstallPromoDto,
+  ) {
+    return this.facilityService.updateAppInstallPromo(promoId, dto);
+  }
+
+  @Delete('promos/:promoId')
+  deletePromo(@Param('promoId') promoId: string) {
+    return this.facilityService.deleteAppInstallPromo(promoId);
   }
 
   @Get(':id')

@@ -89,3 +89,55 @@
 .seat-pulse-ring {
   animation: seat-pulse-ring 1.4s ease-out infinite;
 }
+
+@keyframes visitorPointFlash {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.85);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0) scale(1.08);
+  }
+  40% {
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px) scale(0.95);
+  }
+}
+
+@keyframes visitorPalierSpark {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(0) scale(1.12);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-18px) scale(0.9);
+  }
+}
+
+@keyframes visitorPointsCountUp {
+  0% {
+    color: #4f46e5;
+    text-shadow: 0 0 0 transparent;
+  }
+  40% {
+    color: #d97706;
+    text-shadow: 0 0 18px rgba(251, 191, 36, 0.55);
+  }
+  100% {
+    color: #4f46e5;
+    text-shadow: 0 0 0 transparent;
+  }
+}

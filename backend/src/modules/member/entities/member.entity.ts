@@ -103,6 +103,16 @@ export class MemberEntity implements Member {
   @ApiProperty({ required: false, nullable: true })
   discountOpenSpace: number | null;
 
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'When the member already used the one-time app-install promo',
+  })
+  appInstallPromoClaimedAt: Date | null;
+
+  @ApiProperty({ description: 'Gamification points (credited in PWA only)' })
+  points: number;
+
   @ApiProperty({ required: false, type: [String] })
   skills: string[];
 

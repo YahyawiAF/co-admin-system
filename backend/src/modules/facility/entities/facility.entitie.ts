@@ -49,6 +49,19 @@ export class FacilityEntity {
   @ApiProperty({ required: false, nullable: true })
   receptionAwayStartedAt?: Date | string | null;
 
+  @ApiProperty({ required: false })
+  appInstallGlobalPromoActive?: boolean;
+
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    enum: ['PERCENT', 'FIXED_DT'],
+  })
+  appInstallGlobalPromoKind?: 'PERCENT' | 'FIXED_DT' | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  appInstallGlobalPromoValue?: number | null;
+
   @ApiProperty()
   createdAt: Date;
 

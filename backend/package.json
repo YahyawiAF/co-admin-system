@@ -15,6 +15,7 @@
     "test": "jest",
     "prisma:dev": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "prisma:ensure-promo": "node scripts/ensure-promo-schema.cjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:reset": "prisma migrate reset",

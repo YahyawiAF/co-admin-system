@@ -29,6 +29,29 @@ export enum BillingUnit {
   PERIOD = "PERIOD",
 }
 
+export enum PromoValueKind {
+  PERCENT = "PERCENT",
+  FIXED_DT = "FIXED_DT",
+}
+
+export interface AppInstallPromo {
+  id: string;
+  facilityId?: string;
+  priceId: string;
+  valueKind: PromoValueKind;
+  value: number;
+  sortOrder?: number;
+  isActive?: boolean;
+  priceName?: string;
+  priceAmount?: number;
+}
+
+export interface AppInstallGlobalPromo {
+  valueKind: PromoValueKind;
+  value: number;
+  oneTime?: boolean;
+}
+
 export interface TimeInterval {
   start: string;
   end: string;
@@ -62,6 +85,12 @@ export interface Member {
   visitorNumber?: number | null;
   plan?: Subscription | null;
   credits?: number;
+  /** Gamification points credited in PWA */
+  points?: number;
+  /** When the member used the one-time app-install promo */
+  appInstallPromoClaimedAt?: string | null;
+  /** False once the one-time install promo was used */
+  appInstallPromoEligible?: boolean;
   isActive?: boolean;
   passwordHash?: string | null;
   bio?: string | null;
@@ -227,6 +256,9 @@ export interface Facility {
   mobileSeatMode?: MobileSeatMode;
   receptionAway?: boolean;
   receptionAwayStartedAt?: string | null;
+  appInstallGlobalPromoActive?: boolean;
+  appInstallGlobalPromoKind?: PromoValueKind | null;
+  appInstallGlobalPromoValue?: number | null;
   organizationId?: string | null;
   spaces?: Space[];
 }

@@ -245,9 +245,15 @@ export default function FacilityPage() {
   useEffect(() => {
     if (facilitiesLoading) return;
     if (facilities.length === 0) {
-      facilityApi.create().then(() => {
-        queryClient.invalidateQueries({ queryKey: queryKeys.facility });
-      });
+      facilityApi
+        .create()
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: queryKeys.facility });
+        })
+        .catch((e: Error) => {
+          // Avoid uncaught "Failed to fetch" when API/DB is down
+          console.warn("Facility bootstrap skipped:", e.message);
+        });
     }
   }, [facilities.length, facilitiesLoading, queryClient]);
 

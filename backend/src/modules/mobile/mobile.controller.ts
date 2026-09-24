@@ -30,6 +30,10 @@ import {
   UpdateMobileOrderDto,
   UpdateMobileProfileDto,
   MoveSeatDto,
+  AwardPointsDto,
+  ClaimPendingPointsDto,
+  AdjustPointsDto,
+  RedeemVisitPointsDto,
 } from './dtos/mobile.dto';
 import { PriceService } from '../price/price.service';
 
@@ -103,8 +107,11 @@ export class MobileController {
   }
 
   @Get('floor-plan')
-  floorPlan(@Query('org') org?: string) {
-    return this.mobileService.getFloorPlanForVisitor(org);
+  floorPlan(
+    @Query('org') org?: string,
+    @Query('memberId') memberId?: string,
+  ) {
+    return this.mobileService.getFloorPlanForVisitor(org, memberId);
   }
 
   @Get('status/:memberId')
@@ -116,6 +123,37 @@ export class MobileController {
         status.session as any,
       ),
     };
+  }
+
+  @Get('points/:memberId')
+  getPoints(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Query('pwa') pwa?: string,
+  ) {
+    return this.mobileService.getMemberPoints(
+      memberId,
+      pwa === '1' || pwa === 'true',
+    );
+  }
+
+  @Post('points/award')
+  awardPoints(@Body() dto: AwardPointsDto) {
+    return this.mobileService.awardPoints(dto);
+  }
+
+  @Post('points/claim')
+  claimPoints(@Body() dto: ClaimPendingPointsDto) {
+    return this.mobileService.claimPendingPoints(dto.memberId, dto.isPwa);
+  }
+
+  @Post('admin/points/adjust')
+  adjustPoints(@Body() dto: AdjustPointsDto) {
+    return this.mobileService.adminAdjustPoints(dto);
+  }
+
+  @Post('admin/points/redeem-visit')
+  redeemVisitPoints(@Body() dto: RedeemVisitPointsDto) {
+    return this.mobileService.adminRedeemVisitPoints(dto);
   }
 
   @Get('history/:memberId')

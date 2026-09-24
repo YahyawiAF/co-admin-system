@@ -1,10 +1,26 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, PriceCategory, FixtureKind, SpaceReserveMode } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  PriceCategory,
+  FixtureKind,
+  SpaceReserveMode,
+  PromoValueKind,
+} from '@prisma/client';
 import { startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { FacilityEntity } from './entities/facility.entitie';
 import { defaultReserveMode } from '../mobile/space-occupy';
 import { UpdateFacilityDto } from './dtos/updateFac.dto';
+import {
+  CreateAppInstallPromoDto,
+  UpdateAppInstallPromoDto,
+} from './dtos/app-install-promo.dto';
+
+const MAX_APP_INSTALL_PROMOS = 3;
 
 @Injectable()
 export class FacilityService {
@@ -899,6 +915,162 @@ export class FacilityService {
         data: { capacityNormal: sp.seats.length },
       });
     }
+  }
+
+  private mapPromo(p: {
+    id: string;
+    facilityId: string;
+    priceId: string;
+    valueKind: PromoValueKind;
+    value: number;
+    sortOrder: number;
+    isActive: boolean;
+    price?: { name: string; price: number } | null;
+  }) {
+    return {
+      id: p.id,
+      facilityId: p.facilityId,
+      priceId: p.priceId,
+      valueKind: p.valueKind,
+      value: p.value,
+      sortOrder: p.sortOrder,
+      isActive: p.isActive,
+      priceName: p.price?.name,
+      priceAmount: p.price?.price,
+    };
+  }
+
+  private assertAbonnementPrice(price: {
+    category: PriceCategory | null;
+    categories: PriceCategory[];
+    type: string;
+  }) {
+    const cats = price.categories?.length
+      ? price.categories
+      : price.category
+        ? [price.category]
+        : [];
+    const isAbo =
+      cats.includes(PriceCategory.ABONNEMENT) ||
+      price.type === 'abonnement';
+    if (!isAbo) {
+      throw new BadRequestException(
+        'La promo doit être liée à un tarif abonnement uniquement',
+      );
+    }
+  }
+
+  private validatePromoValue(valueKind: PromoValueKind, value: number) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new BadRequestException('Valeur promo invalide');
+    }
+    if (valueKind === PromoValueKind.PERCENT && value > 100) {
+      throw new BadRequestException('Le pourcentage ne peut pas dépasser 100');
+    }
+  }
+
+  async listAppInstallPromos(facilityId: string) {
+    const facility = await this.prisma.facility.findUnique({
+      where: { id: facilityId },
+    });
+    if (!facility) {
+      throw new NotFoundException(`Facility with ID ${facilityId} not found`);
+    }
+    const promos = await this.prisma.appInstallPromo.findMany({
+      where: { facilityId },
+      include: { price: { select: { name: true, price: true } } },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    });
+    return promos.map((p) => this.mapPromo(p));
+  }
+
+  async createAppInstallPromo(
+    facilityId: string,
+    dto: CreateAppInstallPromoDto,
+  ) {
+    const facility = await this.prisma.facility.findUnique({
+      where: { id: facilityId },
+    });
+    if (!facility) {
+      throw new NotFoundException(`Facility with ID ${facilityId} not found`);
+    }
+
+    const count = await this.prisma.appInstallPromo.count({
+      where: { facilityId },
+    });
+    if (count >= MAX_APP_INSTALL_PROMOS) {
+      throw new BadRequestException(
+        `Maximum ${MAX_APP_INSTALL_PROMOS} promos par établissement`,
+      );
+    }
+
+    const price = await this.prisma.price.findUnique({
+      where: { id: dto.priceId },
+    });
+    if (!price) throw new NotFoundException('Tarif introuvable');
+    this.assertAbonnementPrice(price);
+    this.validatePromoValue(dto.valueKind, dto.value);
+
+    const maxSort = await this.prisma.appInstallPromo.aggregate({
+      where: { facilityId },
+      _max: { sortOrder: true },
+    });
+    const sortOrder =
+      dto.sortOrder ?? (maxSort._max.sortOrder ?? -1) + 1;
+
+    const promo = await this.prisma.appInstallPromo.create({
+      data: {
+        facilityId,
+        priceId: dto.priceId,
+        valueKind: dto.valueKind,
+        value: dto.value,
+        sortOrder,
+        isActive: dto.isActive ?? true,
+      },
+      include: { price: { select: { name: true, price: true } } },
+    });
+    return this.mapPromo(promo);
+  }
+
+  async updateAppInstallPromo(id: string, dto: UpdateAppInstallPromoDto) {
+    const existing = await this.prisma.appInstallPromo.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Promo introuvable');
+
+    if (dto.priceId) {
+      const price = await this.prisma.price.findUnique({
+        where: { id: dto.priceId },
+      });
+      if (!price) throw new NotFoundException('Tarif introuvable');
+      this.assertAbonnementPrice(price);
+    }
+
+    const valueKind = dto.valueKind ?? existing.valueKind;
+    const value = dto.value ?? existing.value;
+    this.validatePromoValue(valueKind, value);
+
+    const promo = await this.prisma.appInstallPromo.update({
+      where: { id },
+      data: {
+        ...(dto.priceId !== undefined ? { priceId: dto.priceId } : {}),
+        ...(dto.valueKind !== undefined ? { valueKind: dto.valueKind } : {}),
+        ...(dto.value !== undefined ? { value: dto.value } : {}),
+        ...(dto.sortOrder !== undefined ? { sortOrder: dto.sortOrder } : {}),
+        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+      },
+      include: { price: { select: { name: true, price: true } } },
+    });
+    return this.mapPromo(promo);
+  }
+
+  async deleteAppInstallPromo(id: string) {
+    const existing = await this.prisma.appInstallPromo.findUnique({
+      where: { id },
+    });
+    if (!existing) throw new NotFoundException('Promo introuvable');
+    await this.prisma.appInstallPromo.delete({ where: { id } });
+    return { ok: true };
   }
 }
 

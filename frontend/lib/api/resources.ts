@@ -38,6 +38,9 @@ import type {
   DebtorMember,
   AwayArrivalsResponse,
   SeatHistoryDay,
+  AppInstallPromo,
+  PromoValueKind,
+  AppInstallGlobalPromo,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -263,6 +266,42 @@ export const facilityApi = {
   },
   awayArrivals(id: string) {
     return http.get<AwayArrivalsResponse>(`/facilities/${id}/away-arrivals`);
+  },
+  listPromos(facilityId: string) {
+    return http.get<AppInstallPromo[]>(`/facilities/${facilityId}/promos`);
+  },
+  createPromo(
+    facilityId: string,
+    data: {
+      priceId: string;
+      valueKind: PromoValueKind;
+      value: number;
+      sortOrder?: number;
+      isActive?: boolean;
+    },
+  ) {
+    return http.post<AppInstallPromo>(
+      `/facilities/${facilityId}/promos`,
+      data,
+    );
+  },
+  updatePromo(
+    promoId: string,
+    data: Partial<{
+      priceId: string;
+      valueKind: PromoValueKind;
+      value: number;
+      sortOrder: number;
+      isActive: boolean;
+    }>,
+  ) {
+    return http.patch<AppInstallPromo>(
+      `/facilities/promos/${promoId}`,
+      data,
+    );
+  },
+  deletePromo(promoId: string) {
+    return http.delete<{ ok: boolean }>(`/facilities/promos/${promoId}`);
   },
   createSpace(data: {
     facilityId: string;
@@ -577,10 +616,20 @@ export const mobileApi = {
     return http.post("/mobile/admin/move-seat", data);
   },
   checkout(id: string) {
-    return http.patch(`/mobile/session/${id}/checkout`, {});
+    return http.patch<{
+      id: string;
+      pointsAwarded?: number;
+      newTrophies?: string[];
+      memberPoints?: number;
+    }>(`/mobile/session/${id}/checkout`, {});
   },
   setPayment(id: string, isPayed: boolean) {
-    return http.patch(`/mobile/session/${id}/payment`, { isPayed });
+    return http.patch<{
+      id: string;
+      pointsAwarded?: number;
+      newTrophies?: string[];
+      memberPoints?: number;
+    }>(`/mobile/session/${id}/payment`, { isPayed });
   },
   register(data: {
     phone: string;
@@ -675,19 +724,25 @@ export const mobileApi = {
       skipAuth: true,
     });
   },
-  floorPlan(org?: string) {
-    const q = org ? `?org=${encodeURIComponent(org)}` : "";
+  floorPlan(org?: string, memberId?: string) {
+    const q = new URLSearchParams();
+    if (org) q.set("org", org);
+    if (memberId) q.set("memberId", memberId);
+    const qs = q.toString() ? `?${q}` : "";
     return http.get<{
       facility: {
         id: string;
         name: string;
         mobileSeatMode: MobileSeatMode;
         receptionAway: boolean;
+        appInstallGlobalPromo?: AppInstallGlobalPromo | null;
+        appInstallPromos?: AppInstallPromo[];
+        appInstallPromoEligible?: boolean;
       } | null;
       spaces: Space[];
       bookings: SeatBooking[];
       seatSettings: MobileSeatSettings;
-    }>(`/mobile/floor-plan${q}`, { skipAuth: true });
+    }>(`/mobile/floor-plan${qs}`, { skipAuth: true });
   },
   claimSeat(memberId: string, seatLabel: string, spaceId?: string, org?: string) {
     return http.post<{ seat: SeatAssignmentInfo | null }>(
@@ -870,6 +925,48 @@ export const mobileApi = {
       { memberId },
       { skipAuth: true },
     );
+  },
+  getPoints(memberId: string, isPwa: boolean) {
+    return http.get<import("@/lib/points-catalog").MemberPointsSnapshot>(
+      `/mobile/points/${memberId}?pwa=${isPwa ? "1" : "0"}`,
+      { skipAuth: true },
+    );
+  },
+  awardPoints(data: {
+    memberId: string;
+    event: import("@/lib/points-catalog").PointEvent;
+    isPwa: boolean;
+  }) {
+    return http.post<import("@/lib/points-catalog").AwardPointsResult>(
+      "/mobile/points/award",
+      data,
+      { skipAuth: true },
+    );
+  },
+  claimPoints(memberId: string) {
+    return http.post<import("@/lib/points-catalog").ClaimPointsResult>(
+      "/mobile/points/claim",
+      { memberId, isPwa: true },
+      { skipAuth: true },
+    );
+  },
+  adjustPoints(data: { memberId: string; delta: number; note?: string }) {
+    return http.post<{
+      delta: number;
+      points: number;
+      message: string;
+    }>("/mobile/admin/points/adjust", data);
+  },
+  redeemVisitPoints(data: { journalId: string; points: number }) {
+    return http.post<{
+      journalId: string;
+      pointsApplied: number;
+      dtCovered: number;
+      fullyCovered: boolean;
+      isPayed: boolean;
+      remainingDue: number;
+      memberPoints: number;
+    }>("/mobile/admin/points/redeem-visit", data);
   },
   inbox(memberId: string) {
     return http.get<

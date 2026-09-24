@@ -32,13 +32,18 @@ function splitFullName(full: string): { firstName: string; lastName: string } {
   };
 }
 
-/** First visit: name + phone only. Returning visitors are routed by Accueil. */
+/**
+ * First visit: name + phone.
+ * Returning light member (no PIN): phone alone resumes session.
+ * Returning with PIN: use Connexion (top right).
+ */
 export function WelcomeRegister() {
   const router = useRouter();
   const { slug, href } = useOrg();
   const { confirm } = useVisitorSession();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState<string | undefined>();
+  const [lookingUp, setLookingUp] = useState(false);
 
   const finish = (member: Member, accessToken?: string, isNew = false) => {
     confirm(member, accessToken);
@@ -73,39 +78,61 @@ export function WelcomeRegister() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const resume = useMutation({
+    mutationFn: () =>
+      mobileApi.login({ phone: phone || "", orgSlug: slug }),
+    onSuccess: (res) => {
+      toast.success(
+        res.member.firstName
+          ? `Bonjour ${res.member.firstName}`
+          : "Bon retour"
+      );
+      finish(res.member, res.accessToken, false);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const submit = async () => {
+    if (!isTunisiaPhone(phone)) return;
+    setLookingUp(true);
     try {
       const found = await mobileApi.lookupPhone(phone || "", slug);
       if (found.exists && found.hasPin) {
         toast.message(
           found.firstName
-            ? `Bonjour ${found.firstName} — Connexion en haut à droite`
-            : "Compte existant — Connexion en haut à droite"
+            ? `Bonjour ${found.firstName} — Connexion (PIN) en haut à droite`
+            : "Compte avec PIN — utilisez Connexion en haut à droite"
         );
         return;
       }
+      if (found.exists && !found.hasPin) {
+        resume.mutate();
+        return;
+      }
+      if (fullName.trim().length < 2) {
+        toast.message("Indiquez votre nom complet pour créer le profil");
+        return;
+      }
+      register.mutate();
     } catch {
-      /* register / reuse light profile */
+      if (fullName.trim().length < 2) {
+        toast.message("Indiquez votre nom complet pour créer le profil");
+        return;
+      }
+      register.mutate();
+    } finally {
+      setLookingUp(false);
     }
-    register.mutate();
   };
 
-  const valid = fullName.trim().length > 1 && isTunisiaPhone(phone);
+  const busy = lookingUp || register.isPending || resume.isPending;
 
   return (
     <div className="rounded-3xl bg-white p-5 shadow-sm">
       <div className="space-y-3">
-        <div>
-          <Label>Nom complet</Label>
-          <Input
-            className="mt-1 h-11"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Prénom Nom"
-            autoComplete="name"
-            autoFocus
-          />
-        </div>
+        <p className="text-sm text-slate-500">
+          Déjà venu ? Le téléphone suffit. Nouveau ? Ajoutez aussi votre nom.
+        </p>
         <div>
           <Label>Téléphone</Label>
           <TunisiaPhoneField
@@ -114,12 +141,22 @@ export function WelcomeRegister() {
             onChange={setPhone}
           />
         </div>
+        <div>
+          <Label>Nom complet</Label>
+          <Input
+            className="mt-1 h-11"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            placeholder="Prénom Nom (si nouveau)"
+            autoComplete="name"
+          />
+        </div>
         <Button
           className="h-12 w-full rounded-full"
-          disabled={!valid || register.isPending}
+          disabled={!isTunisiaPhone(phone) || busy}
           onClick={() => void submit()}
         >
-          {register.isPending ? "…" : "Valider"}
+          {busy ? "…" : "Continuer"}
         </Button>
       </div>
     </div>
