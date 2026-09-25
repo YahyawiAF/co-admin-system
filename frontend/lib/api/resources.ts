@@ -900,7 +900,14 @@ export const mobileApi = {
     openToCollaboration?: boolean;
     showInDirectory?: boolean;
   }) {
-    return http.patch<Member>("/mobile/profile", data, { skipAuth: true });
+    return http.patch<
+      Member & {
+        pointsAwarded?: number;
+        points?: number;
+        newTrophies?: string[];
+        profileRewards?: { details: boolean; avatar: boolean };
+      }
+    >("/mobile/profile", data, { skipAuth: true });
   },
   community(memberId?: string) {
     const q = memberId ? `?memberId=${memberId}` : "";

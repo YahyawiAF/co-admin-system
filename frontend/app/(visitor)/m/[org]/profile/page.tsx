@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Camera,
@@ -34,7 +34,12 @@ import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
-import { PointsCard } from "@/components/visitor/PointsCard";
+import {
+  PointsCard,
+  dispatchPointsAward,
+} from "@/components/visitor/PointsCard";
+import { ProfileMissionCard } from "@/components/visitor/ProfileMissionCard";
+import { TrophyReveal } from "@/components/visitor/TrophyReveal";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -42,6 +47,32 @@ import {
   PROFESSION_SUGGESTIONS,
   SKILL_SUGGESTIONS,
 } from "@/lib/directory-suggestions";
+import {
+  PROFILE_AVATAR_POINTS,
+  PROFILE_COMPLETE_TROPHY_ID,
+  PROFILE_MISSION_TOTAL,
+} from "@/lib/points-catalog";
+import { isStandalonePwa } from "@/lib/visitor-notify";
+
+function isProfileDetailsDone(m?: {
+  firstName?: string | null;
+  lastName?: string | null;
+  functionality?: string | null;
+  bio?: string | null;
+  skills?: string[] | null;
+} | null) {
+  if (!m) return false;
+  const first = (m.firstName || "").trim();
+  const last = (m.lastName || "").trim();
+  const role = (m.functionality || "").trim();
+  const bio = (m.bio || "").trim();
+  const skills = (m.skills || []).filter((s) => !!s?.trim());
+  return !!first && !!last && !!role && (skills.length > 0 || !!bio);
+}
+
+function isProfileAvatarDone(m?: { avatarUrl?: string | null } | null) {
+  return (m?.avatarUrl || "").trim().length >= 24;
+}
 
 function ProfileInner() {
   const router = useRouter();
@@ -52,6 +83,10 @@ function ProfileInner() {
   const { memberId, onboarded, logout, ready } = useVisitorSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [reveal, setReveal] = useState<{
+    points: number;
+    title: string;
+  } | null>(null);
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -70,6 +105,13 @@ function ProfileInner() {
     intervalMs: false,
   });
 
+  const { data: pointsSnap } = useQuery({
+    queryKey: ["member-points", memberId, isStandalonePwa()],
+    queryFn: () => mobileApi.getPoints(memberId!, isStandalonePwa()),
+    enabled: !!memberId && onboarded,
+    staleTime: 30_000,
+  });
+
   const member = data?.member;
   const hasAccount = !!member?.hasPin;
   const subscribed = !!(data?.hasActiveSubscription || member?.isSubscribed);
@@ -77,6 +119,14 @@ function ProfileInner() {
     [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
     member?.firstName ||
     "Visiteur";
+
+  const detailsDone = isProfileDetailsDone(member);
+  const avatarDone = isProfileAvatarDone(member);
+  const missionComplete =
+    !!pointsSnap?.trophies?.some(
+      (t) => t.id === PROFILE_COMPLETE_TROPHY_ID && t.unlocked
+    ) ||
+    (detailsDone && avatarDone);
 
   const openEdit = () => {
     setForm({
@@ -110,7 +160,10 @@ function ProfileInner() {
         showInDirectory: form.showInDirectory,
       }),
     onSuccess: (updated) => {
-      toast.success("Profil enregistré");
+      const awarded = updated.pointsAwarded ?? 0;
+      const newTrophies = updated.newTrophies ?? [];
+      const unlockedComplete = newTrophies.includes(PROFILE_COMPLETE_TROPHY_ID);
+
       saveVisitorCache(
         {
           id: updated.id,
@@ -124,7 +177,31 @@ function ProfileInner() {
       );
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-community"] });
+      queryClient.invalidateQueries({ queryKey: ["member-points", memberId] });
       setEditOpen(false);
+
+      if (awarded > 0) {
+        dispatchPointsAward({
+          amount: awarded,
+          credited: true,
+          pending: false,
+          points: updated.points ?? awarded,
+          flash: true,
+          newTrophies,
+          message: `+${awarded} pts`,
+        });
+      }
+
+      if (unlockedComplete || awarded >= PROFILE_MISSION_TOTAL) {
+        setReveal({
+          points: PROFILE_MISSION_TOTAL,
+          title: "Profil complet",
+        });
+      } else if (awarded > 0) {
+        toast.success(`Profil enregistré · +${awarded} pts`);
+      } else {
+        toast.success("Profil enregistré");
+      }
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -294,6 +371,13 @@ function ProfileInner() {
         </div>
       </div>
 
+      <ProfileMissionCard
+        detailsDone={detailsDone}
+        avatarDone={avatarDone}
+        completed={missionComplete}
+        onEdit={openEdit}
+      />
+
       {memberId ? (
         <PointsCard memberId={memberId} compact={false} />
       ) : null}
@@ -378,6 +462,11 @@ function ProfileInner() {
                 onChange={(e) => onPickPhoto(e.target.files?.[0])}
               />
             </div>
+            {!isProfileAvatarDone(form) ? (
+              <p className="text-center text-[11px] text-amber-700">
+                Photo · +{PROFILE_AVATAR_POINTS} pts mission
+              </p>
+            ) : null}
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label>Prénom</Label>
@@ -474,6 +563,13 @@ function ProfileInner() {
                 }
               />
             </div>
+            {!isProfileDetailsDone(form) ? (
+              <p className="rounded-xl bg-indigo-50 px-3 py-2 text-[11px] text-indigo-700">
+                Remplissez prénom, nom, métier et compétences (ou bio) pour{" "}
+                <strong>+800 pts</strong>. Avec la photo : trophée or{" "}
+                <strong>+1000</strong>.
+              </p>
+            ) : null}
           </div>
           <DialogFooter>
             <Button
@@ -486,6 +582,13 @@ function ProfileInner() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <TrophyReveal
+        open={!!reveal}
+        points={reveal?.points}
+        title={reveal?.title}
+        onClose={() => setReveal(null)}
+      />
     </div>
   );
 }

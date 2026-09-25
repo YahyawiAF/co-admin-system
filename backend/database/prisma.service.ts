@@ -101,6 +101,24 @@ END $$`,
   END IF;
 END $$`,
   `DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON e.enumtypid = t.oid
+    WHERE t.typname = 'PointEvent' AND e.enumlabel = 'PROFILE_DETAILS'
+  ) THEN
+    ALTER TYPE "PointEvent" ADD VALUE 'PROFILE_DETAILS';
+  END IF;
+END $$`,
+  `DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum e
+    JOIN pg_type t ON e.enumtypid = t.oid
+    WHERE t.typname = 'PointEvent' AND e.enumlabel = 'PROFILE_AVATAR'
+  ) THEN
+    ALTER TYPE "PointEvent" ADD VALUE 'PROFILE_AVATAR';
+  END IF;
+END $$`,
+  `DO $$ BEGIN
   CREATE TYPE "PointEntryStatus" AS ENUM ('PENDING', 'CREDITED', 'EXPIRED');
 EXCEPTION WHEN duplicate_object THEN null; END $$`,
   `ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "points" INTEGER NOT NULL DEFAULT 0`,
@@ -177,6 +195,16 @@ WHERE EXISTS (
 AND NOT EXISTS (
   SELECT 1 FROM "_prisma_migrations"
   WHERE migration_name = '20260924120000_points_earn_redeem'
+)`,
+  `INSERT INTO "_prisma_migrations" (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
+SELECT gen_random_uuid()::text, '', NOW(), '20260925140000_profile_mission_points', NULL, NULL, NOW(), 1
+WHERE EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema = 'public' AND table_name = '_prisma_migrations'
+)
+AND NOT EXISTS (
+  SELECT 1 FROM "_prisma_migrations"
+  WHERE migration_name = '20260925140000_profile_mission_points'
 )`,
 ];
 

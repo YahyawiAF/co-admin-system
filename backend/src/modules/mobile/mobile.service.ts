@@ -47,6 +47,8 @@ import {
   nextTrophyThreshold,
   pointsToDt,
   dtToRedeemPoints,
+  PROFILE_DETAILS_POINTS,
+  PROFILE_AVATAR_POINTS,
 } from './points';
 import { creditPoints, debitPoints } from './points-ledger';
 import {
@@ -3577,17 +3579,123 @@ export class MobileService {
         where: { id: dto.memberId },
         data: { ...data, avatarUrl: dto.avatarUrl },
       });
-      return this.sanitizeMember(updated as any);
+      const rewards = await this.maybeAwardProfileMission(updated);
+      return {
+        ...this.sanitizeMember(updated as any),
+        ...rewards,
+        points: rewards.points,
+      };
     } catch {
       const updated = await this.prisma.member.update({
         where: { id: dto.memberId },
         data,
       });
-      return this.sanitizeMember({
+      const member = {
         ...(updated as any),
-        avatarUrl: dto.avatarUrl || null,
-      });
+        avatarUrl: dto.avatarUrl || (updated as any).avatarUrl || null,
+      };
+      const rewards = await this.maybeAwardProfileMission(member);
+      return {
+        ...this.sanitizeMember(member),
+        ...rewards,
+        points: rewards.points,
+      };
     }
+  }
+
+  /** True when core profile fields are filled (mission part 1). */
+  private isProfileDetailsComplete(member: {
+    firstName?: string | null;
+    lastName?: string | null;
+    functionality?: string | null;
+    bio?: string | null;
+    skills?: string[] | null;
+  }) {
+    const first = (member.firstName || '').trim();
+    const last = (member.lastName || '').trim();
+    const role = (member.functionality || '').trim();
+    const bio = (member.bio || '').trim();
+    const skills = (member.skills || []).filter((s) => !!s?.trim());
+    return !!first && !!last && !!role && (skills.length > 0 || !!bio);
+  }
+
+  private isProfileAvatarComplete(member: { avatarUrl?: string | null }) {
+    const url = (member.avatarUrl || '').trim();
+    return url.length >= 24;
+  }
+
+  /** One-time PROFILE_DETAILS (800) + PROFILE_AVATAR (200) → gold trophy. */
+  private async maybeAwardProfileMission(member: {
+    id: string;
+    points?: number | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    functionality?: string | null;
+    bio?: string | null;
+    skills?: string[] | null;
+    avatarUrl?: string | null;
+  }): Promise<{
+    pointsAwarded: number;
+    points: number;
+    newTrophies: string[];
+    profileRewards: { details: boolean; avatar: boolean };
+  }> {
+    let pointsAwarded = 0;
+    let points = member.points ?? 0;
+    const profileRewards = { details: false, avatar: false };
+    let trigger: PointEvent | undefined;
+
+    if (this.isProfileDetailsComplete(member)) {
+      const already = await this.prisma.memberPointEntry.findFirst({
+        where: {
+          memberId: member.id,
+          event: PointEvent.PROFILE_DETAILS,
+          status: PointEntryStatus.CREDITED,
+        },
+      });
+      if (!already) {
+        const credited = await creditPoints(this.prisma, {
+          memberId: member.id,
+          amount: PROFILE_DETAILS_POINTS,
+          event: PointEvent.PROFILE_DETAILS,
+          refId: member.id,
+        });
+        if (credited && credited.amount > 0) {
+          pointsAwarded += credited.amount;
+          points = credited.points;
+          profileRewards.details = true;
+          trigger = PointEvent.PROFILE_DETAILS;
+        }
+      }
+    }
+
+    if (this.isProfileAvatarComplete(member)) {
+      const already = await this.prisma.memberPointEntry.findFirst({
+        where: {
+          memberId: member.id,
+          event: PointEvent.PROFILE_AVATAR,
+          status: PointEntryStatus.CREDITED,
+        },
+      });
+      if (!already) {
+        const credited = await creditPoints(this.prisma, {
+          memberId: member.id,
+          amount: PROFILE_AVATAR_POINTS,
+          event: PointEvent.PROFILE_AVATAR,
+          refId: member.id,
+        });
+        if (credited && credited.amount > 0) {
+          pointsAwarded += credited.amount;
+          points = credited.points;
+          profileRewards.avatar = true;
+          trigger = PointEvent.PROFILE_AVATAR;
+        }
+      }
+    }
+
+    const newTrophies = await this.evaluateTrophies(member.id, trigger);
+
+    return { pointsAwarded, points, newTrophies, profileRewards };
   }
 
   async listCommunity(excludeMemberId?: string) {
@@ -5119,10 +5227,12 @@ export class MobileService {
       event === PointEvent.CHECK_OUT ||
       event === PointEvent.ADMIN_ADJUST ||
       event === PointEvent.REDEEM_VISIT ||
-      event === PointEvent.REDEEM_ORDER
+      event === PointEvent.REDEEM_ORDER ||
+      event === PointEvent.PROFILE_DETAILS ||
+      event === PointEvent.PROFILE_AVATAR
     ) {
       throw new BadRequestException(
-        'Ces points sont gérés côté serveur (paiement / admin)',
+        'Ces points sont gérés côté serveur (paiement / admin / profil)',
       );
     }
     const amount = POINT_AMOUNTS[event];
@@ -5308,7 +5418,7 @@ export class MobileService {
     });
     if (!member) return [];
 
-    const [existing, journalCount, cafeCount, checkoutCount, hasInstall] =
+    const [existing, journalCount, cafeCount, checkoutCount, hasInstall, profileAwards] =
       await Promise.all([
         this.prisma.memberTrophy.findMany({
           where: { memberId },
@@ -5331,6 +5441,16 @@ export class MobileService {
             status: PointEntryStatus.CREDITED,
           },
         }),
+        this.prisma.memberPointEntry.findMany({
+          where: {
+            memberId,
+            event: {
+              in: [PointEvent.PROFILE_DETAILS, PointEvent.PROFILE_AVATAR],
+            },
+            status: PointEntryStatus.CREDITED,
+          },
+          select: { event: true },
+        }),
       ]);
 
     const have = new Set(existing.map((t) => t.trophyId));
@@ -5346,6 +5466,17 @@ export class MobileService {
     if (member.points >= 10000) candidates.push('points_10000');
     if (cafeCount >= 5) candidates.push('cafe_5');
     if (checkoutCount >= 5) candidates.push('checkout_5');
+
+    const profileEvents = new Set(profileAwards.map((e) => e.event));
+    const hasProfileDetails =
+      profileEvents.has(PointEvent.PROFILE_DETAILS) ||
+      triggerEvent === PointEvent.PROFILE_DETAILS;
+    const hasProfileAvatar =
+      profileEvents.has(PointEvent.PROFILE_AVATAR) ||
+      triggerEvent === PointEvent.PROFILE_AVATAR;
+    if (hasProfileDetails && hasProfileAvatar) {
+      candidates.push('profile_complete');
+    }
 
     const unlocked: string[] = [];
     for (const trophyId of candidates) {

@@ -98,6 +98,8 @@ enum PointEvent {
   ADMIN_ADJUST
   REDEEM_VISIT
   REDEEM_ORDER
+  PROFILE_DETAILS
+  PROFILE_AVATAR
 }
 
 enum PointEntryStatus {

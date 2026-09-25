@@ -7,12 +7,23 @@ export type PointEvent =
   | "PRODUCT_PAID"
   | "ADMIN_ADJUST"
   | "REDEEM_VISIT"
-  | "REDEEM_ORDER";
+  | "REDEEM_ORDER"
+  | "PROFILE_DETAILS"
+  | "PROFILE_AVATAR";
 
-/** Install bonus only — visit/product earn are server-side via dtToPoints */
+/** Fixed awards — visit/product earn are server-side via dtToPoints */
 export const POINT_AMOUNTS: Partial<Record<PointEvent, number>> = {
   INSTALL_PWA: 100,
+  PROFILE_DETAILS: 800,
+  PROFILE_AVATAR: 200,
 };
+
+/** Profile mission: details 800 + photo 200 = gold trophy */
+export const PROFILE_DETAILS_POINTS = 800;
+export const PROFILE_AVATAR_POINTS = 200;
+export const PROFILE_MISSION_TOTAL =
+  PROFILE_DETAILS_POINTS + PROFILE_AVATAR_POINTS;
+export const PROFILE_COMPLETE_TROPHY_ID = "profile_complete";
 
 export const POINTS_PER_DT = 100;
 
@@ -110,6 +121,13 @@ export const TROPHY_CATALOG: TrophyDef[] = [
     description: "5 check-outs complétés",
     tier: "bronze",
     icon: "calendar",
+  },
+  {
+    id: "profile_complete",
+    name: "Profil complet",
+    description: "Détails + photo — mission +1000 pts",
+    tier: "gold",
+    icon: "cup",
   },
 ];
 

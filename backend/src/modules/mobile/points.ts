@@ -24,13 +24,21 @@ export function dtToRedeemPoints(amount: number): number {
 /** Score paliers for spark animations (crossing during count-up) */
 export const POINTS_PALIERS = [350, 700, 1000, 2500, 5000, 10000, 20000] as const;
 
-/** Legacy fixed amounts (INSTALL still used; visit/product use dtToPoints) */
+/** Legacy fixed amounts (INSTALL / profile mission; visit/product use dtToPoints) */
 export const POINT_AMOUNTS: Partial<Record<PointEvent, number>> = {
   CHECK_IN: 0,
   CHECK_OUT: 0,
   CAFE_ORDER: 0,
   INSTALL_PWA: 100,
+  PROFILE_DETAILS: 800,
+  PROFILE_AVATAR: 200,
 };
+
+/** Profile mission: details + photo = 1000 pts gold trophy */
+export const PROFILE_DETAILS_POINTS = 800;
+export const PROFILE_AVATAR_POINTS = 200;
+export const PROFILE_MISSION_TOTAL =
+  PROFILE_DETAILS_POINTS + PROFILE_AVATAR_POINTS;
 
 /** Pending browser awards expire after this many days */
 export const PENDING_POINTS_TTL_DAYS = 7;
@@ -100,6 +108,13 @@ export const TROPHY_CATALOG: TrophyDef[] = [
     description: '5 check-outs complétés',
     tier: 'bronze',
     icon: 'calendar',
+  },
+  {
+    id: 'profile_complete',
+    name: 'Profil complet',
+    description: 'Détails + photo — mission +1000 pts',
+    tier: 'gold',
+    icon: 'cup',
   },
 ];
 
