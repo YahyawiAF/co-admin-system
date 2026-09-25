@@ -84,7 +84,7 @@ export default function SessionPage() {
   }
 
   const subKind =
-    session.subscriptionKind ||
+    (session as { subscriptionKind?: string | null }).subscriptionKind ||
     (status?.subscription as { kind?: string } | null)?.kind ||
     null;
   const sessionPrice = session.prices || session.price || null;
