@@ -59,6 +59,8 @@ import {
   productsApi,
   type Expense,
 } from "@/lib/api/resources";
+import { FinanceMonthCharts } from "@/components/admin/finance/FinanceMonthCharts";
+import { FinanceServicesInsight } from "@/components/admin/finance/FinanceServicesInsight";
 
 const expenseSchema = z.object({
   name: z.string().min(1),
@@ -312,8 +314,7 @@ export default function FinancePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Finance</h1>
           <p className="text-muted-foreground">
-            Caisse, dépenses journalières / mensuelles, coffre et analytics du
-            mois
+            Caisse du jour, coffre, et analyse mensuelle (services &amp; espaces)
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -323,22 +324,25 @@ export default function FinancePage() {
             value={date}
             onChange={(e) => setDate(e.target.value)}
           />
-          <Badge variant={isClosed ? "secondary" : isOpen ? "default" : "outline"}>
+          <Badge
+            variant={isClosed ? "secondary" : isOpen ? "default" : "outline"}
+            className="h-9 px-3 text-sm"
+          >
             {isClosed ? "Clôturée" : isOpen ? "Ouverte" : "Fermée"}
           </Badge>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
         {kpis.map((k) => (
-          <Card key={k.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+          <Card key={k.label} className="shadow-none">
+            <CardHeader className="p-3 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">
                 {k.label}
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{k.value}</div>
+            <CardContent className="p-3 pt-0">
+              <div className="text-lg font-semibold tracking-tight">{k.value}</div>
             </CardContent>
           </Card>
         ))}
@@ -349,7 +353,7 @@ export default function FinancePage() {
           <TabsTrigger value="caisse">Caisse</TabsTrigger>
           <TabsTrigger value="depenses">Dépenses</TabsTrigger>
           <TabsTrigger value="coffre">Coffre</TabsTrigger>
-          <TabsTrigger value="mois">Mensuel</TabsTrigger>
+          <TabsTrigger value="mois">Analyse</TabsTrigger>
         </TabsList>
 
         <TabsContent value="caisse" className="mt-4 space-y-4">
@@ -815,9 +819,9 @@ export default function FinancePage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="mois" className="mt-4 space-y-4">
-          <div className="flex items-center gap-2">
-            <Label>Mois</Label>
+        <TabsContent value="mois" className="mt-4 space-y-6">
+          <div className="flex flex-wrap items-center gap-3">
+            <Label>Période</Label>
             <Input
               type="month"
               className="w-auto"
@@ -825,110 +829,90 @@ export default function FinancePage() {
               onChange={(e) => setMonthKey(e.target.value)}
             />
           </div>
+
           {monthData ? (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {[
-                  {
-                    label: "Journal",
-                    value: monthData.revenueJournal,
-                  },
-                  {
-                    label: "Abonnements",
-                    value: monthData.revenueAbonnements,
-                  },
-                  {
-                    label: "Produits",
-                    value: monthData.revenueProducts,
-                  },
-                  {
-                    label: "Dépenses jour",
-                    value: monthData.expensesDaily,
-                  },
-                  {
-                    label: "Dépenses mois",
-                    value: monthData.expensesMonthly,
-                  },
-                  { label: "Net", value: monthData.net },
-                  { label: "Coffre net", value: monthData.coffreNet },
-                  {
-                    label: "Jours clôturés",
-                    value: monthData.daysClosed,
-                    raw: true,
-                  },
-                ].map((k) => (
-                  <Card key={k.label}>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        {k.label}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {"raw" in k && k.raw
-                          ? k.value
-                          : `${Number(k.value).toFixed(1)} DT`}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Clôtures du mois</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>État</TableHead>
-                        <TableHead>Attendu</TableHead>
-                        <TableHead>Compté</TableHead>
-                        <TableHead>Écart</TableHead>
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+              {[
+                { label: "Journal", value: monthData.revenueJournal },
+                { label: "Abonnements", value: monthData.revenueAbonnements },
+                { label: "Produits", value: monthData.revenueProducts },
+                { label: "Net mois", value: monthData.net },
+              ].map((k) => (
+                <Card key={k.label} className="shadow-none">
+                  <CardHeader className="p-3 pb-1">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">
+                      {k.label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0">
+                    <div className="text-lg font-semibold">
+                      {Number(k.value).toFixed(1)} DT
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : null}
+
+          <FinanceMonthCharts year={year} month={month} monthData={monthData} />
+          <FinanceServicesInsight year={year} month={month} />
+
+          {monthData ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Clôtures du mois</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Date</TableHead>
+                      <TableHead>État</TableHead>
+                      <TableHead>Attendu</TableHead>
+                      <TableHead>Compté</TableHead>
+                      <TableHead>Écart</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {monthData.sessions.map((s) => (
+                      <TableRow key={String(s.date)}>
+                        <TableCell>
+                          {format(new Date(s.date), "dd/MM")}
+                        </TableCell>
+                        <TableCell>
+                          {s.closedAt ? "Clôturée" : "Ouverte"}
+                        </TableCell>
+                        <TableCell>
+                          {s.expectedClose != null
+                            ? `${s.expectedClose.toFixed(1)} DT`
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {s.countedClose != null
+                            ? `${s.countedClose.toFixed(1)} DT`
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {s.difference != null
+                            ? `${s.difference.toFixed(1)} DT`
+                            : "—"}
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {monthData.sessions.map((s) => (
-                        <TableRow key={String(s.date)}>
-                          <TableCell>
-                            {format(new Date(s.date), "dd/MM")}
-                          </TableCell>
-                          <TableCell>
-                            {s.closedAt ? "Clôturée" : "Ouverte"}
-                          </TableCell>
-                          <TableCell>
-                            {s.expectedClose != null
-                              ? `${s.expectedClose.toFixed(1)} DT`
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            {s.countedClose != null
-                              ? `${s.countedClose.toFixed(1)} DT`
-                              : "—"}
-                          </TableCell>
-                          <TableCell>
-                            {s.difference != null
-                              ? `${s.difference.toFixed(1)} DT`
-                              : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                      {!monthData.sessions.length ? (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="text-muted-foreground"
-                          >
-                            Aucune session ce mois
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            </>
+                    ))}
+                    {!monthData.sessions.length ? (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-muted-foreground"
+                        >
+                          Aucune session ce mois
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
           ) : (
             <p className="text-sm text-muted-foreground">Chargement…</p>
           )}

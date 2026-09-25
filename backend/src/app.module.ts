@@ -29,6 +29,7 @@ import { CaisseModule } from './modules/caisse/caisse.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { SpaceEventsModule } from './modules/events/events.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { SpaceEventsModule } from './modules/events/events.module';
     GroupsModule,
     OrganizationsModule,
     SpaceEventsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

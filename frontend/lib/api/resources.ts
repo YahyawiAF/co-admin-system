@@ -24,6 +24,12 @@ import type {
   StaffMessage,
   CoffreSummary,
   MonthFinanceSummary,
+  PriceHistoryEntry,
+  FinanceYearMonthRow,
+  FinanceMonthDayRow,
+  ServiceDemandRow,
+  SpaceUsageRow,
+  AnalyticsClientRow,
   MemberGroup,
   SeatOccupant,
   Organization,
@@ -229,10 +235,89 @@ export const pricesApi = {
   remove(id: string) {
     return http.delete<void>(`/prices/${id}`);
   },
+  history(id: string) {
+    return http.get<PriceHistoryEntry[]>(`/prices/${id}/history`);
+  },
   seedCollaboraHub() {
     return http.post<{ created: number; skipped: number; prices: Price[] }>(
       "/prices/seed/collabora-hub",
     );
+  },
+};
+
+export const analyticsApi = {
+  financeMonthly(year: number) {
+    return http.get<{ year: number; months: FinanceYearMonthRow[] }>(
+      `/analytics/finance/monthly?year=${year}`,
+    );
+  },
+  financeMonthDays(year: number, month: number) {
+    return http.get<{ year: number; month: number; days: FinanceMonthDayRow[] }>(
+      `/analytics/finance/month-days?year=${year}&month=${month}`,
+    );
+  },
+  servicesDemand(from?: string, to?: string) {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const qs = q.toString();
+    return http.get<{
+      from: string;
+      to: string;
+      services: ServiceDemandRow[];
+    }>(`/analytics/services/demand${qs ? `?${qs}` : ""}`);
+  },
+  serviceClients(priceId: string, from?: string, to?: string) {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const qs = q.toString();
+    return http.get<{
+      priceId: string;
+      from: string;
+      to: string;
+      clients: AnalyticsClientRow[];
+    }>(`/analytics/services/${priceId}/clients${qs ? `?${qs}` : ""}`);
+  },
+  spacesUsage(from?: string, to?: string) {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const qs = q.toString();
+    return http.get<{ from: string; to: string; spaces: SpaceUsageRow[] }>(
+      `/analytics/spaces/usage${qs ? `?${qs}` : ""}`,
+    );
+  },
+  spaceClients(spaceId: string, from?: string, to?: string) {
+    const q = new URLSearchParams();
+    if (from) q.set("from", from);
+    if (to) q.set("to", to);
+    const qs = q.toString();
+    return http.get<{
+      spaceId: string;
+      from: string;
+      to: string;
+      clients: AnalyticsClientRow[];
+    }>(`/analytics/spaces/${spaceId}/clients${qs ? `?${qs}` : ""}`);
+  },
+  members(opts: {
+    topServiceId?: string;
+    topSpaceId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const q = new URLSearchParams();
+    if (opts.topServiceId) q.set("topServiceId", opts.topServiceId);
+    if (opts.topSpaceId) q.set("topSpaceId", opts.topSpaceId);
+    if (opts.from) q.set("from", opts.from);
+    if (opts.to) q.set("to", opts.to);
+    return http.get<{
+      memberIds: string[];
+      topServiceId?: string;
+      topSpaceId?: string;
+      from: string;
+      to: string;
+    }>(`/analytics/members?${q.toString()}`);
   },
 };
 

@@ -9,6 +9,7 @@ import { HttpStatus } from '@nestjs/common';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { AbonnementEntity } from './entities/abonnement.entity';
 import { EventsGateway } from '../webSocket/events.gateway';
+import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 
 @Injectable()
 export class AbonnementService {
@@ -56,6 +57,23 @@ export class AbonnementService {
           ? existingPrice.durationHours
           : null);
 
+      let spaceName: string | null = null;
+      const spaceId =
+        createAbonnementDto.reservedSeatSpaceId ||
+        existingPrice.spaceId ||
+        null;
+      if (spaceId) {
+        const space = await this.prisma.space.findUnique({
+          where: { id: spaceId },
+          select: { name: true },
+        });
+        spaceName = space?.name || null;
+      }
+      const snap = saleSnapshotFromPrice(existingPrice, {
+        id: spaceId,
+        name: spaceName,
+      });
+
       const created = await this.prisma.abonnement.create({
         data: {
           memberID: createAbonnementDto.memberID,
@@ -71,6 +89,10 @@ export class AbonnementService {
           reservedSeatLabel: createAbonnementDto.reservedSeatLabel || null,
           reservedSeatSpaceId:
             createAbonnementDto.reservedSeatSpaceId || null,
+          serviceName: snap.serviceName,
+          listPrice: snap.listPrice,
+          spaceId: snap.spaceId,
+          spaceName: snap.spaceName,
         },
         include: {
           members: true,

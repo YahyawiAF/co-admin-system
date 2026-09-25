@@ -61,6 +61,7 @@ import {
   spaceAllowsSeat,
   spaceAllowsWhole,
 } from './space-occupy';
+import { saleSnapshotFromPrice } from './sale-snapshot';
 
 export const roundsOfHashing = 10;
 
@@ -442,6 +443,22 @@ export class MobileService {
       select: { id: true },
     });
     return j?.id || null;
+  }
+
+  private async attachSpaceSnapshotToJournal(
+    journalId: string | null | undefined,
+    spaceId?: string | null,
+  ) {
+    if (!journalId || !spaceId) return;
+    const space = await this.prisma.space.findUnique({
+      where: { id: spaceId },
+      select: { id: true, name: true },
+    });
+    if (!space) return;
+    await this.prisma.journal.update({
+      where: { id: journalId },
+      data: { spaceId: space.id, spaceName: space.name },
+    });
   }
 
   private async recordSeatStay(input: {
@@ -1661,6 +1678,18 @@ export class MobileService {
       afterGroup,
     );
 
+    const snap = saleSnapshotFromPrice(price, {
+      id: dto.spaceId || price.spaceId,
+      name: null,
+    });
+    if (snap.spaceId && !snap.spaceName) {
+      const sp = await this.prisma.space.findUnique({
+        where: { id: snap.spaceId },
+        select: { name: true },
+      });
+      snap.spaceName = sp?.name || null;
+    }
+
     const journal = await this.prisma.journal.create({
       data: {
         memberID: dto.memberId,
@@ -1671,6 +1700,10 @@ export class MobileService {
         isReservation: false,
         payedAmount,
         groupVisitId: dto.groupVisitId || null,
+        serviceName: snap.serviceName,
+        listPrice: snap.listPrice,
+        spaceId: snap.spaceId,
+        spaceName: snap.spaceName,
       },
       include: { prices: true, members: { include: { group: true } } },
     });
@@ -1949,6 +1982,16 @@ export class MobileService {
       afterGroup,
     );
     const isPayed = dto.isPayed ?? true;
+    let spaceName: string | null = null;
+    const spaceId = dto.reservedSeatSpaceId || price.spaceId || null;
+    if (spaceId) {
+      const space = await this.prisma.space.findUnique({
+        where: { id: spaceId },
+        select: { name: true },
+      });
+      spaceName = space?.name || null;
+    }
+    const snap = saleSnapshotFromPrice(price, { id: spaceId, name: spaceName });
     const abonnement = await this.prisma.abonnement.create({
       data: {
         memberID: dto.memberId,
@@ -1965,6 +2008,10 @@ export class MobileService {
         hoursUsed: 0,
         reservedSeatLabel: dto.reservedSeatLabel?.trim() || null,
         reservedSeatSpaceId: dto.reservedSeatSpaceId || null,
+        serviceName: snap.serviceName,
+        listPrice: snap.listPrice,
+        spaceId: snap.spaceId,
+        spaceName: snap.spaceName,
       },
       include: { price: true, members: true },
     });
@@ -2229,6 +2276,18 @@ export class MobileService {
     const guestName =
       (dto.guestName || dto.firstName || '').trim() || 'Visiteur anonyme';
 
+    const snap = saleSnapshotFromPrice(price, {
+      id: dto.spaceId || price.spaceId,
+      name: null,
+    });
+    if (snap.spaceId && !snap.spaceName) {
+      const sp = await this.prisma.space.findUnique({
+        where: { id: snap.spaceId },
+        select: { name: true },
+      });
+      snap.spaceName = sp?.name || null;
+    }
+
     const journal = await this.prisma.journal.create({
       data: {
         memberID: null,
@@ -2242,6 +2301,10 @@ export class MobileService {
         payedAmount,
         createdbyUserID: dto.createdbyUserID || null,
         groupVisitId: dto.groupVisitId || null,
+        serviceName: snap.serviceName,
+        listPrice: snap.listPrice,
+        spaceId: snap.spaceId,
+        spaceName: snap.spaceName,
       },
       include: { prices: true, members: true },
     });
@@ -2395,6 +2458,7 @@ export class MobileService {
       (p) => !(p.spaceId === spaceId && p.seatId === seatLabel),
     );
     const journalId = await this.openJournalIdForMember(memberId);
+    await this.attachSpaceSnapshotToJournal(journalId, spaceId);
     if (from && from.seatId !== seatLabel) {
       await this.recordSeatStay({
         type: 'seat.moved',
@@ -2643,6 +2707,7 @@ export class MobileService {
     const journalId = booking.memberId
       ? await this.openJournalIdForMember(booking.memberId)
       : null;
+    await this.attachSpaceSnapshotToJournal(journalId, destSeat.spaceId);
     await this.recordSeatStay({
       type: 'seat.moved',
       memberId: booking.memberId,
@@ -2763,6 +2828,18 @@ export class MobileService {
         : null;
     const expectedLeave = packHours ? addHours(now, packHours) : null;
 
+    const snap = saleSnapshotFromPrice(sub.price, {
+      id: sub.reservedSeatSpaceId || sub.spaceId || sub.price.spaceId,
+      name: sub.spaceName || null,
+    });
+    if (snap.spaceId && !snap.spaceName) {
+      const sp = await this.prisma.space.findUnique({
+        where: { id: snap.spaceId },
+        select: { name: true },
+      });
+      snap.spaceName = sp?.name || null;
+    }
+
     const journal = await this.prisma.journal.create({
       data: {
         memberID: memberId,
@@ -2772,6 +2849,10 @@ export class MobileService {
         isPayed: true,
         isReservation: false,
         payedAmount: 0,
+        serviceName: snap.serviceName,
+        listPrice: snap.listPrice,
+        spaceId: snap.spaceId,
+        spaceName: snap.spaceName,
       },
       include: { prices: true, members: true },
     });
@@ -3191,6 +3272,7 @@ export class MobileService {
       result = await this.startDaySession({
         memberId: request.memberId,
         priceId: request.priceId,
+        spaceId: assignedSpaceId,
       });
     } else {
       result = await this.startSubscription({
@@ -4700,9 +4782,16 @@ export class MobileService {
             isPayed: false,
             isReservation: true,
             payedAmount: price.price,
+            serviceName: price.name,
+            listPrice: price.price,
+            spaceId: row.spaceId || row.seatSpaceId || price.spaceId || null,
+            spaceName: null,
           },
         })
       : null;
+    if (journal?.spaceId) {
+      await this.attachSpaceSnapshotToJournal(journal.id, journal.spaceId);
+    }
     const today = startOfDay(new Date());
     if (row.date.getTime() <= today.getTime()) {
       if (row.kind === BookingRequestKind.ROOM && row.spaceId) {

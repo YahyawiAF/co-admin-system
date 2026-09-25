@@ -10,6 +10,7 @@ import { JournalEntity } from './entities/journal.entity';
 import { endOfDay, startOfDay } from 'date-fns';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { maybeAwardVisitPaidPoints, maybeRevokeVisitPaidPoints } from '../mobile/visit-paid-points';
+import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 
 export const roundsOfHashing = 10;
 
@@ -74,6 +75,7 @@ export class JournalService {
         }
       }
 
+      const snap = saleSnapshotFromPrice(existingPrice);
       return await this.prisma.journal.create({
         data: {
           memberID: memberID || null,
@@ -87,6 +89,10 @@ export class JournalService {
           isAnonymous,
           guestName: createJournalDto.guestName || null,
           groupVisitId: createJournalDto.groupVisitId || null,
+          serviceName: snap.serviceName,
+          listPrice: snap.listPrice,
+          spaceId: snap.spaceId,
+          spaceName: snap.spaceName,
         },
       });
     } catch (error) {

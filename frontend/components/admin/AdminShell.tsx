@@ -43,7 +43,7 @@ const NAV = [
   { href: "/finance", label: "Finance", icon: Banknote },
   { href: "/members", label: "Members", icon: Users },
   { href: "/members?tab=groups", label: "Groupes", icon: UsersRound },
-  { href: "/tarifs", label: "Tarifs", icon: Tags },
+  { href: "/tarifs", label: "Services", icon: Tags },
   { href: "/facility", label: "Facility / Map", icon: Building2 },
   { href: "/events", label: "Événements", icon: Calendar },
   { href: "/commandes", label: "Commandes", icon: Coffee },

@@ -362,6 +362,7 @@ export class PriceService {
       where: { id: priceEntity.id },
       include: this.priceInclude,
     });
+    await this.recordHistory(withOffers || priceEntity, 'create');
     return this.toEntity(withOffers || priceEntity);
   }
 
@@ -464,7 +465,70 @@ export class PriceService {
       include: this.priceInclude,
     });
 
-    return this.toEntity(withOffers || updatedPrice);
+    const next = withOffers || updatedPrice;
+    const catalogChanged =
+      existingPrice.name !== next.name ||
+      Number(existingPrice.price) !== Number(next.price) ||
+      existingPrice.type !== next.type ||
+      existingPrice.isActive !== next.isActive ||
+      existingPrice.spaceId !== next.spaceId ||
+      existingPrice.billingUnit !== next.billingUnit ||
+      existingPrice.durationHours !== next.durationHours ||
+      existingPrice.periodDays !== next.periodDays;
+    if (catalogChanged) {
+      await this.recordHistory(next, 'update');
+    }
+
+    return this.toEntity(next);
+  }
+
+  async findHistory(priceId: string) {
+    await this.findOne(priceId);
+    return this.prisma.priceHistory.findMany({
+      where: { priceId },
+      orderBy: { changedAt: 'desc' },
+    });
+  }
+
+  private async recordHistory(
+    row: {
+      id: string;
+      organizationId?: string | null;
+      name: string;
+      price: number;
+      type: PriceType;
+      categories?: PriceCategory[];
+      category?: PriceCategory | null;
+      billingUnit?: BillingUnit | null;
+      durationHours?: number | null;
+      periodDays?: number | null;
+      spaceId?: string | null;
+      isActive: boolean;
+    },
+    reason: string,
+  ) {
+    const categories =
+      row.categories && row.categories.length
+        ? row.categories
+        : row.category
+          ? [row.category]
+          : [];
+    await this.prisma.priceHistory.create({
+      data: {
+        priceId: row.id,
+        organizationId: row.organizationId || null,
+        name: row.name,
+        price: Number(row.price) || 0,
+        type: row.type,
+        categories,
+        billingUnit: row.billingUnit ?? null,
+        durationHours: row.durationHours ?? null,
+        periodDays: row.periodDays ?? null,
+        spaceId: row.spaceId ?? null,
+        isActive: row.isActive !== false,
+        reason,
+      },
+    });
   }
 
   async remove(id: string): Promise<void> {

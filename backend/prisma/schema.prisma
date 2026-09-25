@@ -217,11 +217,37 @@ model Price {
   journals         Journal[]
   visitRequests    VisitRequest[]
   appInstallPromos AppInstallPromo[]
+  history          PriceHistory[]
 
   @@index([organizationId])
   @@index([spaceId])
   @@index([isActive])
   @@map("prices")
+}
+
+/// Append-only catalog versions for BI / price-change analysis
+model PriceHistory {
+  id               String          @id @default(uuid())
+  priceId          String
+  priceRef         Price           @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  organizationId   String?
+  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  price            Float
+  type             PriceType
+  categories       PriceCategory[] @default([])
+  billingUnit      BillingUnit?
+  durationHours    Float?
+  periodDays       Int?
+  spaceId          String?
+  isActive         Boolean         @default(true)
+  changedAt        DateTime        @default(now())
+  changedByUserId  String?
+  reason           String?
+
+  @@index([priceId, changedAt])
+  @@index([organizationId, changedAt])
+  @@map("price_histories")
 }
 
 model PriceSpace {
@@ -249,6 +275,13 @@ model Journal {
   isAnonymous     Boolean   @default(false)
   guestName       String?
   priceId         String?
+  /// Catalog name at sale time (stable for analytics)
+  serviceName     String?
+  /// Catalog list price at sale time
+  listPrice       Float?
+  /// Space used for this visit (snapshot)
+  spaceId         String?
+  spaceName       String?
   createdbyUserID String?
   createdBy       User?     @relation(fields: [createdbyUserID], references: [id])
   members         Member?   @relation(fields: [memberID], references: [id])
@@ -256,6 +289,9 @@ model Journal {
   groupVisitId    String?
 
   @@index([groupVisitId])
+  @@index([priceId])
+  @@index([spaceId])
+  @@index([memberID, priceId])
   @@map("journals")
 }
 
@@ -271,6 +307,13 @@ model Abonnement {
   memberID      String
   isReservation Boolean   @default(false)
   priceId       String
+  /// Catalog name at sale time (stable for analytics)
+  serviceName     String?
+  /// Catalog list price at sale time
+  listPrice       Float?
+  /// Space reserved / used (snapshot; often same as reservedSeatSpaceId)
+  spaceId         String?
+  spaceName       String?
   hoursQuota         Float?
   hoursUsed          Float     @default(0)
   reservedSeatLabel  String?
@@ -278,6 +321,9 @@ model Abonnement {
   members            Member    @relation(fields: [memberID], references: [id])
   price              Price     @relation(fields: [priceId], references: [id])
 
+  @@index([priceId])
+  @@index([spaceId])
+  @@index([memberID, priceId])
   @@map("abonnements")
 }
 
@@ -385,6 +431,7 @@ model Organization {
   memberGroups  MemberGroup[]
   products      Product[]
   prices        Price[]
+  priceHistories PriceHistory[]
   memberships   OrganizationMembership[]
 
   @@map("organizations")

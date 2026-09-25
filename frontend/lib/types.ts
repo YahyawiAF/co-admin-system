@@ -435,6 +435,78 @@ export interface MonthFinanceSummary {
   }>;
 }
 
+export interface PriceHistoryEntry {
+  id: string;
+  priceId: string;
+  organizationId?: string | null;
+  name: string;
+  price: number;
+  type: string;
+  categories: string[];
+  billingUnit?: string | null;
+  durationHours?: number | null;
+  periodDays?: number | null;
+  spaceId?: string | null;
+  isActive: boolean;
+  changedAt: string;
+  changedByUserId?: string | null;
+  reason?: string | null;
+}
+
+export interface FinanceYearMonthRow {
+  year: number;
+  month: number;
+  revenueJournal: number;
+  revenueAbonnements: number;
+  revenueProducts: number;
+  expenses: number;
+  net: number;
+}
+
+export interface FinanceMonthDayRow {
+  date: string;
+  revenueJournal: number;
+  revenueAbonnements: number;
+  revenueProducts: number;
+  expenses: number;
+  net: number;
+}
+
+export interface ServiceDemandRow {
+  priceId: string | null;
+  name: string;
+  journalCount: number;
+  abonnementCount: number;
+  count: number;
+  revenueJournal: number;
+  revenueAbonnements: number;
+  revenue: number;
+  uniqueClients: number;
+}
+
+export interface SpaceUsageRow {
+  spaceId: string | null;
+  name: string;
+  visitCount: number;
+  subscriptionCount: number;
+  count: number;
+  hours: number;
+  uniqueClients: number;
+}
+
+export interface AnalyticsClientRow {
+  memberId: string;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  count?: number;
+  visitCount?: number;
+  journalCount?: number;
+  abonnementCount?: number;
+  revenue?: number;
+  hours?: number;
+}
+
 export type VisitRequestType = "DAY" | "SUBSCRIPTION";
 export type VisitRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 

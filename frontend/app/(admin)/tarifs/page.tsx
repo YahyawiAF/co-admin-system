@@ -49,6 +49,8 @@ import {
   type AppInstallPromo,
   type Price,
 } from "@/lib/types";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
 import {
   BILLING_UNIT_LABEL,
   formatTarifPrice,
@@ -132,6 +134,11 @@ function PriceFormDialog({
     queryFn: () => facilityApi.layout(),
   });
   const spaces = layout?.spaces || [];
+  const { data: history = [] } = useQuery({
+    queryKey: ["price-history", price?.id],
+    queryFn: () => pricesApi.history(price!.id),
+    enabled: open && !!price?.id,
+  });
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -258,8 +265,11 @@ function PriceFormDialog({
       return pricesApi.create(body);
     },
     onSuccess: () => {
-      toast.success(price ? "Tarif mis à jour" : "Tarif créé");
+      toast.success(price ? "Service mis à jour" : "Service créé");
       queryClient.invalidateQueries({ queryKey: queryKeys.prices });
+      if (price?.id) {
+        queryClient.invalidateQueries({ queryKey: ["price-history", price.id] });
+      }
       setOpen(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -270,7 +280,9 @@ function PriceFormDialog({
       {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
         <DialogHeader className="shrink-0 border-b px-6 py-4 pr-12">
-          <DialogTitle>{price ? "Modifier le tarif" : "Nouveau tarif"}</DialogTitle>
+          <DialogTitle>
+            {price ? "Modifier le service" : "Nouveau service"}
+          </DialogTitle>
         </DialogHeader>
         <form
           className="flex min-h-0 flex-1 flex-col"
@@ -518,7 +530,7 @@ function PriceFormDialog({
           ) : null}
           <div className="flex items-start justify-between gap-3 rounded-lg border px-3 py-3">
             <div>
-              <Label>Tarif actif</Label>
+              <Label>Service actif</Label>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Inactif = masqué du check-in, mobile et sélecteurs (reste
                 éditable ici).
@@ -529,6 +541,40 @@ function PriceFormDialog({
               onCheckedChange={(v) => form.setValue("isActive", v)}
             />
           </div>
+          {price?.id ? (
+            <div className="space-y-2 rounded-lg border px-3 py-3">
+              <Label>Historique des prix</Label>
+              {history.length ? (
+                <ul className="max-h-36 space-y-2 overflow-y-auto text-sm">
+                  {history.map((h) => (
+                    <li
+                      key={h.id}
+                      className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1 last:border-0"
+                    >
+                      <span className="text-muted-foreground">
+                        {format(new Date(h.changedAt), "dd MMM yyyy HH:mm", {
+                          locale: fr,
+                        })}
+                      </span>
+                      <span className="font-medium">
+                        {h.price.toFixed(1)} DT
+                        {h.name !== price.name ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            ({h.name})
+                          </span>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Aucun changement enregistré pour l&apos;instant. Les prochaines
+                  modifications de prix seront historisées.
+                </p>
+              )}
+            </div>
+          ) : null}
           </div>
           <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -722,7 +768,7 @@ export default function TarifsPage() {
   const seed = useMutation({
     mutationFn: () => pricesApi.seedCollaboraHub(),
     onSuccess: (res) => {
-      toast.success(`${res.created} tarifs créés (${res.skipped} déjà présents)`);
+      toast.success(`${res.created} services créés (${res.skipped} déjà présents)`);
       queryClient.invalidateQueries({ queryKey: queryKeys.prices });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -731,7 +777,7 @@ export default function TarifsPage() {
   const remove = useMutation({
     mutationFn: (id: string) => pricesApi.remove(id),
     onSuccess: () => {
-      toast.success("Tarif supprimé");
+      toast.success("Service supprimé");
       queryClient.invalidateQueries({ queryKey: queryKeys.prices });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -763,7 +809,7 @@ export default function TarifsPage() {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Supprimer ce tarif ?</AlertDialogTitle>
+                    <AlertDialogTitle>Supprimer ce service ?</AlertDialogTitle>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Annuler</AlertDialogCancel>
@@ -820,7 +866,7 @@ export default function TarifsPage() {
         </Card>
       ))}
       {!list.length ? (
-        <p className="text-sm text-muted-foreground">Aucun tarif</p>
+        <p className="text-sm text-muted-foreground">Aucun service</p>
       ) : null}
     </div>
   );
@@ -829,8 +875,10 @@ export default function TarifsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tarifs</h1>
-          <p className="text-muted-foreground">Catalogue Collabora Hub</p>
+          <h1 className="text-2xl font-bold tracking-tight">Services</h1>
+          <p className="text-muted-foreground">
+            Offres / tarifs du catalogue — historique des prix pour l&apos;analyse
+          </p>
         </div>
         <div className="flex gap-2">
           <Button

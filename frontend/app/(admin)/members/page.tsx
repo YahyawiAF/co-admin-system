@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import Fuse from "fuse.js";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Pencil, Trash2, UserRound, MapPin } from "lucide-react";
 import { toast } from "sonner";
@@ -49,6 +49,9 @@ import {
   journalApi,
   abonnementsApi,
   bookingApi,
+  analyticsApi,
+  pricesApi,
+  facilityApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Member, MemberGroup, Abonnement } from "@/lib/types";
@@ -60,6 +63,8 @@ export default function MembersPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab") === "groups" ? "groups" : "members";
+  const topServiceId = searchParams.get("topServiceId") || "";
+  const topSpaceId = searchParams.get("topSpaceId") || "";
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<Member | null>(null);
   const [detail, setDetail] = useState<Member | null>(null);
@@ -68,6 +73,31 @@ export default function MembersPage() {
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
   const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
+
+  const analyticsRange = useMemo(() => {
+    const to = new Date();
+    const from = subDays(to, 89);
+    return {
+      from: format(from, "yyyy-MM-dd"),
+      to: format(to, "yyyy-MM-dd"),
+    };
+  }, []);
+
+  const setDemandParam = (key: "topServiceId" | "topSpaceId", value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (!value || value === "all") params.delete(key);
+    else params.set(key, value);
+    // Keep mutual exclusivity for clarity
+    if (key === "topServiceId" && value && value !== "all") {
+      params.delete("topSpaceId");
+    }
+    if (key === "topSpaceId" && value && value !== "all") {
+      params.delete("topServiceId");
+    }
+    if (tab === "groups") params.set("tab", "groups");
+    const qs = params.toString();
+    router.replace(qs ? `/members?${qs}` : "/members");
+  };
 
   const { data: membersRaw = [], isLoading } = useQuery({
     queryKey: queryKeys.members,
@@ -90,6 +120,37 @@ export default function MembersPage() {
     queryKey: ["bookings"],
     queryFn: () => bookingApi.list(),
   });
+  const { data: prices = [] } = useQuery({
+    queryKey: queryKeys.prices,
+    queryFn: () => pricesApi.list(),
+  });
+  const { data: layout } = useQuery({
+    queryKey: ["facility-layout"],
+    queryFn: () => facilityApi.layout(),
+  });
+  const spaces = layout?.spaces || [];
+
+  const { data: demandMembers } = useQuery({
+    queryKey: [
+      "analytics-members",
+      topServiceId,
+      topSpaceId,
+      analyticsRange.from,
+      analyticsRange.to,
+    ],
+    queryFn: () =>
+      analyticsApi.members({
+        topServiceId: topServiceId || undefined,
+        topSpaceId: topSpaceId || undefined,
+        from: analyticsRange.from,
+        to: analyticsRange.to,
+      }),
+    enabled: !!topServiceId || !!topSpaceId,
+  });
+  const demandMemberIds = useMemo(
+    () => new Set(demandMembers?.memberIds || []),
+    [demandMembers],
+  );
 
   const members = Array.isArray(membersRaw) ? membersRaw : [];
   const abos = useMemo(() => {
@@ -165,6 +226,9 @@ export default function MembersPage() {
         (m) => m.plan !== "Membership" && aboState.get(m.id) !== "active"
       );
     }
+    if ((topServiceId || topSpaceId) && demandMembers) {
+      list = list.filter((m) => demandMemberIds.has(m.id));
+    }
     if (search.trim().length >= 2) {
       const fuse = new Fuse(list, {
         keys: ["firstName", "lastName", "phone", "email", "visitorNumber", "group.name"],
@@ -173,7 +237,18 @@ export default function MembersPage() {
       return fuse.search(search).map((r) => r.item);
     }
     return list;
-  }, [members, search, groupFilter, statusFilter, presentIds, aboState]);
+  }, [
+    members,
+    search,
+    groupFilter,
+    statusFilter,
+    presentIds,
+    aboState,
+    topServiceId,
+    topSpaceId,
+    demandMembers,
+    demandMemberIds,
+  ]);
 
   const remove = useMutation({
     mutationFn: (id: string) => membersApi.remove(id),
@@ -251,6 +326,38 @@ export default function MembersPage() {
                 <SelectItem value="abonne">Abonnement actif</SelectItem>
                 <SelectItem value="expired">Abonnement expiré</SelectItem>
                 <SelectItem value="visiteur">Forfait visiteur</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={topServiceId || "all"}
+              onValueChange={(v) => setDemandParam("topServiceId", v)}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Service le + demandé" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les services</SelectItem>
+                {prices.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={topSpaceId || "all"}
+              onValueChange={(v) => setDemandParam("topSpaceId", v)}
+            >
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Espace le + fréquenté" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les espaces</SelectItem>
+                {spaces.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             </div>

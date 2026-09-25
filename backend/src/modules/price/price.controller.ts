@@ -36,6 +36,11 @@ export class PriceController {
     });
   }
 
+  @Get(':id/history')
+  async history(@Param('id') id: string) {
+    return this.priceService.findHistory(id);
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.priceService.findOne(id);
