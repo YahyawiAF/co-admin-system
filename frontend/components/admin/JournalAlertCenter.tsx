@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -12,6 +12,7 @@ import {
   ChevronRight,
   CreditCard,
   TimerOff,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +34,9 @@ import {
 } from "@/lib/journal-utils";
 import {
   daysLeft,
+  isPaymentRemindToday,
+  isPaymentRemindTomorrow,
+  paymentRemindDaysLeft,
   subscriptionExpiryLabel,
 } from "@/lib/subscription-utils";
 import { useJournalAlerts } from "@/lib/journal-alerts-context";
@@ -47,18 +51,23 @@ export type JournalAlertItem = {
     | "sub_expiring"
     | "sub_today"
     | "sub_expired"
-    | "reservation_tomorrow";
+    | "reservation_tomorrow"
+    | "payment_remind_today"
+    | "payment_remind_tomorrow"
+    | "payment_remind_overdue";
   title: string;
   detail: string;
   severity: "urgent" | "warning" | "info";
   journalId?: string;
   memberId?: string;
+  abonnementId?: string;
 };
 
 type BuildInput = {
   rows: Journal[];
   subByMember: Map<string, Abonnement>;
   tomorrowReservations: Journal[];
+  paymentRemindAbos?: Abonnement[];
   now: number;
 };
 
@@ -66,6 +75,7 @@ export function buildJournalAlerts({
   rows,
   subByMember,
   tomorrowReservations,
+  paymentRemindAbos = [],
   now,
 }: BuildInput): JournalAlertItem[] {
   const items: JournalAlertItem[] = [];
@@ -164,6 +174,45 @@ export function buildJournalAlerts({
     });
   }
 
+  for (const a of paymentRemindAbos) {
+    if (a.isPayed || !a.paymentRemindAt) continue;
+    const name = a.members?.firstName || "Client";
+    const formula = a.price?.name || "Abonnement";
+    const left = paymentRemindDaysLeft(a);
+    if (left == null) continue;
+    if (left < 0) {
+      items.push({
+        id: `pay-overdue-${a.id}`,
+        kind: "payment_remind_overdue",
+        title: name,
+        detail: `Relance paiement en retard (${Math.abs(left)} j) · ${formula}`,
+        severity: "urgent",
+        memberId: a.memberID,
+        abonnementId: a.id,
+      });
+    } else if (isPaymentRemindToday(a)) {
+      items.push({
+        id: `pay-today-${a.id}`,
+        kind: "payment_remind_today",
+        title: name,
+        detail: `Demander le paiement aujourd'hui · ${formula}`,
+        severity: "urgent",
+        memberId: a.memberID,
+        abonnementId: a.id,
+      });
+    } else if (isPaymentRemindTomorrow(a)) {
+      items.push({
+        id: `pay-tomorrow-${a.id}`,
+        kind: "payment_remind_tomorrow",
+        title: name,
+        detail: `Relance paiement demain · ${formula}`,
+        severity: "warning",
+        memberId: a.memberID,
+        abonnementId: a.id,
+      });
+    }
+  }
+
   const order = { urgent: 0, warning: 1, info: 2 };
   return items.sort((a, b) => order[a.severity] - order[b.severity]);
 }
@@ -176,6 +225,9 @@ const KIND_LABEL: Record<JournalAlertItem["kind"], string> = {
   sub_today: "Abo expire aujourd'hui",
   sub_expired: "Abo expiré",
   reservation_tomorrow: "Demain",
+  payment_remind_today: "Relance auj.",
+  payment_remind_tomorrow: "Relance demain",
+  payment_remind_overdue: "Relance en retard",
 };
 
 function useJournalAlertData() {
@@ -196,7 +248,14 @@ function useJournalAlertData() {
     const tomorrow = alerts.filter(
       (a) => a.kind === "reservation_tomorrow",
     ).length;
-    return { session, sub, tomorrow, total: alerts.length };
+    const relance = alerts.filter((a) =>
+      [
+        "payment_remind_today",
+        "payment_remind_tomorrow",
+        "payment_remind_overdue",
+      ].includes(a.kind),
+    ).length;
+    return { session, sub, tomorrow, relance, total: alerts.length };
   }, [alerts]);
 
   return { data, alerts, counts };
@@ -209,6 +268,9 @@ function AlertIcon({ kind }: { kind: JournalAlertItem["kind"] }) {
   if (kind === "session_ending" || kind === "leaving_soon") {
     return <AlarmClock className="h-4 w-4 text-sky-700" />;
   }
+  if (kind.startsWith("payment_remind")) {
+    return <Wallet className="h-4 w-4 text-orange-700" />;
+  }
   if (kind.startsWith("sub")) {
     return <CreditCard className="h-4 w-4 text-violet-700" />;
   }
@@ -217,6 +279,7 @@ function AlertIcon({ kind }: { kind: JournalAlertItem["kind"] }) {
 
 function useHandleAlertItem() {
   const { data, actionsRef, setOpen } = useJournalAlerts();
+  const router = useRouter();
   const rowById = useMemo(
     () => new Map(data?.rows.map((r) => [r.id, r]) ?? []),
     [data?.rows],
@@ -239,6 +302,15 @@ function useHandleAlertItem() {
       setOpen(false);
       return;
     }
+    if (item.kind.startsWith("payment_remind")) {
+      if (actions.onViewPaymentRemind) {
+        actions.onViewPaymentRemind();
+      } else {
+        router.push("/impayes");
+      }
+      setOpen(false);
+      return;
+    }
     if (item.journalId) {
       const row = rowById.get(item.journalId);
       if (row) actions.onFocusRow?.(row);
@@ -247,13 +319,17 @@ function useHandleAlertItem() {
   };
 }
 
-/** Icon button for AdminShell top nav (journal page only). */
+/** Icon button for AdminShell top nav (journal / abonnements). */
 export function JournalAlertNavBell() {
   const pathname = usePathname();
   const { open, setOpen, data } = useJournalAlerts();
   const { counts } = useJournalAlertData();
 
-  if (!pathname.startsWith("/journal")) return null;
+  const onAlertsPage =
+    pathname.startsWith("/journal") ||
+    pathname.startsWith("/abonnements") ||
+    pathname.startsWith("/impayes");
+  if (!onAlertsPage) return null;
 
   return (
     <>
@@ -363,6 +439,15 @@ function JournalAlertsDialog({
         ["sub_expiring", "sub_today", "sub_expired"].includes(a.kind),
       );
     }
+    if (tab === "relance") {
+      return alerts.filter((a) =>
+        [
+          "payment_remind_today",
+          "payment_remind_tomorrow",
+          "payment_remind_overdue",
+        ].includes(a.kind),
+      );
+    }
     if (tab === "tomorrow") {
       return alerts.filter((a) => a.kind === "reservation_tomorrow");
     }
@@ -387,7 +472,7 @@ function JournalAlertsDialog({
           onValueChange={setTab}
           className="flex min-h-0 flex-1 flex-col"
         >
-          <TabsList className="mx-4 mt-3 grid w-auto grid-cols-4">
+          <TabsList className="mx-4 mt-3 grid w-auto grid-cols-5">
             <TabsTrigger value="all" className="text-xs">
               Tout {counts.total || ""}
             </TabsTrigger>
@@ -396,6 +481,9 @@ function JournalAlertsDialog({
             </TabsTrigger>
             <TabsTrigger value="sub" className="text-xs">
               Abos {counts.sub || ""}
+            </TabsTrigger>
+            <TabsTrigger value="relance" className="text-xs">
+              Relance {counts.relance || ""}
             </TabsTrigger>
             <TabsTrigger value="tomorrow" className="text-xs">
               Demain {counts.tomorrow || ""}
@@ -446,7 +534,10 @@ function JournalAlertsDialog({
 
         <div className="flex flex-wrap gap-2 border-t px-4 py-3">
           <Button variant="outline" size="sm" asChild>
-            <Link href="/abonnements">Abonnements</Link>
+            <Link href="/abonnements?filter=remind">À relancer</Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/impayes">Impayés</Link>
           </Button>
           <Button
             variant="ghost"

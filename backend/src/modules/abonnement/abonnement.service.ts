@@ -89,6 +89,7 @@ export class AbonnementService {
           reservedSeatLabel: createAbonnementDto.reservedSeatLabel || null,
           reservedSeatSpaceId:
             createAbonnementDto.reservedSeatSpaceId || null,
+          paymentRemindAt: createAbonnementDto.paymentRemindAt ?? null,
           serviceName: snap.serviceName,
           listPrice: snap.listPrice,
           spaceId: snap.spaceId,

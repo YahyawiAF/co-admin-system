@@ -320,6 +320,8 @@ model Abonnement {
   hoursUsed          Float     @default(0)
   reservedSeatLabel  String?
   reservedSeatSpaceId String?
+  /// When to ask the client for payment (unpaid abonnements)
+  paymentRemindAt    DateTime?
   members            Member    @relation(fields: [memberID], references: [id])
   price              Price     @relation(fields: [priceId], references: [id])
 

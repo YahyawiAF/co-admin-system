@@ -63,4 +63,7 @@ export class AbonnementEntity {
 
   @ApiProperty({ required: false })
   reservedSeatSpaceId?: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  paymentRemindAt?: Date | null;
 }

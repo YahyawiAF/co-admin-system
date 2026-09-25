@@ -71,4 +71,10 @@ export class AddAbonnementDto {
   @IsString()
   @ApiProperty({ required: false })
   public reservedSeatSpaceId?: string | null;
+
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @ApiProperty({ required: false, nullable: true })
+  public paymentRemindAt?: Date | null;
 }

@@ -15,6 +15,7 @@ import { ExpensesService } from './expense.service';
 import { ExpenseEntity } from './entities/exp.entitie';
 import { CreateExpenseDto } from './dtos/createExp.dto';
 import { UpdateExpDto } from './dtos/updateExp.dto';
+import { parseLocalDay } from '../../../common/parse-local-day';
 
 @Controller('expenses')
 @ApiTags('Expenses')
@@ -82,7 +83,7 @@ export class ExpensesController {
   async createDailyExpense(
     @Body() body: { expenseId: string; date?: string; Summary?: string },
   ) {
-    const date = body.date ? new Date(body.date) : undefined;
+    const date = body.date ? parseLocalDay(body.date) : undefined;
     return this.expensesService.createDailyExpense({
       expenseId: body.expenseId,
       date,
@@ -101,7 +102,7 @@ export class ExpensesController {
     @Param('id') id: string,
     @Body() body: { expenseId?: string; date?: string; Summary?: string },
   ) {
-    const date = body.date ? new Date(body.date) : undefined;
+    const date = body.date !== undefined ? parseLocalDay(body.date) : undefined;
     return this.expensesService.updateDailyExpense(id, {
       expenseId: body.expenseId,
       date,

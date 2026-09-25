@@ -26,6 +26,7 @@ import { JournalEntity } from './entities/journal.entity';
 import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
 import { PaginatedResult } from 'prisma-pagination';
 import { startOfDay, endOfDay } from 'date-fns';
+import { parseLocalDay } from '../../../common/parse-local-day';
 
 @Controller('Journal')
 @ApiTags('journal')
@@ -51,7 +52,7 @@ export class JournalController {
     @Query('journalDate') journalDate: string,
     @Query('organizationId') organizationId?: string,
   ): Promise<PaginatedResult<AddJournalDto>> {
-    const date = new Date(journalDate);
+    const date = parseLocalDay(journalDate);
 
     // Create date range for filtering within the same day
     const startOfTheDay = startOfDay(date);

@@ -97,11 +97,13 @@ import {
   membersApi,
   mobileApi,
   opsEventsApi,
+  pricesApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import {
   isActiveVisit,
   isLeavingSoon,
+  isJournalPack,
   isOverstay,
   isPendingReservation,
   memberOf,
@@ -126,6 +128,7 @@ import {
   activeSubByMember,
   daysLeft,
   paidSubscriptionRevenueOnDay,
+  paymentRemindDaysLeft,
 } from "@/lib/subscription-utils";
 import { useJournalAlertsDataEffect, useJournalAlerts } from "@/lib/journal-alerts-context";
 import {
@@ -168,6 +171,7 @@ export default function JournalClient() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
   const [payFilter, setPayFilter] = useState("all");
+  const [tarifFilter, setTarifFilter] = useState("all");
   const [spaceFilter, setSpaceFilter] = useState("all");
   const [tableFilter, setTableFilter] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
@@ -206,6 +210,7 @@ export default function JournalClient() {
     typeFilter,
     personFilter,
     payFilter,
+    tarifFilter,
     spaceFilter,
     tableFilter,
     quickFilter,
@@ -233,6 +238,19 @@ export default function JournalClient() {
     queryKey: queryKeys.facility,
     queryFn: () => facilityApi.list(),
   });
+
+  const { data: prices = [] } = useQuery({
+    queryKey: queryKeys.prices,
+    queryFn: () => pricesApi.list(),
+  });
+
+  const journalTarifs = useMemo(
+    () =>
+      prices
+        .filter((p) => p.isActive !== false && isJournalPack(p))
+        .sort((a, b) => a.name.localeCompare(b.name, "fr")),
+    [prices],
+  );
 
   const { data: occupancy } = useQuery({
     queryKey: ["facility-occupancy"],
@@ -434,6 +452,20 @@ export default function JournalClient() {
     [tomorrowPage]
   );
 
+  const paymentRemindAbos = useMemo(
+    () =>
+      abonnements.filter(
+        (a) =>
+          !a.isPayed &&
+          a.paymentRemindAt &&
+          (() => {
+            const left = paymentRemindDaysLeft(a);
+            return left != null && left <= 1;
+          })(),
+      ),
+    [abonnements],
+  );
+
   const { actionsRef } = useJournalAlerts();
 
   const alertsData = useMemo(
@@ -441,9 +473,10 @@ export default function JournalClient() {
       rows,
       subByMember,
       tomorrowReservations,
+      paymentRemindAbos,
       now,
     }),
-    [rows, subByMember, tomorrowReservations, now],
+    [rows, subByMember, tomorrowReservations, paymentRemindAbos, now],
   );
 
   actionsRef.current = {
@@ -451,6 +484,7 @@ export default function JournalClient() {
     onFilterOverstay: () => setQuickFilter("overstay"),
     onFilterLeavingSoon: () => setQuickFilter("leaving_soon"),
     onViewTomorrow: () => setDate(tomorrow),
+    onViewPaymentRemind: () => router.push("/impayes"),
   };
 
   useJournalAlertsDataEffect(alertsData);
@@ -483,6 +517,11 @@ export default function JournalClient() {
       list = list.filter((r) => !isAbonnementVisit(r, subByMember));
     if (payFilter === "paid") list = list.filter((r) => r.isPayed);
     if (payFilter === "unpaid") list = list.filter((r) => !r.isPayed);
+    if (tarifFilter !== "all") {
+      list = list.filter(
+        (r) => r.priceId === tarifFilter || priceOf(r)?.id === tarifFilter,
+      );
+    }
 
     if (quickFilter === "overstay") {
       list = list.filter((r) => isOverstay(r, now));
@@ -513,7 +552,7 @@ export default function JournalClient() {
       });
     }
     return list;
-  }, [rows, statusFilter, typeFilter, personFilter, payFilter, quickFilter, search, now, subByMember]);
+  }, [rows, statusFilter, typeFilter, personFilter, payFilter, tarifFilter, quickFilter, search, now, subByMember]);
 
   const displayRows = useMemo(() => {
     let grouped = groupJournalByPerson(filtered);
@@ -1203,6 +1242,19 @@ export default function JournalClient() {
               <SelectItem value="all">Tous</SelectItem>
               <SelectItem value="paid">Payé</SelectItem>
               <SelectItem value="unpaid">Non payé</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={tarifFilter} onValueChange={setTarifFilter}>
+            <SelectTrigger className="w-[170px]">
+              <SelectValue placeholder="Tarif" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tous les tarifs</SelectItem>
+              {journalTarifs.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {journalSpaces.length > 0 ? (

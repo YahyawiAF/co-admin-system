@@ -3,12 +3,13 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { differenceInCalendarDays, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import { Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -38,7 +39,12 @@ import { queryKeys } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 import type { DebtorItem, DebtorSource } from "@/lib/types";
 
-type Filter = "OPEN" | "VISIT" | "ABONNEMENT" | "LEDGER" | "HISTORY";
+type Filter = "OPEN" | "VISIT" | "ABONNEMENT" | "RELANCE" | "LEDGER" | "HISTORY";
+
+function remindDaysLeft(item: DebtorItem) {
+  if (!item.paymentRemindAt) return null;
+  return differenceInCalendarDays(new Date(item.paymentRemindAt), new Date());
+}
 
 export default function ImpayesPage() {
   const queryClient = useQueryClient();
@@ -60,7 +66,7 @@ export default function ImpayesPage() {
 
   const openItems = useMemo(
     () => members.flatMap((m) => m.items.filter((i) => !i.settled)),
-    [members]
+    [members],
   );
   const historyItems = useMemo(
     () =>
@@ -68,9 +74,19 @@ export default function ImpayesPage() {
         .flatMap((m) => m.items)
         .filter((i) => i.settled)
         .sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
         ),
-    [histMembers]
+    [histMembers],
+  );
+
+  const relanceItems = useMemo(
+    () =>
+      openItems.filter((i) => {
+        if (i.source !== "ABONNEMENT" || !i.paymentRemindAt) return false;
+        const left = remindDaysLeft(i);
+        return left != null && left <= 1;
+      }),
+    [openItems],
   );
 
   const rows = useMemo(() => {
@@ -79,12 +95,13 @@ export default function ImpayesPage() {
       return openItems.filter((i) => i.source === "VISIT");
     if (filter === "ABONNEMENT")
       return openItems.filter((i) => i.source === "ABONNEMENT");
+    if (filter === "RELANCE") return relanceItems;
     if (filter === "LEDGER")
       return openItems.filter((i) => i.source === "LEDGER");
     return openItems.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
     );
-  }, [filter, openItems, historyItems]);
+  }, [filter, openItems, historyItems, relanceItems]);
 
   const totalOpen = members.reduce((s, m) => s + m.net, 0);
 
@@ -104,7 +121,10 @@ export default function ImpayesPage() {
         return;
       }
       if (item.source === "ABONNEMENT" && item.abonnementId) {
-        await abonnementsApi.update(item.abonnementId, { isPayed: true });
+        await abonnementsApi.update(item.abonnementId, {
+          isPayed: true,
+          paymentRemindAt: null,
+        });
         return;
       }
       if (item.source === "LEDGER" && item.ledgerId) {
@@ -113,6 +133,26 @@ export default function ImpayesPage() {
     },
     onSuccess: () => {
       toast.success("Marqué payé");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const setRemind = useMutation({
+    mutationFn: async ({
+      item,
+      date,
+    }: {
+      item: DebtorItem;
+      date: string;
+    }) => {
+      if (!item.abonnementId) throw new Error("Abonnement introuvable");
+      await abonnementsApi.update(item.abonnementId, {
+        paymentRemindAt: date ? new Date(date).toISOString() : null,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Date de relance enregistrée");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -154,6 +194,7 @@ export default function ImpayesPage() {
       label: "Abonnements",
       count: openItems.filter((i) => i.source === "ABONNEMENT").length,
     },
+    { id: "RELANCE", label: "À relancer", count: relanceItems.length },
     {
       id: "LEDGER",
       label: "Crédit ledger",
@@ -173,8 +214,8 @@ export default function ImpayesPage() {
         <h1 className="text-2xl font-bold tracking-tight">Impayés</h1>
         <p className="text-sm text-muted-foreground">
           Visites, abonnements et crédits encore dus — historique des
-          règlements. Supprimer retire l&apos;écriture (et le CA si
-          abonnement).
+          règlements. Sur les abonnements, fixez une date de relance pour
+          rappeler le client.
         </p>
       </div>
 
@@ -221,14 +262,14 @@ export default function ImpayesPage() {
               "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
               filter === chip.id
                 ? "border-rose-500 bg-rose-600 text-white"
-                : "border-rose-200 bg-rose-50 text-rose-900"
+                : "border-rose-200 bg-rose-50 text-rose-900",
             )}
           >
             {chip.label}
             <span
               className={cn(
                 "rounded-full px-1.5 py-0.5 text-[10px] font-bold",
-                filter === chip.id ? "bg-white/25" : "bg-black/5"
+                filter === chip.id ? "bg-white/25" : "bg-black/5",
               )}
             >
               {chip.count}
@@ -247,71 +288,137 @@ export default function ImpayesPage() {
                 <TableHead>Source</TableHead>
                 <TableHead>Détail</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Relance</TableHead>
                 <TableHead>Montant</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((item) => (
-                <TableRow
-                  key={`${item.source}-${item.id}`}
-                  className={cn(!item.settled && "bg-rose-50/70")}
-                >
-                  <TableCell>
-                    {item.visitorNumber != null
-                      ? `#${item.visitorNumber}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    {item.memberName}
-                  </TableCell>
-                  <TableCell>
-                    <SourceBadge source={item.source} settled={item.settled} />
-                  </TableCell>
-                  <TableCell>{item.label}</TableCell>
-                  <TableCell>
-                    {format(new Date(item.date), "dd MMM yyyy", { locale: fr })}
-                  </TableCell>
-                  <TableCell>{item.amount.toFixed(1)} DT</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      {!item.settled ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={settle.isPending}
-                          onClick={() => settle.mutate(item)}
-                        >
-                          Marquer payé
-                        </Button>
+              {rows.map((item) => {
+                const left = remindDaysLeft(item);
+                return (
+                  <TableRow
+                    key={`${item.source}-${item.id}`}
+                    className={cn(
+                      !item.settled && "bg-rose-50/70",
+                      item.source === "ABONNEMENT" &&
+                        left != null &&
+                        left <= 0 &&
+                        "bg-orange-50/80",
+                    )}
+                  >
+                    <TableCell>
+                      {item.visitorNumber != null
+                        ? `#${item.visitorNumber}`
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="font-medium">
+                      {item.memberName}
+                    </TableCell>
+                    <TableCell>
+                      <SourceBadge
+                        source={item.source}
+                        settled={item.settled}
+                      />
+                    </TableCell>
+                    <TableCell>{item.label}</TableCell>
+                    <TableCell>
+                      {format(new Date(item.date), "dd MMM yyyy", {
+                        locale: fr,
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {item.source === "ABONNEMENT" &&
+                      !item.settled &&
+                      item.abonnementId ? (
+                        <div className="flex flex-col gap-1">
+                          <Input
+                            type="date"
+                            className="h-8 w-[140px]"
+                            defaultValue={
+                              item.paymentRemindAt
+                                ? format(
+                                    new Date(item.paymentRemindAt),
+                                    "yyyy-MM-dd",
+                                  )
+                                : ""
+                            }
+                            onBlur={(e) => {
+                              const next = e.target.value;
+                              const prev = item.paymentRemindAt
+                                ? format(
+                                    new Date(item.paymentRemindAt),
+                                    "yyyy-MM-dd",
+                                  )
+                                : "";
+                              if (next === prev) return;
+                              setRemind.mutate({ item, date: next });
+                            }}
+                          />
+                          {left != null ? (
+                            <span
+                              className={cn(
+                                "text-[10px]",
+                                left < 0 && "text-rose-700",
+                                left === 0 && "text-orange-700",
+                                left > 0 && "text-muted-foreground",
+                              )}
+                            >
+                              {left < 0
+                                ? `En retard ${Math.abs(left)} j`
+                                : left === 0
+                                  ? "Aujourd’hui"
+                                  : left === 1
+                                    ? "Demain"
+                                    : `Dans ${left} j`}
+                            </span>
+                          ) : null}
+                        </div>
                       ) : (
-                        <Badge variant="secondary">Réglé</Badge>
+                        "—"
                       )}
-                      {canDelete(item) ? (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-destructive"
-                          disabled={remove.isPending}
-                          onClick={() => setToDelete(item)}
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" />
-                          Supprimer
+                    </TableCell>
+                    <TableCell>{item.amount.toFixed(1)} DT</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {!item.settled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={settle.isPending}
+                            onClick={() => settle.mutate(item)}
+                          >
+                            Marquer payé
+                          </Button>
+                        ) : (
+                          <Badge variant="secondary">Réglé</Badge>
+                        )}
+                        {canDelete(item) ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive"
+                            disabled={remove.isPending}
+                            onClick={() => setToDelete(item)}
+                          >
+                            <Trash2 className="mr-1 h-3.5 w-3.5" />
+                            Supprimer
+                          </Button>
+                        ) : null}
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link href={`/members?memberId=${item.memberId}`}>
+                            Fiche
+                          </Link>
                         </Button>
-                      ) : null}
-                      <Button size="sm" variant="ghost" asChild>
-                        <Link href={`/members?memberId=${item.memberId}`}>
-                          Fiche
-                        </Link>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {!rows.length ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="py-10 text-center text-sm text-muted-foreground"
                   >
                     <Wallet className="mx-auto mb-2 h-6 w-6 opacity-40" />
@@ -371,10 +478,11 @@ function SourceBadge({
       ? "Visite"
       : source === "ABONNEMENT"
         ? "Abonnement"
-        : "Crédit";
+        : "Ledger";
   return (
-    <Badge variant={settled ? "secondary" : "outline"} className="text-[10px]">
+    <Badge variant={settled ? "secondary" : "outline"}>
       {label}
+      {settled ? " · réglé" : ""}
     </Badge>
   );
 }

@@ -80,16 +80,24 @@ import {
   daysLeft,
   hoursLeft,
   isActiveSub,
+  isPaymentRemindDue,
   leaveDateFromPeriodStart,
   paidSubscriptionRevenueOnDay,
+  paymentRemindDaysLeft,
   subKind,
 } from "@/lib/subscription-utils";
+import {
+  useJournalAlerts,
+  useJournalAlertsDataEffect,
+} from "@/lib/journal-alerts-context";
+import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
 
 const schema = z.object({
   memberID: z.string().min(1),
   priceId: z.string().min(1),
   registredDate: z.string().min(1),
   leaveDate: z.string().optional(),
+  paymentRemindAt: z.string().optional(),
   isPayed: z.boolean(),
   payedAmount: z.coerce.number().min(0),
   hoursUsed: z.coerce.number().min(0).optional(),
@@ -113,6 +121,7 @@ type AboQuickFilter =
   | "expired"
   | "expiring"
   | "unpaid"
+  | "remind"
   | "hours_low"
   | "hours_pool"
   | "semi_day"
@@ -130,10 +139,17 @@ function AbonnementsInner() {
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const focusMember = searchParams.get("memberId");
+  const focusFilter = searchParams.get("filter");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Abonnement | null>(null);
   const [search, setSearch] = useState("");
-  const [quickFilter, setQuickFilter] = useState<AboQuickFilter>("active");
+  const [quickFilter, setQuickFilter] = useState<AboQuickFilter>(
+    focusFilter === "remind"
+      ? "remind"
+      : focusFilter === "unpaid"
+        ? "unpaid"
+        : "active",
+  );
   const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
@@ -178,6 +194,26 @@ function AbonnementsInner() {
   }, [debtorsData]);
 
   const rows = asList(raw);
+  const paymentRemindAbos = useMemo(
+    () => rows.filter((a) => isPaymentRemindDue(a, 1)),
+    [rows],
+  );
+  const { actionsRef } = useJournalAlerts();
+  const alertsData = useMemo(
+    () => ({
+      rows: [],
+      subByMember: new Map(),
+      tomorrowReservations: [],
+      paymentRemindAbos,
+      now: Date.now(),
+    }),
+    [paymentRemindAbos],
+  );
+  actionsRef.current = {
+    onViewPaymentRemind: () => setQuickFilter("remind"),
+  };
+  useJournalAlertsDataEffect(alertsData);
+
   const subPrices = useMemo(
     () =>
       prices.filter(
@@ -196,6 +232,7 @@ function AbonnementsInner() {
       return isActiveSub(a) && d != null && d <= 3;
     }).length;
     const unpaid = rows.filter((a) => !a.isPayed).length;
+    const remind = rows.filter((a) => isPaymentRemindDue(a, 1)).length;
     const hoursLow = rows.filter((a) => {
       const h = hoursLeft(a);
       return isActiveSub(a) && h != null && h > 0 && h <= 5;
@@ -207,6 +244,7 @@ function AbonnementsInner() {
       expired,
       expiring,
       unpaid,
+      remind,
       hoursLow,
       todayPaid,
     };
@@ -231,6 +269,11 @@ function AbonnementsInner() {
       id: "unpaid",
       label: "Impayés",
       tone: "border-red-200 bg-red-50 text-red-800 data-[active=true]:bg-red-600 data-[active=true]:text-white",
+    },
+    {
+      id: "remind",
+      label: "À relancer",
+      tone: "border-orange-200 bg-orange-50 text-orange-800 data-[active=true]:bg-orange-600 data-[active=true]:text-white",
     },
     {
       id: "hours_low",
@@ -279,6 +322,8 @@ function AbonnementsInner() {
         return isActiveSub(a) && d != null && d <= 3;
       });
     } else if (quickFilter === "unpaid") list = list.filter((a) => !a.isPayed);
+    else if (quickFilter === "remind")
+      list = list.filter((a) => isPaymentRemindDue(a, 1));
     else if (quickFilter === "hours_low") {
       list = list.filter((a) => {
         const h = hoursLeft(a);
@@ -301,6 +346,7 @@ function AbonnementsInner() {
       priceId: "",
       registredDate: format(new Date(), "yyyy-MM-dd"),
       leaveDate: "",
+      paymentRemindAt: "",
       isPayed: true,
       payedAmount: 0,
       hoursUsed: 0,
@@ -335,6 +381,7 @@ function AbonnementsInner() {
       priceId: "",
       registredDate: format(new Date(), "yyyy-MM-dd"),
       leaveDate: "",
+      paymentRemindAt: "",
       isPayed: true,
       payedAmount: 0,
       hoursUsed: 0,
@@ -351,6 +398,9 @@ function AbonnementsInner() {
       priceId: a.priceId,
       registredDate: format(new Date(a.registredDate), "yyyy-MM-dd"),
       leaveDate: a.leaveDate ? format(new Date(a.leaveDate), "yyyy-MM-dd") : "",
+      paymentRemindAt: a.paymentRemindAt
+        ? format(new Date(a.paymentRemindAt), "yyyy-MM-dd")
+        : "",
       isPayed: a.isPayed,
       payedAmount: a.payedAmount,
       hoursUsed: a.hoursUsed || 0,
@@ -407,6 +457,10 @@ function AbonnementsInner() {
         isPayed,
         payedAmount,
         isReservation: false,
+        paymentRemindAt:
+          !isPayed && v.paymentRemindAt
+            ? new Date(v.paymentRemindAt).toISOString()
+            : null,
         hoursQuota:
           price?.billingUnit === "HOURLY" ? price.durationHours : null,
         hoursUsed: v.hoursUsed || 0,
@@ -705,6 +759,18 @@ function AbonnementsInner() {
                     );
                   })()}
                 </div>
+                {!form.watch("isPayed") ? (
+                  <div className="space-y-2">
+                    <Label>Date de relance</Label>
+                    <Input
+                      type="date"
+                      {...form.register("paymentRemindAt")}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Rappeler de demander le paiement au client ce jour-là.
+                    </p>
+                  </div>
+                ) : null}
                 {isHoursPool ? (
                   <div className="space-y-2">
                     <Label>
@@ -750,6 +816,8 @@ function AbonnementsInner() {
         </div>
       </div>
 
+      <JournalAlertStrip />
+
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Total", value: String(kpis.total) },
@@ -760,6 +828,7 @@ function AbonnementsInner() {
           },
           { label: "Expire ≤3j", value: String(kpis.expiring) },
           { label: "Impayés", value: String(kpis.unpaid) },
+          { label: "À relancer", value: String(kpis.remind) },
           { label: "Heures faibles", value: String(kpis.hoursLow) },
           { label: "Expirés", value: String(kpis.expired) },
         ].map((k) => (
@@ -959,23 +1028,42 @@ function AbonnementsInner() {
                           const catalog = a.price?.price || 0;
                           const received = a.payedAmount || 0;
                           const remaining = Math.max(0, catalog - received);
-                          if (a.isPayed) {
-                            return (
-                              <Badge variant="default">Payé</Badge>
-                            );
-                          }
-                          if (remaining > 0.009 && received > 0.009) {
-                            return (
-                              <Badge
-                                variant="secondary"
-                                className="bg-amber-100 text-amber-900"
-                              >
-                                Reste {remaining.toFixed(0)} DT
-                              </Badge>
-                            );
-                          }
+                          const remindLeft = paymentRemindDaysLeft(a);
                           return (
-                            <Badge variant="secondary">Non payé</Badge>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {a.isPayed ? (
+                                <Badge variant="default">Payé</Badge>
+                              ) : remaining > 0.009 && received > 0.009 ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="bg-amber-100 text-amber-900"
+                                >
+                                  Reste {remaining.toFixed(0)} DT
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary">Non payé</Badge>
+                              )}
+                              {!a.isPayed && a.paymentRemindAt && remindLeft != null ? (
+                                <Badge
+                                  variant="outline"
+                                  className={cn(
+                                    remindLeft < 0 &&
+                                      "border-rose-400 text-rose-800",
+                                    remindLeft === 0 &&
+                                      "border-orange-400 text-orange-800",
+                                    remindLeft === 1 &&
+                                      "border-amber-400 text-amber-800",
+                                  )}
+                                >
+                                  Relance{" "}
+                                  {remindLeft < 0
+                                    ? `${Math.abs(remindLeft)}j`
+                                    : remindLeft === 0
+                                      ? "auj."
+                                      : `J-${remindLeft}`}
+                                </Badge>
+                              ) : null}
+                            </div>
                           );
                         })()}
                       </TableCell>
@@ -1217,6 +1305,7 @@ function AbonnementsInner() {
                     priceId: "",
                     registredDate: format(new Date(), "yyyy-MM-dd"),
                     leaveDate: "",
+                    paymentRemindAt: "",
                     isPayed: true,
                     payedAmount: 0,
                     hoursUsed: 0,

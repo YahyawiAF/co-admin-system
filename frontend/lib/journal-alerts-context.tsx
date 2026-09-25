@@ -16,6 +16,7 @@ export type JournalAlertsData = {
   rows: Journal[];
   subByMember: Map<string, Abonnement>;
   tomorrowReservations: Journal[];
+  paymentRemindAbos: Abonnement[];
   now: number;
 };
 
@@ -24,6 +25,7 @@ export type JournalAlertsActions = {
   onFilterOverstay?: () => void;
   onFilterLeavingSoon?: () => void;
   onViewTomorrow?: () => void;
+  onViewPaymentRemind?: () => void;
 };
 
 /** @deprecated use JournalAlertsData */

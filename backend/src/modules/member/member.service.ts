@@ -612,6 +612,9 @@ export class MemberService {
           payedAmount: paid,
           remaining,
           registredDate: a.registredDate.toISOString(),
+          paymentRemindAt: a.paymentRemindAt
+            ? a.paymentRemindAt.toISOString()
+            : null,
         };
       }),
     };
@@ -943,6 +946,9 @@ export class MemberService {
         memberId: a.memberID,
         memberName: memberName(a.members),
         visitorNumber: a.members.visitorNumber ?? null,
+        paymentRemindAt: a.paymentRemindAt
+          ? a.paymentRemindAt.toISOString()
+          : null,
       });
     }
 

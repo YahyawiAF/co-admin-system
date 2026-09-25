@@ -7,6 +7,10 @@ import { PrismaService } from 'database/prisma.service';
 import { endOfDay, startOfDay } from 'date-fns';
 import { OpsEventsService } from '../ops-events/ops-events.service';
 import { ConfigService } from '@nestjs/config';
+import {
+  isLocalToday,
+  parseLocalDay,
+} from '../../../common/parse-local-day';
 
 @Injectable()
 export class CaisseService {
@@ -17,8 +21,19 @@ export class CaisseService {
   ) {}
 
   private dayKey(date: Date | string) {
-    const d = typeof date === 'string' ? new Date(date) : date;
-    return startOfDay(d);
+    return parseLocalDay(date);
+  }
+
+  /** Auto-open today's caisse with float 0 if no session yet. Close stays manual. */
+  async ensureOpenToday(date: string) {
+    if (!isLocalToday(date)) return this.getOrNull(date);
+    const day = this.dayKey(date);
+    const existing = await this.prisma.caisseSession.findUnique({
+      where: { date: day },
+      include: { movements: { orderBy: { createdAt: 'asc' } } },
+    });
+    if (existing) return existing;
+    return this.open(date, 0);
   }
 
   async getOrNull(date: string) {
@@ -72,6 +87,7 @@ export class CaisseService {
   }
 
   async daySummary(date: string) {
+    await this.ensureOpenToday(date);
     const day = this.dayKey(date);
     const start = startOfDay(day);
     const end = endOfDay(day);

@@ -205,6 +205,7 @@ export interface Abonnement {
   isPayed: boolean;
   registredDate: string;
   leaveDate?: string | null;
+  paymentRemindAt?: string | null;
   payedAmount: number;
   memberID: string;
   members?: Member | null;
@@ -763,6 +764,7 @@ export interface DebtorItem {
   memberName: string;
   visitorNumber: number | null;
   seatLabel?: string | null;
+  paymentRemindAt?: string | null;
 }
 
 export interface DebtorMember {

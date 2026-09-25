@@ -8,7 +8,9 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  ComposedChart,
   Legend,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -74,10 +76,24 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
         Abonnements: Math.round(d.revenueAbonnements * 10) / 10,
         Produits: Math.round(d.revenueProducts * 10) / 10,
         Dépenses: Math.round(d.expenses * 10) / 10,
-        Net: Math.round(d.net * 10) / 10,
+        Total: Math.round(d.net * 10) / 10,
       })),
     [daysData],
   );
+
+  const dayTotals = useMemo(() => {
+    const days = daysData?.days || [];
+    return days.reduce(
+      (acc, d) => ({
+        Journal: acc.Journal + (d.revenueJournal || 0),
+        Abonnements: acc.Abonnements + (d.revenueAbonnements || 0),
+        Produits: acc.Produits + (d.revenueProducts || 0),
+        Dépenses: acc.Dépenses + (d.expenses || 0),
+        Total: acc.Total + (d.net || 0),
+      }),
+      { Journal: 0, Abonnements: 0, Produits: 0, Dépenses: 0, Total: 0 },
+    );
+  }, [daysData]);
 
   const mixChart = useMemo(() => {
     if (!monthData) return [];
@@ -85,7 +101,9 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
       { name: "Journal", value: monthData.revenueJournal },
       { name: "Abonnements", value: monthData.revenueAbonnements },
       { name: "Produits", value: monthData.revenueProducts },
-    ].filter((r) => r.value > 0);
+      { name: "Dépenses", value: monthData.expenses },
+      { name: "Total (net)", value: monthData.net },
+    ].filter((r) => Math.abs(r.value) > 0);
   }, [monthData]);
 
   return (
@@ -130,27 +148,54 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            Jours du mois — mix revenus
+            Jours du mois — mix revenus, dépenses et total
           </CardTitle>
         </CardHeader>
-        <CardContent className="h-64 pt-2">
+        <CardContent className="pt-2">
           {dayChart.length ? (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dayChart}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} width={40} />
-                <Tooltip formatter={(v: number) => fmtDt(v)} />
-                <Legend />
-                <Bar dataKey="Journal" stackId="a" fill="hsl(210 70% 50%)" />
-                <Bar
-                  dataKey="Abonnements"
-                  stackId="a"
-                  fill="hsl(160 50% 40%)"
-                />
-                <Bar dataKey="Produits" stackId="a" fill="hsl(35 80% 50%)" />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={dayChart}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} width={40} />
+                    <Tooltip formatter={(v: number) => fmtDt(v)} />
+                    <Legend />
+                    <Bar dataKey="Journal" stackId="a" fill="hsl(210 70% 50%)" />
+                    <Bar
+                      dataKey="Abonnements"
+                      stackId="a"
+                      fill="hsl(160 50% 40%)"
+                    />
+                    <Bar dataKey="Produits" stackId="a" fill="hsl(35 80% 50%)" />
+                    <Bar
+                      dataKey="Dépenses"
+                      fill="hsl(var(--destructive))"
+                      radius={[2, 2, 0, 0]}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="Total"
+                      stroke="hsl(var(--primary))"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                <span>Journal {fmtDt(dayTotals.Journal)}</span>
+                <span>Abo {fmtDt(dayTotals.Abonnements)}</span>
+                <span>Produits {fmtDt(dayTotals.Produits)}</span>
+                <span className="text-destructive">
+                  Dépenses {fmtDt(dayTotals.Dépenses)}
+                </span>
+                <span className="font-medium text-foreground">
+                  Total {fmtDt(dayTotals.Total)}
+                </span>
+              </div>
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">
               Aucune vente ce mois
@@ -172,11 +217,11 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
                 <YAxis
                   type="category"
                   dataKey="name"
-                  width={90}
+                  width={100}
                   tick={{ fontSize: 12 }}
                 />
                 <Tooltip formatter={(v: number) => fmtDt(v)} />
-                <Bar dataKey="value" name="CA" fill="hsl(var(--primary))" radius={4} />
+                <Bar dataKey="value" name="Montant" fill="hsl(var(--primary))" radius={4} />
               </BarChart>
             </ResponsiveContainer>
           ) : (

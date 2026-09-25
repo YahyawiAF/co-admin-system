@@ -831,11 +831,12 @@ export default function FinancePage() {
           </div>
 
           {monthData ? (
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-4">
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-5">
               {[
                 { label: "Journal", value: monthData.revenueJournal },
                 { label: "Abonnements", value: monthData.revenueAbonnements },
                 { label: "Produits", value: monthData.revenueProducts },
+                { label: "Dépenses", value: monthData.expenses },
                 { label: "Net mois", value: monthData.net },
               ].map((k) => (
                 <Card key={k.label} className="shadow-none">

@@ -40,7 +40,12 @@ import {
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { isPendingReservation, memberOf } from "@/lib/journal-utils";
-import { paidSubscriptionRevenueOnDay, asAbonnementList } from "@/lib/subscription-utils";
+import {
+  asAbonnementList,
+  isPaymentRemindDue,
+  paidSubscriptionRevenueOnDay,
+  paymentRemindDaysLeft,
+} from "@/lib/subscription-utils";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 
 export default function DashboardPage() {
@@ -120,6 +125,7 @@ export default function DashboardPage() {
       return days >= 0 && days <= 3;
     }
   );
+  const paymentRelances = abos.filter((a) => isPaymentRemindDue(a, 1));
 
   return (
     <div className="space-y-6">
@@ -295,6 +301,58 @@ export default function DashboardPage() {
               <Link href={`/journal?date=${format(tomorrow, "yyyy-MM-dd")}`}>
                 Voir le journal de demain →
               </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {paymentRelances.length > 0 ? (
+        <Card className="border-orange-300 bg-orange-50/50 dark:bg-orange-950/20">
+          <CardHeader className="flex flex-row items-center gap-2 pb-2">
+            <Wallet className="h-5 w-5 text-orange-700" />
+            <div>
+              <CardTitle className="text-base">
+                {paymentRelances.length} relance
+                {paymentRelances.length !== 1 ? "s" : ""} paiement
+              </CardTitle>
+              <CardDescription>
+                Abonnements non payés à rappeler aujourd&apos;hui ou demain
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {paymentRelances.slice(0, 6).map((a) => {
+              const left = paymentRemindDaysLeft(a);
+              return (
+                <div
+                  key={a.id}
+                  className="flex items-center justify-between rounded-lg border border-orange-200 bg-background px-3 py-2 text-sm"
+                >
+                  <span>
+                    {a.members?.firstName || "Client"}
+                    {a.members?.visitorNumber
+                      ? ` #${a.members.visitorNumber}`
+                      : ""}
+                  </span>
+                  <Badge
+                    variant="outline"
+                    className={
+                      left != null && left <= 0
+                        ? "border-rose-400 text-rose-800"
+                        : "border-orange-400"
+                    }
+                  >
+                    {left != null && left < 0
+                      ? `Retard ${Math.abs(left)} j`
+                      : left === 0
+                        ? "Aujourd’hui"
+                        : "Demain"}
+                  </Badge>
+                </div>
+              );
+            })}
+            <Button variant="link" className="h-auto p-0" asChild>
+              <Link href="/impayes">Voir les impayés →</Link>
             </Button>
           </CardContent>
         </Card>

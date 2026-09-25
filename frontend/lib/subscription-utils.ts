@@ -12,6 +12,31 @@ export function daysLeft(a: Abonnement) {
   return differenceInCalendarDays(new Date(a.leaveDate), new Date());
 }
 
+/** Calendar days until payment remind date (negative = overdue). */
+export function paymentRemindDaysLeft(a: Abonnement) {
+  if (!a.paymentRemindAt) return null;
+  return differenceInCalendarDays(new Date(a.paymentRemindAt), new Date());
+}
+
+export function isPaymentRemindDue(
+  a: Abonnement,
+  withinDays = 0,
+): boolean {
+  if (a.isPayed || !a.paymentRemindAt) return false;
+  const left = paymentRemindDaysLeft(a);
+  return left != null && left <= withinDays;
+}
+
+export function isPaymentRemindToday(a: Abonnement) {
+  if (a.isPayed || !a.paymentRemindAt) return false;
+  return paymentRemindDaysLeft(a) === 0;
+}
+
+export function isPaymentRemindTomorrow(a: Abonnement) {
+  if (a.isPayed || !a.paymentRemindAt) return false;
+  return paymentRemindDaysLeft(a) === 1;
+}
+
 /** Warn only in the last days — a 7-day pack that just started is not “bientôt fini”. */
 export const SUB_EXPIRING_WITHIN_DAYS = 3;
 

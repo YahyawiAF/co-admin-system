@@ -4,6 +4,7 @@ import { CreateExpenseDto } from './dtos/createExp.dto';
 import { ExpenseEntity } from './entities/exp.entitie';
 import { UpdateExpDto } from './dtos/updateExp.dto';
 import { PrismaService } from 'database/prisma.service';
+import { parseLocalDay } from '../../../common/parse-local-day';
 
 @Injectable()
 export class ExpensesService {
@@ -29,7 +30,7 @@ export class ExpensesService {
     date?: Date;
     Summary?: string;
   }) {
-    const date = data.date ?? new Date();
+    const date = parseLocalDay(data.date ?? null);
 
     return this.prisma.dailyExpense.create({
       data: {
@@ -47,7 +48,7 @@ export class ExpensesService {
       where: { id },
       data: {
         expenseId: data.expenseId,
-        date: data.date,
+        date: data.date !== undefined ? parseLocalDay(data.date) : undefined,
         Summary: data.Summary,
       },
     });

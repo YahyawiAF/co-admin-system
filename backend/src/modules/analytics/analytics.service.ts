@@ -7,15 +7,16 @@ import {
   startOfMonth,
   subDays,
 } from 'date-fns';
+import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
 
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   private parseRange(from?: string, to?: string) {
-    const end = to ? endOfDay(new Date(to)) : endOfDay(new Date());
+    const end = to ? endOfDay(parseLocalDay(to)) : endOfDay(new Date());
     const start = from
-      ? startOfDay(new Date(from))
+      ? startOfDay(parseLocalDay(from))
       : startOfDay(subDays(end, 89));
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       throw new BadRequestException('Invalid from/to date');
@@ -138,7 +139,7 @@ export class AnalyticsService {
     >();
 
     const ensure = (d: Date) => {
-      const key = startOfDay(d).toISOString().slice(0, 10);
+      const key = localDayKey(d);
       if (!byDay.has(key)) {
         byDay.set(key, {
           date: key,
