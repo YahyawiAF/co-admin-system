@@ -639,14 +639,8 @@ export default function JournalClient() {
   };
 
   const memberIdForJournal = (journalId: string) => {
-    for (const r of rows) {
-      if (r.id === journalId) return r.memberID || r.members?.id;
-      const passage = r.passages?.find((p) => p.id === journalId);
-      if (passage) {
-        return passage.memberID || passage.members?.id || r.memberID || r.members?.id;
-      }
-    }
-    return undefined;
+    const hit = rows.find((r) => r.id === journalId);
+    return hit?.memberID || hit?.members?.id || undefined;
   };
 
   const checkout = useMutation({

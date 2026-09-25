@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { mobileApi } from "@/lib/api/resources";
+import {
+  mobileApi,
+  type MobileStatusResponse,
+} from "@/lib/api/resources";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 import {
@@ -14,9 +17,9 @@ const OPTIMISTIC_SESSION_KEY = "visitorOptimisticSession";
 export type OptimisticSessionPayload = {
   memberId: string;
   at: number;
-  session?: Record<string, unknown> | null;
-  seat?: Record<string, unknown> | null;
-  pendingRequest?: Record<string, unknown> | null;
+  session?: MobileStatusResponse["session"] | Record<string, unknown> | null;
+  seat?: MobileStatusResponse["seat"] | Record<string, unknown> | null;
+  pendingRequest?: MobileStatusResponse["pendingRequest"] | Record<string, unknown> | null;
 };
 
 export function writeOptimisticSession(payload: OptimisticSessionPayload) {
@@ -70,7 +73,7 @@ export function useMobileStatus(opts?: {
 
   return useQuery({
     queryKey: ["mobile-status", memberId],
-    queryFn: async () => {
+    queryFn: async (): Promise<MobileStatusResponse> => {
       const data = await mobileApi.status(memberId!);
       const opt = readOptimisticSession(memberId!);
 
@@ -83,21 +86,24 @@ export function useMobileStatus(opts?: {
 
       // Keep showing session UI while create/approve is still in flight
       if (opt?.session && !data.session) {
-        const merged = {
+        const merged: MobileStatusResponse = {
           ...data,
           hasOpenSession: true,
           pendingRequest: null,
-          session: opt.session,
-          seat: opt.seat ?? data.seat,
+          session: (opt.session as MobileStatusResponse["session"]) ?? null,
+          seat:
+            (opt.seat as MobileStatusResponse["seat"]) ?? data.seat,
         };
         writeLocalCache("mobile-status", merged, memberId);
         return merged;
       }
 
       if (opt?.pendingRequest && !data.pendingRequest && !data.session) {
-        const merged = {
+        const merged: MobileStatusResponse = {
           ...data,
-          pendingRequest: opt.pendingRequest,
+          pendingRequest:
+            (opt.pendingRequest as MobileStatusResponse["pendingRequest"]) ??
+            null,
         };
         writeLocalCache("mobile-status", merged, memberId);
         return merged;
@@ -111,20 +117,26 @@ export function useMobileStatus(opts?: {
     gcTime: 30 * 60_000,
     refetchInterval: interval,
     refetchOnReconnect: true,
-    placeholderData: () => {
+    placeholderData: (): MobileStatusResponse | undefined => {
       if (!memberId) return undefined;
-      const cached = readLocalCache("mobile-status", memberId) ?? undefined;
+      const cached =
+        readLocalCache<MobileStatusResponse>("mobile-status", memberId) ??
+        undefined;
       const opt = readOptimisticSession(memberId);
-      if (
-        opt?.session &&
-        !(cached as { session?: unknown } | undefined)?.session
-      ) {
+      if (opt?.session && !cached?.session) {
         return {
-          ...(cached || {}),
+          ...(cached || {
+            session: null,
+            subscription: null,
+            hasActiveSubscription: false,
+            pendingRequest: null,
+            hasOpenSession: true,
+          }),
           hasOpenSession: true,
-          session: opt.session,
-          seat: opt.seat ?? (cached as { seat?: unknown } | undefined)?.seat,
-        } as typeof cached;
+          session: (opt.session as MobileStatusResponse["session"]) ?? null,
+          seat:
+            (opt.seat as MobileStatusResponse["seat"]) ?? cached?.seat,
+        };
       }
       return cached;
     },

@@ -649,6 +649,27 @@ export const visitRequestsApi = {
   },
 };
 
+export type MobileStatusResponse = {
+  session:
+    | (Journal & {
+        seat?: SeatAssignmentInfo | null;
+        amountDue?: number;
+        overtime?: boolean;
+        remainingMs?: number | null;
+      })
+    | null;
+  subscription: Abonnement | null;
+  hasActiveSubscription: boolean;
+  canChooseForfait?: boolean;
+  mustScanToEnter?: boolean;
+  dailyCreditRemainingHours?: number | null;
+  pendingRequest: VisitRequest | null;
+  hasOpenSession: boolean;
+  seat?: SeatAssignmentInfo | null;
+  seatSettings?: MobileSeatSettings;
+  member?: Member | null;
+};
+
 export const mobileApi = {
   quickCheckIn(data: {
     priceId: string;
@@ -782,26 +803,9 @@ export const mobileApi = {
     }>(`/mobile/admin/members/${memberId}/login-token`, {});
   },
   status(memberId: string) {
-    return http.get<{
-      session:
-        | (Journal & {
-            seat?: SeatAssignmentInfo | null;
-            amountDue?: number;
-            overtime?: boolean;
-            remainingMs?: number | null;
-          })
-        | null;
-      subscription: Abonnement | null;
-      hasActiveSubscription: boolean;
-      canChooseForfait?: boolean;
-      mustScanToEnter?: boolean;
-      dailyCreditRemainingHours?: number | null;
-      pendingRequest: VisitRequest | null;
-      hasOpenSession: boolean;
-      seat?: SeatAssignmentInfo | null;
-      seatSettings?: MobileSeatSettings;
-      member?: Member | null;
-    }>(`/mobile/status/${memberId}`, { skipAuth: true });
+    return http.get<MobileStatusResponse>(`/mobile/status/${memberId}`, {
+      skipAuth: true,
+    });
   },
   seatSettings(org?: string) {
     const q = org ? `?org=${encodeURIComponent(org)}` : "";

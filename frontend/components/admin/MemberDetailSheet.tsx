@@ -357,6 +357,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                     variant="outline"
                     disabled={adjustPoints.isPending}
                     onClick={() => {
+                      if (!member?.id) return;
                       const raw = window.prompt(
                         "Ajouter combien de points ?",
                         "50"
@@ -367,7 +368,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                         toast.error("Nombre invalide");
                         return;
                       }
-                      adjustPoints.mutate({ memberId: m.id, delta: n });
+                      adjustPoints.mutate({ memberId: member.id, delta: n });
                     }}
                   >
                     Ajouter
@@ -380,6 +381,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                       adjustPoints.isPending || Number(m.points ?? 0) <= 0
                     }
                     onClick={() => {
+                      if (!member?.id) return;
                       const raw = window.prompt(
                         "Retirer combien de points ?",
                         "10"
@@ -390,7 +392,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                         toast.error("Nombre invalide");
                         return;
                       }
-                      adjustPoints.mutate({ memberId: m.id, delta: -n });
+                      adjustPoints.mutate({ memberId: member.id, delta: -n });
                     }}
                   >
                     Retirer
