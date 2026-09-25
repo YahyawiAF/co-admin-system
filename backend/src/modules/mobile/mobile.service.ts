@@ -3272,7 +3272,11 @@ export class MobileService {
       result = await this.startDaySession({
         memberId: request.memberId,
         priceId: request.priceId,
+        // Snapshot only — seat/space booking happens below in approveVisitRequest.
+        // Without reserveKind: 'none', spaceId alone books the whole space
+        // (often "salle de réunion") for every forfait.
         spaceId: assignedSpaceId,
+        reserveKind: 'none',
       });
     } else {
       result = await this.startSubscription({
