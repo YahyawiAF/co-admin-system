@@ -392,6 +392,25 @@ export interface DayFinanceSummary {
   unpaidJournal: number;
   occupancy: OccupancyStats;
   journalsCount: number;
+  dailyExpenses?: Array<{
+    id: string;
+    expenseId: string;
+    date?: string | null;
+    Summary?: string | null;
+    expense?: {
+      id: string;
+      name: string;
+      amount: number;
+      type: "MENSUEL" | "JOURNALIER" | string;
+    };
+  }>;
+  dailyProducts?: Array<{
+    id: string;
+    productId: string;
+    quantite: number;
+    status?: string;
+    product?: { name: string; sellingPrice: number };
+  }>;
 }
 
 export interface CoffreEntry {

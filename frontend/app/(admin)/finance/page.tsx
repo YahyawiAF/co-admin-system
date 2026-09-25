@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -80,7 +82,8 @@ export default function FinancePage() {
   const [moveLabel, setMoveLabel] = useState("");
   const [productId, setProductId] = useState("");
   const [productQty, setProductQty] = useState("1");
-  const [expenseId, setExpenseId] = useState("");
+  const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>([]);
+  const [expenseNote, setExpenseNote] = useState("");
   const [coffreAmount, setCoffreAmount] = useState("");
   const [coffreLabel, setCoffreLabel] = useState("");
   const [monthKey, setMonthKey] = useState(format(new Date(), "yyyy-MM"));
@@ -135,6 +138,8 @@ export default function FinancePage() {
     queryClient.invalidateQueries({ queryKey: ["coffre"] });
     queryClient.invalidateQueries({ queryKey: ["caisse-month"] });
     queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics-finance-days"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics-finance-year"] });
     refetch();
   };
 
@@ -200,13 +205,39 @@ export default function FinancePage() {
   });
 
   const addExpense = useMutation({
-    mutationFn: () =>
-      dailyExpensesApi.create({
-        expenseId,
-        date,
-      }),
+    mutationFn: async () => {
+      if (!selectedExpenseIds.length) {
+        throw new Error("Choisissez au moins une dépense");
+      }
+      const note = expenseNote.trim() || undefined;
+      await Promise.all(
+        selectedExpenseIds.map((id) =>
+          dailyExpensesApi.create({
+            expenseId: id,
+            date,
+            Summary: note,
+          }),
+        ),
+      );
+      return selectedExpenseIds.length;
+    },
+    onSuccess: (n) => {
+      toast.success(
+        n === 1
+          ? "Dépense enregistrée"
+          : `${n} dépenses enregistrées pour ce jour`,
+      );
+      setSelectedExpenseIds([]);
+      setExpenseNote("");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const removeDailyExpense = useMutation({
+    mutationFn: (id: string) => dailyExpensesApi.remove(id),
     onSuccess: () => {
-      toast.success("Dépense enregistrée");
+      toast.success("Dépense retirée du jour");
       invalidate();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -235,7 +266,7 @@ export default function FinancePage() {
         ? expensesApi.update(editExpense.id, v)
         : expensesApi.create(v),
     onSuccess: () => {
-      toast.success(editExpense ? "Dépense mise à jour" : "Dépense créée");
+      toast.success(editExpense ? "Modèle mis à jour" : "Modèle créé");
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
       setExpenseOpen(false);
     },
@@ -285,6 +316,202 @@ export default function FinancePage() {
   const expenseList = Array.isArray(expenses) ? expenses : [];
   const dailyCatalog = expenseList.filter((e) => e.type === "JOURNALIER");
   const monthlyCatalog = expenseList.filter((e) => e.type === "MENSUEL");
+  const dayExpenses = summary?.dailyExpenses || [];
+  const dayExpenseTotal = dayExpenses.reduce(
+    (s, de) => s + (de.expense?.amount || 0),
+    0,
+  );
+  const selectedExpenseTotal = useMemo(
+    () =>
+      selectedExpenseIds.reduce((s, id) => {
+        const e = expenseList.find((x) => x.id === id);
+        return s + (e?.amount || 0);
+      }, 0),
+    [selectedExpenseIds, expenseList],
+  );
+
+  const toggleExpenseSelect = (id: string) => {
+    setSelectedExpenseIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  const DayExpensesPanel = (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-base">Dépenses du jour</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {format(new Date(date + "T12:00:00"), "EEEE d MMMM yyyy", {
+                locale: fr,
+              })}{" "}
+              — cochez une ou plusieurs lignes du catalogue, puis ajoutez.
+            </p>
+          </div>
+          <Badge variant="secondary" className="text-sm">
+            Total jour {dayExpenseTotal.toFixed(1)} DT
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {!expenseList.length ? (
+          <Alert>
+            <AlertDescription>
+              Aucun modèle de dépense. Créez-en dans l&apos;onglet{" "}
+              <strong>Dépenses</strong> (ex. Café, Loyer, Eau).
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  { title: "Journalières", list: dailyCatalog },
+                  { title: "Mensuelles", list: monthlyCatalog },
+                ] as const
+              ).map((group) => (
+                <div
+                  key={group.title}
+                  className="rounded-lg border bg-muted/20 p-3"
+                >
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.title}
+                  </p>
+                  {group.list.length ? (
+                    <ul className="space-y-1.5">
+                      {group.list.map((e) => {
+                        const checked = selectedExpenseIds.includes(e.id);
+                        return (
+                          <li key={e.id}>
+                            <label
+                              className={cn(
+                                "flex cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-2 text-sm transition-colors",
+                                checked
+                                  ? "border-primary/40 bg-primary/5"
+                                  : "border-transparent bg-background hover:bg-muted/60",
+                              )}
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={() =>
+                                  toggleExpenseSelect(e.id)
+                                }
+                              />
+                              <span className="min-w-0 flex-1 font-medium">
+                                {e.name}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-muted-foreground">
+                                {e.amount} DT
+                              </span>
+                            </label>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Aucune</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expense-note">Note (optionnel)</Label>
+              <Input
+                id="expense-note"
+                placeholder="Ex. facture électricité, courses…"
+                value={expenseNote}
+                onChange={(e) => setExpenseNote(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
+              <p className="text-sm text-muted-foreground">
+                {selectedExpenseIds.length === 0
+                  ? "Aucune sélection"
+                  : selectedExpenseIds.length === 1
+                    ? "1 dépense · "
+                    : `${selectedExpenseIds.length} dépenses · `}
+                {selectedExpenseIds.length > 0 ? (
+                  <span className="font-semibold text-foreground">
+                    {selectedExpenseTotal.toFixed(1)} DT
+                  </span>
+                ) : null}
+              </p>
+              <Button
+                disabled={
+                  !selectedExpenseIds.length ||
+                  addExpense.isPending ||
+                  isClosed
+                }
+                onClick={() => addExpense.mutate()}
+              >
+                <Plus className="mr-1.5 h-4 w-4" />
+                Ajouter au jour
+              </Button>
+            </div>
+            {isClosed ? (
+              <p className="text-xs text-amber-700">
+                Caisse clôturée — les dépenses du jour ne peuvent plus être
+                modifiées.
+              </p>
+            ) : null}
+          </>
+        )}
+
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">Enregistrées ce jour</p>
+            <span className="text-xs text-muted-foreground">
+              {dayExpenses.length} ligne
+              {dayExpenses.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          {dayExpenses.length ? (
+            <ul className="divide-y rounded-lg border">
+              {dayExpenses.map((de) => (
+                <li
+                  key={de.id}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">
+                      {de.expense?.name || "Dépense"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {de.expense?.type === "MENSUEL"
+                        ? "Mensuel"
+                        : "Journalier"}
+                      {de.Summary ? ` · ${de.Summary}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 tabular-nums font-medium text-destructive">
+                    −{(de.expense?.amount || 0).toFixed(1)} DT
+                  </span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0 text-destructive"
+                    disabled={isClosed || removeDailyExpense.isPending}
+                    onClick={() => removeDailyExpense.mutate(de.id)}
+                    title="Retirer du jour"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+              Aucune dépense sur cette date. Cochez ci-dessus pour en ajouter
+              plusieurs d&apos;un coup.
+            </p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   const openCreateExpense = () => {
     setEditExpense(null);
@@ -520,9 +747,7 @@ export default function FinancePage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">
-                  Ventes &amp; dépenses du jour
-                </CardTitle>
+                <CardTitle className="text-base">Ventes produits</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-end gap-2">
@@ -549,59 +774,44 @@ export default function FinancePage() {
                   />
                   <Button
                     size="sm"
-                    disabled={!productId || addProduct.isPending}
+                    disabled={!productId || addProduct.isPending || isClosed}
                     onClick={() => addProduct.mutate()}
                   >
                     + Vente
                   </Button>
                 </div>
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-[160px] flex-1 space-y-1">
-                    <Label>Dépense du jour</Label>
-                    <Select value={expenseId} onValueChange={setExpenseId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Choisir" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {expenseList.map((e) => (
-                          <SelectItem key={e.id} value={e.id}>
-                            {e.name} ({e.amount} DT) · {e.type === "MENSUEL" ? "mensuel" : "journalier"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={!expenseId || addExpense.isPending}
-                    onClick={() => addExpense.mutate()}
-                  >
-                    Enregistrer
-                  </Button>
-                </div>
                 <p className="text-xs text-muted-foreground">
-                  {format(new Date(date), "EEEE d MMMM yyyy", { locale: fr })}
+                  {format(new Date(date + "T12:00:00"), "EEEE d MMMM yyyy", {
+                    locale: fr,
+                  })}
                 </p>
               </CardContent>
             </Card>
           </div>
+
+          {DayExpensesPanel}
         </TabsContent>
 
         <TabsContent value="depenses" className="mt-4 space-y-4">
+          {DayExpensesPanel}
+
           <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              Catalogue : journalier (récurrent chaque jour) et mensuel.
-              Appliquez-les sur l&apos;onglet Caisse.
-            </p>
+            <div>
+              <h2 className="text-base font-semibold">Catalogue des modèles</h2>
+              <p className="text-sm text-muted-foreground">
+                Créez des modèles (café, loyer, eau…) puis cochez-les ci-dessus
+                pour les appliquer au jour sélectionné — plusieurs d&apos;un
+                coup.
+              </p>
+            </div>
             <Dialog open={expenseOpen} onOpenChange={setExpenseOpen}>
               <DialogTrigger asChild>
-                <Button onClick={openCreateExpense}>+ Dépense</Button>
+                <Button onClick={openCreateExpense}>+ Modèle</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>
-                    {editExpense ? "Modifier la dépense" : "Nouvelle dépense"}
+                    {editExpense ? "Modifier le modèle" : "Nouveau modèle de dépense"}
                   </DialogTitle>
                 </DialogHeader>
                 <form
@@ -662,8 +872,8 @@ export default function FinancePage() {
                 <CardHeader>
                   <CardTitle className="text-base">
                     {type === "JOURNALIER"
-                      ? "Dépenses journalières"
-                      : "Dépenses mensuelles"}
+                      ? "Modèles journaliers"
+                      : "Modèles mensuels"}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">

@@ -864,6 +864,7 @@ export class MemberService {
           memberId: string;
           memberName: string;
           visitorNumber: number | null;
+          paymentRemindAt?: string | null;
         }>;
       }
     >();
