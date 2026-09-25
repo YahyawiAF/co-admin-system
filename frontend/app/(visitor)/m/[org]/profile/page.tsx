@@ -1,10 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Camera,
@@ -38,7 +38,11 @@ import {
   PointsCard,
   dispatchPointsAward,
 } from "@/components/visitor/PointsCard";
-import { ProfileMissionCard } from "@/components/visitor/ProfileMissionCard";
+import {
+  ProfileMissionEntry,
+  isProfileAvatarDone,
+  isProfileDetailsDone,
+} from "@/components/visitor/ProfileMissionEntry";
 import { TrophyReveal } from "@/components/visitor/TrophyReveal";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
@@ -52,37 +56,18 @@ import {
   PROFILE_COMPLETE_TROPHY_ID,
   PROFILE_MISSION_TOTAL,
 } from "@/lib/points-catalog";
-import { isStandalonePwa } from "@/lib/visitor-notify";
-
-function isProfileDetailsDone(m?: {
-  firstName?: string | null;
-  lastName?: string | null;
-  functionality?: string | null;
-  bio?: string | null;
-  skills?: string[] | null;
-} | null) {
-  if (!m) return false;
-  const first = (m.firstName || "").trim();
-  const last = (m.lastName || "").trim();
-  const role = (m.functionality || "").trim();
-  const bio = (m.bio || "").trim();
-  const skills = (m.skills || []).filter((s) => !!s?.trim());
-  return !!first && !!last && !!role && (skills.length > 0 || !!bio);
-}
-
-function isProfileAvatarDone(m?: { avatarUrl?: string | null } | null) {
-  return (m?.avatarUrl || "").trim().length >= 24;
-}
 
 function ProfileInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const showUpgrade = searchParams.get("upgrade") === "1";
+  const wantEdit = searchParams.get("edit") === "1";
   const queryClient = useQueryClient();
   const { href, slug } = useOrg();
   const { memberId, onboarded, logout, ready } = useVisitorSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const editOpenedRef = useRef(false);
   const [reveal, setReveal] = useState<{
     points: number;
     title: string;
@@ -105,13 +90,6 @@ function ProfileInner() {
     intervalMs: false,
   });
 
-  const { data: pointsSnap } = useQuery({
-    queryKey: ["member-points", memberId, isStandalonePwa()],
-    queryFn: () => mobileApi.getPoints(memberId!, isStandalonePwa()),
-    enabled: !!memberId && onboarded,
-    staleTime: 30_000,
-  });
-
   const member = data?.member;
   const hasAccount = !!member?.hasPin;
   const subscribed = !!(data?.hasActiveSubscription || member?.isSubscribed);
@@ -119,14 +97,6 @@ function ProfileInner() {
     [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
     member?.firstName ||
     "Visiteur";
-
-  const detailsDone = isProfileDetailsDone(member);
-  const avatarDone = isProfileAvatarDone(member);
-  const missionComplete =
-    !!pointsSnap?.trophies?.some(
-      (t) => t.id === PROFILE_COMPLETE_TROPHY_ID && t.unlocked
-    ) ||
-    (detailsDone && avatarDone);
 
   const openEdit = () => {
     setForm({
@@ -143,6 +113,14 @@ function ProfileInner() {
     });
     setEditOpen(true);
   };
+
+  useEffect(() => {
+    if (!wantEdit || !member || !hasAccount || editOpenedRef.current) return;
+    editOpenedRef.current = true;
+    openEdit();
+    router.replace(href("/profile"), { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantEdit, member?.id, hasAccount]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -371,12 +349,7 @@ function ProfileInner() {
         </div>
       </div>
 
-      <ProfileMissionCard
-        detailsDone={detailsDone}
-        avatarDone={avatarDone}
-        completed={missionComplete}
-        onEdit={openEdit}
-      />
+      <ProfileMissionEntry onEdit={openEdit} />
 
       {memberId ? (
         <PointsCard memberId={memberId} compact={false} />

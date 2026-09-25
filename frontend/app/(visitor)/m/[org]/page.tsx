@@ -26,6 +26,7 @@ import { AppInstallPromo } from "@/components/visitor/AppInstallPromo";
 import {
   PointsCard,
 } from "@/components/visitor/PointsCard";
+import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
 import {
   isWithinPointageGrace,
   PointageGraceWindow,
@@ -310,6 +311,7 @@ export default function MobileHomePage() {
       />
 
       {memberId ? <PointsCard memberId={memberId} /> : null}
+      <ProfileMissionEntry hideWhenComplete />
 
       {/* App install promo — once only; hidden after claim */}
       {(status?.member?.appInstallPromoEligible !== false &&
