@@ -323,8 +323,7 @@ export default function MobileHomePage() {
           emphasize={showCheckoutPromo && !session}
           unlocked={
             !!status?.member?.appInstallPromoActive ||
-            (!!status?.member?.pwaInstalledAt &&
-              status?.member?.appInstallPromoEligible !== false)
+            !!status?.member?.pwaInstalledAt
           }
         />
       ) : null}
