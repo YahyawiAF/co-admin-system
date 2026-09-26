@@ -89,8 +89,12 @@ export interface Member {
   points?: number;
   /** When the member used the one-time app-install promo */
   appInstallPromoClaimedAt?: string | null;
+  /** First open as installed PWA */
+  pwaInstalledAt?: string | null;
   /** False once the one-time install promo was used */
   appInstallPromoEligible?: boolean;
+  /** True when promo can apply now (eligible + PWA installed) */
+  appInstallPromoActive?: boolean;
   isActive?: boolean;
   passwordHash?: string | null;
   bio?: string | null;

@@ -321,6 +321,11 @@ export default function MobileHomePage() {
           globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
           promos={layout?.facility?.appInstallPromos ?? null}
           emphasize={showCheckoutPromo && !session}
+          unlocked={
+            !!status?.member?.appInstallPromoActive ||
+            (!!status?.member?.pwaInstalledAt &&
+              status?.member?.appInstallPromoEligible !== false)
+          }
         />
       ) : null}
 

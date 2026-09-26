@@ -119,6 +119,19 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
     const onAward = (e: Event) => {
       const detail = (e as CustomEvent<AwardPointsResult>).detail;
       if (!detail || detail.amount <= 0) return;
+      // Don't celebrate balance credits until the installed PWA unlocks points
+      if (!isStandalonePwa()) {
+        void queryClient.invalidateQueries({
+          queryKey: ["member-points", memberId],
+        });
+        return;
+      }
+      if (detail.pending) {
+        void queryClient.invalidateQueries({
+          queryKey: ["member-points", memberId],
+        });
+        return;
+      }
       triggerFlash(detail.amount, detail.newTrophies, detail.points);
       void queryClient.invalidateQueries({
         queryKey: ["member-points", memberId],
@@ -233,13 +246,12 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
         {locked ? (
           <p className="mt-2 text-sm text-slate-500">
             {display > 0
-              ? "Installez l’app pour les garder"
-              : "Installez l’app pour collecter"}
+              ? "Installez l’app sur votre téléphone pour sauver ces points — ils ne comptent pas encore."
+              : "Les points ne commencent qu’après installation de l’app sur votre téléphone."}
           </p>
         ) : (
           <p className="mt-2 text-xs leading-snug text-slate-500">
-            Paiement confirmé par l’accueil + check-out → vos points
-            s’ajoutent ici.
+            Paiement confirmé + check-out → vos points s’ajoutent ici.
           </p>
         )}
 

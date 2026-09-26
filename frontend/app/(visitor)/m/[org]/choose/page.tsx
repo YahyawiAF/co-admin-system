@@ -106,7 +106,12 @@ function ChooseInner() {
     layout?.facility?.appInstallPromoEligible !== false &&
     !status?.member?.appInstallPromoClaimedAt &&
     status?.member?.appInstallPromoEligible !== false;
-  const promoOpts = promoEligible
+  /** Discounted price only once the app is installed (promo activated). */
+  const promoActive =
+    promoEligible &&
+    (!!status?.member?.appInstallPromoActive ||
+      !!status?.member?.pwaInstalledAt);
+  const promoOpts = promoActive
     ? {
         promos: layout?.facility?.appInstallPromos ?? null,
         globalPromo: layout?.facility?.appInstallGlobalPromo ?? null,

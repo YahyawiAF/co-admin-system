@@ -50,7 +50,7 @@ import {
   PROFILE_DETAILS_POINTS,
   PROFILE_AVATAR_POINTS,
 } from './points';
-import { creditPoints, debitPoints } from './points-ledger';
+import { creditPoints, debitPoints, earnPoints } from './points-ledger';
 import {
   maybeAwardVisitPaidPoints as creditVisitPaidPoints,
   maybeAwardProductPaidPoints as creditProductPaidPoints,
@@ -327,10 +327,14 @@ export class MobileService {
       where: { id: memberId },
       select: {
         appInstallPromoClaimedAt: true,
+        pwaInstalledAt: true,
         organizationId: true,
       },
     });
-    if (!member || member.appInstallPromoClaimedAt) return null;
+    // Promo only activates after the visitor has installed the PWA
+    if (!member || member.appInstallPromoClaimedAt || !member.pwaInstalledAt) {
+      return null;
+    }
 
     const facility = await this.prisma.facility.findFirst({
       where: { organizationId: member.organizationId },
@@ -1013,6 +1017,7 @@ export class MobileService {
     openToCollaboration?: boolean | null;
     showInDirectory?: boolean | null;
     appInstallPromoClaimedAt?: Date | null;
+    pwaInstalledAt?: Date | null;
     points?: number | null;
   }) {
     return {
@@ -1040,7 +1045,12 @@ export class MobileService {
         ? member.appInstallPromoClaimedAt.toISOString?.() ??
           String(member.appInstallPromoClaimedAt)
         : null,
+      pwaInstalledAt: member.pwaInstalledAt
+        ? member.pwaInstalledAt.toISOString?.() ?? String(member.pwaInstalledAt)
+        : null,
       appInstallPromoEligible: !member.appInstallPromoClaimedAt,
+      appInstallPromoActive:
+        !member.appInstallPromoClaimedAt && !!member.pwaInstalledAt,
     };
   }
 
@@ -3650,11 +3660,13 @@ export class MobileService {
         where: {
           memberId: member.id,
           event: PointEvent.PROFILE_DETAILS,
-          status: PointEntryStatus.CREDITED,
+          status: {
+            in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
+          },
         },
       });
       if (!already) {
-        const credited = await creditPoints(this.prisma, {
+        const credited = await earnPoints(this.prisma, {
           memberId: member.id,
           amount: PROFILE_DETAILS_POINTS,
           event: PointEvent.PROFILE_DETAILS,
@@ -3674,11 +3686,13 @@ export class MobileService {
         where: {
           memberId: member.id,
           event: PointEvent.PROFILE_AVATAR,
-          status: PointEntryStatus.CREDITED,
+          status: {
+            in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
+          },
         },
       });
       if (!already) {
-        const credited = await creditPoints(this.prisma, {
+        const credited = await earnPoints(this.prisma, {
           memberId: member.id,
           amount: PROFILE_AVATAR_POINTS,
           event: PointEvent.PROFILE_AVATAR,
@@ -5150,12 +5164,23 @@ export class MobileService {
     });
   }
 
+  private async markPwaInstalled(memberId: string) {
+    await this.prisma.member.updateMany({
+      where: { id: memberId, pwaInstalledAt: null },
+      data: { pwaInstalledAt: new Date() },
+    });
+  }
+
   async getMemberPoints(memberId: string, isPwa: boolean) {
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
-      select: { id: true, points: true },
+      select: { id: true, points: true, pwaInstalledAt: true },
     });
     if (!member) throw new NotFoundException('Membre introuvable');
+
+    if (isPwa) {
+      await this.markPwaInstalled(memberId);
+    }
 
     await this.expirePendingPoints(memberId);
 
@@ -5339,6 +5364,8 @@ export class MobileService {
         'Seule l’app installée peut sauvegarder les points',
       );
     }
+    await this.markPwaInstalled(memberId);
+
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
       select: { id: true, points: true },

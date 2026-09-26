@@ -33,7 +33,11 @@ export default function MobileTarifsPage() {
     layout?.facility?.appInstallPromoEligible !== false &&
     !status?.member?.appInstallPromoClaimedAt &&
     status?.member?.appInstallPromoEligible !== false;
-  const promoOpts = promoEligible
+  const promoActive =
+    promoEligible &&
+    (!!status?.member?.appInstallPromoActive ||
+      !!status?.member?.pwaInstalledAt);
+  const promoOpts = promoActive
     ? {
         promos: layout?.facility?.appInstallPromos ?? null,
         globalPromo: layout?.facility?.appInstallGlobalPromo ?? null,
@@ -60,6 +64,12 @@ export default function MobileTarifsPage() {
       <p className="mb-4 text-sm text-slate-500">
         En cas de dépassement, le prix du forfait reste affiché ; l&apos;accueil
         peut ajuster.
+        {promoEligible && !promoActive ? (
+          <>
+            {" "}
+            Installez l&apos;app pour activer votre promo sur ces tarifs.
+          </>
+        ) : null}
       </p>
       <div className="space-y-6">
         {groups.map(({ cat, items }) =>

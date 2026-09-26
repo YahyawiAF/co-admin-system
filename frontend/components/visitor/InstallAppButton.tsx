@@ -106,7 +106,7 @@ export function InstallAppButton({
           onClick={() => void onClick()}
         >
           <Download className="mr-1.5 h-4 w-4" />
-          Installer l’app
+          Installer & activer
         </Button>
       )}
 
@@ -122,10 +122,12 @@ export function InstallAppButton({
 
           <SheetHeader className="space-y-1 px-5 pb-3 text-left">
             <SheetTitle className="text-[17px] leading-tight">
-              Installer l’application
+              Installez pour gagner
             </SheetTitle>
             <SheetDescription className="text-[13px]">
-              Ajoutez l’app à votre écran d’accueil pour un accès rapide.
+              Sur votre téléphone : activez votre promo et commencez à
+              collecter des points. Sans l&apos;app, les points ne sont pas
+              comptés.
             </SheetDescription>
           </SheetHeader>
 

@@ -110,6 +110,13 @@ export class MemberEntity implements Member {
   })
   appInstallPromoClaimedAt: Date | null;
 
+  @ApiProperty({
+    required: false,
+    nullable: true,
+    description: 'First time the member opened the installed PWA',
+  })
+  pwaInstalledAt: Date | null;
+
   @ApiProperty({ description: 'Gamification points (credited in PWA only)' })
   points: number;
 

@@ -57,6 +57,8 @@ model Member {
   discountOpenSpace   Float?
   /// When the member already used the one-time app-install promo
   appInstallPromoClaimedAt DateTime?
+  /// First time the member opened the app as an installed PWA
+  pwaInstalledAt DateTime?
   /// Gamification score — only credited when client is installed PWA
   points        Int           @default(0)
   abonnements   Abonnement[]

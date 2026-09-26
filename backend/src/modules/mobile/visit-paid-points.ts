@@ -1,13 +1,14 @@
 import { PointEntryStatus, PointEvent, ProductOrderStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from 'database/prisma.service';
-import { creditPoints } from './points-ledger';
+import { creditPoints, earnPoints } from './points-ledger';
 import { dtToPoints, pointsToDt } from './points';
 
 /**
  * Earn when visit has leaveTime + isPayed.
  * Cash portion = payedAmount − any REDEEM_VISIT DT (no earn on points payment).
  * Idempotent per journal via refId.
+ * Credits only if PWA installed; otherwise PENDING until install.
  */
 export async function maybeAwardVisitPaidPoints(
   prisma: PrismaService,
@@ -49,18 +50,22 @@ export async function maybeAwardVisitPaidPoints(
   const amount = dtToPoints(earnable);
   if (amount <= 0) return null;
 
-  const result = await creditPoints(prisma, {
+  const result = await earnPoints(prisma, {
     memberId: journal.memberID,
     amount,
     event: PointEvent.VISIT_PAID,
     refId: journal.id,
   });
   if (!result || result.amount <= 0) return null;
-  return { memberId: journal.memberID, amount: result.amount };
+  return {
+    memberId: journal.memberID,
+    amount: result.amount,
+    pending: result.pending,
+  };
 }
 
 /**
- * When admin unmarks visit unpaid — remove VISIT_PAID credit for that journal
+ * When admin unmarks visit unpaid — remove VISIT_PAID credit/pending for that journal
  * so a later re-pay can award again. Clamps at 0 balance.
  */
 export async function maybeRevokeVisitPaidPoints(
@@ -78,11 +83,21 @@ export async function maybeRevokeVisitPaidPoints(
       memberId: journal.memberID,
       event: PointEvent.VISIT_PAID,
       refId: journal.id,
-      status: PointEntryStatus.CREDITED,
+      status: {
+        in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
+      },
       amount: { gt: 0 },
     },
   });
   if (!credit) return null;
+
+  if (credit.status === PointEntryStatus.PENDING) {
+    await prisma.memberPointEntry.update({
+      where: { id: credit.id },
+      data: { status: PointEntryStatus.EXPIRED },
+    });
+    return { memberId: journal.memberID, amount: 0, points: undefined };
+  }
 
   const member = await prisma.member.findUnique({
     where: { id: journal.memberID },
@@ -122,7 +137,7 @@ export async function maybeRevokeVisitPaidPoints(
   };
 }
 
-/** Earn once when admin marks café/order paid. */
+/** Earn once when admin marks café/order paid (PENDING until PWA if not installed). */
 export async function maybeAwardProductPaidPoints(
   prisma: PrismaService,
   orderId: string,
@@ -147,14 +162,14 @@ export async function maybeAwardProductPaidPoints(
   });
   if (!member) return null;
 
-  const result = await creditPoints(prisma, {
+  const result = await earnPoints(prisma, {
     memberId,
     amount,
     event: PointEvent.PRODUCT_PAID,
     refId: order.id,
   });
   if (!result || result.amount <= 0) return null;
-  return { memberId, amount: result.amount };
+  return { memberId, amount: result.amount, pending: result.pending };
 }
 
 /** Revoke PRODUCT_PAID when admin unmarks order unpaid. */
@@ -174,11 +189,21 @@ export async function maybeRevokeProductPaidPoints(
       memberId,
       event: PointEvent.PRODUCT_PAID,
       refId: order.id,
-      status: PointEntryStatus.CREDITED,
+      status: {
+        in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
+      },
       amount: { gt: 0 },
     },
   });
   if (!credit) return null;
+
+  if (credit.status === PointEntryStatus.PENDING) {
+    await prisma.memberPointEntry.update({
+      where: { id: credit.id },
+      data: { status: PointEntryStatus.EXPIRED },
+    });
+    return { memberId, amount: 0, points: undefined };
+  }
 
   const member = await prisma.member.findUnique({
     where: { id: memberId },
