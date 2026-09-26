@@ -42,7 +42,6 @@ import { EventsGateway } from '../webSocket/events.gateway';
 import { PushService } from '../push/push.service';
 import {
   POINT_AMOUNTS,
-  PENDING_POINTS_TTL_DAYS,
   TROPHY_CATALOG,
   nextTrophyThreshold,
   pointsToDt,
@@ -5178,9 +5177,7 @@ export class MobileService {
     });
     if (!member) throw new NotFoundException('Membre introuvable');
 
-    if (isPwa) {
-      await this.markPwaInstalled(memberId);
-    }
+    // Do not trust ?pwa=1 alone to mark install — only claim in standalone does.
 
     await this.expirePendingPoints(memberId);
 
@@ -5206,7 +5203,7 @@ export class MobileService {
         }),
       ]);
 
-    const pendingPoints = pendingAgg._sum.amount || 0;
+    const pendingPoints = isPwa ? pendingAgg._sum.amount || 0 : 0;
     const unlockedIds = new Set(trophies.map((t) => t.trophyId));
     const points = isPwa ? member.points : 0;
     const next = isPwa ? nextTrophyThreshold(member.points) : null;
@@ -5215,8 +5212,7 @@ export class MobileService {
       locked: !isPwa,
       points,
       pendingPoints,
-      /** Browser teaser — shows what they risk losing */
-      displayHint: isPwa ? member.points : pendingPoints,
+      displayHint: isPwa ? member.points : 0,
       nextTrophy: next,
       trophies: TROPHY_CATALOG.map((t) => ({
         ...t,
@@ -5296,35 +5292,22 @@ export class MobileService {
 
     await this.expirePendingPoints(dto.memberId);
 
+    // Web browser: no pending stash — points only exist in the installed PWA
     if (!dto.isPwa) {
-      const expiresAt = addDays(new Date(), PENDING_POINTS_TTL_DAYS);
-      await this.prisma.memberPointEntry.create({
-        data: {
-          memberId: dto.memberId,
-          amount,
-          event,
-          status: PointEntryStatus.PENDING,
-          expiresAt,
-        },
-      });
-      const pendingAgg = await this.prisma.memberPointEntry.aggregate({
-        where: {
-          memberId: dto.memberId,
-          status: PointEntryStatus.PENDING,
-        },
-        _sum: { amount: true },
-      });
       return {
-        amount,
+        amount: 0,
         credited: false,
-        pending: true,
+        pending: false,
         points: 0,
-        pendingPoints: pendingAgg._sum.amount || 0,
-        flash: true,
+        pendingPoints: 0,
+        flash: false,
         newTrophies: [] as string[],
-        message: `+${amount} pts en attente — installez l’app pour les garder`,
+        message:
+          'Téléchargez l’app et commencez à collecter des points',
       };
     }
+
+    await this.markPwaInstalled(dto.memberId);
 
     const now = new Date();
     const [, updated] = await this.prisma.$transaction([

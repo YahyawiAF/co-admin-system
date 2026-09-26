@@ -74,7 +74,7 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
   });
 
   const claim = useMutation({
-    mutationFn: () => mobileApi.claimPoints(memberId),
+    mutationFn: () => mobileApi.claimPoints(memberId, isPwa),
     onSuccess: (res) => {
       if (res.flash && res.claimed > 0) {
         setFlash({
@@ -142,9 +142,7 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
   }, [memberId, queryClient, triggerFlash]);
 
   const locked = data?.locked ?? !isPwa;
-  const displayTarget = locked
-    ? data?.pendingPoints ?? 0
-    : data?.points ?? 0;
+  const displayTarget = locked ? 0 : data?.points ?? 0;
   const animated = useCountUp(displayTarget, counting && !locked);
   const display = counting && !locked ? animated : displayTarget;
 
@@ -213,7 +211,7 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
           {locked ? (
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
               <Lock className="h-3 w-3" />
-              À sauver
+              App requise
             </span>
           ) : (
             <span className="text-[10px] font-medium text-slate-400">
@@ -226,7 +224,7 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
           <p
             className={cn(
               "text-4xl font-bold tabular-nums leading-none",
-              locked ? "text-slate-400" : "text-indigo-600"
+              locked ? "text-slate-300" : "text-indigo-600"
             )}
             style={
               counting && !locked
@@ -234,9 +232,7 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
                 : undefined
             }
           >
-            {locked && display === 0
-              ? "???"
-              : display.toLocaleString("fr-FR")}
+            {locked ? "—" : display.toLocaleString("fr-FR")}
           </p>
           <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
             pts
@@ -245,13 +241,12 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
 
         {locked ? (
           <p className="mt-2 text-sm text-slate-500">
-            {display > 0
-              ? "Installez l’app sur votre téléphone pour sauver ces points — ils ne comptent pas encore."
-              : "Les points ne commencent qu’après installation de l’app sur votre téléphone."}
+            Téléchargez l&apos;app et commencez à collecter des points. Sur le
+            web, aucun point n&apos;est compté.
           </p>
         ) : (
           <p className="mt-2 text-xs leading-snug text-slate-500">
-            Paiement confirmé + check-out → vos points s’ajoutent ici.
+            Paiement confirmé + check-out → vos points s&apos;ajoutent ici.
           </p>
         )}
 

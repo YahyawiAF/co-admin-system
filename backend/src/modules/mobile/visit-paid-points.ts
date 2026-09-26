@@ -1,14 +1,14 @@
 import { PointEntryStatus, PointEvent, ProductOrderStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PrismaService } from 'database/prisma.service';
-import { creditPoints, earnPoints } from './points-ledger';
+import { earnPoints } from './points-ledger';
 import { dtToPoints, pointsToDt } from './points';
 
 /**
  * Earn when visit has leaveTime + isPayed.
  * Cash portion = payedAmount − any REDEEM_VISIT DT (no earn on points payment).
  * Idempotent per journal via refId.
- * Credits only if PWA installed; otherwise PENDING until install.
+ * Credits only if PWA already installed; otherwise skip (no pending stash).
  */
 export async function maybeAwardVisitPaidPoints(
   prisma: PrismaService,
@@ -137,7 +137,7 @@ export async function maybeRevokeVisitPaidPoints(
   };
 }
 
-/** Earn once when admin marks café/order paid (PENDING until PWA if not installed). */
+/** Earn once when admin marks café/order paid (skip if PWA not installed). */
 export async function maybeAwardProductPaidPoints(
   prisma: PrismaService,
   orderId: string,

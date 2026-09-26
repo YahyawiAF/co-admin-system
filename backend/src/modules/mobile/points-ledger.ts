@@ -4,9 +4,8 @@ import {
 } from '@nestjs/common';
 import { PointEntryStatus, PointEvent } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { addDays } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
-import { PENDING_POINTS_TTL_DAYS, pointsToDt } from './points';
+import { pointsToDt } from './points';
 
 export type CreditPointsInput = {
   memberId: string;
@@ -80,8 +79,8 @@ export async function creditPoints(
 }
 
 /**
- * Earn points only when the member has installed the PWA.
- * Otherwise store PENDING (no balance bump) until they open the installed app.
+ * Earn points only when the member has already opened the installed PWA.
+ * Web / pre-install: no points at all (no PENDING stash).
  */
 export async function earnPoints(
   prisma: PrismaService,
@@ -96,47 +95,32 @@ export async function earnPoints(
   });
   if (!member) throw new NotFoundException('Membre introuvable');
 
+  // Not on installed app yet → ignore (start collecting only after PWA install)
+  if (!member.pwaInstalledAt) {
+    return null;
+  }
+
   if (input.refId) {
     const already = await prisma.memberPointEntry.findFirst({
       where: {
         memberId: input.memberId,
         event: input.event,
         refId: input.refId,
-        status: {
-          in: [PointEntryStatus.CREDITED, PointEntryStatus.PENDING],
-        },
+        status: PointEntryStatus.CREDITED,
       },
     });
     if (already) {
       return {
         amount: 0,
         points: member.points,
-        pending: already.status === PointEntryStatus.PENDING,
+        pending: false,
       };
     }
   }
 
-  if (member.pwaInstalledAt) {
-    const credited = await creditPoints(prisma, input);
-    if (!credited) return null;
-    return { ...credited, pending: false };
-  }
-
-  const now = new Date();
-  const expiresAt = addDays(now, PENDING_POINTS_TTL_DAYS);
-  await prisma.memberPointEntry.create({
-    data: {
-      id: randomUUID(),
-      memberId: input.memberId,
-      amount,
-      event: input.event,
-      status: PointEntryStatus.PENDING,
-      refId: input.refId || null,
-      expiresAt,
-    },
-  });
-
-  return { amount, points: member.points, pending: true };
+  const credited = await creditPoints(prisma, input);
+  if (!credited) return null;
+  return { ...credited, pending: false };
 }
 
 /** Debit points (stores negative ledger amount). */

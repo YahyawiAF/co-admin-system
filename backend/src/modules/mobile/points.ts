@@ -40,9 +40,6 @@ export const PROFILE_AVATAR_POINTS = 200;
 export const PROFILE_MISSION_TOTAL =
   PROFILE_DETAILS_POINTS + PROFILE_AVATAR_POINTS;
 
-/** Pending browser awards expire after this many days */
-export const PENDING_POINTS_TTL_DAYS = 7;
-
 export type TrophyDef = {
   id: string;
   name: string;

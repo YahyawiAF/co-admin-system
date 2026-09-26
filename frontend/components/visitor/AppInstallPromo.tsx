@@ -156,7 +156,7 @@ export function AppInstallPromo({
             <span className="font-semibold text-slate-700">
               activer la promo
             </span>{" "}
-            et commencer à gagner des points.
+            et commencer à collecter des points (aucun point sur le web).
           </p>
           <div className="mt-2.5">
             <InstallAppButton className="w-full" />

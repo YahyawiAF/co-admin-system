@@ -1039,10 +1039,10 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
-  claimPoints(memberId: string) {
+  claimPoints(memberId: string, isPwa: boolean) {
     return http.post<import("@/lib/points-catalog").ClaimPointsResult>(
       "/mobile/points/claim",
-      { memberId, isPwa: true },
+      { memberId, isPwa },
       { skipAuth: true },
     );
   },
