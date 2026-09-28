@@ -10,6 +10,7 @@ import { ErrorCode, GeneralException } from '@/exceptions';
 import { AbonnementEntity } from './entities/abonnement.entity';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
+import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
 
 @Injectable()
 export class AbonnementService {
@@ -107,6 +108,25 @@ export class AbonnementService {
         created.leaveDate,
         created.reservedSeatSpaceId,
       );
+      const switchedJournalId = await switchOpenSessionToSubscription(
+        this.prisma,
+        created.memberID,
+        existingPrice,
+      );
+      if (switchedJournalId) {
+        this.eventsGateway.sendTableUpdates({
+          type: 'session_switched_to_subscription',
+          journalId: switchedJournalId,
+          memberId: created.memberID,
+        });
+        this.eventsGateway.sendSessionPricingChanged({
+          journalId: switchedJournalId,
+          memberId: created.memberID,
+          mode: 'SUBSCRIPTION',
+          tierName: existingPrice.name,
+          amountDue: 0,
+        });
+      }
       return created;
     } catch (error) {
       throw new GeneralException(

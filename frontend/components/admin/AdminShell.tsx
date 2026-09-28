@@ -32,6 +32,7 @@ import { CheckoutNotify } from "@/components/admin/CheckoutNotify";
 import { JournalAlertNavBell } from "@/components/admin/JournalAlertCenter";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { JournalAlertsProvider } from "@/lib/journal-alerts-context";
+import { RefreshButton } from "@/components/RefreshButton";
 import { useState, type ReactNode } from "react";
 
 const NAV = [
@@ -165,6 +166,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
           <div className="flex-1" />
+          <RefreshButton />
           <SeatOccupancyBoard variant="icon" />
           <JournalAlertNavBell />
           <StaffInboxBell />

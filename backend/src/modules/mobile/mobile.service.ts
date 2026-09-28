@@ -3,6 +3,7 @@ import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -59,10 +60,20 @@ import {
 import {
   assertPriceCanOccupy,
   linkedSpaceIds,
+  priceCategoriesFor,
   spaceAllowsSeat,
   spaceAllowsWhole,
 } from './space-occupy';
 import { saleSnapshotFromPrice } from './sale-snapshot';
+import { switchOpenSessionToSubscription } from './session-to-subscription';
+import { ladderFor, pricingNoticeKey } from './session-pricing';
+import {
+  computeRowPricing,
+  loadPricingContext,
+  memberDiscountPercent,
+  pricingPayload,
+  PricedJournalRow,
+} from './session-pricing-context';
 
 export const roundsOfHashing = 10;
 
@@ -82,47 +93,148 @@ export class MobileService {
     await this.releaseStaleBookings();
   }
 
-  /** Push + vibrate even if the PWA is closed — ~5 min before session end. */
+  /**
+   * Push + vibrate even if the PWA is closed: pack/tier ending soon, grace,
+   * overtime surcharge and tier changes. Also pings admin journals.
+   */
   @Cron(CronExpression.EVERY_MINUTE)
   async notifySessionsEndingSoon() {
     const now = new Date();
     const sessions = await this.prisma.journal.findMany({
       where: {
         leaveTime: null,
+        isReservation: false,
         memberID: { not: null },
-        registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+        // Include forgotten sessions from previous days
+        registredTime: { gte: addDays(startOfDay(now), -2) },
       },
       include: {
         prices: true,
-        members: { select: { id: true, organizationId: true } },
+        members: {
+          include: {
+            group: true,
+            organization: { select: { slug: true } },
+          },
+        },
       },
     });
     for (const session of sessions) {
       const memberId = session.memberID;
-      if (!memberId || this.sessionEndWarned.has(session.id)) continue;
-      const enriched = await this.enrichSessionWithSeat(session as any);
-      const remaining = enriched?.remainingMs;
-      if (remaining == null || remaining <= 0 || remaining > 5 * 60_000) {
+      if (!memberId) continue;
+      const slug = session.members?.organization?.slug;
+      const url = slug ? `/m/${slug}` : '/m';
+      const ctx = await loadPricingContext(
+        this.prisma,
+        session.members?.organizationId,
+      );
+      const pricing = computeRowPricing(
+        session as unknown as PricedJournalRow,
+        ctx,
+        now,
+      );
+
+      if (!pricing) {
+        if (this.sessionEndWarned.has(session.id)) continue;
+        if (session.registredTime < startOfDay(now)) continue;
+        const enriched = await this.enrichSessionWithSeat(session as any);
+        const remaining = enriched?.remainingMs;
+        const warnMs = ctx.rules.sessionWarnBeforeMin * 60_000;
+        if (remaining == null || remaining <= 0 || remaining > warnMs) {
+          continue;
+        }
+        this.sessionEndWarned.add(session.id);
+        await this.pushService.sendToMember(memberId, {
+          title: 'Fin de session bientôt',
+          body: `Il vous reste moins de ${ctx.rules.sessionWarnBeforeMin} minutes. Pensez à finaliser.`,
+          tag: `session-end-${session.id}`,
+          url,
+          vibrate: [200, 80, 200, 80, 400],
+          requireInteraction: true,
+        });
         continue;
       }
-      this.sessionEndWarned.add(session.id);
-      const org = session.members?.organizationId
-        ? await this.prisma.organization.findUnique({
-            where: { id: session.members.organizationId },
-            select: { slug: true },
-          })
-        : null;
-      await this.pushService.sendToMember(memberId, {
-        title: 'Fin de session bientôt',
-        body: 'Il vous reste moins de 5 minutes. Pensez à finaliser.',
-        tag: `session-end-${session.id}`,
-        url: org?.slug ? `/m/${org.slug}` : '/m',
-        vibrate: [200, 80, 200, 80, 400],
-        requireInteraction: true,
+
+      const key = pricingNoticeKey(pricing);
+      if (!key || key === session.lastPricingNotice) continue;
+      await this.prisma.journal.update({
+        where: { id: session.id },
+        data: { lastPricingNotice: key },
+      });
+      const message = this.pricingNoticeMessage(pricing, ctx.rules, now);
+      if (message) {
+        await this.pushService.sendToMember(memberId, {
+          ...message,
+          tag: `session-pricing-${session.id}`,
+          url,
+          vibrate: [200, 80, 200, 80, 400],
+          requireInteraction: true,
+        });
+      }
+      this.eventsGateway.sendSessionPricingChanged({
+        journalId: session.id,
+        memberId,
+        stage: pricing.stage,
+        mode: pricing.mode,
+        tierName: pricing.currentTier.name,
+        amountDue: pricing.amountDue,
+        extraAmount: pricing.extraAmount,
+        overtimeMs: pricing.overtimeMs,
       });
     }
     if (this.sessionEndWarned.size > 400) {
       this.sessionEndWarned.clear();
+    }
+  }
+
+  private pricingNoticeMessage(
+    p: ReturnType<typeof computeRowPricing> & object,
+    rules: { sessionWarnBeforeMin: number; overtimeSurchargeDt: number },
+    now: Date,
+  ): { title: string; body: string } | null {
+    const dt = (n: number | null | undefined) => `${(n ?? 0).toFixed(3)} DT`;
+    const inMin = (at: number | null) =>
+      at == null ? null : Math.max(1, Math.round((at - now.getTime()) / 60_000));
+    const nextIn = inMin(p.nextChangeAt);
+    const tier = p.currentTier.name;
+    const nextLine =
+      p.nextChangeAt && p.nextAmount != null
+        ? p.nextTierName
+          ? `Tarif ${p.nextTierName} (${dt(p.nextAmount)}) dans ${nextIn} min.`
+          : `+${rules.overtimeSurchargeDt.toFixed(3)} DT dans ${nextIn} min.`
+        : '';
+    switch (p.stage) {
+      case 'WARNING':
+        return {
+          title:
+            p.mode === 'AUTO'
+              ? `Palier ${tier} : fin dans ${inMin(p.tierEndsAt)} min`
+              : `Forfait ${tier} : fin dans ${inMin(p.tierEndsAt)} min`,
+          body: `${nextLine} Pensez au check-out si vous partez.`.trim(),
+        };
+      case 'GRACE':
+        return {
+          title:
+            p.mode === 'AUTO' ? `Palier ${tier} terminé` : `Forfait ${tier} dépassé`,
+          body: nextLine || 'Pensez au check-out.',
+        };
+      case 'SURCHARGE':
+        return {
+          title: `Dépassement : +${p.extraAmount.toFixed(3)} DT`,
+          body: `Total ${dt(p.amountDue)}. ${nextLine}`.trim(),
+        };
+      case 'NEXT_TIER':
+      case 'WITHIN':
+        return {
+          title: `Tarif ${tier} appliqué`,
+          body: `Montant actuel ${dt(p.amountDue)}.`,
+        };
+      case 'OVERTIME':
+        return {
+          title: 'Durée maximale dépassée',
+          body: `Montant ${dt(p.amountDue)}. Pensez au check-out.`,
+        };
+      default:
+        return null;
     }
   }
 
@@ -360,6 +472,16 @@ export class MobileService {
       facility.appInstallGlobalPromoValue > 0 &&
       facility.appInstallGlobalPromoKind
     ) {
+      const scopes = facility.appInstallGlobalPromoScopes ?? [];
+      if (scopes.length) {
+        const price = await this.prisma.price.findUnique({
+          where: { id: priceId },
+          select: { category: true, categories: true, type: true },
+        });
+        if (!price || !priceCategoriesFor(price).some((c) => scopes.includes(c))) {
+          return null;
+        }
+      }
       return {
         valueKind: facility.appInstallGlobalPromoKind,
         value: facility.appInstallGlobalPromoValue,
@@ -368,26 +490,49 @@ export class MobileService {
     return null;
   }
 
-  /** Apply one-time install promo and mark member as claimed when discount lands. */
-  private async finalizeAmountWithAppPromo(
+  /**
+   * Apply the one-time install promo, mark the member as claimed when a
+   * discount lands, and return the snapshot to store on the sale.
+   */
+  private async applyAppPromo(
     memberId: string | null | undefined,
     priceId: string,
     amountAfterGroupDiscount: number,
-  ): Promise<number> {
+  ): Promise<{
+    amount: number;
+    snapshot: {
+      priceBeforePromo: number | null;
+      promoDiscount: number | null;
+      promoLabel: string | null;
+    };
+  }> {
+    const none = {
+      amount: amountAfterGroupDiscount,
+      snapshot: { priceBeforePromo: null, promoDiscount: null, promoLabel: null },
+    };
     const promo = await this.resolveAppInstallPromo(memberId, priceId);
-    if (!promo || !memberId) return amountAfterGroupDiscount;
+    if (!promo || !memberId) return none;
     const next = this.applyPromoValue(
       amountAfterGroupDiscount,
       promo.valueKind,
       promo.value,
     );
-    if (next < amountAfterGroupDiscount - 0.001) {
-      await this.prisma.member.update({
-        where: { id: memberId },
-        data: { appInstallPromoClaimedAt: new Date() },
-      });
-    }
-    return next;
+    if (next >= amountAfterGroupDiscount - 0.001) return none;
+    await this.prisma.member.update({
+      where: { id: memberId },
+      data: { appInstallPromoClaimedAt: new Date() },
+    });
+    return {
+      amount: next,
+      snapshot: {
+        priceBeforePromo: amountAfterGroupDiscount,
+        promoDiscount: Math.round((amountAfterGroupDiscount - next) * 1000) / 1000,
+        promoLabel:
+          promo.valueKind === PromoValueKind.PERCENT
+            ? `Promo app −${promo.value} %`
+            : `Promo app −${promo.value} DT`,
+      },
+    };
   }
 
   private async resolveVisitDiscount(
@@ -1297,7 +1442,7 @@ export class MobileService {
           lt: endOfDay(now),
         },
       },
-      include: { prices: true, members: true },
+      include: { prices: true, members: { include: { group: true } } },
       orderBy: { registredTime: 'desc' },
     });
   }
@@ -1527,6 +1672,7 @@ export class MobileService {
                     valueKind: facility.appInstallGlobalPromoKind,
                     value: facility.appInstallGlobalPromoValue,
                     oneTime: true,
+                    scopes: facility.appInstallGlobalPromoScopes ?? [],
                   }
                 : null,
             appInstallPromos: promoEligible
@@ -1683,11 +1829,8 @@ export class MobileService {
       : price.price;
     const discount = await this.resolveVisitDiscount(dto.memberId, price);
     const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
-    const payedAmount = await this.finalizeAmountWithAppPromo(
-      dto.memberId,
-      dto.priceId,
-      afterGroup,
-    );
+    const { amount: payedAmount, snapshot: promoSnapshot } =
+      await this.applyAppPromo(dto.memberId, dto.priceId, afterGroup);
 
     const snap = saleSnapshotFromPrice(price, {
       id: dto.spaceId || price.spaceId,
@@ -1710,7 +1853,18 @@ export class MobileService {
         isPayed: false,
         isReservation: false,
         payedAmount,
+        ...promoSnapshot,
         groupVisitId: dto.groupVisitId || null,
+        pricingMode: 'FIXED',
+        ...(!isHourly && durationHours
+          ? {
+              fixedPriceId: price.id,
+              fixedServiceName: price.name,
+              fixedDurationHours: durationHours,
+              fixedAmount: payedAmount,
+              fixedAt: now,
+            }
+          : {}),
         serviceName: snap.serviceName,
         listPrice: snap.listPrice,
         spaceId: snap.spaceId,
@@ -1769,14 +1923,13 @@ export class MobileService {
       member: this.sanitizeMember(member),
       accessToken,
       ...status,
-      session: this.enrichSession(status.session as any),
     };
   }
 
   async checkoutSession(journalId: string, dto: CheckoutSessionDto) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
-      include: { prices: true, members: true },
+      include: { prices: true, members: { include: { group: true } } },
     });
     if (!journal) throw new NotFoundException('Session not found');
     // Checkout = leaveTime only. Payment (isPayed) is independent.
@@ -1784,7 +1937,17 @@ export class MobileService {
       throw new ConflictException('Session already checked out');
     }
 
-    const now = new Date();
+    let now = new Date();
+    if (dto.leaveAt) {
+      const leaveAt = new Date(dto.leaveAt);
+      if (Number.isNaN(leaveAt.getTime())) {
+        throw new BadRequestException('Heure de départ invalide');
+      }
+      if (leaveAt.getTime() < new Date(journal.registredTime).getTime()) {
+        throw new BadRequestException('Le départ doit être après l’arrivée');
+      }
+      if (leaveAt.getTime() < now.getTime()) now = leaveAt;
+    }
     const activeSub = journal.memberID
       ? await this.getActiveSubscription(journal.memberID)
       : null;
@@ -1795,6 +1958,9 @@ export class MobileService {
       !!kind && !!activeSub && journal.priceId === activeSub.priceId;
 
     let payedAmount = journal.payedAmount;
+    let promoSnapshot: Awaited<
+      ReturnType<MobileService['applyAppPromo']>
+    >['snapshot'] | null = null;
     if (
       !isSubscriptionVisit &&
       journal.prices &&
@@ -1809,6 +1975,28 @@ export class MobileService {
       payedAmount = Math.max(journal.payedAmount || 0, elapsed * rate);
     } else if (isSubscriptionVisit) {
       payedAmount = 0;
+    } else {
+      const ctx = await loadPricingContext(
+        this.prisma,
+        journal.members?.organizationId,
+      );
+      const pricing = computeRowPricing(
+        journal as unknown as PricedJournalRow,
+        ctx,
+        now,
+      );
+      if (pricing) {
+        payedAmount = pricing.amountDue;
+        if (journal.pricingMode === 'AUTO' && journal.memberID) {
+          const promo = await this.applyAppPromo(
+            journal.memberID,
+            pricing.currentTier.priceId || journal.priceId || '',
+            payedAmount,
+          );
+          payedAmount = promo.amount;
+          if (promo.snapshot.promoDiscount) promoSnapshot = promo.snapshot;
+        }
+      }
     }
 
     const updated = await this.prisma.journal.update({
@@ -1816,9 +2004,16 @@ export class MobileService {
       data: {
         leaveTime: now,
         // Keep existing payment status unless explicitly sent
-        ...(dto.isPayed !== undefined ? { isPayed: dto.isPayed } : {}),
+        ...(dto.isPayed !== undefined
+          ? {
+              isPayed: dto.isPayed,
+              paidAmount: dto.isPayed ? payedAmount : 0,
+              paidAt: dto.isPayed ? journal.paidAt ?? new Date() : null,
+            }
+          : {}),
         payedAmount,
-        ...(isSubscriptionVisit ? { isPayed: true } : {}),
+        ...(promoSnapshot ?? {}),
+        ...(isSubscriptionVisit ? { isPayed: true, paidAmount: 0 } : {}),
       },
       include: { prices: true, members: true },
     });
@@ -1917,13 +2112,22 @@ export class MobileService {
   async setPaymentStatus(journalId: string, isPayed: boolean) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
-      include: { prices: true, members: true },
+      include: { prices: true, members: { include: { group: true } } },
     });
     if (!journal) throw new NotFoundException('Session not found');
 
+    let paidAmount = 0;
+    if (isPayed) {
+      paidAmount = journal.payedAmount || 0;
+      if (!journal.leaveTime) {
+        const enriched = await this.enrichSessionWithSeat(journal as any);
+        paidAmount = Number(enriched?.amountDue ?? paidAmount);
+      }
+    }
+
     const updated = await this.prisma.journal.update({
       where: { id: journalId },
-      data: { isPayed },
+      data: { isPayed, paidAmount, paidAt: isPayed ? new Date() : null },
       include: { prices: true, members: true },
     });
 
@@ -1959,6 +2163,250 @@ export class MobileService {
     };
   }
 
+  /**
+   * QR scan without tariff choice: the session starts now in AUTO mode and
+   * the price follows the day pack tiers (2h → 4h → …).
+   */
+  async startAutoSession(memberId: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      include: { group: true, organization: { select: { slug: true } } },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+
+    const alreadyOpen = await this.openSessionForRescan(memberId);
+    if (alreadyOpen) return alreadyOpen;
+
+    const activeSub = await this.getActiveSubscription(memberId);
+    const subKind = activeSub?.price
+      ? this.subscriptionKind(activeSub.price)
+      : null;
+    if (subKind === 'HOURS_POOL') {
+      return this.startSubscriptionSession(memberId);
+    }
+    if (this.isPeriodKind(subKind) && activeSub?.price) {
+      const quota = this.periodDailyQuotaHours(
+        activeSub.price,
+        subKind as 'SEMI_DAY' | 'FULL_DAY',
+      );
+      const used = await this.dailySubscriptionUsedHours(
+        memberId,
+        activeSub.priceId,
+      );
+      if (used < quota - 0.01) return this.startSubscriptionSession(memberId);
+    }
+
+    await this.releaseStaleBookings();
+    if (await this.getOpenSession(memberId)) {
+      throw new ConflictException('Session déjà en cours');
+    }
+    const pending = await this.prisma.visitRequest.findFirst({
+      where: { memberId, status: VisitRequestStatus.PENDING },
+      select: { id: true },
+    });
+    if (pending) {
+      throw new ConflictException('Une demande est déjà en attente');
+    }
+
+    const ctx = await loadPricingContext(this.prisma, member.organizationId);
+    const first = ladderFor(ctx.ladder, PriceCategory.JOURNEE)[0];
+    if (!first) {
+      throw new BadRequestException(
+        'Aucun forfait (2h, 4h…) configuré pour le démarrage automatique',
+      );
+    }
+    const price = await this.prisma.price.findUnique({
+      where: { id: first.priceId },
+    });
+    if (!price) throw new NotFoundException('Price not found');
+
+    const discountPercent = memberDiscountPercent(member, price.category);
+    const payedAmount = this.applyPercentOff(price.price, discountPercent);
+    const settings = await this.getSeatSettings(
+      member.organization?.slug || undefined,
+    );
+    const seat =
+      settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN &&
+      price.occupySeat !== false &&
+      !this.isOpenSpaceDay(price)
+        ? await this.pickFreeSeat(true)
+        : null;
+
+    const snap = saleSnapshotFromPrice(price, {
+      id: seat?.spaceId || price.spaceId,
+      name: null,
+    });
+    if (snap.spaceId && !snap.spaceName) {
+      const sp = await this.prisma.space.findUnique({
+        where: { id: snap.spaceId },
+        select: { name: true },
+      });
+      snap.spaceName = sp?.name || null;
+    }
+
+    const now = new Date();
+    const journal = await this.prisma.journal.create({
+      data: {
+        memberID: memberId,
+        priceId: price.id,
+        registredTime: now,
+        leaveTime: null,
+        isPayed: false,
+        isReservation: false,
+        payedAmount,
+        pricingMode: 'AUTO',
+        serviceName: snap.serviceName,
+        listPrice: snap.listPrice,
+        spaceId: snap.spaceId,
+        spaceName: snap.spaceName,
+      },
+      include: { prices: true, members: { include: { group: true } } },
+    });
+
+    if (seat) {
+      try {
+        await this.bookSeatForMember(memberId, seat.label, {
+          spaceId: seat.spaceId,
+        });
+      } catch {
+        /* seat taken meanwhile — reception assigns one */
+      }
+    }
+
+    // Shows up in reception's "arrivals" panel (seat assignment / ack)
+    const arrival = await this.prisma.visitRequest.create({
+      data: {
+        memberId,
+        priceId: price.id,
+        type: VisitRequestType.DAY,
+        status: VisitRequestStatus.APPROVED,
+        autoApproved: true,
+        seatLabel: seat?.label || null,
+        spaceId: seat?.spaceId || null,
+      },
+    });
+    const seatInfo = await this.resolveSeatForMember(memberId);
+    this.eventsGateway.sendVisitArrival({
+      id: arrival.id,
+      status: arrival.status,
+      type: arrival.type,
+      memberId,
+      memberName:
+        [member.firstName, member.lastName].filter(Boolean).join(' ') ||
+        'Visiteur',
+      memberPhone: member.phone,
+      visitorNumber: member.visitorNumber,
+      priceName: `Auto (${price.name})`,
+      seatLabel: seatInfo?.seatLabel || null,
+      spaceId: seat?.spaceId || null,
+      seat: seatInfo,
+      createdAt: arrival.createdAt,
+      journalId: journal.id,
+      pricingMode: 'AUTO',
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'auto_session_started',
+      journalId: journal.id,
+      memberId,
+    });
+
+    return this.enrichSessionWithSeat(journal as any);
+  }
+
+  /** Fix a pack on an open session (reception only — members ask the desk). */
+  async fixSessionTariff(
+    journalId: string,
+    priceId: string,
+    opts: { byAdmin?: boolean } = {},
+  ) {
+    if (!opts.byAdmin) {
+      throw new ForbiddenException(
+        'Pour changer de tarif, demandez à l’accueil',
+      );
+    }
+    const journal = await this.prisma.journal.findUnique({
+      where: { id: journalId },
+      include: { prices: true, members: { include: { group: true } } },
+    });
+    if (!journal) throw new NotFoundException('Session not found');
+    if (journal.leaveTime) {
+      throw new ConflictException('Session déjà terminée');
+    }
+    const price = await this.prisma.price.findUnique({ where: { id: priceId } });
+    if (!price) throw new NotFoundException('Price not found');
+    if (
+      price.billingUnit === BillingUnit.HOURLY ||
+      price.category === PriceCategory.ABONNEMENT ||
+      price.type === 'abonnement' ||
+      !price.durationHours ||
+      price.durationHours <= 0
+    ) {
+      throw new BadRequestException('Choisissez un forfait (2h, 4h, …)');
+    }
+    const now = new Date();
+    const percent = memberDiscountPercent(journal.members, price.category);
+    const amount = this.applyPercentOff(price.price, percent);
+
+    const updated = await this.prisma.journal.update({
+      where: { id: journalId },
+      data: {
+        pricingMode: 'FIXED',
+        priceId: price.id,
+        payedAmount: amount,
+        fixedPriceId: price.id,
+        fixedServiceName: price.name,
+        fixedDurationHours: price.durationHours,
+        fixedAmount: amount,
+        fixedAt: now,
+        lastPricingNotice: null,
+        serviceName: price.name,
+        listPrice: price.price,
+      },
+      include: { prices: true, members: { include: { group: true } } },
+    });
+
+    this.eventsGateway.sendTableUpdates({
+      type: 'session_tariff_fixed',
+      journalId,
+      memberId: updated.memberID,
+    });
+    this.eventsGateway.sendSessionPricingChanged({
+      journalId,
+      memberId: updated.memberID,
+      mode: 'FIXED',
+      tierName: price.name,
+      amountDue: amount,
+    });
+    if (updated.memberID) {
+      void this.pushService.sendToMember(updated.memberID, {
+        title: `Forfait ${price.name} fixé`,
+        body: `Montant ${amount.toFixed(3)} DT.`,
+        tag: `session-pricing-${journalId}`,
+        url: '/m',
+      });
+    }
+
+    return this.enrichSessionWithSeat(updated as any);
+  }
+
+  /** Tier ladder + overtime rules (for live client-side price ticking). */
+  async getPricingContext(orgSlug?: string, orgId?: string) {
+    let organizationId: string | null = orgId || null;
+    if (!organizationId && orgSlug) {
+      try {
+        organizationId = (await this.resolveOrganizationBySlug(orgSlug)).id;
+      } catch {
+        organizationId = null;
+      }
+    }
+    const ctx = await loadPricingContext(this.prisma, organizationId);
+    return {
+      rules: ctx.rules,
+      ladder: ladderFor(ctx.ladder, PriceCategory.JOURNEE),
+      allTiers: ctx.ladder,
+    };
+  }
+
   async startSubscription(dto: StartSubscriptionDto) {
     const member = await this.prisma.member.findUnique({
       where: { id: dto.memberId },
@@ -1987,11 +2435,8 @@ export class MobileService {
 
     const discount = await this.resolveVisitDiscount(dto.memberId, price);
     const afterGroup = this.applyPercentOff(price.price, discount.percent);
-    const remisedPrice = await this.finalizeAmountWithAppPromo(
-      dto.memberId,
-      dto.priceId,
-      afterGroup,
-    );
+    const { amount: remisedPrice, snapshot: promoSnapshot } =
+      await this.applyAppPromo(dto.memberId, dto.priceId, afterGroup);
     const isPayed = dto.isPayed ?? true;
     let spaceName: string | null = null;
     const spaceId = dto.reservedSeatSpaceId || price.spaceId || null;
@@ -2014,6 +2459,7 @@ export class MobileService {
         isReservation: false,
         // When unpaid: payedAmount = already received (0). When paid: full remised.
         payedAmount: isPayed ? remisedPrice : 0,
+        ...promoSnapshot,
         hoursQuota:
           price.billingUnit === BillingUnit.HOURLY ? price.durationHours : null,
         hoursUsed: 0,
@@ -2039,7 +2485,33 @@ export class MobileService {
       });
     }
 
-    return abonnement;
+    const switchedJournalId = await switchOpenSessionToSubscription(
+      this.prisma,
+      dto.memberId,
+      price,
+    );
+    if (switchedJournalId) {
+      this.eventsGateway.sendTableUpdates({
+        type: 'session_switched_to_subscription',
+        journalId: switchedJournalId,
+        memberId: dto.memberId,
+      });
+      this.eventsGateway.sendSessionPricingChanged({
+        journalId: switchedJournalId,
+        memberId: dto.memberId,
+        mode: 'SUBSCRIPTION',
+        tierName: price.name,
+        amountDue: 0,
+      });
+      void this.pushService.sendToMember(dto.memberId, {
+        title: `Abonnement ${price.name} activé`,
+        body: 'Votre session en cours passe sur votre abonnement.',
+        tag: `session-pricing-${switchedJournalId}`,
+        url: '/m',
+      });
+    }
+
+    return { ...abonnement, switchedJournalId };
   }
 
   async quickCheckIn(dto: QuickCheckInDto) {
@@ -2278,11 +2750,12 @@ export class MobileService {
       price,
     );
     const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
-    const payedAmount = await this.finalizeAmountWithAppPromo(
-      dto.bookForMemberId || dto.memberId,
-      dto.priceId,
-      afterGroup,
-    );
+    const { amount: payedAmount, snapshot: promoSnapshot } =
+      await this.applyAppPromo(
+        dto.bookForMemberId || dto.memberId,
+        dto.priceId,
+        afterGroup,
+      );
 
     const guestName =
       (dto.guestName || dto.firstName || '').trim() || 'Visiteur anonyme';
@@ -2310,6 +2783,7 @@ export class MobileService {
         isPayed: false,
         isReservation: false,
         payedAmount,
+        ...promoSnapshot,
         createdbyUserID: dto.createdbyUserID || null,
         groupVisitId: dto.groupVisitId || null,
         serviceName: snap.serviceName,
@@ -2909,7 +3383,17 @@ export class MobileService {
   }
 
   async scanIn(memberId: string) {
+    const alreadyOpen = await this.openSessionForRescan(memberId);
+    if (alreadyOpen) return alreadyOpen;
     return this.startSubscriptionSession(memberId);
+  }
+
+  /** Scanning again never restarts or closes a session: return the running one. */
+  private async openSessionForRescan(memberId: string) {
+    const open = await this.getOpenSession(memberId);
+    if (!open) return null;
+    const session = await this.enrichSessionWithSeat(open as any);
+    return session ? { ...session, alreadyOpen: true } : null;
   }
 
   enrichSession(
@@ -3024,7 +3508,48 @@ export class MobileService {
         hoursUsed: kind === 'HOURS_POOL' ? hoursUsed : null,
       };
     }
+    const pricing = await this.sessionPricingPayload(session as any);
+    if (pricing) {
+      return {
+        ...base,
+        seat,
+        sessionElapsedMs,
+        expectedLeaveTime: new Date(pricing.tierEndsAt),
+        remainingMs: pricing.tierEndsAt - Date.now(),
+        overtime: pricing.overtime,
+        amountDue: pricing.amountDue,
+        pricing,
+      };
+    }
     return { ...base, seat, sessionElapsedMs };
+  }
+
+  private async sessionPricingPayload(
+    session: PricedJournalRow & {
+      memberID?: string | null;
+      members?: (PricedJournalRow['members'] & { organizationId?: string | null }) | null;
+    },
+  ) {
+    if (!session) return null;
+    let members = session.members;
+    if (session.memberID && (!members || members.group === undefined)) {
+      members = await this.prisma.member.findUnique({
+        where: { id: session.memberID },
+        include: { group: true },
+      });
+    }
+    let organizationId = members?.organizationId ?? null;
+    if (!organizationId && session.prices?.id) {
+      organizationId =
+        (
+          await this.prisma.price.findUnique({
+            where: { id: session.prices.id },
+            select: { organizationId: true },
+          })
+        )?.organizationId ?? null;
+    }
+    const ctx = await loadPricingContext(this.prisma, organizationId);
+    return pricingPayload({ ...session, members }, ctx);
   }
 
   async createVisitRequest(dto: CreateVisitRequestDto) {
@@ -3205,9 +3730,8 @@ export class MobileService {
     let assignedLabel = seatLabel?.trim() || request.seatLabel?.trim() || null;
     let assignedSpaceId = spaceId || request.spaceId || undefined;
     const requestKind = this.subscriptionKind(request.price);
-    const hoursSub =
-      request.type === VisitRequestType.SUBSCRIPTION &&
-      requestKind === 'HOURS_POOL';
+    const isSubscriptionRequest =
+      request.type === VisitRequestType.SUBSCRIPTION;
     const wantsDedicatedSeat =
       request.type === VisitRequestType.SUBSCRIPTION &&
       !!(request.price as { reserveSeat?: boolean }).reserveSeat;
@@ -3215,9 +3739,10 @@ export class MobileService {
       !!occupyWholeFlag ||
       !!request.occupyWhole ||
       (!!request.price.occupyWhole && request.price.occupySeat === false);
+    // Subscriptions only take a seat now when the tarif reserves one;
+    // otherwise the seat is assigned at each visit, like a day visitor.
     const skipSeat =
-      occupyWhole ||
-      (hoursSub && !wantsDedicatedSeat);
+      occupyWhole || (isSubscriptionRequest && !wantsDedicatedSeat);
 
     if (wantsDedicatedSeat) {
       if (!assignedLabel) {

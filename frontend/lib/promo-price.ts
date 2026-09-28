@@ -1,8 +1,10 @@
 import {
+  PriceCategory,
   PromoValueKind,
   type AppInstallGlobalPromo,
   type AppInstallPromo,
 } from "@/lib/types";
+import { priceCategoriesOf } from "@/lib/tarif-labels";
 
 export type PromoOfferLike = Pick<
   AppInstallPromo,
@@ -24,13 +26,50 @@ export function applyPromoValue(
   return Math.round(next * 100) / 100;
 }
 
-/** Resolve best promo for a tarif: price-linked first, else global. */
+export const PROMO_SCOPE_ORDER: PriceCategory[] = [
+  PriceCategory.JOURNEE,
+  PriceCategory.OPEN_SPACE,
+  PriceCategory.SALLE,
+  PriceCategory.ABONNEMENT,
+];
+
+export const PROMO_SCOPE_LABEL: Record<PriceCategory, string> = {
+  [PriceCategory.JOURNEE]: "Journée (journal)",
+  [PriceCategory.OPEN_SPACE]: "Open space",
+  [PriceCategory.SALLE]: "Salle de réunion",
+  [PriceCategory.ABONNEMENT]: "Abonnement",
+};
+
+type PromoOpts = {
+  promos?: PromoOfferLike[] | null;
+  globalPromo?: AppInstallGlobalPromo | null;
+  /** Tarif categories (see promoCategoriesOf) — needed when the global promo is scoped */
+  categories?: PriceCategory[] | null;
+};
+
+/** Categories used for promo scopes: uncategorised tarifs fall back on their type. */
+export function promoCategoriesOf(
+  price:
+    | {
+        category?: string | null;
+        categories?: (string | null)[] | null;
+        type?: string | null;
+      }
+    | null
+    | undefined
+): PriceCategory[] {
+  if (!price) return [];
+  const cats = priceCategoriesOf(price);
+  if (cats.length) return cats;
+  return [
+    price.type === "abonnement" ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
+  ];
+}
+
+/** Resolve best promo for a tarif: price-linked first, else global (if in scope). */
 export function resolvePromoForPrice(
   priceId: string | null | undefined,
-  opts: {
-    promos?: PromoOfferLike[] | null;
-    globalPromo?: AppInstallGlobalPromo | null;
-  }
+  opts: PromoOpts
 ): { valueKind: PromoValueKind; value: number } | null {
   const linked = (opts.promos ?? []).find(
     (p) =>
@@ -44,7 +83,11 @@ export function resolvePromoForPrice(
   }
   const g = opts.globalPromo;
   if (g && Number.isFinite(g.value) && g.value > 0) {
-    return { valueKind: g.valueKind, value: g.value };
+    const scopes = g.scopes ?? [];
+    const inScope =
+      !scopes.length ||
+      (opts.categories ?? []).some((c) => scopes.includes(c));
+    if (inScope) return { valueKind: g.valueKind, value: g.value };
   }
   return null;
 }
@@ -52,10 +95,7 @@ export function resolvePromoForPrice(
 export function pricedWithPromo(
   original: number,
   priceId: string | null | undefined,
-  opts: {
-    promos?: PromoOfferLike[] | null;
-    globalPromo?: AppInstallGlobalPromo | null;
-  }
+  opts: PromoOpts
 ): { original: number; final: number; hasPromo: boolean } {
   const promo = resolvePromoForPrice(priceId, opts);
   if (!promo) {

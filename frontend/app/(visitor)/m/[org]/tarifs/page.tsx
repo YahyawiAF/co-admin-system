@@ -8,7 +8,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { PriceCategory } from "@/lib/types";
 import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
-import { pricedWithPromo } from "@/lib/promo-price";
+import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -80,7 +80,10 @@ export default function MobileTarifsPage() {
               </h2>
               <div className="space-y-2">
                 {items.map((p) => {
-                  const priced = pricedWithPromo(p.price, p.id, promoOpts);
+                  const priced = pricedWithPromo(p.price, p.id, {
+                    ...promoOpts,
+                    categories: promoCategoriesOf(p),
+                  });
                   return (
                     <Card key={p.id}>
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">

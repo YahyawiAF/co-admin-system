@@ -72,6 +72,7 @@ import { cn } from "@/lib/utils";
 import { AbonnementSeatMap } from "@/components/admin/AbonnementSeatMap";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
+import { PromoPriceTag, promoPriceOf } from "@/components/admin/JournalPricingCells";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
@@ -1022,10 +1023,17 @@ function AbonnementsInner() {
                           </span>
                         ) : null}
                       </TableCell>
-                      <TableCell>{a.payedAmount} DT</TableCell>
+                      <TableCell>
+                        {a.payedAmount} DT
+                        {promoPriceOf(a) != null ? (
+                          <div>
+                            <PromoPriceTag row={a} compact />
+                          </div>
+                        ) : null}
+                      </TableCell>
                       <TableCell>
                         {(() => {
-                          const catalog = a.price?.price || 0;
+                          const catalog = promoPriceOf(a) ?? (a.price?.price || 0);
                           const received = a.payedAmount || 0;
                           const remaining = Math.max(0, catalog - received);
                           const remindLeft = paymentRemindDaysLeft(a);

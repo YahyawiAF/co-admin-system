@@ -25,7 +25,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -62,6 +64,12 @@ import {
 import {
   defaultOccupyForCategory,
 } from "@/lib/space-occupy";
+import {
+  PROMO_SCOPE_LABEL,
+  PROMO_SCOPE_ORDER,
+  promoCategoriesOf,
+} from "@/lib/promo-price";
+import { cn } from "@/lib/utils";
 
 const VISIT_PRICE_CATS = [
   PriceCategory.JOURNEE,
@@ -597,10 +605,13 @@ export default function TarifsPage() {
     active: boolean;
     valueKind: PromoValueKind;
     value: string;
+    /** Empty = every tarif */
+    scopes: PriceCategory[];
   }>({
     active: false,
     valueKind: PromoValueKind.FIXED_DT,
     value: "",
+    scopes: [],
   });
   const [promoDraft, setPromoDraft] = useState<{
     priceId: string;
@@ -632,12 +643,14 @@ export default function TarifsPage() {
         facility.appInstallGlobalPromoValue > 0
           ? String(facility.appInstallGlobalPromoValue)
           : "",
+      scopes: facility.appInstallGlobalPromoScopes ?? [],
     });
   }, [
     facility?.id,
     facility?.appInstallGlobalPromoActive,
     facility?.appInstallGlobalPromoKind,
     facility?.appInstallGlobalPromoValue,
+    facility?.appInstallGlobalPromoScopes?.join(","),
   ]);
 
   const { data: promos = [] } = useQuery({
@@ -646,14 +659,22 @@ export default function TarifsPage() {
     enabled: !!facility?.id,
   });
 
-  const aboPrices = useMemo(
-    () =>
-      prices.filter(
-        (p) =>
-          priceCategoriesOf(p).includes(PriceCategory.ABONNEMENT) ||
-          p.type === PriceType.abonnement
-      ),
-    [prices]
+  /** Any active tarif can carry a promo, grouped by its main category. */
+  const promoPriceGroups = useMemo(() => {
+    const groups = new Map<PriceCategory, Price[]>();
+    for (const p of prices) {
+      if (p.isActive === false) continue;
+      const cat = promoCategoriesOf(p)[0];
+      groups.set(cat, [...(groups.get(cat) ?? []), p]);
+    }
+    return PROMO_SCOPE_ORDER.filter((c) => groups.get(c)?.length).map((c) => ({
+      category: c,
+      prices: groups.get(c)!,
+    }));
+  }, [prices]);
+  const promoPriceCount = promoPriceGroups.reduce(
+    (n, g) => n + g.prices.length,
+    0
   );
 
   const saveGlobalPromo = useMutation({
@@ -678,6 +699,7 @@ export default function TarifsPage() {
           ? globalDraft.valueKind
           : null,
         appInstallGlobalPromoValue: globalDraft.active ? value : null,
+        appInstallGlobalPromoScopes: globalDraft.scopes,
       });
     },
     onSuccess: () => {
@@ -690,7 +712,7 @@ export default function TarifsPage() {
   const createPromo = useMutation({
     mutationFn: async () => {
       if (!facility?.id) throw new Error("Facility introuvable");
-      if (!promoDraft.priceId) throw new Error("Choisissez un tarif abonnement");
+      if (!promoDraft.priceId) throw new Error("Choisissez un tarif");
       const value = Number(promoDraft.value);
       if (!Number.isFinite(value) || value < 0) {
         throw new Error("Valeur invalide");
@@ -764,15 +786,6 @@ export default function TarifsPage() {
     }
     return map;
   }, [prices]);
-
-  const seed = useMutation({
-    mutationFn: () => pricesApi.seedCollaboraHub(),
-    onSuccess: (res) => {
-      toast.success(`${res.created} services créés (${res.skipped} déjà présents)`);
-      queryClient.invalidateQueries({ queryKey: queryKeys.prices });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   const remove = useMutation({
     mutationFn: (id: string) => pricesApi.remove(id),
@@ -881,14 +894,6 @@ export default function TarifsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => seed.mutate()}
-            disabled={seed.isPending}
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            Seed Collabora Hub
-          </Button>
           <PriceFormDialog trigger={<Button>+ Ajouter</Button>} />
         </div>
       </div>
@@ -1036,24 +1041,84 @@ export default function TarifsPage() {
                   </Button>
                 </div>
               </div>
+
+              <div
+                className={
+                  globalDraft.active
+                    ? "space-y-2"
+                    : "pointer-events-none space-y-2 opacity-50"
+                }
+              >
+                <Label>S&apos;applique à</Label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setGlobalDraft((d) => ({ ...d, scopes: [] }))
+                    }
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-sm",
+                      globalDraft.scopes.length === 0
+                        ? "border-primary bg-primary/10 font-medium text-primary"
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    Tous les tarifs
+                  </button>
+                  {PROMO_SCOPE_ORDER.map((c) => {
+                    const on = globalDraft.scopes.includes(c);
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() =>
+                          setGlobalDraft((d) => ({
+                            ...d,
+                            scopes: on
+                              ? d.scopes.filter((s) => s !== c)
+                              : [...d.scopes, c],
+                          }))
+                        }
+                        className={cn(
+                          "rounded-full border px-3 py-1.5 text-sm",
+                          on
+                            ? "border-primary bg-primary/10 font-medium text-primary"
+                            : "hover:bg-muted"
+                        )}
+                      >
+                        {PROMO_SCOPE_LABEL[c]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {globalDraft.scopes.length
+                    ? `Promo valable uniquement sur : ${globalDraft.scopes
+                        .map((s) => PROMO_SCOPE_LABEL[s])
+                        .join(", ")}.`
+                    : "Promo valable sur tous les tarifs (journal, salles, abonnements…)."}{" "}
+                  Pensez à enregistrer.
+                </p>
+              </div>
             </section>
 
             {/* 2 — Tarifs abonnement */}
             <section className="space-y-4">
               <div className="space-y-1">
                 <h2 className="text-base font-semibold">
-                  Promos liées aux abonnements
+                  Promos liées à un tarif
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   Jusqu&apos;à 3 offres supplémentaires, chacune liée à un tarif
-                  abonnement (% ou DT). Affichées sous la promo globale.
+                  précis — journée, salle, open space ou abonnement (% ou DT).
+                  Prioritaires sur la promo globale pour ce tarif.
                 </p>
               </div>
 
               <div className="rounded-xl border bg-muted/30 p-4">
                 <div className="grid gap-3 sm:grid-cols-[1fr_140px_100px_auto] sm:items-end">
                   <div className="space-y-1.5">
-                    <Label>Tarif abonnement</Label>
+                    <Label>Tarif</Label>
                     <Select
                       value={promoDraft.priceId || undefined}
                       onValueChange={(v) =>
@@ -1061,13 +1126,20 @@ export default function TarifsPage() {
                       }
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Choisir un abonnement…" />
+                        <SelectValue placeholder="Choisir un tarif…" />
                       </SelectTrigger>
                       <SelectContent>
-                        {aboPrices.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} — {formatTarifPrice(p)}
-                          </SelectItem>
+                        {promoPriceGroups.map((g) => (
+                          <SelectGroup key={g.category}>
+                            <SelectLabel>
+                              {PROMO_SCOPE_LABEL[g.category]}
+                            </SelectLabel>
+                            {g.prices.map((p) => (
+                              <SelectItem key={p.id} value={p.id}>
+                                {p.name} — {formatTarifPrice(p)}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
                         ))}
                       </SelectContent>
                     </Select>
@@ -1120,21 +1192,21 @@ export default function TarifsPage() {
                       createPromo.isPending ||
                       !facility?.id ||
                       promos.length >= 3 ||
-                      !aboPrices.length
+                      !promoPriceCount
                     }
                     onClick={() => createPromo.mutate()}
                   >
                     Ajouter
                   </Button>
                 </div>
-                {!aboPrices.length ? (
+                {!promoPriceCount ? (
                   <p className="mt-2 text-xs text-amber-600">
-                    Créez d&apos;abord un tarif dans l&apos;onglet Abonnement.
+                    Créez d&apos;abord un tarif actif.
                   </p>
                 ) : null}
                 {promos.length >= 3 ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Maximum 3 promos abonnement atteint.
+                    Maximum 3 promos par tarif atteint.
                   </p>
                 ) : null}
               </div>
@@ -1162,7 +1234,7 @@ export default function TarifsPage() {
                         >
                           <td className="px-4 py-3">
                             <div className="font-medium">
-                              {p.priceName || "Abonnement"}
+                              {p.priceName || "Tarif"}
                             </div>
                             {p.priceAmount != null ? (
                               <div className="text-xs text-muted-foreground">
@@ -1222,7 +1294,7 @@ export default function TarifsPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Aucune promo abonnement pour l&apos;instant.
+                  Aucune promo liée à un tarif pour l&apos;instant.
                 </p>
               )}
             </section>

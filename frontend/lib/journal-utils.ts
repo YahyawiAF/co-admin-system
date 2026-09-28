@@ -1,4 +1,10 @@
-import type { Journal } from "@/lib/types";
+import type { Journal, SessionPricingPayload } from "@/lib/types";
+import {
+  computeSessionPricing,
+  liveRowPricing,
+  type PricingTier,
+  type SessionPricingResult,
+} from "@/lib/session-pricing";
 
 export function isJournalPack(p: {
   category?: string | null;
@@ -137,8 +143,52 @@ export function visitStatus(row: Journal): "reservation" | "present" | "left" {
   return "left";
 }
 
-/** Expected end time from pack durationHours, or null if unknown / open hourly meter. */
-export function expectedEndMs(row: Journal): number | null {
+let pricingLadder: PricingTier[] | null = null;
+
+/** Tier ladder used to tick pack / auto prices live (set by pages that load pricing-context). */
+export function setJournalPricingLadder(ladder: PricingTier[] | null | undefined) {
+  pricingLadder = ladder ?? null;
+}
+
+/** Live tier / overtime pricing for pack & auto visits (null for hourly / subscription). */
+export function rowPricing(row: Journal, now = Date.now()): SessionPricingPayload | null {
+  if (!row.pricing || row.isReservation) return null;
+  return liveRowPricing(row, pricingLadder, now);
+}
+
+/** Pricing evaluated at an arbitrary instant (timeline / previews), even for closed visits. */
+export function rowPricingAt(row: Journal, at: number): SessionPricingResult | null {
+  const p = row.pricing;
+  if (!p || !pricingLadder?.length) return null;
+  const mode = row.pricingMode ?? p.mode;
+  return computeSessionPricing({
+    mode,
+    registredTime: row.registredTime,
+    at,
+    ladder: pricingLadder,
+    rules: p.rules,
+    discountPercent: p.discountPercent,
+    fixed:
+      mode === "FIXED" && p.fixedDurationHours
+        ? {
+            priceId: p.fixedPriceId,
+            name: p.fixedServiceName,
+            durationHours: p.fixedDurationHours,
+            amount: p.fixedAmount ?? p.baseAmount,
+            category: priceOf(row)?.category ?? null,
+          }
+        : null,
+  });
+}
+
+/** Expected end: FIXED pack end, AUTO current tier end, or pack durationHours; null if unknown / open hourly meter. */
+export function expectedEndMs(row: Journal, now = Date.now()): number | null {
+  const pricing = rowPricing(row, now);
+  if (pricing) {
+    return pricing.mode === "FIXED" && pricing.fixedEndsAt != null
+      ? pricing.fixedEndsAt
+      : pricing.tierEndsAt;
+  }
   const price = priceOf(row);
   if (!price || row.isReservation) return null;
   if (price.billingUnit === "HOURLY") {
@@ -158,8 +208,10 @@ export function billableHours(fromMs: number, toMs: number): number {
   return Math.max(0.25, Math.round(h * 4) / 4);
 }
 
-/** Live amount for an open hourly visit (tarif × hours stayed). */
+/** Live amount: tier / overtime pricing for packs & auto, tarif × hours for hourly. */
 export function visitAmountDue(row: Journal, now = Date.now()): number {
+  const pricing = rowPricing(row, now);
+  if (pricing) return isActiveVisit(row) ? pricing.amountDue : row.payedAmount || 0;
   const price = priceOf(row);
   if (
     isActiveVisit(row) &&
@@ -174,9 +226,40 @@ export function visitAmountDue(row: Journal, now = Date.now()): number {
 
 export function isOverstay(row: Journal, now = Date.now()): boolean {
   if (!isActiveVisit(row)) return false;
-  const end = expectedEndMs(row);
+  const end = expectedEndMs(row, now);
   if (end == null) return false;
   return now > end;
+}
+
+/** Collected amount (0 when unpaid). */
+export function visitPaidAmount(row: Journal): number {
+  if (row.paidAmount && row.paidAmount > 0) return row.paidAmount;
+  return row.isPayed ? row.payedAmount || 0 : 0;
+}
+
+/** Still owed on this visit (e.g. paid the pack, then stayed longer). */
+export function visitBalanceDue(row: Journal, now = Date.now()): number {
+  const due = visitAmountDue(row, now);
+  const paid = visitPaidAmount(row);
+  if (!row.isPayed && paid <= 0) return due;
+  return Math.max(0, Math.round((due - paid) * 1000) / 1000);
+}
+
+/** Paid at least the original pack but still present past its end — likely forgot to check out. */
+export function isLikelyForgotCheckout(row: Journal, now = Date.now()): boolean {
+  if (!isActiveVisit(row)) return false;
+  const pricing = rowPricing(row, now);
+  if (!pricing || !pricing.overtime) return false;
+  const paid = visitPaidAmount(row);
+  return paid > 0 && paid + 0.001 >= (pricing.fixedAmount ?? pricing.baseAmount);
+}
+
+/** Overtime (or balance) still unpaid on a pack / auto visit. */
+export function hasUnpaidOvertime(row: Journal, now = Date.now()): boolean {
+  if (row.isReservation) return false;
+  const pricing = rowPricing(row, now);
+  if (!pricing) return false;
+  return pricing.overtime && visitBalanceDue(row, now) > 0.001;
 }
 
 /** Present visits whose pack ends within `withinMs` (default 30 min), not yet overstay. */
@@ -186,14 +269,14 @@ export function isLeavingSoon(
   withinMs = 30 * 60_000
 ): boolean {
   if (!isActiveVisit(row)) return false;
-  const end = expectedEndMs(row);
+  const end = expectedEndMs(row, now);
   if (end == null) return false;
   const remaining = end - now;
   return remaining >= 0 && remaining <= withinMs;
 }
 
 export function remainingMs(row: Journal, now = Date.now()): number | null {
-  const end = expectedEndMs(row);
+  const end = expectedEndMs(row, now);
   if (end == null) return null;
   return end - now;
 }

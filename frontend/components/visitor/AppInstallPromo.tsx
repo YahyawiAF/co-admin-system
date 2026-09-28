@@ -10,6 +10,7 @@ import {
   type AppInstallGlobalPromo,
   type AppInstallPromo as PromoOffer,
 } from "@/lib/types";
+import { PROMO_SCOPE_LABEL } from "@/lib/promo-price";
 
 type Props = {
   /** @deprecated Prefer `promos` / `globalPromo` */
@@ -77,6 +78,12 @@ export function AppInstallPromo({
             active[0]!.priceName
           ) + (active.length > 1 ? ` +${active.length - 1}` : "")
         : null;
+  const scopeLabel =
+    hasGlobal && globalPromo!.scopes?.length
+      ? `Valable sur : ${globalPromo!.scopes
+          .map((s) => PROMO_SCOPE_LABEL[s])
+          .join(", ")}`
+      : null;
 
   // In PWA with unlocked promo — celebrate activation
   if (standalone && unlocked) {
@@ -108,6 +115,11 @@ export function AppInstallPromo({
               Votre réduction s&apos;applique au prochain paiement dans
               l&apos;app.
             </p>
+            {scopeLabel ? (
+              <p className="mt-1 text-[12px] font-medium text-emerald-700">
+                {scopeLabel}
+              </p>
+            ) : null}
           </div>
         </div>
       </div>
@@ -158,6 +170,11 @@ export function AppInstallPromo({
             </span>{" "}
             et commencer à collecter des points (aucun point sur le web).
           </p>
+          {scopeLabel ? (
+            <p className="mt-1 text-[12px] font-medium text-indigo-700">
+              {scopeLabel}
+            </p>
+          ) : null}
           <div className="mt-2.5">
             <InstallAppButton className="w-full" />
           </div>

@@ -54,14 +54,36 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const base = raw.replace(/\/$/, "");
     const s = io(base, {
       transports: ["websocket", "polling"],
+      // Without this the client never falls back to polling when a proxy blocks WebSocket.
+      tryAllTransports: true,
       autoConnect: true,
       reconnection: true,
-      reconnectionAttempts: 12,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1_000,
+      reconnectionDelayMax: 5_000,
       timeout: 12_000,
     });
 
     s.on("connect", () => setConnected(true));
     s.on("disconnect", () => setConnected(false));
+
+    // Events emitted while we were offline are lost — resync what's on screen.
+    s.io.on("reconnect", () => {
+      debouncedInvalidate(qcRef.current, [
+        ["mobile-status"],
+        ["journal"],
+        queryKeys.visitRequestsPending,
+        queryKeys.visitArrivals,
+        ["bookings"],
+        ["facility-occupancy"],
+      ]);
+    });
+
+    // Background tabs / sleeping phones throttle reconnect timers; retry right away on resume.
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !s.connected) s.connect();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     // --- Visit request: inject payload directly, then background-refetch ---
     s.on("visit_request", (payload: VisitRequest) => {
@@ -107,9 +129,16 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     s.on("visit_arrival", () => {
       debouncedInvalidate(qcRef.current, [
         queryKeys.visitArrivals,
+        ["journal"],
         ["bookings"],
         ["facility-occupancy"],
       ]);
+    });
+
+    s.on("session_pricing_changed", () => {
+      const qc = qcRef.current;
+      qc.invalidateQueries({ queryKey: ["mobile-status"] });
+      debouncedInvalidate(qc, [["journal"]]);
     });
 
     s.on("visitor_checkout", (payload?: {
@@ -266,6 +295,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
     setSocket(s);
     return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      s.io.off("reconnect");
       s.removeAllListeners();
       s.disconnect();
     };

@@ -25,13 +25,18 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Abonnement, Journal } from "@/lib/types";
 import {
+  hasUnpaidOvertime,
   isActiveVisit,
   isLeavingSoon,
+  isLikelyForgotCheckout,
   isOverstay,
   memberOf,
   remainingMs,
+  rowPricing,
+  visitBalanceDue,
   visitorLabel,
 } from "@/lib/journal-utils";
+import { formatDt, formatMinutes } from "@/lib/session-pricing";
 import {
   daysLeft,
   isPaymentRemindToday,
@@ -47,6 +52,8 @@ export type JournalAlertItem = {
   kind:
     | "session_ending"
     | "overstay"
+    | "tier_change_soon"
+    | "overtime_unpaid"
     | "leaving_soon"
     | "sub_expiring"
     | "sub_today"
@@ -80,6 +87,7 @@ export function buildJournalAlerts({
 }: BuildInput): JournalAlertItem[] {
   const items: JournalAlertItem[] = [];
   const FIVE_MIN = 5 * 60_000;
+  const TEN_MIN = 10 * 60_000;
 
   for (const row of rows) {
     if (!isActiveVisit(row)) continue;
@@ -98,12 +106,50 @@ export function buildJournalAlerts({
       });
     }
 
+    const pricing = rowPricing(row, now);
+    if (
+      pricing?.nextChangeAt != null &&
+      pricing.nextAmount != null &&
+      pricing.nextChangeAt > now &&
+      pricing.nextChangeAt - now <= TEN_MIN
+    ) {
+      items.push({
+        id: `tier-${row.id}-${pricing.nextChangeAt}`,
+        kind: "tier_change_soon",
+        title: name,
+        detail: `${pricing.nextTierName ? `Passe au tarif ${pricing.nextTierName}` : "Supplément"} (${formatDt(pricing.nextAmount)}) dans ${formatMinutes(pricing.nextChangeAt - now)}`,
+        severity: "warning",
+        journalId: row.id,
+        memberId: row.memberID || undefined,
+      });
+    }
+    if (hasUnpaidOvertime(row, now)) {
+      items.push({
+        id: `ot-unpaid-${row.id}`,
+        kind: "overtime_unpaid",
+        title: name,
+        detail: `${
+          pricing?.mode === "FIXED"
+            ? `Forfait ${pricing.fixedServiceName ?? ""} (${formatDt(pricing.fixedAmount)}) dépassé`
+            : "Dépassement"
+        } · reste ${formatDt(visitBalanceDue(row, now))}${
+          isLikelyForgotCheckout(row, now) ? " · checkout oublié ?" : ""
+        }`,
+        severity: "urgent",
+        journalId: row.id,
+        memberId: row.memberID || undefined,
+      });
+    }
+
     if (isOverstay(row, now)) {
       items.push({
         id: `overstay-${row.id}`,
         kind: "overstay",
         title: name,
-        detail: "Session dépassée",
+        detail:
+          pricing?.mode === "FIXED"
+            ? `Forfait ${pricing.fixedServiceName ?? ""} dépassé de ${formatMinutes(pricing.overtimeMs)}`
+            : "Session dépassée",
         severity: "urgent",
         journalId: row.id,
         memberId: row.memberID || undefined,
@@ -217,9 +263,19 @@ export function buildJournalAlerts({
   return items.sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
+const SESSION_KINDS: JournalAlertItem["kind"][] = [
+  "session_ending",
+  "overstay",
+  "tier_change_soon",
+  "overtime_unpaid",
+  "leaving_soon",
+];
+
 const KIND_LABEL: Record<JournalAlertItem["kind"], string> = {
   session_ending: "Fin imminente",
   overstay: "Dépassement",
+  tier_change_soon: "Tarif suivant bientôt",
+  overtime_unpaid: "Reste à payer",
   leaving_soon: "Bientôt parti",
   sub_expiring: "Abo bientôt fini",
   sub_today: "Abo expire aujourd'hui",
@@ -240,7 +296,7 @@ function useJournalAlertData() {
 
   const counts = useMemo(() => {
     const session = alerts.filter((a) =>
-      ["session_ending", "overstay", "leaving_soon"].includes(a.kind),
+      SESSION_KINDS.includes(a.kind),
     ).length;
     const sub = alerts.filter((a) =>
       ["sub_expiring", "sub_today", "sub_expired"].includes(a.kind),
@@ -264,6 +320,12 @@ function useJournalAlertData() {
 function AlertIcon({ kind }: { kind: JournalAlertItem["kind"] }) {
   if (kind === "overstay") {
     return <TimerOff className="h-4 w-4 text-amber-700" />;
+  }
+  if (kind === "overtime_unpaid") {
+    return <Wallet className="h-4 w-4 text-rose-700" />;
+  }
+  if (kind === "tier_change_soon") {
+    return <AlarmClock className="h-4 w-4 text-amber-700" />;
   }
   if (kind === "session_ending" || kind === "leaving_soon") {
     return <AlarmClock className="h-4 w-4 text-sky-700" />;
@@ -431,7 +493,7 @@ function JournalAlertsDialog({
   const filtered = useMemo(() => {
     if (tab === "session") {
       return alerts.filter((a) =>
-        ["session_ending", "overstay", "leaving_soon"].includes(a.kind),
+        SESSION_KINDS.includes(a.kind),
       );
     }
     if (tab === "sub") {

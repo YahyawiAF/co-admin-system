@@ -47,6 +47,10 @@ export class EventsGateway {
     this.server.sockets.emit('visitor_checkout', data);
   }
 
+  sendSessionPricingChanged(data: any) {
+    this.server.sockets.emit('session_pricing_changed', data);
+  }
+
   sendProductOrder(data: any) {
     this.server.sockets.emit('product_order', data);
   }

@@ -5,6 +5,7 @@ import { PrismaService } from 'database/prisma.service';
 import { CreatePriceDto } from './dtos/create-price.dto';
 import { UpdatePriceDto } from './dtos/update-price.dto';
 import { defaultOccupy } from '../mobile/space-occupy';
+import { invalidatePricingContext } from '../mobile/session-pricing-context';
 
 const COLLABORA_HUB_TARIFS: Array<{
   name: string;
@@ -284,6 +285,7 @@ export class PriceService {
   }
 
   async create(createPriceDto: CreatePriceDto): Promise<PriceEntity> {
+    invalidatePricingContext();
     const {
       name,
       price,
@@ -403,6 +405,7 @@ export class PriceService {
     id: string,
     updatePriceDto: UpdatePriceDto,
   ): Promise<PriceEntity> {
+    invalidatePricingContext();
     const existingPrice = await this.prisma.price.findUnique({
       where: { id },
     });
@@ -532,6 +535,7 @@ export class PriceService {
   }
 
   async remove(id: string): Promise<void> {
+    invalidatePricingContext();
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) {
       throw new NotFoundException(`Price with ID ${id} not found`);

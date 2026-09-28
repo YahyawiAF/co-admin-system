@@ -20,6 +20,8 @@ import {
   CreateMobileOrderDto,
   CreateStaffMessageDto,
   CreateVisitRequestDto,
+  FixSessionTariffDto,
+  StartAutoSessionDto,
   MobileLoginDto,
   MobileRegisterDto,
   QuickCheckInDto,
@@ -279,6 +281,29 @@ export class MobileController {
   @Post('session/scan-in')
   scanIn(@Body() dto: ScanInDto) {
     return this.mobileService.scanIn(dto.memberId);
+  }
+
+  @Post('session/start-auto')
+  startAutoSession(@Body() dto: StartAutoSessionDto) {
+    return this.mobileService.startAutoSession(dto.memberId);
+  }
+
+  @Patch('session/:id/fix-tariff')
+  fixSessionTariff(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: FixSessionTariffDto,
+  ) {
+    return this.mobileService.fixSessionTariff(id, dto.priceId, {
+      byAdmin: !!dto.byAdmin,
+    });
+  }
+
+  @Get('pricing-context')
+  pricingContext(
+    @Query('org') org?: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.mobileService.getPricingContext(org, organizationId);
   }
 
   @Post('session/claim-seat')

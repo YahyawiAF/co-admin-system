@@ -56,7 +56,14 @@ export default function MobileHomePage() {
     setIsApp(isStandalonePwa());
   }, []);
 
-  const { data: status, refetch, isSuccess: statusReady } = useMobileStatus();
+  const {
+    data: status,
+    refetch,
+    isSuccess,
+    isPlaceholderData,
+  } = useMobileStatus();
+  // Cached status can be stale (e.g. "no session"): never start / route on it
+  const statusReady = isSuccess && !isPlaceholderData;
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug, memberId],
     queryFn: async () => {
@@ -92,8 +99,13 @@ export default function MobileHomePage() {
 
   const scanIn = useMutation({
     mutationFn: () => mobileApi.scanIn(memberId!),
-    onSuccess: () => {
-      toast.success("Présence enregistrée ✓");
+    onSuccess: (res) => {
+      if (res?.alreadyOpen) {
+        setGraceDismissed(true);
+        toast.message("Votre session est déjà en cours");
+      } else {
+        toast.success("Présence enregistrée ✓");
+      }
       refetch();
     },
     onError: (e: Error) => toast.error(e.message),
@@ -101,14 +113,33 @@ export default function MobileHomePage() {
   const scanInRef = useRef(scanIn.mutate);
   scanInRef.current = scanIn.mutate;
 
-  const goForfait = () => {
-    router.replace(href("/choose?mode=day"));
-  };
+  const [routeDone, setRouteDone] = useState(false);
+
+  /** No subscription (or day credit used): the counter starts now, price follows tiers. */
+  const startAuto = useMutation({
+    mutationFn: () => mobileApi.startAutoSession(memberId!),
+    onSuccess: (res) => {
+      if (res?.alreadyOpen) {
+        setGraceDismissed(true);
+        toast.message("Votre session est déjà en cours");
+      } else {
+        toast.success("Présence enregistrée ✓ — le compteur démarre");
+      }
+      refetch();
+    },
+    onError: (e: Error) => {
+      toast.error(e.message);
+      setRouteDone(true);
+    },
+  });
+  const startAutoRef = useRef(startAuto.mutate);
+  startAutoRef.current = startAuto.mutate;
 
   const afterScan = () => {
     if (!statusReady || !status) return;
     if (status.session || status.pendingRequest) {
-      toast.message("Session déjà en cours");
+      setGraceDismissed(true);
+      toast.message("Votre session est déjà en cours");
       return;
     }
     if (status.hasActiveSubscription) {
@@ -117,15 +148,13 @@ export default function MobileHomePage() {
         (status.subscription as { dailyCreditRemainingHours?: number } | null)
           ?.dailyCreditRemainingHours;
       if (rem != null && rem <= 0) {
-        toast.message("Crédit du jour terminé — choisissez un forfait");
-        goForfait();
+        startAutoRef.current();
         return;
       }
       scanInRef.current();
       return;
     }
-    toast.message("Choisissez un forfait ou un abonnement");
-    goForfait();
+    startAutoRef.current();
   };
 
   useEffect(() => {
@@ -134,12 +163,16 @@ export default function MobileHomePage() {
     const routedKey = `accueil_routed_${memberId}`;
     const fromQr = consumeQrEntry(slug);
 
-    // Active session / pending — stay; remember we already landed here
+    // Active session / pending — stay and show it (scanning again never checks out)
     if (status.session || status.pendingRequest) {
       try {
         sessionStorage.setItem(routedKey, "1");
       } catch {
         /* ignore */
+      }
+      if (fromQr && status.session) {
+        setGraceDismissed(true);
+        toast.message("Votre session est déjà en cours");
       }
       return;
     }
@@ -166,16 +199,18 @@ export default function MobileHomePage() {
         (status.subscription as { dailyCreditRemainingHours?: number } | null)
           ?.dailyCreditRemainingHours;
       if (rem != null && rem <= 0) {
-        router.replace(href("/choose?mode=day"));
+        if (fromQr) startAutoRef.current();
+        else setRouteDone(true);
         return;
       }
       scanInRef.current();
       return;
     }
 
-    // Known visitor without abo → forfait (first entry / QR only)
-    router.replace(href("/choose?mode=day"));
-  }, [onboarded, memberId, statusReady, status, slug, router, href]);
+    // Scanned the entry QR → counter starts now (AUTO tiers); else stay on Accueil
+    if (fromQr) startAutoRef.current();
+    else setRouteDone(true);
+  }, [onboarded, memberId, statusReady, status, slug]);
 
   const pending = status?.pendingRequest;
   const session = status?.session;
@@ -270,9 +305,10 @@ export default function MobileHomePage() {
       }
     })();
   const routingAway =
-    !alreadyRouted &&
-    (!statusReady ||
-      (!!status && !status.session && !status.pendingRequest));
+    (!alreadyRouted && !routeDone && !startAuto.isError &&
+      (!statusReady ||
+        (!!status && !status.session && !status.pendingRequest))) ||
+    startAuto.isPending;
   if (routingAway && !session && !pending) {
     return <p className="text-slate-500">Chargement…</p>;
   }
@@ -331,20 +367,13 @@ export default function MobileHomePage() {
       {/* Hero — compact greeting / post-pointage grace */}
       {session && showGrace ? (
         <PointageGraceWindow
-          sessionId={session.id}
           forfaitName={
-            session.prices?.name || session.price?.name || "Forfait"
+            session.pricingMode === "AUTO"
+              ? "Tarif auto — le prix suit le temps passé"
+              : session.prices?.name || session.price?.name || "Forfait"
           }
           registredTime={session.registredTime}
           onExpired={() => setGraceDismissed(true)}
-          onCancelled={() => {
-            setGraceDismissed(true);
-            void refetch();
-          }}
-          onChangeTarif={() => {
-            setGraceDismissed(true);
-            router.push(href("/choose?mode=day"));
-          }}
         />
       ) : session ? (
         <ActiveSessionPanel
@@ -372,6 +401,14 @@ export default function MobileHomePage() {
           onCheckoutSuccess={() => {
             if (!isStandalonePwa()) setShowCheckoutPromo(true);
           }}
+          onSwitchToSubscription={
+            status?.hasActiveSubscription ? undefined : goSubscription
+          }
+          pendingSubscriptionName={
+            pending?.type === "SUBSCRIPTION"
+              ? pending.price?.name || "abonnement"
+              : null
+          }
         />
       ) : (
         <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
@@ -425,18 +462,22 @@ export default function MobileHomePage() {
       {!session && !pending ? (
         <ScanQrPresence
           slug={slug}
-          pending={scanIn.isPending || !statusReady}
+          pending={scanIn.isPending || startAuto.isPending || !statusReady}
           error={
-            scanIn.isError ? (scanIn.error as Error).message : null
+            scanIn.isError
+              ? (scanIn.error as Error).message
+              : startAuto.isError
+                ? (startAuto.error as Error).message
+                : null
           }
           hint={
             status?.hasActiveSubscription
               ? periodSub && dailyRem != null && dailyRem <= 0
-                ? "Crédit du jour terminé — un forfait sera proposé"
+                ? "Crédit du jour terminé — le compteur démarre au scan"
                 : periodSub && dailyRem != null
                   ? `${Number(dailyRem).toFixed(1)} h restantes aujourd’hui`
                   : "Scannez le QR de l’accueil"
-              : "Scannez le QR de l’accueil pour activer votre accès"
+              : "Scannez le QR : le compteur démarre, le tarif s’ajuste au temps passé"
           }
           onConfirmed={afterScan}
         />

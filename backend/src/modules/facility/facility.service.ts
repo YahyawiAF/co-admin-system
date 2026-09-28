@@ -14,6 +14,7 @@ import { startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { FacilityEntity } from './entities/facility.entitie';
 import { defaultReserveMode } from '../mobile/space-occupy';
+import { invalidatePricingContext } from '../mobile/session-pricing-context';
 import { UpdateFacilityDto } from './dtos/updateFac.dto';
 import {
   CreateAppInstallPromoDto,
@@ -179,6 +180,7 @@ export class FacilityService {
       }
     }
 
+    invalidatePricingContext();
     const updatedFacility = await this.prisma.facility.update({
       where: { id },
       data: {
@@ -940,26 +942,6 @@ export class FacilityService {
     };
   }
 
-  private assertAbonnementPrice(price: {
-    category: PriceCategory | null;
-    categories: PriceCategory[];
-    type: string;
-  }) {
-    const cats = price.categories?.length
-      ? price.categories
-      : price.category
-        ? [price.category]
-        : [];
-    const isAbo =
-      cats.includes(PriceCategory.ABONNEMENT) ||
-      price.type === 'abonnement';
-    if (!isAbo) {
-      throw new BadRequestException(
-        'La promo doit être liée à un tarif abonnement uniquement',
-      );
-    }
-  }
-
   private validatePromoValue(valueKind: PromoValueKind, value: number) {
     if (!Number.isFinite(value) || value < 0) {
       throw new BadRequestException('Valeur promo invalide');
@@ -1008,7 +990,6 @@ export class FacilityService {
       where: { id: dto.priceId },
     });
     if (!price) throw new NotFoundException('Tarif introuvable');
-    this.assertAbonnementPrice(price);
     this.validatePromoValue(dto.valueKind, dto.value);
 
     const maxSort = await this.prisma.appInstallPromo.aggregate({
@@ -1043,7 +1024,6 @@ export class FacilityService {
         where: { id: dto.priceId },
       });
       if (!price) throw new NotFoundException('Tarif introuvable');
-      this.assertAbonnementPrice(price);
     }
 
     const valueKind = dto.valueKind ?? existing.valueKind;

@@ -52,6 +52,12 @@ export class AddJournalDto {
   @ApiProperty()
   public payedAmount: number;
 
+  /** Amount actually collected (payedAmount = amount owed) */
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public paidAmount?: number;
+
   @IsOptional()
   @IsBoolean()
   @ApiProperty({ required: false })

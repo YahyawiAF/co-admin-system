@@ -50,6 +50,8 @@ export interface AppInstallGlobalPromo {
   valueKind: PromoValueKind;
   value: number;
   oneTime?: boolean;
+  /** Tarif categories it applies to (empty = all) */
+  scopes?: PriceCategory[];
 }
 
 export interface TimeInterval {
@@ -183,7 +185,38 @@ export interface Journal {
   createdbyUserID?: string | null;
   hasOpenDebt?: boolean;
   openDebtAmount?: number;
+  serviceName?: string | null;
+  listPrice?: number | null;
+  pricingMode?: JournalPricingMode;
+  fixedPriceId?: string | null;
+  fixedServiceName?: string | null;
+  fixedDurationHours?: number | null;
+  fixedAmount?: number | null;
+  fixedAt?: string | null;
+  /** Amount actually collected (payedAmount = amount owed) */
+  paidAmount?: number;
+  paidAt?: string | null;
+  /** Server-computed tier / overtime pricing (pack & auto visits only) */
+  pricing?: SessionPricingPayload | null;
+  priceBeforePromo?: number | null;
+  promoDiscount?: number | null;
+  promoLabel?: string | null;
 }
+
+export type JournalPricingMode = "FIXED" | "AUTO";
+
+export type SessionPricingPayload = import("@/lib/session-pricing").SessionPricingResult & {
+  closed: boolean;
+  fixedPriceId: string | null;
+  fixedServiceName: string | null;
+  fixedDurationHours: number | null;
+  fixedAmount: number | null;
+  fixedAt: string | null;
+  paidAmount: number;
+  balanceDue: number;
+  discountPercent: number;
+  rules: import("@/lib/session-pricing").PricingRules;
+};
 
 export type MobileSeatMode = 'ADMIN_ASSIGN' | 'VISITOR_CHOOSE' | 'AUTO_ASSIGN';
 
@@ -223,6 +256,9 @@ export interface Abonnement {
   kind?: "HOURS_POOL" | "SEMI_DAY" | "FULL_DAY" | null;
   daysRemaining?: number | null;
   hoursRemaining?: number | null;
+  priceBeforePromo?: number | null;
+  promoDiscount?: number | null;
+  promoLabel?: string | null;
 }
 
 export type ProductOrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED";
@@ -264,6 +300,13 @@ export interface Facility {
   appInstallGlobalPromoActive?: boolean;
   appInstallGlobalPromoKind?: PromoValueKind | null;
   appInstallGlobalPromoValue?: number | null;
+  /** Tarif categories the global promo applies to (empty = all) */
+  appInstallGlobalPromoScopes?: PriceCategory[];
+  sessionWarnBeforeMin?: number;
+  autoTierGraceMin?: number;
+  fixedGraceMin?: number;
+  overtimeSurchargeDt?: number;
+  overtimeNextTierMin?: number;
   organizationId?: string | null;
   spaces?: Space[];
 }

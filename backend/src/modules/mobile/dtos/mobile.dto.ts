@@ -166,6 +166,32 @@ export class CheckoutSessionDto {
   @IsOptional()
   @IsBoolean()
   isPayed?: boolean;
+
+  /** Real departure time (forgotten checkout). Must be in the past. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  leaveAt?: string;
+}
+
+export class StartAutoSessionDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  memberId: string;
+}
+
+export class FixSessionTariffDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  priceId: string;
+
+  /** Admin can pick any pack; members only packs longer than elapsed time */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  byAdmin?: boolean;
 }
 
 export class QuickCheckInDto {

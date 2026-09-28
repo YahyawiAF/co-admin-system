@@ -9,7 +9,11 @@ import {
   IsObject,
   IsBoolean,
   IsEnum,
+  IsInt,
+  IsArray,
+  Min,
 } from 'class-validator';
+import { PriceCategory } from '@prisma/client';
 
 export enum MobileSeatModeDto {
   ADMIN_ASSIGN = 'ADMIN_ASSIGN',
@@ -127,4 +131,45 @@ export class CreateFacilityDto {
   @IsOptional()
   @IsNumber()
   appInstallGlobalPromoValue?: number | null;
+
+  @ApiProperty({
+    required: false,
+    enum: PriceCategory,
+    isArray: true,
+    description: 'Tarif categories the global promo applies to (empty = all)',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsEnum(PriceCategory, { each: true })
+  appInstallGlobalPromoScopes?: PriceCategory[];
+
+  @ApiProperty({ required: false, description: 'Warn N min before a pack/tier ends' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sessionWarnBeforeMin?: number;
+
+  @ApiProperty({ required: false, description: 'AUTO: minutes kept on a tier after it ends' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  autoTierGraceMin?: number;
+
+  @ApiProperty({ required: false, description: 'FIXED: overtime minutes without extra' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  fixedGraceMin?: number;
+
+  @ApiProperty({ required: false, description: 'FIXED: extra (DT) after the grace' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  overtimeSurchargeDt?: number;
+
+  @ApiProperty({ required: false, description: 'FIXED: minutes over before next tier price' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  overtimeNextTierMin?: number;
 }

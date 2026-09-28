@@ -759,6 +759,54 @@ export default function FacilityPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const [pricingRules, setPricingRules] = useState({
+    sessionWarnBeforeMin: "5",
+    autoTierGraceMin: "15",
+    fixedGraceMin: "15",
+    overtimeSurchargeDt: "0.75",
+    overtimeNextTierMin: "30",
+  });
+
+  useEffect(() => {
+    if (!facility) return;
+    setPricingRules({
+      sessionWarnBeforeMin: String(facility.sessionWarnBeforeMin ?? 5),
+      autoTierGraceMin: String(facility.autoTierGraceMin ?? 15),
+      fixedGraceMin: String(facility.fixedGraceMin ?? 15),
+      overtimeSurchargeDt: String(facility.overtimeSurchargeDt ?? 0.75),
+      overtimeNextTierMin: String(facility.overtimeNextTierMin ?? 30),
+    });
+  }, [facility]);
+
+  const updatePricingRules = useMutation({
+    mutationFn: () => {
+      const int = (v: string) => Math.max(0, Math.round(Number(v) || 0));
+      const fixedGraceMin = int(pricingRules.fixedGraceMin);
+      const overtimeNextTierMin = int(pricingRules.overtimeNextTierMin);
+      if (overtimeNextTierMin < fixedGraceMin) {
+        throw new Error(
+          "Le passage au tarif suivant doit être après la tolérance du forfait fixé"
+        );
+      }
+      return facilityApi.update(facility!.id, {
+        sessionWarnBeforeMin: int(pricingRules.sessionWarnBeforeMin),
+        autoTierGraceMin: int(pricingRules.autoTierGraceMin),
+        fixedGraceMin,
+        overtimeSurchargeDt: Math.max(
+          0,
+          Number(pricingRules.overtimeSurchargeDt) || 0
+        ),
+        overtimeNextTierMin,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Règles de dépassement enregistrées");
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["pricing-context"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const updateOrg = useMutation({
     mutationFn: () =>
       organizationsApi.update(orgDraft.id, {
@@ -2372,6 +2420,76 @@ export default function FacilityPage() {
                 onClick={() => updateProfile.mutate()}
               >
                 Enregistrer les places mobile
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Dépassement et paliers</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Tarif auto : le client reste sur le palier atteint (2h, 4h…) et
+                passe au suivant après la tolérance. Forfait fixé : après la fin
+                du forfait, tolérance sans frais, puis supplément, puis tarif
+                suivant.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(
+                  [
+                    [
+                      "sessionWarnBeforeMin",
+                      "Prévenir avant la fin (min)",
+                      "Notification au client avant la fin du palier / forfait",
+                      "1",
+                    ],
+                    [
+                      "autoTierGraceMin",
+                      "Tolérance tarif auto (min)",
+                      "Ex. 15 : 2h15 → passe au palier 4h",
+                      "1",
+                    ],
+                    [
+                      "fixedGraceMin",
+                      "Tolérance forfait fixé (min)",
+                      "Dépassement signalé sans frais",
+                      "1",
+                    ],
+                    [
+                      "overtimeSurchargeDt",
+                      "Supplément dépassement (DT)",
+                      "Ex. 0.75 = 750 millimes après la tolérance",
+                      "0.05",
+                    ],
+                    [
+                      "overtimeNextTierMin",
+                      "Tarif suivant après (min)",
+                      "Minutes de dépassement avant le tarif suivant",
+                      "1",
+                    ],
+                  ] as const
+                ).map(([key, label, hint, step]) => (
+                  <div key={key} className="space-y-1">
+                    <Label>{label}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={step}
+                      value={pricingRules[key]}
+                      onChange={(e) =>
+                        setPricingRules((r) => ({ ...r, [key]: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">{hint}</p>
+                  </div>
+                ))}
+              </div>
+              <Button
+                disabled={!facility || updatePricingRules.isPending}
+                onClick={() => updatePricingRules.mutate()}
+              >
+                Enregistrer les règles
               </Button>
             </CardContent>
           </Card>

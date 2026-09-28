@@ -62,6 +62,24 @@ export class FacilityEntity {
   @ApiProperty({ required: false, nullable: true })
   appInstallGlobalPromoValue?: number | null;
 
+  @ApiProperty({ required: false, isArray: true })
+  appInstallGlobalPromoScopes?: string[];
+
+  @ApiProperty({ required: false })
+  sessionWarnBeforeMin?: number;
+
+  @ApiProperty({ required: false })
+  autoTierGraceMin?: number;
+
+  @ApiProperty({ required: false })
+  fixedGraceMin?: number;
+
+  @ApiProperty({ required: false })
+  overtimeSurchargeDt?: number;
+
+  @ApiProperty({ required: false })
+  overtimeNextTierMin?: number;
+
   @ApiProperty()
   createdAt: Date;
 

@@ -27,6 +27,7 @@ import { journalApi, membersApi, mobileApi, pricesApi } from "@/lib/api/resource
 import { queryKeys } from "@/lib/query-client";
 import type { Journal } from "@/lib/types";
 import { isJournalPack } from "@/lib/journal-utils";
+import { JournalPricingTimeline } from "@/components/admin/JournalPricingCells";
 
 const schema = z.object({
   priceId: z.string().min(1),
@@ -277,6 +278,8 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
                 </p>
               </div>
             </div>
+
+            <JournalPricingTimeline row={journal} />
 
             {day?.subscription ? (
               <div className="rounded-lg border bg-sky-50/60 px-3 py-2 text-sm dark:bg-sky-950/20">

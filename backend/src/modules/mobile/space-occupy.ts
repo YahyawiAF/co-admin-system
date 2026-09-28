@@ -84,6 +84,19 @@ export function priceCategoriesOf(price: {
   return [];
 }
 
+/** Categories used for promo scopes: uncategorised tarifs fall back on their type. */
+export function priceCategoriesFor(price: {
+  category?: PriceCategory | string | null;
+  categories?: (PriceCategory | string | null)[] | null;
+  type?: string | null;
+}): PriceCategory[] {
+  const cats = priceCategoriesOf(price);
+  if (cats.length) return cats;
+  return [
+    price.type === 'abonnement' ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
+  ];
+}
+
 export function priceMatchesSpaceCategories(
   price: {
     category?: PriceCategory | string | null;

@@ -30,7 +30,7 @@ import {
   priceAllowsWholeIn,
   spacesForPrice,
 } from "@/lib/space-occupy";
-import { pricedWithPromo } from "@/lib/promo-price";
+import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { toast } from "sonner";
 
@@ -217,7 +217,15 @@ function ChooseInner() {
       clearOptimisticSession();
       queryClient.setQueryData(
         ["mobile-status", memberId],
-        (old: any) => (old ? { ...old, pendingRequest: req, session: null } : old)
+        (old: any) =>
+          old
+            ? {
+                ...old,
+                pendingRequest: req,
+                // Subscription requested mid-session: the session keeps running
+                session: req.type === "SUBSCRIPTION" ? old.session : null,
+              }
+            : old
       );
       sessionStorage.setItem("pendingVisitRequestId", req.id);
       setPendingId(req.id);
@@ -452,6 +460,17 @@ function ChooseInner() {
               L&apos;accueil a reçu votre demande. Vous pouvez annuler pour
               choisir un autre forfait.
             </p>
+            {status?.session ? (
+              <p className="mt-2 text-sm font-medium text-indigo-600">
+                Votre session en cours passera sur l&apos;abonnement dès la
+                validation.
+              </p>
+            ) : null}
+            {status?.session ? (
+              <Button className="mt-4 mr-2" onClick={() => router.push(href())}>
+                Voir ma session
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               className="mt-4"
@@ -515,7 +534,10 @@ function ChooseInner() {
           <p className="text-xs text-slate-500">
             <span className="inline-flex align-middle">
               <PromoPrice
-                {...pricedWithPromo(pickedPrice.price, pickedPrice.id, promoOpts)}
+                {...pricedWithPromo(pickedPrice.price, pickedPrice.id, {
+                  ...promoOpts,
+                  categories: promoCategoriesOf(pickedPrice),
+                })}
                 size="sm"
                 align="start"
               />
@@ -663,6 +685,15 @@ function ChooseInner() {
         {mode === "subscription" ? "Abonnement" : "Forfait"}
       </h1>
       <p className="mb-3 text-xs text-slate-500">{hint}</p>
+      {mode === "subscription" && status?.session ? (
+        <Alert className="mb-3 border-indigo-200 bg-indigo-50">
+          <AlertDescription className="text-indigo-800">
+            Session en cours : une fois l&apos;abonnement validé par
+            l&apos;accueil, votre session passe sur l&apos;abonnement (plus de
+            tarif à payer pour aujourd&apos;hui).
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {create.isError ? (
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>
@@ -672,7 +703,10 @@ function ChooseInner() {
       ) : null}
       <div className="space-y-2">
         {options.map((o) => {
-          const priced = pricedWithPromo(o.price, o.id, promoOpts);
+          const priced = pricedWithPromo(o.price, o.id, {
+            ...promoOpts,
+            categories: promoCategoriesOf(o),
+          });
           return (
           <button
             key={o.id}

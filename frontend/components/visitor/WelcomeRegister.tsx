@@ -16,7 +16,6 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import {
   clearPendingRegister,
-  consumeQrEntry,
   loadPendingRegister,
   markInstallNudgePending,
 } from "@/lib/visitorCache";
@@ -47,11 +46,9 @@ export function WelcomeRegister() {
 
   const finish = (member: Member, accessToken?: string, isNew = false) => {
     confirm(member, accessToken);
-    if (isNew) {
-      markInstallNudgePending(slug, member.id);
-      consumeQrEntry(slug);
-    }
-    router.replace(href("/choose?mode=day"));
+    if (isNew) markInstallNudgePending(slug, member.id);
+    // Accueil starts the AUTO session when the visitor came from the entry QR
+    router.replace(href());
   };
 
   useEffect(() => {

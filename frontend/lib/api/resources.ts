@@ -1,5 +1,6 @@
 import { http } from "./httpClient";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
+import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
   Journal,
   Member,
@@ -237,11 +238,6 @@ export const pricesApi = {
   },
   history(id: string) {
     return http.get<PriceHistoryEntry[]>(`/prices/${id}/history`);
-  },
-  seedCollaboraHub() {
-    return http.post<{ created: number; skipped: number; prices: Price[] }>(
-      "/prices/seed/collabora-hub",
-    );
   },
 };
 
@@ -649,15 +645,26 @@ export const visitRequestsApi = {
   },
 };
 
+export type MobileSession = Journal & {
+  seat?: SeatAssignmentInfo | null;
+  amountDue?: number;
+  overtime?: boolean;
+  remainingMs?: number | null;
+  expectedLeaveTime?: string | null;
+  /** Scan while a session is already running: the existing one is returned. */
+  alreadyOpen?: boolean;
+};
+
+export type PricingContextResponse = {
+  rules: PricingRules;
+  /** Default (JOURNEE) ladder used by AUTO sessions */
+  ladder: PricingTier[];
+  /** All day pack tiers, any category */
+  allTiers: PricingTier[];
+};
+
 export type MobileStatusResponse = {
-  session:
-    | (Journal & {
-        seat?: SeatAssignmentInfo | null;
-        amountDue?: number;
-        overtime?: boolean;
-        remainingMs?: number | null;
-      })
-    | null;
+  session: MobileSession | null;
   subscription: Abonnement | null;
   hasActiveSubscription: boolean;
   canChooseForfait?: boolean;
@@ -721,13 +728,37 @@ export const mobileApi = {
   }) {
     return http.post("/mobile/admin/move-seat", data);
   },
-  checkout(id: string) {
+  checkout(id: string, opts?: { leaveAt?: string; isPayed?: boolean }) {
     return http.patch<{
       id: string;
+      payedAmount?: number;
       pointsAwarded?: number;
       newTrophies?: string[];
       memberPoints?: number;
-    }>(`/mobile/session/${id}/checkout`, {});
+    }>(`/mobile/session/${id}/checkout`, opts ?? {});
+  },
+  startAutoSession(memberId: string) {
+    return http.post<MobileSession>(
+      "/mobile/session/start-auto",
+      { memberId },
+      { skipAuth: true },
+    );
+  },
+  /** Reception only — members ask the desk to change their tariff. */
+  fixSessionTariff(id: string, priceId: string) {
+    return http.patch<MobileSession>(`/mobile/session/${id}/fix-tariff`, {
+      priceId,
+      byAdmin: true,
+    });
+  },
+  getPricingContext(opts?: { orgSlug?: string; organizationId?: string | null }) {
+    const params = new URLSearchParams();
+    if (opts?.orgSlug) params.set("org", opts.orgSlug);
+    if (opts?.organizationId) params.set("organizationId", opts.organizationId);
+    const q = params.toString() ? `?${params}` : "";
+    return http.get<PricingContextResponse>(`/mobile/pricing-context${q}`, {
+      skipAuth: true,
+    });
   },
   setPayment(id: string, isPayed: boolean) {
     return http.patch<{
@@ -1016,7 +1047,7 @@ export const mobileApi = {
     }>(`/mobile/admin/visitor-day/${memberId}`);
   },
   scanIn(memberId: string) {
-    return http.post(
+    return http.post<MobileSession>(
       "/mobile/session/scan-in",
       { memberId },
       { skipAuth: true },

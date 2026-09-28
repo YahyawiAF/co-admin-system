@@ -11,6 +11,13 @@ import { endOfDay, startOfDay } from 'date-fns';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { maybeAwardVisitPaidPoints, maybeRevokeVisitPaidPoints } from '../mobile/visit-paid-points';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
+import {
+  isTierPricedRow,
+  loadPricingContext,
+  PricedJournalRow,
+  PricingContext,
+  pricingPayload,
+} from '../mobile/session-pricing-context';
 
 export const roundsOfHashing = 10;
 
@@ -89,6 +96,21 @@ export class JournalService {
           isAnonymous,
           guestName: createJournalDto.guestName || null,
           groupVisitId: createJournalDto.groupVisitId || null,
+          paidAmount: createJournalDto.isPayed
+            ? createJournalDto.paidAmount ?? createJournalDto.payedAmount
+            : 0,
+          paidAt: createJournalDto.isPayed ? new Date() : null,
+          ...(existingPrice.billingUnit !== 'HOURLY' &&
+          existingPrice.durationHours &&
+          existingPrice.durationHours > 0
+            ? {
+                fixedPriceId: existingPrice.id,
+                fixedServiceName: existingPrice.name,
+                fixedDurationHours: existingPrice.durationHours,
+                fixedAmount: createJournalDto.payedAmount,
+                fixedAt: new Date(),
+              }
+            : {}),
           serviceName: snap.serviceName,
           listPrice: snap.listPrice,
           spaceId: snap.spaceId,
@@ -180,19 +202,46 @@ export class JournalService {
     ];
     const debt = await this.debtFlagsForMembers(memberIds);
 
-    return {
-      data: rows.map((row) => {
-        const flags = row.memberID ? debt.get(row.memberID) : undefined;
-        const thisUnpaid = !row.isPayed
-          ? Number(row.prices?.price ?? row.payedAmount ?? 0)
-          : 0;
-        const past = Math.max(0, (flags?.amount ?? 0) - thisUnpaid);
-        return new JournalEntity({
+    const ctxByOrg = new Map<string, PricingContext>();
+    const ctxFor = async (orgId: string | null | undefined) => {
+      const key = orgId || '_';
+      if (!ctxByOrg.has(key)) {
+        ctxByOrg.set(key, await loadPricingContext(this.prisma, orgId));
+      }
+      return ctxByOrg.get(key)!;
+    };
+
+    const data: Journal[] = [];
+    for (const row of rows) {
+      const flags = row.memberID ? debt.get(row.memberID) : undefined;
+      const thisUnpaid = !row.isPayed
+        ? Number(row.prices?.price ?? row.payedAmount ?? 0)
+        : 0;
+      const past = Math.max(0, (flags?.amount ?? 0) - thisUnpaid);
+      const priced = row as unknown as PricedJournalRow & {
+        members?: { organizationId?: string | null } | null;
+        prices?: { organizationId?: string | null } | null;
+      };
+      const pricing = isTierPricedRow(priced)
+        ? pricingPayload(
+            priced,
+            await ctxFor(
+              priced.members?.organizationId ?? priced.prices?.organizationId,
+            ),
+          )
+        : null;
+      data.push(
+        new JournalEntity({
           ...row,
           hasOpenDebt: past > 0.009,
           openDebtAmount: Math.round(past * 100) / 100,
-        });
-      }) as unknown as Journal[],
+          pricing,
+        } as any) as unknown as Journal,
+      );
+    }
+
+    return {
+      data,
       meta: paginatedResult.meta,
     };
   }
@@ -265,9 +314,22 @@ export class JournalService {
       }
 
       const existing = await this.prisma.journal.findUnique({ where: { id } });
+      const data: Prisma.JournalUncheckedUpdateInput = { ...updateJournalDto };
+      if (updateJournalDto.isPayed === false) {
+        data.paidAmount = 0;
+        data.paidAt = null;
+      } else if (
+        updateJournalDto.isPayed === true &&
+        updateJournalDto.paidAmount === undefined &&
+        (!existing?.isPayed || updateJournalDto.payedAmount !== undefined)
+      ) {
+        data.paidAmount =
+          updateJournalDto.payedAmount ?? existing?.payedAmount ?? 0;
+        if (!existing?.isPayed) data.paidAt = new Date();
+      }
       const updated = await this.prisma.journal.update({
         where: { id },
-        data: updateJournalDto,
+        data,
       });
       if (
         existing?.memberID &&

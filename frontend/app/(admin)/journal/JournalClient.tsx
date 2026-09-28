@@ -117,7 +117,23 @@ import {
   groupOf,
   groupJournalByPerson,
   isAbonnementVisit,
+  hasUnpaidOvertime,
+  rowPricing,
+  setJournalPricingLadder,
 } from "@/lib/journal-utils";
+import { usePricingContext } from "@/lib/hooks/use-pricing-context";
+import { getAdminOrganizationId } from "@/lib/admin-org";
+import {
+  JournalForfaitCell,
+  JournalPricingAmountCell,
+  PromoPriceTag,
+  promoPriceOf,
+  JournalPricingStageChip,
+} from "@/components/admin/JournalPricingCells";
+import {
+  CloseSessionAtDialog,
+  FixSessionTariffDialog,
+} from "@/components/admin/SessionTariffDialogs";
 import {
   buildDayWhatsAppText,
   openDayPrintView,
@@ -144,7 +160,13 @@ import {
   pointsToDt,
 } from "@/lib/points-catalog";
 
-type QuickFilter = "all" | "overstay" | "leaving_soon" | "first_out" | "unpaid_present";
+type QuickFilter =
+  | "all"
+  | "overstay"
+  | "overtime_unpaid"
+  | "leaving_soon"
+  | "first_out"
+  | "unpaid_present";
 
 export default function JournalClient() {
   const router = useRouter();
@@ -194,12 +216,22 @@ export default function JournalClient() {
     firstName: "",
     phone: "",
   });
+  const [tariffRow, setTariffRow] = useState<Journal | null>(null);
+  const [closeRow, setCloseRow] = useState<Journal | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
   }, []);
+
+  const [adminOrgId, setAdminOrgId] = useState<string | null>(null);
+  useEffect(() => {
+    setAdminOrgId(getAdminOrganizationId());
+  }, []);
+  const { data: pricingCtx } = usePricingContext({ organizationId: adminOrgId });
+  // Rows tick live against the same ladder as the server
+  setJournalPricingLadder(pricingCtx?.allTiers);
 
   // Clear selection when date or filters change
   useEffect(() => {
@@ -501,6 +533,11 @@ export default function JournalClient() {
     () => rows.filter((r) => isActiveVisit(r) && !r.isPayed).length,
     [rows]
   );
+  const overtimeUnpaidCount = useMemo(
+    () => rows.filter((r) => hasUnpaidOvertime(r, now)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, now, pricingCtx?.allTiers]
+  );
 
   const filtered = useMemo(() => {
     let list = rows;
@@ -525,6 +562,8 @@ export default function JournalClient() {
 
     if (quickFilter === "overstay") {
       list = list.filter((r) => isOverstay(r, now));
+    } else if (quickFilter === "overtime_unpaid") {
+      list = list.filter((r) => hasUnpaidOvertime(r, now));
     } else if (quickFilter === "leaving_soon") {
       list = list.filter((r) => isLeavingSoon(r, now));
     } else if (quickFilter === "first_out") {
@@ -940,6 +979,13 @@ export default function JournalClient() {
       count: overstayCount,
       icon: <TimerOff className="h-3.5 w-3.5" />,
       tone: "border-amber-400 bg-amber-50 text-amber-900 data-[active=true]:bg-amber-500 data-[active=true]:text-white",
+    },
+    {
+      id: "overtime_unpaid",
+      label: "Dépassés / reste à payer",
+      count: overtimeUnpaidCount,
+      icon: <Wallet className="h-3.5 w-3.5" />,
+      tone: "border-rose-400 bg-rose-50 text-rose-900 data-[active=true]:bg-rose-600 data-[active=true]:text-white",
     },
     {
       id: "leaving_soon",
@@ -1495,7 +1541,9 @@ export default function JournalClient() {
                           );
                         })()}
                       </TableCell>
-                      <TableCell>{p?.name || "—"}</TableCell>
+                      <TableCell>
+                        <JournalForfaitCell row={row} now={now} />
+                      </TableCell>
                       <TableCell>
                         {status === "present" || status === "reservation" ? (
                           <Button
@@ -1595,6 +1643,7 @@ export default function JournalClient() {
                               Bientôt
                             </Badge>
                           ) : null}
+                          <JournalPricingStageChip row={row} now={now} />
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1640,6 +1689,16 @@ export default function JournalClient() {
                                           )}`
                                         : " · en cours"}{" "}
                                       · {visitAmountDue(p, now).toFixed(1)} DT
+                                      {promoPriceOf(p) != null ? (
+                                        <s className="ml-1 text-muted-foreground">
+                                          {p.priceBeforePromo?.toFixed(1)}
+                                        </s>
+                                      ) : null}
+                                      {promoPriceOf(p) != null ? (
+                                        <span className="ml-1 font-medium text-emerald-700">
+                                          promo
+                                        </span>
+                                      ) : null}
                                     </span>
                                     <div className="flex shrink-0 items-center gap-0.5">
                                       {!p.isPayed && p.memberID ? (
@@ -1717,9 +1776,18 @@ export default function JournalClient() {
                                 ))
                               : null}
                           </div>
+                        ) : rowPricing(row, now) ? (
+                          <JournalPricingAmountCell row={row} now={now} />
                         ) : (
                           <>
-                            {visitAmountDue(row, now).toFixed(1)} DT
+                            {promoPriceOf(row) != null ? (
+                              <PromoPriceTag
+                                row={row}
+                                amount={visitAmountDue(row, now)}
+                              />
+                            ) : (
+                              <>{visitAmountDue(row, now).toFixed(1)} DT</>
+                            )}
                             {status === "present" &&
                             p?.billingUnit === "HOURLY" &&
                             p.category !== "ABONNEMENT" &&
@@ -1816,6 +1884,29 @@ export default function JournalClient() {
                             >
                               <LogOut className="h-4 w-4 text-primary" />
                             </Button>
+                          ) : null}
+                          {status === "present" && row.pricing ? (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                title="Clôturer à une heure (checkout oublié)"
+                                onClick={() => setCloseRow(row)}
+                              >
+                                <AlarmClock className="h-4 w-4 text-violet-700" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                title="Fixer / changer le forfait"
+                                onClick={() => setTariffRow(row)}
+                              >
+                                {rowPricing(row, now)?.mode === "AUTO"
+                                  ? "Fixer"
+                                  : "Forfait"}
+                              </Button>
+                            </>
                           ) : null}
                           {isAnonymousVisit(row) && status === "present" ? (
                             <>
@@ -2004,6 +2095,20 @@ export default function JournalClient() {
         open={!!editRow}
         onOpenChange={(o) => {
           if (!o) setEditRow(null);
+        }}
+      />
+      <FixSessionTariffDialog
+        row={tariffRow}
+        tiers={pricingCtx?.allTiers ?? []}
+        onOpenChange={(o) => {
+          if (!o) setTariffRow(null);
+        }}
+      />
+      <CloseSessionAtDialog
+        row={closeRow}
+        ladder={pricingCtx?.allTiers}
+        onOpenChange={(o) => {
+          if (!o) setCloseRow(null);
         }}
       />
       <Dialog

@@ -26,6 +26,7 @@ import {
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
 import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
+import { RefreshButton } from "@/components/RefreshButton";
 
 const TITLE_BY_SUFFIX: Record<string, string> = {
   "": "Accueil",
@@ -168,6 +169,7 @@ export function MobileHeader() {
               Connexion
             </Button>
           ) : null}
+          <RefreshButton className="h-10 w-10 rounded-full bg-slate-50 text-primary" />
           {onboarded && communityUnlocked ? (
             <Button
               variant="ghost"

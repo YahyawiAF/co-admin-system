@@ -291,6 +291,24 @@ model Journal {
   members         Member?   @relation(fields: [memberID], references: [id])
   prices          Price?    @relation(fields: [priceId], references: [id])
   groupVisitId    String?
+  /// AUTO = price follows pack tiers by elapsed time; FIXED = pack chosen (overtime rules apply)
+  pricingMode        JournalPricingMode @default(FIXED)
+  /// Original fixed tariff snapshot (kept even when overtime moves the price to the next tier)
+  fixedPriceId       String?
+  fixedServiceName   String?
+  fixedDurationHours Float?
+  /// Fixed tariff amount after discounts
+  fixedAmount        Float?
+  fixedAt            DateTime?
+  /// Amount actually collected (payedAmount = amount owed)
+  paidAmount         Float     @default(0)
+  paidAt             DateTime?
+  /// Last pricing push sent (e.g. "warn:2", "tier:4") — dedupes cron notifications
+  lastPricingNotice  String?
+  /// Promo snapshot: amount before the promo, DT saved, label ("Promo app −10 %")
+  priceBeforePromo   Float?
+  promoDiscount      Float?
+  promoLabel         String?
 
   @@index([groupVisitId])
   @@index([priceId])
@@ -318,6 +336,10 @@ model Abonnement {
   /// Space reserved / used (snapshot; often same as reservedSeatSpaceId)
   spaceId         String?
   spaceName       String?
+  /// Promo snapshot: amount before the promo, DT saved, label
+  priceBeforePromo Float?
+  promoDiscount    Float?
+  promoLabel       String?
   hoursQuota         Float?
   hoursUsed          Float     @default(0)
   reservedSeatLabel  String?
@@ -408,6 +430,11 @@ model DailyExpense {
   updatedAt     DateTime  @updatedAt
 }
 
+enum JournalPricingMode {
+  FIXED
+  AUTO
+}
+
 enum MobileSeatMode {
   ADMIN_ASSIGN // admin picks seat on approve; visitor sees map
   VISITOR_CHOOSE // after approve, visitor picks seat on map
@@ -491,6 +518,18 @@ model Facility {
   appInstallGlobalPromoActive Boolean         @default(false)
   appInstallGlobalPromoKind   PromoValueKind?
   appInstallGlobalPromoValue  Float?
+  /// Tarif categories the global promo applies to (empty = all tarifs)
+  appInstallGlobalPromoScopes PriceCategory[] @default([])
+  /// Session pricing: warn N minutes before a pack / tier ends
+  sessionWarnBeforeMin Int   @default(5)
+  /// AUTO sessions stay on the current tier N minutes after it ends
+  autoTierGraceMin     Int   @default(15)
+  /// FIXED sessions: overtime without extra charge for N minutes
+  fixedGraceMin        Int   @default(15)
+  /// FIXED sessions: extra (DT) once the grace is over
+  overtimeSurchargeDt  Float @default(0.75)
+  /// FIXED sessions: switch to next tier price after N minutes over
+  overtimeNextTierMin  Int   @default(30)
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())

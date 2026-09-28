@@ -31,7 +31,13 @@ import {
 import { useOrg } from "@/lib/org";
 import { useRouter } from "next/navigation";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
+import { usePricingContext } from "@/lib/hooks/use-pricing-context";
 import { useVisitorSession } from "@/lib/visitor-session";
+import {
+  liveRowPricing,
+  pricingNoticeKey,
+  pricingNoticeText,
+} from "@/lib/session-pricing";
 
 type CoffeeReady = {
   productName: string;
@@ -52,6 +58,8 @@ type InboxAlert = {
 
 type SessionWarn = {
   sessionId: string;
+  title?: string;
+  body?: string;
 };
 
 type OrderRefused = {
@@ -63,7 +71,7 @@ const FIVE_MIN = 5 * 60 * 1000;
 export function VisitorAlerts() {
   const queryClient = useQueryClient();
   const { socket } = useRealtime();
-  const { href } = useOrg();
+  const { href, slug } = useOrg();
   const router = useRouter();
   const { memberId } = useVisitorSession();
   const [optIn, setOptIn] = useState(false);
@@ -97,6 +105,42 @@ export function VisitorAlerts() {
   }, [memberId, optIn]);
 
   const { data: status } = useMobileStatus();
+  const { data: pricingCtx } = usePricingContext({
+    orgSlug: slug,
+    enabled: !!status?.session?.pricing,
+  });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!status?.session?.pricing) return;
+    const t = window.setInterval(() => setTick((x) => x + 1), 30_000);
+    return () => window.clearInterval(t);
+  }, [status?.session?.pricing]);
+
+  // Tier / overtime moments (AUTO + FIXED packs) — same keys as the server push
+  useEffect(() => {
+    const session = status?.session;
+    if (!session?.id || !session.pricing) return;
+    const live = liveRowPricing(session, pricingCtx?.allTiers);
+    if (!live) return;
+    const key = pricingNoticeKey(live);
+    if (!key) return;
+    const storeKey = `pricing-notice:${session.id}`;
+    try {
+      if (sessionStorage.getItem(storeKey) === key) return;
+      sessionStorage.setItem(storeKey, key);
+    } catch {
+      /* ignore */
+    }
+    const msg = pricingNoticeText(live, live.rules);
+    if (!msg) return;
+    setSessionWarn({ sessionId: session.id, ...msg });
+    showVisitorNotification({
+      title: msg.title,
+      body: msg.body,
+      tag: `session-pricing-${session.id}`,
+      sound: "alert",
+    });
+  }, [status?.session, pricingCtx?.allTiers, tick]);
 
   useEffect(() => {
     const session = status?.session as
@@ -104,10 +148,11 @@ export function VisitorAlerts() {
           id?: string;
           remainingMs?: number | null;
           expectedLeaveTime?: string;
+          pricing?: unknown;
         }
       | null
       | undefined;
-    if (!session?.id) return;
+    if (!session?.id || session.pricing) return;
 
     let remaining = session.remainingMs ?? null;
     if (remaining == null && session.expectedLeaveTime) {
@@ -471,12 +516,12 @@ export function VisitorAlerts() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5 text-amber-600" />
-              Moins de 5 minutes
+              {sessionWarn?.title ?? "Moins de 5 minutes"}
             </DialogTitle>
           </DialogHeader>
           <p className="text-base leading-relaxed">
-            Votre session se termine bientôt. Pensez à finaliser ou à demander
-            une prolongation à l’accueil.
+            {sessionWarn?.body ??
+              "Votre session se termine bientôt. Pensez à finaliser ou à demander une prolongation à l’accueil."}
           </p>
           <DialogFooter>
             <Button

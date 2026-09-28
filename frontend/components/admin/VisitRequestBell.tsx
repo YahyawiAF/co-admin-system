@@ -40,15 +40,14 @@ function isHoursPoolRequest(req: VisitRequest | null) {
   );
 }
 
-function isPeriodSubRequest(req: VisitRequest | null) {
-  if (!req || req.type !== "SUBSCRIPTION") return false;
-  return req.price?.billingUnit !== "HOURLY";
+/** Subscription whose tarif has "place réservée" on — only then a seat is required. */
+function needsDedicatedSeat(req: VisitRequest | null) {
+  return req?.type === "SUBSCRIPTION" && !!req.price?.reserveSeat;
 }
 
 function skipsSeat(req: VisitRequest | null) {
   if (!req) return false;
-  if (isHoursPoolRequest(req)) return true;
-  if (isPeriodSubRequest(req)) return false;
+  if (req.type === "SUBSCRIPTION") return !needsDedicatedSeat(req);
   if (req.occupyWhole) return true;
   if (req.price?.occupyWhole && req.price?.occupySeat === false) return true;
   return false;
@@ -122,7 +121,7 @@ export function VisitRequestBell() {
   const seatMode: MobileSeatMode =
     seatSettings?.mobileSeatMode || "ADMIN_ASSIGN";
   const needsAdminSeat =
-    isPeriodSubRequest(current) ||
+    needsDedicatedSeat(current) ||
     (seatMode === "ADMIN_ASSIGN" && !skipsSeat(current));
   const autoSeat = seatMode === "AUTO_ASSIGN";
 
@@ -462,22 +461,18 @@ export function VisitRequestBell() {
                   className="h-8 w-8 text-green-600"
                   disabled={busy}
                   onClick={() => {
-                    if (
-                      seatMode === "ADMIN_ASSIGN" &&
-                      !skipsSeat(req) &&
-                      !isHoursPoolRequest(req)
-                    ) {
-                      setArrivalsOpen(false);
-                      setCurrent(req);
-                      setSeatLabel(null);
-                      toast.message("Choisissez une place sur le plan");
-                      return;
-                    }
-                    if (isPeriodSubRequest(req)) {
+                    if (needsDedicatedSeat(req)) {
                       setArrivalsOpen(false);
                       setCurrent(req);
                       setSeatLabel(null);
                       toast.message("Choisissez la place réservée");
+                      return;
+                    }
+                    if (seatMode === "ADMIN_ASSIGN" && !skipsSeat(req)) {
+                      setArrivalsOpen(false);
+                      setCurrent(req);
+                      setSeatLabel(null);
+                      toast.message("Choisissez une place sur le plan");
                       return;
                     }
                     approve.mutate({ id: req.id });
@@ -638,10 +633,10 @@ export function VisitRequestBell() {
                     </label>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
-                    {isPeriodSubRequest(current)
-                      ? "Abonnement période : choisissez la place réservée (toujours à eux)."
-                      : isHoursPoolRequest(current)
-                        ? "Abonnement heures : pas de place maintenant. Après le scan, attribuez-la comme un visiteur."
+                    {needsDedicatedSeat(current)
+                      ? "Abonnement avec place réservée : choisissez sa place (toujours à lui)."
+                      : current?.type === "SUBSCRIPTION"
+                        ? "Abonnement sans place réservée : confirmez directement. La place est attribuée à chaque venue, comme un visiteur. Si le client est déjà présent, sa session passe sur l’abonnement."
                         : needsAdminSeat
                           ? "Mode admin : sélectionnez une place puis confirmez."
                           : autoSeat
@@ -683,7 +678,8 @@ export function VisitRequestBell() {
                   {autoSeat ? "Confirmer (place auto)" : "Confirmer"}
                 </Button>
               ) : null}
-              {!wantsWholeSpace(current) && (needsAdminSeat || seatLabel) ? (
+              {!wantsWholeSpace(current) &&
+              (needsAdminSeat || (seatLabel && !skipsSeat(current))) ? (
                 <Button
                   disabled={busy || !current || (needsAdminSeat && !seatLabel)}
                   onClick={() => {

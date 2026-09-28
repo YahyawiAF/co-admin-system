@@ -18,8 +18,25 @@ import type {
   MobileSeatSettings,
   SeatAssignmentInfo,
 } from "@/lib/types";
-import { pricedWithPromo } from "@/lib/promo-price";
+import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useOrg } from "@/lib/org";
+import { usePricingContext } from "@/lib/hooks/use-pricing-context";
+import {
+  formatDt,
+  formatMinutes,
+  liveRowPricing,
+  stageLabel,
+} from "@/lib/session-pricing";
+import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 
 function formatClock(ms: number) {
@@ -37,7 +54,7 @@ export type ActiveSession = Journal & {
   amountDue?: number;
   overtime?: boolean;
   remainingMs?: number | null;
-  expectedLeaveTime?: string;
+  expectedLeaveTime?: string | null;
   sessionElapsedMs?: number;
   coveredBySubscription?: boolean;
   subscriptionKind?: "HOURS_POOL" | "SEMI_DAY" | "FULL_DAY" | null;
@@ -57,6 +74,10 @@ type Props = {
   onCheckoutSuccess?: () => void;
   promos?: AppInstallPromo[] | null;
   globalPromo?: AppInstallGlobalPromo | null;
+  /** Open the subscription picker (session switches to the abo once approved) */
+  onSwitchToSubscription?: () => void;
+  /** Subscription request waiting for reception */
+  pendingSubscriptionName?: string | null;
 };
 
 export function ActiveSessionPanel({
@@ -70,10 +91,22 @@ export function ActiveSessionPanel({
   onCheckoutSuccess,
   promos,
   globalPromo,
+  onSwitchToSubscription,
+  pendingSubscriptionName,
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
   const visible = usePageVisible();
+  const { slug } = useOrg();
+  const [confirmCheckout, setConfirmCheckout] = useState(false);
+  const { data: pricingCtx } = usePricingContext({
+    orgSlug: slug,
+    enabled: !!session.pricing,
+  });
+  const live = useMemo(
+    () => liveRowPricing(session, pricingCtx?.allTiers, now),
+    [session, pricingCtx?.allTiers, now]
+  );
 
   useEffect(() => {
     if (!visible) return;
@@ -107,11 +140,12 @@ export function ActiveSessionPanel({
         (elapsedMs ?? 0) / 3600_000;
       return poolLeft * 3600_000;
     }
+    if (live) return live.tierEndsAt - now;
     if (session.expectedLeaveTime) {
       return new Date(session.expectedLeaveTime).getTime() - now;
     }
     return session.remainingMs ?? null;
-  }, [session, now, isHoursPool, elapsedMs]);
+  }, [session, now, isHoursPool, elapsedMs, live]);
 
   const poolProgress = useMemo(() => {
     if (!isHoursPool || !session.hoursQuota) return null;
@@ -139,15 +173,26 @@ export function ActiveSessionPanel({
   const catalogPrice =
     session.prices?.price ?? session.price?.price ?? null;
   const priceId = session.priceId || session.prices?.id || session.price?.id;
-  const amountRaw = covered ? 0 : session.amountDue ?? session.payedAmount ?? 0;
-  const priced = !covered
-    ? pricedWithPromo(
-        catalogPrice != null && catalogPrice > 0 ? catalogPrice : amountRaw,
-        priceId,
-        { promos, globalPromo }
-      )
-    : null;
-  const forfaitName = session.prices?.name || session.price?.name || "Forfait";
+  const amountRaw = covered
+    ? 0
+    : live?.amountDue ?? session.amountDue ?? session.payedAmount ?? 0;
+  const priced =
+    !covered && !live
+      ? pricedWithPromo(
+          catalogPrice != null && catalogPrice > 0 ? catalogPrice : amountRaw,
+          priceId,
+          {
+            promos,
+            globalPromo,
+            categories: promoCategoriesOf(session.prices || session.price),
+          }
+        )
+      : null;
+  const forfaitName = live
+    ? live.mode === "AUTO"
+      ? `Palier ${live.currentTier.name}`
+      : live.fixedServiceName || live.currentTier.name
+    : session.prices?.name || session.price?.name || "Forfait";
 
   const checkout = useMutation({
     mutationFn: () => mobileApi.checkout(session.id),
@@ -156,6 +201,7 @@ export function ActiveSessionPanel({
       newTrophies?: string[];
       memberPoints?: number;
     }) => {
+      setConfirmCheckout(false);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
       queryClient.invalidateQueries({ queryKey: ["member-points", memberId] });
       const awarded = res?.pointsAwarded ?? 0;
@@ -213,6 +259,16 @@ export function ActiveSessionPanel({
         {isHoursPool ? (
           <Badge variant="outline" className="px-2.5 py-1 text-sm">
             Heures
+          </Badge>
+        ) : null}
+        {live ? (
+          <Badge
+            variant="secondary"
+            className="rounded-md bg-indigo-50 px-2.5 py-1 text-sm text-indigo-700"
+          >
+            {live.mode === "AUTO"
+              ? "Tarif auto"
+              : `Forfait fixé ${live.fixedServiceName ?? ""} · ${formatDt(live.fixedAmount ?? live.baseAmount)}`}
           </Badge>
         ) : null}
       </div>
@@ -289,7 +345,7 @@ export function ActiveSessionPanel({
               variant="secondary"
               className="rounded-md bg-indigo-50 text-indigo-700"
             >
-              Heures
+              {live ? (live.mode === "AUTO" ? "Auto" : "Fixé") : "Heures"}
             </Badge>
           </div>
           <div className="mt-2 flex items-end justify-between gap-2">
@@ -323,7 +379,11 @@ export function ActiveSessionPanel({
                   Utilisé aujourd&apos;hui ·{" "}
                   {elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
                 </span>
-                <span>Expiration à minuit</span>
+                <span>
+                  {live
+                    ? `Fin ${live.mode === "AUTO" ? "palier" : "forfait"} ${format(live.tierEndsAt, "HH:mm")}`
+                    : "Expiration à minuit"}
+                </span>
               </div>
             </div>
           ) : (
@@ -342,7 +402,62 @@ export function ActiveSessionPanel({
         </div>
       )}
 
-      {overtime && !isHoursPool ? (
+      {live && !covered ? (
+        <div className="mb-2.5 rounded-2xl border bg-white px-3.5 py-3 text-left shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Montant actuel
+            </p>
+            <span
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[10px] font-semibold",
+                live.stage === "WITHIN"
+                  ? "bg-indigo-50 text-indigo-700"
+                  : live.stage === "WARNING" || live.stage === "GRACE"
+                    ? "bg-amber-50 text-amber-700"
+                    : "bg-rose-50 text-rose-700"
+              )}
+            >
+              {stageLabel(live, now)}
+            </span>
+          </div>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-indigo-600">
+            {formatDt(live.amountDue)}
+          </p>
+          {live.mode === "FIXED" && live.overtime ? (
+            <p className="mt-1 text-[11px] font-medium text-rose-600">
+              Forfait {live.fixedServiceName} ({formatDt(live.fixedAmount)})
+              dépassé de {formatMinutes(live.overtimeMs)}
+              {live.extraAmount > 0 ? ` · +${formatDt(live.extraAmount)}` : ""}
+            </p>
+          ) : null}
+          {live.nextChangeAt != null && live.nextAmount != null ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              {live.nextTierName
+                ? `Tarif ${live.nextTierName}`
+                : "Supplément"}{" "}
+              dans {formatMinutes(live.nextChangeAt - now)} →{" "}
+              <span className="font-semibold text-slate-700">
+                {formatDt(live.nextAmount)}
+              </span>
+              {" "}({format(live.nextChangeAt, "HH:mm")})
+            </p>
+          ) : null}
+          {live.paidAmount > 0 ? (
+            <p className="mt-1 text-[11px] text-slate-500">
+              Payé {formatDt(live.paidAmount)}
+              {live.balanceDue > 0 ? (
+                <span className="font-semibold text-rose-600">
+                  {" "}· reste {formatDt(live.balanceDue)}
+                </span>
+              ) : null}
+            </p>
+          ) : null}
+          <p className="mt-2 text-[11px] text-slate-500">
+            Pour fixer ou changer votre forfait, demandez à l&apos;accueil.
+          </p>
+        </div>
+      ) : overtime && !isHoursPool ? (
         <Alert className="mb-4 text-left">
           <AlertDescription>
             Le prix du forfait reste affiché ; l&apos;accueil peut ajuster.
@@ -366,6 +481,34 @@ export function ActiveSessionPanel({
             {priced.hasPromo ? " · promo appliquée" : ""}
           </p>
         </>
+      ) : null}
+
+      {!covered && pendingSubscriptionName ? (
+        <div className="mb-2.5 rounded-2xl border border-indigo-200 bg-indigo-50 px-3.5 py-3 text-left text-sm text-indigo-800">
+          <p className="font-semibold">
+            Abonnement {pendingSubscriptionName} demandé
+          </p>
+          <p className="mt-0.5 text-xs">
+            En attente de l&apos;accueil — votre session passera sur
+            l&apos;abonnement dès la validation.
+          </p>
+        </div>
+      ) : !covered && onSwitchToSubscription && !isOptimistic ? (
+        <button
+          type="button"
+          onClick={onSwitchToSubscription}
+          className="mb-2.5 flex w-full items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50/60 px-3.5 py-3 text-left hover:bg-indigo-50"
+        >
+          <span>
+            <span className="block text-sm font-semibold text-indigo-700">
+              Passer à un abonnement
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500">
+              Votre session en cours bascule sur l&apos;abonnement
+            </span>
+          </span>
+          <span className="text-lg text-indigo-600">›</span>
+        </button>
       ) : null}
 
       {seatLabel ? (
@@ -421,7 +564,7 @@ export function ActiveSessionPanel({
       <Button
         className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold hover:bg-indigo-700"
         disabled={checkout.isPending || !!session.leaveTime || isOptimistic}
-        onClick={() => checkout.mutate()}
+        onClick={() => setConfirmCheckout(true)}
       >
         {isOptimistic
           ? "Confirmation…"
@@ -429,6 +572,71 @@ export function ActiveSessionPanel({
             ? "Check-out…"
             : "Check-out"}
       </Button>
+
+      <Dialog
+        open={confirmCheckout}
+        onOpenChange={(open) => {
+          if (!checkout.isPending) setConfirmCheckout(open);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-3xl">
+          <DialogHeader>
+            <DialogTitle>Terminer votre session ?</DialogTitle>
+            <DialogDescription>
+              Le compteur s&apos;arrête et la session ne pourra pas être reprise.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 rounded-2xl bg-slate-50 px-3.5 py-3 text-sm">
+            <div className="flex justify-between gap-2">
+              <span className="text-slate-500">Temps passé</span>
+              <span className="font-semibold tabular-nums">
+                {elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
+              </span>
+            </div>
+            {!covered ? (
+              <div className="flex justify-between gap-2">
+                <span className="text-slate-500">Montant</span>
+                <span className="font-semibold tabular-nums">
+                  {formatDt(live?.amountDue ?? amountRaw)}
+                </span>
+              </div>
+            ) : null}
+            {live && live.balanceDue > 0 && live.paidAmount > 0 ? (
+              <div className="flex justify-between gap-2 text-rose-600">
+                <span>Reste à payer</span>
+                <span className="font-semibold tabular-nums">
+                  {formatDt(live.balanceDue)}
+                </span>
+              </div>
+            ) : null}
+          </div>
+          {elapsedMs != null && elapsedMs < 5 * 60_000 ? (
+            <p className="text-xs text-amber-700">
+              Votre session a commencé il y a moins de 5 min. Pour changer de
+              tarif, demandez plutôt à l&apos;accueil.
+            </p>
+          ) : null}
+          <DialogFooter className="grid grid-cols-2 gap-2 sm:space-x-0">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-full"
+              disabled={checkout.isPending}
+              onClick={() => setConfirmCheckout(false)}
+            >
+              Continuer
+            </Button>
+            <Button
+              type="button"
+              className="h-11 rounded-full bg-rose-600 hover:bg-rose-700"
+              disabled={checkout.isPending}
+              onClick={() => checkout.mutate()}
+            >
+              {checkout.isPending ? "Check-out…" : "Terminer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
