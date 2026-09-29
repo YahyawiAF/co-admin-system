@@ -192,6 +192,12 @@ export class FixSessionTariffDto {
   @IsOptional()
   @IsBoolean()
   byAdmin?: boolean;
+
+  /** Required when the member changes their own session from the app */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  memberId?: string;
 }
 
 export class QuickCheckInDto {

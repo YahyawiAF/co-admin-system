@@ -2313,17 +2313,16 @@ export class MobileService {
     return this.enrichSessionWithSeat(journal as any);
   }
 
-  /** Fix a pack on an open session (reception only — members ask the desk). */
+  /**
+   * Fix / change the pack of an open session. Reception can pick any pack;
+   * the member only a pack of their org still covering the elapsed time,
+   * and only while nothing has been paid on the session.
+   */
   async fixSessionTariff(
     journalId: string,
     priceId: string,
-    opts: { byAdmin?: boolean } = {},
+    opts: { byAdmin?: boolean; memberId?: string } = {},
   ) {
-    if (!opts.byAdmin) {
-      throw new ForbiddenException(
-        'Pour changer de tarif, demandez à l’accueil',
-      );
-    }
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
       include: { prices: true, members: { include: { group: true } } },
@@ -2344,6 +2343,30 @@ export class MobileService {
       throw new BadRequestException('Choisissez un forfait (2h, 4h, …)');
     }
     const now = new Date();
+    if (!opts.byAdmin) {
+      if (!opts.memberId || opts.memberId !== journal.memberID) {
+        throw new ForbiddenException('Cette session ne vous appartient pas');
+      }
+      if (journal.isPayed || (journal.paidAmount || 0) > 0) {
+        throw new ForbiddenException(
+          'Session déjà payée — pour changer de forfait, demandez à l’accueil',
+        );
+      }
+      const ctx = await loadPricingContext(
+        this.prisma,
+        journal.members?.organizationId ?? null,
+      );
+      if (!ctx.ladder.some((t) => t.priceId === price.id)) {
+        throw new BadRequestException('Forfait indisponible');
+      }
+      const elapsedH =
+        (now.getTime() - new Date(journal.registredTime).getTime()) / 3_600_000;
+      if (price.durationHours <= elapsedH) {
+        throw new BadRequestException(
+          'Ce forfait est plus court que le temps déjà passé',
+        );
+      }
+    }
     const percent = memberDiscountPercent(journal.members, price.category);
     const amount = this.applyPercentOff(price.price, percent);
 

@@ -15,7 +15,7 @@ type Props = {
 
 /**
  * 10s welcome card right after pointage. No undo: ending the session goes
- * through the confirmed check-out, tariff changes through reception.
+ * through the confirmed check-out, tariff changes through the session panel.
  */
 export function PointageGraceWindow({
   forfaitName,
@@ -72,7 +72,7 @@ export function PointageGraceWindow({
           />
         </div>
         <p className="text-center text-[11px] text-slate-500">
-          Pour changer de tarif, demandez à l&apos;accueil.
+          Vous pourrez fixer votre forfait depuis votre session.
         </p>
 
         <Button

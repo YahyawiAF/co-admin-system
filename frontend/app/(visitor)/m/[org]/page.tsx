@@ -6,10 +6,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
+  Armchair,
   CalendarDays,
   CreditCard,
   MessageSquare,
-  Monitor,
   Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -269,6 +269,15 @@ export default function MobileHomePage() {
   }, [seat, layout?.spaces]);
 
   const hasWifi = !!(wifiFallback?.wifiSsid || wifiFallback?.wifiPassword);
+  const scanError = scanIn.isError
+    ? (scanIn.error as Error).message
+    : startAuto.isError
+      ? (startAuto.error as Error).message
+      : null;
+  const showInstallPromo =
+    status?.member?.appInstallPromoEligible !== false &&
+    !status?.member?.appInstallPromoClaimedAt &&
+    layout?.facility?.appInstallPromoEligible !== false;
 
   const sessionPrice = session?.prices || session?.price || null;
   const allowedSpaceIds = useMemo(
@@ -346,13 +355,8 @@ export default function MobileHomePage() {
         onClose={() => setWifiOpen(false)}
       />
 
-      {memberId ? <PointsCard memberId={memberId} /> : null}
-      <ProfileMissionEntry hideWhenComplete />
-
       {/* App install promo — once only; hidden after claim */}
-      {(status?.member?.appInstallPromoEligible !== false &&
-        !status?.member?.appInstallPromoClaimedAt &&
-        layout?.facility?.appInstallPromoEligible !== false) ? (
+      {showInstallPromo ? (
         <AppInstallPromo
           globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
           promos={layout?.facility?.appInstallPromos ?? null}
@@ -458,29 +462,49 @@ export default function MobileHomePage() {
       {/* Announcement slot */}
       <AnnouncementBanner />
 
-      {/* Scan — main action (web pointage = check-in) */}
+      {/* Two clear entry points: on site (scan) vs book a place */}
       {!session && !pending ? (
-        <ScanQrPresence
-          slug={slug}
-          pending={scanIn.isPending || startAuto.isPending || !statusReady}
-          error={
-            scanIn.isError
-              ? (scanIn.error as Error).message
-              : startAuto.isError
-                ? (startAuto.error as Error).message
-                : null
-          }
-          hint={
-            status?.hasActiveSubscription
+        <div className="rounded-3xl bg-white p-3 shadow-sm">
+          <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Votre accès
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <ScanQrPresence
+              variant="tile"
+              slug={slug}
+              pending={scanIn.isPending || startAuto.isPending || !statusReady}
+              onConfirmed={afterScan}
+            />
+            <button
+              type="button"
+              disabled={!canChooseForfait}
+              onClick={goChooseDay}
+              className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-indigo-100 bg-white px-3 py-4 text-center transition hover:bg-indigo-50/50 active:scale-[0.98] disabled:opacity-50"
+            >
+              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <Armchair className="h-7 w-7" />
+              </span>
+              <span className="text-sm font-bold leading-tight text-slate-900">
+                Réserver ma place
+              </span>
+              <span className="text-[11px] leading-tight text-slate-500">
+                Choisir forfait et place
+              </span>
+            </button>
+          </div>
+          {scanError ? (
+            <p className="mt-2 text-center text-xs text-rose-600">{scanError}</p>
+          ) : null}
+          <p className="mt-2 text-center text-[11px] text-slate-500">
+            {status?.hasActiveSubscription
               ? periodSub && dailyRem != null && dailyRem <= 0
                 ? "Crédit du jour terminé — le compteur démarre au scan"
                 : periodSub && dailyRem != null
                   ? `${Number(dailyRem).toFixed(1)} h restantes aujourd’hui`
-                  : "Scannez le QR de l’accueil"
-              : "Scannez le QR : le compteur démarre, le tarif s’ajuste au temps passé"
-          }
-          onConfirmed={afterScan}
-        />
+                  : "Abonné : scannez simplement en arrivant"
+              : "Sur place : le prix suit le temps passé"}
+          </p>
+        </div>
       ) : null}
 
       {/* Abonnement summary (idle) — app only */}
@@ -563,46 +587,28 @@ export default function MobileHomePage() {
         </Alert>
       ) : null}
 
-      {/* Main access card — full booking CTAs in the installed app only */}
+      {/* Secondary booking options — installed app only */}
       {isApp && !session ? (
-        <div className="rounded-3xl bg-white p-4 shadow-sm">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Votre accès
-          </p>
-          <div className="mt-2.5 space-y-2">
-            <Button
-              className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold shadow-sm hover:bg-indigo-700"
-              disabled={!canChooseForfait}
-              onClick={goChooseDay}
-            >
-              <Monitor className="mr-2 h-4 w-4" />
-              Réserver ma place maintenant
-            </Button>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                className="h-11 rounded-full border-indigo-200 text-indigo-700"
-                disabled={!!pending && pending.type === "SUBSCRIPTION"}
-                onClick={goSubscription}
-              >
-                <CreditCard className="mr-1.5 h-4 w-4" />
-                Abonnement
-              </Button>
-              <Button
-                variant="outline"
-                className="h-11 rounded-full border-slate-200 text-slate-700"
-                asChild
-              >
-                <Link href={href("/reserve")}>
-                  <CalendarDays className="mr-1.5 h-4 w-4" />
-                  Autre jour
-                </Link>
-              </Button>
-            </div>
-          </div>
-          <p className="mt-2.5 text-center text-[11px] text-slate-400">
-            Réservation pour aujourd&apos;hui : sur place ou par téléphone
-          </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            className="h-11 rounded-full border-indigo-200 bg-white text-indigo-700 shadow-sm"
+            disabled={!!pending && pending.type === "SUBSCRIPTION"}
+            onClick={goSubscription}
+          >
+            <CreditCard className="mr-1.5 h-4 w-4" />
+            Abonnement
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11 rounded-full border-slate-200 bg-white text-slate-700 shadow-sm"
+            asChild
+          >
+            <Link href={href("/reserve")}>
+              <CalendarDays className="mr-1.5 h-4 w-4" />
+              Autre jour
+            </Link>
+          </Button>
         </div>
       ) : isApp && status?.hasActiveSubscription ? (
         <Button
@@ -628,6 +634,11 @@ export default function MobileHomePage() {
           Wi‑Fi de l&apos;espace
         </Button>
       ) : null}
+
+      {memberId ? (
+        <PointsCard memberId={memberId} hideLocked={showInstallPromo && !isApp} />
+      ) : null}
+      <ProfileMissionEntry hideWhenComplete />
 
       {/* Secondary: contact + install (Café/Communauté live in the bottom nav) */}
       <div className="flex items-center justify-center gap-4 pt-1">

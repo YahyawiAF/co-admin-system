@@ -24,8 +24,8 @@ export function InstallAppButton({
   variant = "button",
 }: {
   className?: string;
-  /** "button" = pill button; "link" = discreet text link */
-  variant?: "button" | "link";
+  /** "button" = full pill; "pill" = small inline pill; "link" = text link */
+  variant?: "button" | "pill" | "link";
 }) {
   const [hidden, setHidden] = useState(false);
   const [open, setOpen] = useState(false);
@@ -97,6 +97,15 @@ export function InstallAppButton({
         >
           <Download className="h-3.5 w-3.5" />
           Installer l’app
+        </button>
+      ) : variant === "pill" ? (
+        <button
+          type="button"
+          className="inline-flex h-8 items-center gap-1 rounded-full bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700"
+          onClick={() => void onClick()}
+        >
+          <Download className="h-3.5 w-3.5" />
+          Installer
         </button>
       ) : (
         <Button

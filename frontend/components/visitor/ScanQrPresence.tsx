@@ -138,6 +138,8 @@ type Props = {
   error?: string | null;
   hint?: string | null;
   onConfirmed: () => void;
+  /** "tile": square action tile only — the parent renders hint / error */
+  variant?: "card" | "tile";
 };
 
 export function ScanQrPresence({
@@ -147,6 +149,7 @@ export function ScanQrPresence({
   error,
   hint,
   onConfirmed,
+  variant = "card",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [camError, setCamError] = useState<string | null>(null);
@@ -262,23 +265,48 @@ export function ScanQrPresence({
   }, [open, slug]);
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow-sm">
-      {hint ? (
-        <p className="mb-2 text-center text-sm text-slate-500">{hint}</p>
-      ) : null}
-      {error ? (
-        <Alert variant="destructive" className="mb-3">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      <Button
-        className="h-12 w-full rounded-full"
-        disabled={pending || disabled}
-        onClick={openScanner}
-      >
-        <QrCode className="mr-2 h-5 w-5" />
-        {pending ? "Enregistrement…" : "Scan QR code"}
-      </Button>
+    <div
+      className={
+        variant === "tile" ? "flex" : "rounded-2xl bg-white p-4 shadow-sm"
+      }
+    >
+      {variant === "tile" ? (
+        <button
+          type="button"
+          disabled={pending || disabled}
+          onClick={openScanner}
+          className="flex w-full flex-col items-center justify-center gap-2 rounded-2xl bg-indigo-600 px-3 py-4 text-center text-white shadow-sm transition hover:bg-indigo-700 active:scale-[0.98] disabled:opacity-60"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
+            <QrCode className="h-7 w-7" />
+          </span>
+          <span className="text-sm font-bold leading-tight">
+            {pending ? "Enregistrement…" : "Je suis sur place"}
+          </span>
+          <span className="text-[11px] leading-tight text-white/80">
+            Scanner le QR de l&apos;accueil
+          </span>
+        </button>
+      ) : (
+        <>
+          {hint ? (
+            <p className="mb-2 text-center text-sm text-slate-500">{hint}</p>
+          ) : null}
+          {error ? (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
+          <Button
+            className="h-12 w-full rounded-full"
+            disabled={pending || disabled}
+            onClick={openScanner}
+          >
+            <QrCode className="mr-2 h-5 w-5" />
+            {pending ? "Enregistrement…" : "Scan QR code"}
+          </Button>
+        </>
+      )}
 
       {open ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-black">

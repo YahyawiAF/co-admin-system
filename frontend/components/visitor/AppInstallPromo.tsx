@@ -90,37 +90,20 @@ export function AppInstallPromo({
     return (
       <div
         className={cn(
-          "relative overflow-hidden rounded-3xl bg-white px-4 py-3.5 shadow-sm ring-2 ring-emerald-200",
+          "flex items-center gap-3 rounded-3xl bg-white px-3.5 py-2.5 shadow-sm ring-1 ring-emerald-200",
           className
         )}
       >
-        <div className="relative flex items-center gap-3">
-          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
-            <PartyPopper className="h-6 w-6" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">
-              Promo activée
-            </p>
-            {valueLabel ? (
-              <p className="mt-0.5 text-2xl font-bold tabular-nums leading-none text-emerald-700">
-                {valueLabel}
-              </p>
-            ) : (
-              <p className="mt-0.5 text-lg font-bold text-slate-900">
-                Vous avez gagné
-              </p>
-            )}
-            <p className="mt-1.5 text-[13px] leading-snug text-slate-500">
-              Votre réduction s&apos;applique au prochain paiement dans
-              l&apos;app.
-            </p>
-            {scopeLabel ? (
-              <p className="mt-1 text-[12px] font-medium text-emerald-700">
-                {scopeLabel}
-              </p>
-            ) : null}
-          </div>
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+          <PartyPopper className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-emerald-700">
+            {valueLabel ? `Promo ${valueLabel}` : "Promo activée"}
+          </p>
+          <p className="truncate text-[11px] text-slate-500">
+            {scopeLabel ?? "Appliquée à votre prochain paiement"}
+          </p>
         </div>
       </div>
     );
@@ -132,54 +115,31 @@ export function AppInstallPromo({
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-3xl bg-white px-4 py-3.5 shadow-sm",
+        "flex items-center gap-3 rounded-3xl bg-white px-3.5 py-2.5 shadow-sm",
         emphasize && "ring-2 ring-indigo-200",
         className
       )}
     >
-      <div
-        className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-indigo-100/80"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute -bottom-10 -left-6 h-24 w-24 rounded-full bg-amber-100/70"
-        aria-hidden
-      />
-
-      <div className="relative flex items-center gap-3">
-        <span className="flex h-12 w-12 shrink-0 animate-[bounce_1.6s_ease-in-out_infinite] items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-          <Gift className="h-6 w-6" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-amber-600">
-            Vous gagnez
-          </p>
+      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+        <Gift className="h-5 w-5" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-bold text-slate-900">
           {valueLabel ? (
-            <p className="mt-0.5 text-2xl font-bold tabular-nums leading-none text-indigo-600">
-              {valueLabel}
-            </p>
+            <>
+              <span className="text-indigo-600">{valueLabel}</span> offerts
+            </>
           ) : (
-            <p className="mt-0.5 text-lg font-bold leading-snug text-slate-900">
-              Cadeau à l&apos;installation
-            </p>
+            "Cadeau à l’installation"
           )}
-          <p className="mt-1.5 text-[13px] leading-snug text-slate-500">
-            Installez l&apos;app sur votre téléphone pour{" "}
-            <span className="font-semibold text-slate-700">
-              activer la promo
-            </span>{" "}
-            et commencer à collecter des points (aucun point sur le web).
-          </p>
-          {scopeLabel ? (
-            <p className="mt-1 text-[12px] font-medium text-indigo-700">
-              {scopeLabel}
-            </p>
-          ) : null}
-          <div className="mt-2.5">
-            <InstallAppButton className="w-full" />
-          </div>
-        </div>
+        </p>
+        <p className="truncate text-[11px] text-slate-500">
+          {scopeLabel
+            ? `Promo + points · ${scopeLabel}`
+            : "Installez l’app : promo + points"}
+        </p>
       </div>
+      <InstallAppButton variant="pill" />
     </div>
   );
 }

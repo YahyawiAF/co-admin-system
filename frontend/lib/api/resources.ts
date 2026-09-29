@@ -744,11 +744,18 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
-  /** Reception only — members ask the desk to change their tariff. */
+  /** Reception: any pack on any open session. */
   fixSessionTariff(id: string, priceId: string) {
     return http.patch<MobileSession>(`/mobile/session/${id}/fix-tariff`, {
       priceId,
       byAdmin: true,
+    });
+  },
+  /** Member: packs still covering the elapsed time, unpaid session only. */
+  fixMySessionTariff(id: string, priceId: string, memberId: string) {
+    return http.patch<MobileSession>(`/mobile/session/${id}/fix-tariff`, {
+      priceId,
+      memberId,
     });
   },
   getPricingContext(opts?: { orgSlug?: string; organizationId?: string | null }) {

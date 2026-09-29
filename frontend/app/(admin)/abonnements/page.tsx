@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, startOfDay, subMilliseconds } from "date-fns";
 import { Pencil, MapPin, MoreHorizontal, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -497,7 +497,10 @@ function AbonnementsInner() {
 
   const endNow = useMutation({
     mutationFn: (a: Abonnement) =>
-      abonnementsApi.update(a.id, { leaveDate: new Date().toISOString() }),
+      // leaveDate is the last valid day (inclusive), so "now" would keep access until midnight.
+      abonnementsApi.update(a.id, {
+        leaveDate: subMilliseconds(startOfDay(new Date()), 1).toISOString(),
+      }),
     onSuccess: () => {
       toast.success("Abonnement terminé — place libérée");
       setEnding(null);

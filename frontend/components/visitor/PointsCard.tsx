@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Lock, Trophy } from "lucide-react";
+import { ChevronDown, Lock, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mobileApi } from "@/lib/api/resources";
 import { isStandalonePwa } from "@/lib/visitor-notify";
@@ -17,6 +17,8 @@ type Props = {
   className?: string;
   /** Compact: hide trophy grid until expanded */
   compact?: boolean;
+  /** Render nothing while locked (another card already pushes the install) */
+  hideLocked?: boolean;
 };
 
 function useCountUp(target: number, active: boolean, durationMs = 1200) {
@@ -46,7 +48,12 @@ function useCountUp(target: number, active: boolean, durationMs = 1200) {
   return value;
 }
 
-export function PointsCard({ memberId, className, compact = true }: Props) {
+export function PointsCard({
+  memberId,
+  className,
+  compact = true,
+  hideLocked = false,
+}: Props) {
   const queryClient = useQueryClient();
   const [isPwa, setIsPwa] = useState(false);
   const [showTrophies, setShowTrophies] = useState(!compact);
@@ -159,16 +166,14 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
     return () => window.clearTimeout(t);
   }, [counting, flash?.key]);
 
+  if (hideLocked && locked) return null;
+
   if (isLoading && !data) {
     return (
       <div
-        className={cn(
-          "rounded-3xl bg-white px-4 py-3.5 shadow-sm",
-          className
-        )}
-      >
-        <p className="text-[11px] text-slate-400">Chargement points…</p>
-      </div>
+        className={cn("h-14 rounded-3xl bg-white shadow-sm", className)}
+        aria-hidden
+      />
     );
   }
 
@@ -179,20 +184,11 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
   return (
     <div
       className={cn(
-        "relative overflow-hidden rounded-3xl bg-white px-4 py-3.5 shadow-sm",
+        "relative overflow-hidden rounded-3xl bg-white px-3.5 py-2.5 shadow-sm",
         palierBurst != null && "ring-2 ring-amber-400",
         className
       )}
     >
-      <div
-        className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-amber-100/70"
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none absolute -bottom-10 -left-6 h-24 w-24 rounded-full bg-indigo-100/60"
-        aria-hidden
-      />
-
       {flash ? (
         <PointFlash
           key={flash.key}
@@ -203,98 +199,83 @@ export function PointsCard({ memberId, className, compact = true }: Props) {
         />
       ) : null}
 
-      <div className="relative">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Points
-          </p>
-          {locked ? (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
-              <Lock className="h-3 w-3" />
-              App requise
-            </span>
-          ) : (
-            <span className="text-[10px] font-medium text-slate-400">
-              100 pts = 1 DT
-            </span>
-          )}
-        </div>
-
-        <div className="mt-1 flex items-end gap-2">
-          <p
-            className={cn(
-              "text-4xl font-bold tabular-nums leading-none",
-              locked ? "text-slate-300" : "text-indigo-600"
-            )}
-            style={
-              counting && !locked
-                ? { animation: "visitorPointsCountUp 1.2s ease-out" }
-                : undefined
-            }
-          >
-            {locked ? "—" : display.toLocaleString("fr-FR")}
-          </p>
-          <p className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-400">
-            pts
-          </p>
-        </div>
-
-        {locked ? (
-          <p className="mt-2 text-sm text-slate-500">
-            Téléchargez l&apos;app et commencez à collecter des points. Sur le
-            web, aucun point n&apos;est compté.
-          </p>
-        ) : (
-          <p className="mt-2 text-xs leading-snug text-slate-500">
-            Paiement confirmé + check-out → vos points s&apos;ajoutent ici.
-          </p>
-        )}
-
-        {!locked && next ? (
-          <div className="mt-2.5">
-            <div className="mb-1 flex justify-between text-xs text-slate-500">
-              <span>{next.name}</span>
-              <span className="tabular-nums">
-                {data.points}/{next.target}
-              </span>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-500",
-                  palierBurst != null
-                    ? "bg-gradient-to-r from-amber-400 to-orange-500"
-                    : "bg-indigo-600"
-                )}
-                style={{ width: `${next.progress}%` }}
-              />
-            </div>
+      {locked ? (
+        <div className="flex items-center gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+            <Lock className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-slate-900">Points</p>
+            <p className="truncate text-[11px] text-slate-500">
+              Collectés dans l&apos;app uniquement
+            </p>
           </div>
-        ) : null}
-
-        {locked ? (
-          <div className="mt-3">
-            <InstallAppButton className="w-full" />
-          </div>
-        ) : (
+          <InstallAppButton variant="pill" />
+        </div>
+      ) : (
+        <>
           <button
             type="button"
             onClick={() => setShowTrophies((v) => !v)}
-            className="mt-2.5 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500"
+            aria-expanded={showTrophies}
+            className="flex w-full items-center gap-3 text-left"
           >
-            <Trophy className="h-4 w-4 text-amber-500" />
-            {showTrophies ? "Masquer" : "Trophées"}
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-500">
+              <Trophy className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline gap-1">
+                <span
+                  className="text-xl font-bold tabular-nums leading-none text-indigo-600"
+                  style={
+                    counting
+                      ? { animation: "visitorPointsCountUp 1.2s ease-out" }
+                      : undefined
+                  }
+                >
+                  {display.toLocaleString("fr-FR")}
+                </span>
+                <span className="text-xs font-semibold text-slate-400">pts</span>
+                <span className="ml-auto text-[10px] text-slate-400">
+                  100 pts = 1 DT
+                </span>
+              </span>
+              {next ? (
+                <span className="mt-1.5 flex items-center gap-2">
+                  <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
+                    <span
+                      className={cn(
+                        "block h-full rounded-full transition-all duration-500",
+                        palierBurst != null
+                          ? "bg-gradient-to-r from-amber-400 to-orange-500"
+                          : "bg-indigo-600"
+                      )}
+                      style={{ width: `${next.progress}%` }}
+                    />
+                  </span>
+                  <span className="max-w-[45%] truncate text-[10px] text-slate-500">
+                    {next.name} · {data.points}/{next.target}
+                  </span>
+                </span>
+              ) : null}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 shrink-0 text-slate-300 transition-transform",
+                showTrophies && "rotate-180"
+              )}
+            />
           </button>
-        )}
 
-        {showTrophies && !locked ? (
-          <TrophyShelf
-            trophies={data.trophies}
-            highlightIds={newTrophyIds}
-            className="mt-3"
-          />
-        ) : null}
-      </div>
+          {showTrophies ? (
+            <TrophyShelf
+              trophies={data.trophies}
+              highlightIds={newTrophyIds}
+              className="mt-3"
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

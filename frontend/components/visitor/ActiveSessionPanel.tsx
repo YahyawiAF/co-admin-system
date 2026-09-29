@@ -37,7 +37,68 @@ import {
   stageLabel,
 } from "@/lib/session-pricing";
 import { format } from "date-fns";
+import {
+  ChevronRight,
+  Clock,
+  Crown,
+  RefreshCw,
+  Timer,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function ActionTile({
+  icon: Icon,
+  label,
+  hint,
+  onClick,
+  muted,
+}: {
+  icon: LucideIcon;
+  label: string;
+  hint?: string;
+  onClick?: () => void;
+  muted?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex min-w-0 items-center gap-2 rounded-2xl border px-2.5 py-2 text-left transition",
+        muted
+          ? "border-slate-200 bg-slate-50"
+          : "border-indigo-100 bg-indigo-50/60 hover:bg-indigo-50 active:scale-[0.98]"
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl",
+          muted ? "bg-white text-slate-400" : "bg-white text-indigo-600 shadow-sm"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "block truncate text-xs font-semibold",
+            muted ? "text-slate-600" : "text-indigo-700"
+          )}
+        >
+          {label}
+        </span>
+        {hint ? (
+          <span className="block truncate text-[10px] text-slate-500">{hint}</span>
+        ) : null}
+      </span>
+      {onClick ? (
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-indigo-300" />
+      ) : null}
+    </button>
+  );
+}
 
 function formatClock(ms: number) {
   const abs = Math.abs(ms);
@@ -99,6 +160,7 @@ export function ActiveSessionPanel({
   const visible = usePageVisible();
   const { slug } = useOrg();
   const [confirmCheckout, setConfirmCheckout] = useState(false);
+  const [tariffOpen, setTariffOpen] = useState(false);
   const { data: pricingCtx } = usePricingContext({
     orgSlug: slug,
     enabled: !!session.pricing,
@@ -221,6 +283,37 @@ export function ActiveSessionPanel({
         );
       }
       onCheckoutSuccess?.();
+    },
+  });
+
+  const tiers = useMemo(
+    () =>
+      [...(pricingCtx?.allTiers ?? [])].sort(
+        (a, b) => a.durationHours - b.durationHours
+      ),
+    [pricingCtx?.allTiers]
+  );
+  const sessionStart = session.registredTime
+    ? new Date(session.registredTime).getTime()
+    : now;
+  const canChangeTariff =
+    !!live &&
+    !covered &&
+    !isOptimistic &&
+    !session.isPayed &&
+    !(live.paidAmount > 0) &&
+    tiers.length > 0;
+  const showTariffTile = canChangeTariff;
+  const showSubTile =
+    !covered &&
+    (!!pendingSubscriptionName || (!!onSwitchToSubscription && !isOptimistic));
+
+  const fixTariff = useMutation({
+    mutationFn: (priceId: string) =>
+      mobileApi.fixMySessionTariff(session.id, priceId, memberId),
+    onSuccess: () => {
+      setTariffOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
 
@@ -453,9 +546,11 @@ export function ActiveSessionPanel({
               ) : null}
             </p>
           ) : null}
-          <p className="mt-2 text-[11px] text-slate-500">
-            Pour fixer ou changer votre forfait, demandez à l&apos;accueil.
-          </p>
+          {!canChangeTariff ? (
+            <p className="mt-2 text-[11px] text-slate-500">
+              Pour changer votre forfait, demandez à l&apos;accueil.
+            </p>
+          ) : null}
         </div>
       ) : overtime && !isHoursPool ? (
         <Alert className="mb-4 text-left">
@@ -483,32 +578,46 @@ export function ActiveSessionPanel({
         </>
       ) : null}
 
-      {!covered && pendingSubscriptionName ? (
-        <div className="mb-2.5 rounded-2xl border border-indigo-200 bg-indigo-50 px-3.5 py-3 text-left text-sm text-indigo-800">
-          <p className="font-semibold">
-            Abonnement {pendingSubscriptionName} demandé
-          </p>
-          <p className="mt-0.5 text-xs">
-            En attente de l&apos;accueil — votre session passera sur
-            l&apos;abonnement dès la validation.
-          </p>
-        </div>
-      ) : !covered && onSwitchToSubscription && !isOptimistic ? (
-        <button
-          type="button"
-          onClick={onSwitchToSubscription}
-          className="mb-2.5 flex w-full items-center justify-between rounded-2xl border border-indigo-200 bg-indigo-50/60 px-3.5 py-3 text-left hover:bg-indigo-50"
+      {showTariffTile || showSubTile ? (
+        <div
+          className={cn(
+            "mb-2.5 grid gap-2",
+            showTariffTile && showSubTile ? "grid-cols-2" : "grid-cols-1"
+          )}
         >
-          <span>
-            <span className="block text-sm font-semibold text-indigo-700">
-              Passer à un abonnement
-            </span>
-            <span className="mt-0.5 block text-xs text-slate-500">
-              Votre session en cours bascule sur l&apos;abonnement
-            </span>
-          </span>
-          <span className="text-lg text-indigo-600">›</span>
-        </button>
+          {showTariffTile ? (
+            <ActionTile
+              icon={live?.mode === "AUTO" ? Timer : RefreshCw}
+              label={live?.mode === "AUTO" ? "Fixer forfait" : "Changer forfait"}
+              hint={
+                live?.mode === "AUTO"
+                  ? "2h, 4h, journée…"
+                  : live?.fixedServiceName ?? undefined
+              }
+              onClick={() => {
+                fixTariff.reset();
+                setTariffOpen(true);
+              }}
+            />
+          ) : null}
+          {showSubTile ? (
+            pendingSubscriptionName ? (
+              <ActionTile
+                icon={Clock}
+                label="Abonnement"
+                hint="En attente"
+                muted
+              />
+            ) : (
+              <ActionTile
+                icon={Crown}
+                label="Abonnement"
+                hint="Sans compteur"
+                onClick={onSwitchToSubscription}
+              />
+            )
+          ) : null}
+        </div>
       ) : null}
 
       {seatLabel ? (
@@ -612,8 +721,10 @@ export function ActiveSessionPanel({
           </div>
           {elapsedMs != null && elapsedMs < 5 * 60_000 ? (
             <p className="text-xs text-amber-700">
-              Votre session a commencé il y a moins de 5 min. Pour changer de
-              tarif, demandez plutôt à l&apos;accueil.
+              Votre session a commencé il y a moins de 5 min.{" "}
+              {canChangeTariff
+                ? "Pour changer de tarif, utilisez plutôt « Fixer forfait »."
+                : "Pour changer de tarif, demandez plutôt à l’accueil."}
             </p>
           ) : null}
           <DialogFooter className="grid grid-cols-2 gap-2 sm:space-x-0">
@@ -635,6 +746,68 @@ export function ActiveSessionPanel({
               {checkout.isPending ? "Check-out…" : "Terminer"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={tariffOpen}
+        onOpenChange={(open) => {
+          if (!fixTariff.isPending) setTariffOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-sm rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <Timer className="h-4 w-4" />
+              </span>
+              Choisir mon forfait
+            </DialogTitle>
+            <DialogDescription>
+              Arrivé à {format(sessionStart, "HH:mm")} · supplément au-delà du
+              forfait.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {tiers.map((t) => {
+              const endsAt = sessionStart + t.durationHours * 3_600_000;
+              const tooShort = endsAt <= now;
+              const isCurrent =
+                live?.mode === "FIXED" && live.fixedPriceId === t.priceId;
+              return (
+                <button
+                  key={t.priceId}
+                  type="button"
+                  disabled={fixTariff.isPending || tooShort || isCurrent}
+                  onClick={() => fixTariff.mutate(t.priceId)}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-2xl border px-3.5 py-3 text-left text-sm transition",
+                    isCurrent
+                      ? "border-indigo-300 bg-indigo-50"
+                      : "border-slate-200 hover:bg-slate-50",
+                    tooShort && "opacity-50"
+                  )}
+                >
+                  <span>
+                    <span className="font-semibold text-slate-900">{t.name}</span>
+                    <span className="block text-[11px] text-slate-500">
+                      Jusqu&apos;à {format(endsAt, "HH:mm")}
+                      {tooShort ? " · déjà dépassé" : ""}
+                      {isCurrent ? " · actuel" : ""}
+                    </span>
+                  </span>
+                  <span className="font-semibold tabular-nums text-indigo-600">
+                    {formatDt(t.price)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {fixTariff.isError ? (
+            <p className="text-xs text-rose-600">
+              {(fixTariff.error as Error).message}
+            </p>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
