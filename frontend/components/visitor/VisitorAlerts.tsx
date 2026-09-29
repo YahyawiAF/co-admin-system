@@ -248,16 +248,6 @@ export function VisitorAlerts() {
           status: payload.status,
           type: payload.type,
         });
-        if (payload.status === "APPROVED") {
-          // Allow Wi‑Fi modal to show after seat assignment
-          try {
-            Object.keys(sessionStorage)
-              .filter((k) => k.startsWith("wifi-seen:"))
-              .forEach((k) => sessionStorage.removeItem(k));
-          } catch {
-            /* ignore */
-          }
-        }
         showVisitorNotification({
           title:
             payload.status === "APPROVED"

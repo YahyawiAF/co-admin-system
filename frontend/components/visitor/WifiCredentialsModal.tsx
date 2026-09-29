@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Copy, Wifi } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -24,12 +23,10 @@ type Props = {
   seat?: SeatAssignmentInfo | null;
   /** Fallback when no seat Wi‑Fi (e.g. Accueil before check-in) */
   fallback?: WifiSource | null;
-  /** Show when visit just approved or user taps Wi‑Fi */
+  /** Opens only when the user taps the Wi‑Fi button — never automatically */
   forceOpen?: boolean;
   onClose?: () => void;
 };
-
-const seenKey = (spaceId: string) => `wifi-seen:${spaceId}`;
 
 export function WifiCredentialsModal({
   seat,
@@ -37,30 +34,12 @@ export function WifiCredentialsModal({
   forceOpen,
   onClose,
 }: Props) {
-  const [open, setOpen] = useState(false);
-
   const ssid = (seat?.wifiSsid || fallback?.wifiSsid || "").trim();
   const password = (seat?.wifiPassword || fallback?.wifiPassword || "").trim();
-  const spaceId = seat?.spaceId || fallback?.spaceId || "";
   const spaceName = seat?.spaceName || fallback?.spaceName || "";
   const hasWifi = !!(ssid || password);
 
-  useEffect(() => {
-    if (!hasWifi || !spaceId) return;
-    if (forceOpen) {
-      setOpen(true);
-      return;
-    }
-    if (typeof window === "undefined") return;
-    if (sessionStorage.getItem(seenKey(spaceId)) === "1") return;
-    setOpen(true);
-  }, [hasWifi, spaceId, forceOpen, ssid, password]);
-
-  const dismiss = () => {
-    if (spaceId) sessionStorage.setItem(seenKey(spaceId), "1");
-    setOpen(false);
-    onClose?.();
-  };
+  const dismiss = () => onClose?.();
 
   const copy = async (label: string, value: string) => {
     if (!value) return;
@@ -75,7 +54,7 @@ export function WifiCredentialsModal({
   if (!hasWifi) return null;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && dismiss()}>
+    <Dialog open={!!forceOpen} onOpenChange={(o) => !o && dismiss()}>
       <DialogContent className="max-w-[420px] rounded-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

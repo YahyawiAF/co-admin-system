@@ -322,12 +322,7 @@ export default function MobileHomePage() {
     return <p className="text-slate-500">Chargement…</p>;
   }
 
-  const openWifi = () => {
-    if (wifiFallback?.spaceId) {
-      sessionStorage.removeItem(`wifi-seen:${wifiFallback.spaceId}`);
-    }
-    setWifiOpen(true);
-  };
+  const openWifi = () => setWifiOpen(true);
 
   const goChooseDay = () => {
     router.push(href("/choose?mode=day"));
