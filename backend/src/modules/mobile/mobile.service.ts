@@ -10,7 +10,14 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { addDays, addHours, endOfDay, startOfDay } from 'date-fns';
+import {
+  addDays,
+  addHours,
+  endOfDay,
+  format,
+  startOfDay,
+  subDays,
+} from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import {
   CheckoutSessionDto,
@@ -25,6 +32,7 @@ import {
 } from './dtos/mobile.dto';
 import {
   BillingUnit,
+  MemberAvailability,
   MobileSeatMode,
   PriceCategory,
   ProductOrderStatus,
@@ -44,6 +52,7 @@ import { PushService } from '../push/push.service';
 import {
   POINT_AMOUNTS,
   TROPHY_CATALOG,
+  levelForSessions,
   nextTrophyThreshold,
   pointsToDt,
   dtToRedeemPoints,
@@ -1160,10 +1169,20 @@ export class MobileService {
     linkedinUrl?: string | null;
     openToCollaboration?: boolean | null;
     showInDirectory?: boolean | null;
+    availability?: MemberAvailability | null;
+    lookingFor?: string[] | null;
+    todayFocus?: string | null;
+    todayFocusAt?: Date | null;
+    shareAttendance?: boolean | null;
     appInstallPromoClaimedAt?: Date | null;
     pwaInstalledAt?: Date | null;
     points?: number | null;
   }) {
+    // "Focus du jour" expires daily
+    const focusFresh =
+      !!member.todayFocus &&
+      !!member.todayFocusAt &&
+      member.todayFocusAt >= startOfDay(new Date());
     return {
       id: member.id,
       phone: member.phone,
@@ -1184,6 +1203,10 @@ export class MobileService {
       linkedinUrl: member.linkedinUrl || null,
       openToCollaboration: !!member.openToCollaboration,
       showInDirectory: !!member.showInDirectory,
+      availability: member.availability ?? null,
+      lookingFor: member.lookingFor || [],
+      todayFocus: focusFresh ? member.todayFocus! : null,
+      shareAttendance: !!member.shareAttendance,
       points: member.points ?? 0,
       appInstallPromoClaimedAt: member.appInstallPromoClaimedAt
         ? member.appInstallPromoClaimedAt.toISOString?.() ??
@@ -2050,6 +2073,11 @@ export class MobileService {
     }
 
     if (journal.memberID) {
+      // The "focus du jour" only makes sense while on site
+      await this.prisma.member.updateMany({
+        where: { id: journal.memberID },
+        data: { todayFocus: null, todayFocusAt: null },
+      });
       const keepDedicated =
         isSubscriptionVisit &&
         this.seatPrivilegeActiveNow(activeSub?.price as any) &&
@@ -4094,11 +4122,19 @@ export class MobileService {
     linkedinUrl?: string;
     openToCollaboration?: boolean;
     showInDirectory?: boolean;
+    availability?: MemberAvailability | null;
+    lookingFor?: string[];
+    todayFocus?: string | null;
+    shareAttendance?: boolean;
   }) {
     const member = await this.prisma.member.findUnique({
       where: { id: dto.memberId },
     });
     if (!member) throw new NotFoundException('Member not found');
+    const focus =
+      dto.todayFocus !== undefined
+        ? (dto.todayFocus || '').trim().slice(0, 120) || null
+        : undefined;
     const cleanTags = (arr?: string[]) =>
       arr
         ?.map((s) => s.trim())
@@ -4115,6 +4151,11 @@ export class MobileService {
       linkedinUrl?: string | null;
       openToCollaboration?: boolean;
       showInDirectory?: boolean;
+      availability?: MemberAvailability | null;
+      lookingFor?: string[];
+      todayFocus?: string | null;
+      todayFocusAt?: Date | null;
+      shareAttendance?: boolean;
     } = {
       firstName: dto.firstName !== undefined ? dto.firstName.trim() : undefined,
       lastName: dto.lastName !== undefined ? dto.lastName.trim() : undefined,
@@ -4130,7 +4171,15 @@ export class MobileService {
           : undefined,
       openToCollaboration: dto.openToCollaboration,
       showInDirectory: dto.showInDirectory,
+      availability: dto.availability,
+      lookingFor:
+        dto.lookingFor !== undefined ? cleanTags(dto.lookingFor) : undefined,
+      todayFocus: focus,
+      todayFocusAt:
+        focus === undefined ? undefined : focus ? new Date() : null,
+      shareAttendance: dto.shareAttendance,
     };
+    if (focus !== undefined) await this.publishDailyNote(member, focus);
     try {
       const updated = await this.prisma.member.update({
         where: { id: dto.memberId },
@@ -4268,32 +4317,182 @@ export class MobileService {
       });
       organizationId = self?.organizationId;
     }
-    const members = await this.prisma.member.findMany({
-      where: {
-        deletedAt: null,
-        showInDirectory: true,
-        ...(organizationId ? { organizationId } : {}),
-        ...(excludeMemberId ? { id: { not: excludeMemberId } } : {}),
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
+    // Community = people on site right now (open session today) only.
     const now = new Date();
-    const present = await this.prisma.journal.findMany({
+    const open = await this.prisma.journal.findMany({
       where: {
         leaveTime: null,
-        memberID: { in: members.map((m) => m.id) },
+        isReservation: false,
+        memberID: { not: null },
         registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+        ...(organizationId ? { members: { organizationId } } : {}),
       },
-      select: { memberID: true },
+      select: { memberID: true, registredTime: true },
+      orderBy: { registredTime: 'desc' },
     });
-    const presentIds = new Set(
-      present.map((j) => j.memberID).filter(Boolean) as string[],
-    );
-    return members.map((m) => ({
-      ...this.sanitizeMember(m as any),
-      isPresent: presentIds.has(m.id),
-    }));
+    const arrivedAt = new Map<string, Date>();
+    for (const j of open) {
+      if (j.memberID && !arrivedAt.has(j.memberID)) {
+        arrivedAt.set(j.memberID, j.registredTime);
+      }
+    }
+    if (excludeMemberId) arrivedAt.delete(excludeMemberId);
+    if (!arrivedAt.size) return [];
+
+    const ids = [...arrivedAt.keys()];
+    const [members, seats] = await Promise.all([
+      this.prisma.member.findMany({
+        where: { id: { in: ids }, deletedAt: null, showInDirectory: true },
+      }),
+      this.seatsForMembers(ids),
+    ]);
+    return members
+      .map((m) => ({
+        ...this.communityMember(m),
+        isPresent: true,
+        presentSince: arrivedAt.get(m.id)!.toISOString(),
+        seat: seats.get(m.id) ?? null,
+      }))
+      .sort((a, b) => b.presentSince.localeCompare(a.presentSince));
+  }
+
+  /** One note per member per day: replacing it bumps it to the top; null removes it. */
+  private async publishDailyNote(
+    member: { id: string; organizationId: string },
+    text: string | null,
+  ) {
+    await this.prisma.communityNote.deleteMany({
+      where: {
+        memberId: member.id,
+        createdAt: { gte: startOfDay(new Date()) },
+      },
+    });
+    if (text) {
+      await this.prisma.communityNote.create({
+        data: {
+          organizationId: member.organizationId,
+          memberId: member.id,
+          text,
+        },
+      });
+    }
+    this.eventsGateway.sendCommunityNote({
+      type: 'community_note',
+      organizationId: member.organizationId,
+      memberId: member.id,
+    });
+  }
+
+  /** "Fil du jour" for the viewer's organization + live presence count. */
+  async communityFeed(viewerId?: string) {
+    if (!viewerId) return { notes: [], presentCount: 0 };
+    const viewer = await this.prisma.member.findUnique({
+      where: { id: viewerId },
+      select: { organizationId: true },
+    });
+    if (!viewer) throw new NotFoundException('Membre introuvable');
+    const now = new Date();
+    const [notes, open] = await Promise.all([
+      this.prisma.communityNote.findMany({
+        where: {
+          organizationId: viewer.organizationId,
+          createdAt: { gte: startOfDay(now) },
+          member: { deletedAt: null, showInDirectory: true },
+        },
+        include: {
+          member: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              avatarUrl: true,
+              functionality: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.journal.findMany({
+        where: {
+          leaveTime: null,
+          isReservation: false,
+          memberID: { not: null },
+          registredTime: { gte: startOfDay(now), lt: endOfDay(now) },
+          members: {
+            organizationId: viewer.organizationId,
+            deletedAt: null,
+            showInDirectory: true,
+          },
+        },
+        select: { memberID: true },
+      }),
+    ]);
+    const presentIds = new Set(open.map((j) => j.memberID!));
+    presentIds.delete(viewerId);
+    return {
+      presentCount: presentIds.size,
+      notes: notes.map((n) => ({
+        id: n.id,
+        text: n.text,
+        createdAt: n.createdAt.toISOString(),
+        isMine: n.memberId === viewerId,
+        author: { ...n.member, isPresent: presentIds.has(n.memberId) },
+      })),
+    };
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async wipeYesterdayNotes() {
+    await this.prisma.communityNote.deleteMany({
+      where: { createdAt: { lt: startOfDay(new Date()) } },
+    });
+  }
+
+  /** Public-facing member shape: no phone / email for other members. */
+  private communityMember(m: Parameters<MobileService['sanitizeMember']>[0]) {
+    const { phone: _phone, email: _email, ...rest } = this.sanitizeMember(m);
+    return rest;
+  }
+
+  /** Current seat (space + label) for many members in 3 queries. */
+  private async seatsForMembers(memberIds: string[]) {
+    const out = new Map<
+      string,
+      { seatLabel: string; spaceName: string | null; spaceId: string }
+    >();
+    if (!memberIds.length) return out;
+    const bookings = await this.prisma.seatBooking.findMany({
+      where: {
+        memberId: { in: memberIds },
+        isBooked: true,
+        eventKey: 'collabora-hub',
+      },
+      select: { memberId: true, seatId: true, spaceId: true, isPermanent: true },
+      orderBy: { bookedAt: 'desc' },
+    });
+    const spaceIds = [...new Set(bookings.map((b) => b.spaceId))];
+    const spaces = spaceIds.length
+      ? await this.prisma.space.findMany({
+          where: { id: { in: spaceIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const spaceName = new Map(spaces.map((s) => [s.id, s.name]));
+    // Prefer today's (non-permanent) booking over a subscription's fixed seat
+    const ordered = [
+      ...bookings.filter((b) => !b.isPermanent),
+      ...bookings.filter((b) => b.isPermanent),
+    ];
+    for (const b of ordered) {
+      if (!b.memberId || out.has(b.memberId)) continue;
+      out.set(b.memberId, {
+        seatLabel: b.seatId,
+        spaceId: b.spaceId,
+        spaceName: spaceName.get(b.spaceId) ?? null,
+      });
+    }
+    return out;
   }
 
   async getCommunityMember(memberId: string, viewerId?: string) {
@@ -4343,11 +4542,41 @@ export class MobileService {
       orderBy: { event: { startAt: 'desc' } },
       take: 30,
     });
+    const seat = present
+      ? (await this.seatsForMembers([memberId])).get(memberId) ?? null
+      : null;
+    // Trophy shelf is public; streak & level only when the member opted in
+    const unlocked = await this.prisma.memberTrophy.findMany({
+      where: { memberId },
+      orderBy: { unlockedAt: 'asc' },
+    });
+    const unlockedIds = new Map(unlocked.map((t) => [t.trophyId, t.unlockedAt]));
+    const shareAttendance = member.shareAttendance || member.id === viewerId;
+    const attendance = shareAttendance
+      ? {
+          streak: await this.computeStreak(memberId),
+          level: levelForSessions(
+            await this.prisma.journal.count({ where: { memberID: memberId } }),
+          ),
+          shared: member.shareAttendance,
+        }
+      : null;
     return {
       member: {
-        ...this.sanitizeMember(member as any),
+        ...(member.id === viewerId
+          ? this.sanitizeMember(member as any)
+          : this.communityMember(member as any)),
         isPresent: !!present,
+        seat,
       },
+      trophies: TROPHY_CATALOG.filter((t) => unlockedIds.has(t.id)).map(
+        (t) => ({
+          ...t,
+          unlocked: true,
+          unlockedAt: unlockedIds.get(t.id) ?? null,
+        }),
+      ),
+      attendance,
       events: events.map((r) => ({
         id: r.event.id,
         title: r.event.title,
@@ -5718,10 +5947,42 @@ export class MobileService {
     });
   }
 
+  /**
+   * Consecutive-day check-in streak. Weekends never break the streak
+   * (but count when the member does come in). Today counts once checked in;
+   * otherwise the streak is still "alive" from yesterday.
+   */
+  private async computeStreak(memberId: string) {
+    const rows = await this.prisma.journal.findMany({
+      where: {
+        memberID: memberId,
+        isReservation: false,
+        registredTime: { gte: subDays(startOfDay(new Date()), 366) },
+      },
+      select: { registredTime: true },
+    });
+    const days = new Set(rows.map((r) => format(r.registredTime, 'yyyy-MM-dd')));
+    let cursor = startOfDay(new Date());
+    if (!days.has(format(cursor, 'yyyy-MM-dd'))) cursor = subDays(cursor, 1);
+    let streak = 0;
+    for (let i = 0; i < 366; i++) {
+      const dow = cursor.getDay();
+      if (days.has(format(cursor, 'yyyy-MM-dd'))) streak += 1;
+      else if (dow !== 0 && dow !== 6) break; // weekday gap ends the streak
+      cursor = subDays(cursor, 1);
+    }
+    return streak;
+  }
+
   async getMemberPoints(memberId: string, isPwa: boolean) {
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
-      select: { id: true, points: true, pwaInstalledAt: true },
+      select: {
+        id: true,
+        points: true,
+        pwaInstalledAt: true,
+        shareAttendance: true,
+      },
     });
     if (!member) throw new NotFoundException('Membre introuvable');
 
@@ -5729,6 +5990,7 @@ export class MobileService {
 
     await this.expirePendingPoints(memberId);
 
+    const streak = await this.computeStreak(memberId);
     const [pendingAgg, trophies, journalCount, cafeCount, checkoutCount] =
       await Promise.all([
         this.prisma.memberPointEntry.aggregate({
@@ -5773,6 +6035,10 @@ export class MobileService {
         cafeOrders: cafeCount,
         checkouts: checkoutCount,
       },
+      // Private by default — shown on the public profile only when opted in
+      streak,
+      level: levelForSessions(journalCount),
+      shareAttendance: member.shareAttendance,
     };
   }
 

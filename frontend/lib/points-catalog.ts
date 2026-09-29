@@ -1,4 +1,4 @@
-/** Shared points catalog (mirrors backend). 100 pts = 1 DT. */
+/** Shared points catalog (mirrors backend). Earn: 1 DT → 50 pts · Redeem: 100 pts = 1 DT. */
 
 export type PointEvent =
   | "CAFE_ORDER"
@@ -27,10 +27,13 @@ export const PROFILE_COMPLETE_TROPHY_ID = "profile_complete";
 
 export const POINTS_PER_DT = 100;
 
-/** Earn: floor(amount_DT × 100). Example: 3.5 DT → 350 pts */
+/** Earn rate: 1 DT spent → 50 pts (redeem stays 100 pts = 1 DT) */
+export const EARN_POINTS_PER_DT = 50;
+
+/** Earn: floor(amount_DT × 50). Example: 3.5 DT → 175 pts */
 export function dtToPoints(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.floor(amount * POINTS_PER_DT);
+  return Math.floor(amount * EARN_POINTS_PER_DT);
 }
 
 /** Redeem: points / 100 → DT. Example: 350 pts → 3.5 DT */
@@ -131,6 +134,14 @@ export const TROPHY_CATALOG: TrophyDef[] = [
   },
 ];
 
+/** Attendance level computed server-side from session count */
+export type MemberLevel = {
+  id: string;
+  name: string;
+  sessions: number;
+  next: { name: string; target: number; progress: number } | null;
+};
+
 export type MemberPointsSnapshot = {
   locked: boolean;
   points: number;
@@ -146,6 +157,10 @@ export type MemberPointsSnapshot = {
     TrophyDef & { unlocked: boolean; unlockedAt: string | null }
   >;
   stats: { sessions: number; cafeOrders: number; checkouts: number };
+  /** Private — own profile only unless shareAttendance */
+  streak: number;
+  level: MemberLevel;
+  shareAttendance: boolean;
 };
 
 export type AwardPointsResult = {

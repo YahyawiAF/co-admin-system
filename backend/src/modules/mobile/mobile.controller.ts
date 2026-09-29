@@ -173,6 +173,11 @@ export class MobileController {
     return this.mobileService.listCommunity(memberId);
   }
 
+  @Get('community/feed')
+  communityFeed(@Query('memberId') memberId?: string) {
+    return this.mobileService.communityFeed(memberId);
+  }
+
   @Get('community/member/:id')
   communityMember(
     @Param('id', ParseUUIDPipe) id: string,

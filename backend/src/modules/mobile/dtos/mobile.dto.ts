@@ -12,7 +12,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { VisitRequestType } from '@prisma/client';
+import { MemberAvailability, VisitRequestType } from '@prisma/client';
 
 export class MobileRegisterDto {
   @ApiProperty({ example: '20123456' })
@@ -411,6 +411,17 @@ export class UpdateMobileProfileDto {
   @IsString()
   linkedinUrl?: string;
 
+  @ApiPropertyOptional({ enum: MemberAvailability, nullable: true })
+  @IsOptional()
+  @IsEnum(MemberAvailability)
+  availability?: MemberAvailability | null;
+
+  @ApiPropertyOptional({ type: [String], description: 'Recherche / looking for' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  lookingFor?: string[];
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -420,6 +431,21 @@ export class UpdateMobileProfileDto {
   @IsOptional()
   @IsBoolean()
   showInDirectory?: boolean;
+
+  @ApiPropertyOptional({
+    description: '"Focus du jour" — short status while on site (null clears)',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  todayFocus?: string | null;
+
+  @ApiPropertyOptional({
+    description: 'Opt-in: show streak & level on the public profile',
+  })
+  @IsOptional()
+  @IsBoolean()
+  shareAttendance?: boolean;
 }
 
 export class CreateStaffMessageDto {

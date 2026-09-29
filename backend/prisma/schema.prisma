@@ -69,6 +69,7 @@ model Member {
   productOrders    DailyProduct[]
   sentMessages     CommunityMessage[] @relation("MessageFrom")
   receivedMessages CommunityMessage[] @relation("MessageTo")
+  communityNotes   CommunityNote[]
   staffMessages    StaffMessage[]
   loginTokens      MemberLoginToken[]
   skills                 String[]  @default([])
@@ -76,6 +77,15 @@ model Member {
   linkedinUrl            String?
   openToCollaboration    Boolean   @default(true)
   showInDirectory        Boolean   @default(true)
+  /// Community status while on site (null = not set)
+  availability           MemberAvailability?
+  /// "Recherche" tags: what the member is looking for
+  lookingFor             String[]  @default([])
+  /// "Focus du jour" — short status shown while on site (expires daily)
+  todayFocus             String?   @db.VarChar(120)
+  todayFocusAt           DateTime?
+  /// Opt-in: show streak & level on the public profile
+  shareAttendance        Boolean   @default(false)
   eventRegistrations     EventRegistration[]
   pushSubscriptions      PushSubscription[]
   ledgerEntries          MemberLedger[]
@@ -88,6 +98,11 @@ model Member {
   @@index([organizationId])
   @@index([groupId])
   @@map("members")
+}
+
+enum MemberAvailability {
+  OPEN_TO_CHAT
+  FOCUS
 }
 
 enum PointEvent {
@@ -796,6 +811,20 @@ model CommunityMessage {
   @@index([toMemberId, createdAt])
   @@index([fromMemberId, createdAt])
   @@map("community_messages")
+}
+
+/// "Fil du jour": one note per member per day, wiped at midnight
+model CommunityNote {
+  id             String   @id @default(uuid())
+  organizationId String
+  memberId       String
+  member         Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  text           String   @db.VarChar(120)
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([memberId, createdAt])
+  @@map("community_notes")
 }
 
 model StaffMessage {

@@ -34,6 +34,7 @@ import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
+import { AttendanceCard } from "@/components/visitor/AttendanceCard";
 import {
   PointsCard,
   dispatchPointsAward,
@@ -48,9 +49,14 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import {
+  LOOKING_FOR_SUGGESTIONS,
+  OFFER_SUGGESTIONS,
   PROFESSION_SUGGESTIONS,
   SKILL_SUGGESTIONS,
 } from "@/lib/directory-suggestions";
+import { AVAILABILITY } from "@/lib/community";
+import type { MemberAvailability } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
   PROFILE_AVATAR_POINTS,
   PROFILE_COMPLETE_TROPHY_ID,
@@ -80,6 +86,8 @@ function ProfileInner() {
     avatarUrl: "",
     skills: [] as string[],
     services: [] as string[],
+    lookingFor: [] as string[],
+    availability: null as MemberAvailability | null,
     linkedinUrl: "",
     openToCollaboration: true,
     showInDirectory: true,
@@ -107,6 +115,8 @@ function ProfileInner() {
       avatarUrl: member?.avatarUrl || "",
       skills: member?.skills || [],
       services: member?.services || [],
+      lookingFor: member?.lookingFor || [],
+      availability: member?.availability ?? null,
       linkedinUrl: member?.linkedinUrl || "",
       openToCollaboration: member?.openToCollaboration !== false,
       showInDirectory: member?.showInDirectory !== false,
@@ -133,6 +143,8 @@ function ProfileInner() {
         avatarUrl: form.avatarUrl || undefined,
         skills: form.skills,
         services: form.services,
+        lookingFor: form.lookingFor,
+        availability: form.availability,
         linkedinUrl: form.linkedinUrl,
         openToCollaboration: form.openToCollaboration,
         showInDirectory: form.showInDirectory,
@@ -352,7 +364,10 @@ function ProfileInner() {
       <ProfileMissionEntry onEdit={openEdit} />
 
       {memberId ? (
-        <PointsCard memberId={memberId} compact={false} />
+        <>
+          <PointsCard memberId={memberId} compact={false} />
+          <AttendanceCard memberId={memberId} />
+        </>
       ) : null}
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
@@ -497,6 +512,64 @@ function ProfileInner() {
                 suggestions={SKILL_SUGGESTIONS}
                 placeholder="Ajouter…"
               />
+            </div>
+            <div className="space-y-1">
+              <Label>Je propose</Label>
+              <TagInput
+                value={form.services}
+                onChange={(services) => setForm((f) => ({ ...f, services }))}
+                suggestions={OFFER_SUGGESTIONS}
+                placeholder="Services que vous offrez…"
+                maxTags={12}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Je recherche</Label>
+              <TagInput
+                value={form.lookingFor}
+                onChange={(lookingFor) => setForm((f) => ({ ...f, lookingFor }))}
+                suggestions={LOOKING_FOR_SUGGESTIONS}
+                placeholder="Profils, clients, associé…"
+                maxTags={12}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>Statut sur place</Label>
+              <div className="grid grid-cols-3 gap-1 rounded-full bg-slate-100 p-1">
+                {(
+                  [
+                    { id: null, label: "Aucun", icon: null },
+                    ...(Object.keys(AVAILABILITY) as MemberAvailability[]).map(
+                      (k) => ({
+                        id: k,
+                        label: AVAILABILITY[k].short,
+                        icon: AVAILABILITY[k].icon,
+                      })
+                    ),
+                  ] as const
+                ).map((opt) => {
+                  const active = form.availability === opt.id;
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.id ?? "none"}
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, availability: opt.id }))
+                      }
+                      className={cn(
+                        "flex h-8 items-center justify-center gap-1 rounded-full text-xs font-semibold transition",
+                        active
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-500"
+                      )}
+                    >
+                      {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Bio</Label>

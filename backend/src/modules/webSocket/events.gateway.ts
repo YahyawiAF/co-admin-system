@@ -63,6 +63,10 @@ export class EventsGateway {
     this.server.sockets.emit('community_message', data);
   }
 
+  sendCommunityNote(data: any) {
+    this.server.sockets.emit('community_note', data);
+  }
+
   sendStaffMessage(data: any) {
     this.server.sockets.emit('staff_message', data);
   }

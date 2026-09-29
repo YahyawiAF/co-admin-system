@@ -118,7 +118,40 @@ export interface Member {
   openToCollaboration?: boolean;
   showInDirectory?: boolean;
   isPresent?: boolean;
+  availability?: MemberAvailability | null;
+  /** "Recherche" tags */
+  lookingFor?: string[];
+  /** Community only: when the member arrived today (ISO) */
+  presentSince?: string | null;
+  /** Community only: current seat while present */
+  seat?: CommunitySeat | null;
+  /** "Focus du jour" — short status while on site (expires daily) */
+  todayFocus?: string | null;
+  /** Opt-in: streak & level visible on the public profile */
+  shareAttendance?: boolean;
 }
+
+export type MemberAvailability = "OPEN_TO_CHAT" | "FOCUS";
+
+/** "Fil du jour" note — wiped at midnight */
+export type CommunityNote = {
+  id: string;
+  text: string;
+  createdAt: string;
+  isMine: boolean;
+  author: Pick<
+    Member,
+    "id" | "firstName" | "lastName" | "avatarUrl" | "functionality"
+  > & { isPresent: boolean };
+};
+
+export type CommunityFeed = { notes: CommunityNote[]; presentCount: number };
+
+export type CommunitySeat = {
+  seatLabel: string;
+  spaceName: string | null;
+  spaceId: string;
+};
 
 export interface MemberGroup {
   id: string;

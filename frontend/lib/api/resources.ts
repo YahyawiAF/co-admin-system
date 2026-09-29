@@ -48,6 +48,7 @@ import type {
   AppInstallPromo,
   PromoValueKind,
   AppInstallGlobalPromo,
+  MemberAvailability,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -937,6 +938,10 @@ export const mobileApi = {
     linkedinUrl?: string | null;
     openToCollaboration?: boolean;
     showInDirectory?: boolean;
+    availability?: MemberAvailability | null;
+    lookingFor?: string[];
+    todayFocus?: string | null;
+    shareAttendance?: boolean;
   }) {
     return http.patch<
       Member & {
@@ -950,6 +955,12 @@ export const mobileApi = {
   community(memberId?: string) {
     const q = memberId ? `?memberId=${memberId}` : "";
     return http.get<Member[]>(`/mobile/community${q}`, { skipAuth: true });
+  },
+  communityFeed(memberId: string) {
+    return http.get<import("@/lib/types").CommunityFeed>(
+      `/mobile/community/feed?memberId=${encodeURIComponent(memberId)}`,
+      { skipAuth: true },
+    );
   },
   communityMember(id: string, viewerId?: string) {
     const q = viewerId ? `?viewerId=${encodeURIComponent(viewerId)}` : "";
@@ -965,6 +976,17 @@ export const mobileApi = {
         coverImage?: string | null;
         registrationStatus: string;
       }>;
+      trophies: Array<
+        import("@/lib/points-catalog").TrophyDef & {
+          unlocked: boolean;
+          unlockedAt: string | null;
+        }
+      >;
+      attendance: {
+        streak: number;
+        level: import("@/lib/points-catalog").MemberLevel;
+        shared: boolean;
+      } | null;
     }>(`/mobile/community/member/${id}${q}`, { skipAuth: true });
   },
   myEvents(memberId: string) {

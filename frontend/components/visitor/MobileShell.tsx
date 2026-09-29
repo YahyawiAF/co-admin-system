@@ -16,10 +16,12 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
 import { isStandalonePwa } from "@/lib/visitor-notify";
+import { isCommunityUnlocked } from "@/lib/community";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
+import { CommunityNotePopup } from "@/components/visitor/CommunityNotePopup";
 
 /** Light visitor (name+phone, no PIN): no community */
 const LIGHT_NAV = [
@@ -87,7 +89,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
   });
   const [isApp, setIsApp] = useState(false);
   const hasAccount = !!status?.member?.hasPin;
-  const communityUnlocked = hasAccount && isApp;
+  const communityUnlocked = isCommunityUnlocked(hasAccount, isApp);
   const keyboardOpen = useMobileKeyboardOpen();
   const nav = !onboarded
     ? GUEST_NAV
@@ -103,6 +105,11 @@ export function MobileShell({ children }: { children: ReactNode }) {
     rest.startsWith("/community") ||
     rest.startsWith("/chat/") ||
     rest.startsWith("/u/");
+  const showCommunityNudge =
+    onboarded &&
+    communityUnlocked &&
+    !keyboardOpen &&
+    (rest === "" || rest === "/" || rest.startsWith("/session"));
 
   useEffect(() => {
     setIsApp(isStandalonePwa());
@@ -178,6 +185,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
           {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       )}
+      {showCommunityNudge ? <CommunityNotePopup /> : null}
       <nav
         aria-hidden={keyboardOpen}
         className={cn(

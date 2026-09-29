@@ -67,3 +67,37 @@ export const SKILL_SUGGESTIONS = [
   "Product",
   "Design system",
 ];
+
+/** "Je propose" — services a member offers */
+export const OFFER_SUGGESTIONS = [
+  "Développement web",
+  "Application mobile",
+  "Design graphique",
+  "Identité visuelle",
+  "Photographie",
+  "Montage vidéo",
+  "Rédaction",
+  "Traduction",
+  "Conseil",
+  "Comptabilité",
+  "Conseil juridique",
+  "Formation",
+  "Mentorat",
+  "Gestion réseaux sociaux",
+];
+
+/** "Je recherche" — what a member is looking for */
+export const LOOKING_FOR_SUGGESTIONS = [
+  "Associé",
+  "Clients",
+  "Développeur",
+  "Designer",
+  "Marketeur",
+  "Mentor",
+  "Stagiaire",
+  "Financement",
+  "Partenaires",
+  "Bêta-testeurs",
+  "Freelance",
+  "Feedback",
+];

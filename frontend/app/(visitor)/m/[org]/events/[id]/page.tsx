@@ -199,9 +199,7 @@ export default function EventDetailPage() {
               <DirectoryCard
                 key={a.id}
                 member={a as Member}
-                onClick={() =>
-                  router.push(href(`/u/${a.id}`))
-                }
+                onOpen={() => router.push(href(`/u/${a.id}`))}
               />
             ))
           )}

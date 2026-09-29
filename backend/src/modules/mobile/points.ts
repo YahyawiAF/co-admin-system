@@ -1,12 +1,15 @@
 import { PointEvent } from '@prisma/client';
 
-/** 100 pts = 1 DT (earn & redeem). Example: 3.5 DT → 350 pts */
+/** Redeem value: 100 pts = 1 DT. Example: 350 pts → 3.5 DT */
 export const POINTS_PER_DT = 100;
 
-/** Convert paid amount (DT) → points earned */
+/** Earn rate: 1 DT spent → 50 pts (half the redeem rate) */
+export const EARN_POINTS_PER_DT = 50;
+
+/** Convert paid amount (DT) → points earned. Example: 3.5 DT → 175 pts */
 export function dtToPoints(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
-  return Math.floor(amount * POINTS_PER_DT);
+  return Math.floor(amount * EARN_POINTS_PER_DT);
 }
 
 /** Convert points → DT value for payment */
@@ -114,6 +117,34 @@ export const TROPHY_CATALOG: TrophyDef[] = [
     icon: 'cup',
   },
 ];
+
+/** Attendance levels — private by default (Member.shareAttendance opts in) */
+export type LevelDef = { id: string; name: string; min: number };
+
+export const LEVELS: LevelDef[] = [
+  { id: 'nouveau', name: 'Nouveau', min: 0 },
+  { id: 'habitue', name: 'Habitué', min: 10 },
+  { id: 'pilier', name: 'Pilier', min: 50 },
+  { id: 'legende', name: 'Légende', min: 150 },
+];
+
+export function levelForSessions(sessions: number) {
+  let current = LEVELS[0];
+  for (const l of LEVELS) if (sessions >= l.min) current = l;
+  const next = LEVELS[LEVELS.indexOf(current) + 1] ?? null;
+  return {
+    id: current.id,
+    name: current.name,
+    sessions,
+    next: next
+      ? {
+          name: next.name,
+          target: next.min,
+          progress: Math.min(100, Math.round((sessions / next.min) * 100)),
+        }
+      : null,
+  };
+}
 
 export function nextTrophyThreshold(points: number): {
   trophyId: string;

@@ -35,6 +35,19 @@ Light, calm, card-based UI (reference: Collabora Hub mockups). One accent color,
 - Tertiary: plain text links `text-xs font-medium text-slate-500` with a small icon — never a third pill row.
 - Café / Communauté / Événements / Profil live in the bottom nav — do not duplicate them as buttons on Accueil.
 
+## Compactness (recurring feedback — apply by default)
+
+The user has asked many times for blocks to take less space. Treat every new or edited block as compact-first:
+
+- Status / summary blocks (counts, presence, points, promos, install nudges) are **one row**: `py-2.5`, icon or dot on the left, short text, optional small action on the right. Never a label line + big number line + separate hint row.
+- Big figures (`text-2xl`) only for the page's single key metric (e.g. session timer). Counts inside a row use `text-sm font-bold tabular-nums`.
+- Never render a zero state as a figure ("0 membre"). Replace it with a short phrase in the same row ("Personne sur place").
+- Hints become a single `text-[11px]` phrase or a small inline link inside the row — no extra divider (`border-t`) section for one line of text.
+- Optional controls (status toggles, composers) show only when relevant (e.g. member present) and sit inline in the same row when possible.
+- Empty states: small card (`py-5`, icon `h-10 w-10`), one title + one hint line max.
+- Avatar stacks: max 3–4 avatars at `h-7`, hide on very narrow screens if the row gets tight.
+- Before adding a card, ask: can this be a row inside an existing card, a chip, or a toast instead?
+
 ## Progress & badges
 
 - Progress bar: `h-2`–`h-2.5` rounded-full, indigo fill on `bg-slate-200`; caption row underneath (`text-[11px] text-slate-500`) with left/right labels (e.g. "Utilisé aujourd'hui" / "Expiration à minuit").
@@ -46,6 +59,7 @@ Light, calm, card-based UI (reference: Collabora Hub mockups). One accent color,
 - Wi-Fi: circular glass button (`bg-white/20 backdrop-blur-sm`) in hero top-right; modal via `WifiCredentialsModal`.
 - Scan QR stays the visually dominant action when the visitor has no session.
 - Empty/pending states use a white card with centered slate text, never a bare `<Alert>` with default border.
+- Engagement nudges (e.g. `CommunityNotePopup`) are transient toasts, not cards: floating above the bottom nav, auto-hide after ~6 s, dismissible, each item shown once (localStorage).
 
 ## React
 

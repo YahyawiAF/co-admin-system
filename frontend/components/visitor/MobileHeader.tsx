@@ -21,6 +21,7 @@ import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useVisibleInterval } from "@/lib/hooks/use-page-visible";
 import { isStandalonePwa } from "@/lib/visitor-notify";
+import { isCommunityUnlocked } from "@/lib/community";
 import {
   readLocalCache,
   writeLocalCache,
@@ -72,7 +73,7 @@ export function MobileHeader() {
 
   const { data: status } = useMobileStatus();
   const hasAccount = !!status?.member?.hasPin;
-  const communityUnlocked = hasAccount && isApp;
+  const communityUnlocked = isCommunityUnlocked(hasAccount, isApp);
 
   useEffect(() => {
     setIsApp(isStandalonePwa());

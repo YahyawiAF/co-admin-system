@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Member, Subscription } from '@prisma/client';
+import { Member, MemberAvailability, Subscription } from '@prisma/client';
 import { Expose } from 'class-transformer';
 
 export class MemberEntity implements Member {
@@ -134,6 +134,21 @@ export class MemberEntity implements Member {
 
   @ApiProperty({ required: false })
   showInDirectory: boolean;
+
+  @ApiProperty({ required: false, enum: MemberAvailability, nullable: true })
+  availability: MemberAvailability | null;
+
+  @ApiProperty({ required: false, type: [String] })
+  lookingFor: string[];
+
+  @ApiProperty({ required: false, nullable: true })
+  todayFocus: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  todayFocusAt: Date | null;
+
+  @ApiProperty({ required: false })
+  shareAttendance: boolean;
 
   @ApiProperty({
     description:
