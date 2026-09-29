@@ -12,6 +12,10 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  MemberSearchSelect,
+  type MemberLock,
+} from "@/components/admin/MemberSearchSelect";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,6 +70,7 @@ import { queryKeys } from "@/lib/query-client";
 import {
   PriceCategory,
   type Abonnement,
+  type Member,
   type PaginatedResponse,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -195,6 +200,33 @@ function AbonnementsInner() {
   }, [debtorsData]);
 
   const rows = asList(raw);
+  const activeAboByMember = useMemo(() => {
+    const map = new Map<string, Abonnement>();
+    for (const a of rows) {
+      if (isActiveSub(a) && !map.has(a.memberID)) map.set(a.memberID, a);
+    }
+    return map;
+  }, [rows]);
+  const aboLockFor = (m: Member): MemberLock | null => {
+    const a = activeAboByMember.get(m.id);
+    if (!a || a.id === editing?.id) return null;
+    const left = daysLeft(a);
+    const hLeft = hoursLeft(a);
+    return {
+      title: "Déjà abonné",
+      detail: [
+        a.price?.name,
+        a.leaveDate
+          ? `jusqu'au ${format(new Date(a.leaveDate), "dd/MM/yyyy")}`
+          : null,
+        hLeft != null ? `${hLeft}h restantes` : left != null ? `${left} j.` : null,
+        a.reservedSeatLabel ? `place ${a.reservedSeatLabel}` : null,
+        a.isPayed ? null : "non payé",
+      ]
+        .filter(Boolean)
+        .join(" · "),
+    };
+  };
   const paymentRemindAbos = useMemo(
     () => rows.filter((a) => isPaymentRemindDue(a, 1)),
     [rows],
@@ -640,21 +672,14 @@ function AbonnementsInner() {
               >
                 <div className="space-y-2">
                   <Label>Membre</Label>
-                  <Select
+                  <MemberSearchSelect
+                    members={Array.isArray(members) ? members : []}
+                    lockedFor={aboLockFor}
                     value={form.watch("memberID")}
-                    onValueChange={(v) => form.setValue("memberID", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Choisir" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Array.isArray(members) ? members : []).map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.firstName || "Visiteur"} {m.phone}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(v) =>
+                      form.setValue("memberID", v, { shouldValidate: true })
+                    }
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Formule</Label>
