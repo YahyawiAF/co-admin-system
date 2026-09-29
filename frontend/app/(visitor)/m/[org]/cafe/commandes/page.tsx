@@ -2,19 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { loadVisitorCache } from "@/lib/visitorCache";
 import { mobileApi } from "@/lib/api/resources";
-import { useOrg } from "@/lib/org";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
-import Link from "next/link";
 
 export default function CafeOrdersPage() {
   const queryClient = useQueryClient();
-  const { href } = useOrg();
   const { socket } = useRealtime();
   const [memberId, setMemberId] = useState<string | null>(null);
 
@@ -74,23 +70,7 @@ export default function CafeOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-10 w-10 rounded-full bg-white shadow-sm"
-          asChild
-        >
-          <Link href={href("/cafe")} aria-label="Retour au café">
-            <ArrowLeft className="h-5 w-5" />
-          </Link>
-        </Button>
-        <div>
-          <h1 className="text-base font-semibold">Mes commandes</h1>
-          <p className="text-xs text-slate-500">Statut et paiement</p>
-        </div>
-      </div>
+      <p className="px-1 text-xs text-slate-500">Statut et paiement de vos commandes</p>
 
       {isLoading ? (
         <p className="text-sm text-slate-500">Chargement…</p>

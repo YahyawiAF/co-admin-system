@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, LogIn, MessageCircle } from "lucide-react";
+import { Bell, ChevronLeft, LogIn, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -45,6 +45,16 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "/reservations": "Mes réservations",
 };
 
+/** Bottom-nav destinations: they show the org logo instead of a back arrow. */
+const TAB_ROOTS = new Set(["", "/events", "/community", "/cafe", "/profile"]);
+
+function parentOf(suffix: string) {
+  if (suffix.startsWith("/cafe/")) return "/cafe";
+  if (suffix.startsWith("/events/")) return "/events";
+  if (suffix.startsWith("/u/")) return "/community";
+  return "";
+}
+
 export function MobileHeader() {
   const pathname = usePathname();
   const router = useRouter();
@@ -57,6 +67,7 @@ export function MobileHeader() {
     pathname === base || pathname === `${base}/`
       ? ""
       : pathname.slice(base.length);
+  const isRoot = TAB_ROOTS.has(suffix.replace(/\/$/, ""));
   const inboxInterval = useVisibleInterval(45_000);
 
   const { data: status } = useMobileStatus();
@@ -145,13 +156,23 @@ export function MobileHeader() {
     <>
       <header className="sticky top-0 z-50 -mx-4 mb-3 border-b border-white/40 bg-white/90 px-3 py-2.5 backdrop-blur">
         <div className="flex items-center gap-2.5">
-          <Link
-            href={href()}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm"
-            aria-label="Accueil"
-          >
-            {(org.name || "C").trim().charAt(0).toUpperCase()}
-          </Link>
+          {isRoot ? (
+            <Link
+              href={href()}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm"
+              aria-label="Accueil"
+            >
+              {(org.name || "C").trim().charAt(0).toUpperCase()}
+            </Link>
+          ) : (
+            <Link
+              href={href(parentOf(suffix))}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-50 text-slate-700 ring-1 ring-slate-200/70 transition hover:bg-slate-100 active:scale-95"
+              aria-label="Retour"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </Link>
+          )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-semibold leading-tight">
               {title}

@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { mobileApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
@@ -37,7 +36,6 @@ export default function VisitorPublicProfilePage() {
   if (error || !data?.member) {
     return (
       <div className="space-y-3">
-        <MobileBackHome label="Communauté" />
         <p className="text-sm text-slate-500">Profil introuvable ou privé.</p>
       </div>
     );
@@ -55,8 +53,6 @@ export default function VisitorPublicProfilePage() {
 
   return (
     <div className="space-y-4">
-      <MobileBackHome label="Communauté" />
-
       <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
         <div className="bg-gradient-to-br from-slate-800 via-slate-700 to-sky-900 px-5 pb-12 pt-6" />
         <div className="-mt-10 px-5 pb-5">

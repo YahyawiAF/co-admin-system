@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { ChevronLeft, Crown, Loader2, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,6 @@ import { PriceCategory, PriceType } from "@/lib/types";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
-import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import {
   useMobileStatus,
   writeOptimisticSession,
@@ -387,9 +386,6 @@ function ChooseInner() {
   if (mode === "day" && status?.session && !status.pendingRequest) {
     return (
       <div className="space-y-3 text-center">
-        <div className="text-left">
-          <MobileBackHome />
-        </div>
         <Alert>
           <AlertDescription>
             Vous avez déjà une session en cours.
@@ -410,9 +406,6 @@ function ChooseInner() {
         ?.dailyCreditRemainingHours;
     return (
       <div className="space-y-3 text-center">
-        <div className="text-left">
-          <MobileBackHome />
-        </div>
         <Alert>
           <AlertDescription>
             {subKind === "HOURS_POOL"
@@ -433,9 +426,6 @@ function ChooseInner() {
     const rejected = pendingRequest?.status === "REJECTED";
     return (
       <div className="py-4 text-center">
-        <div className="mb-4 text-left">
-          <MobileBackHome />
-        </div>
         {rejected ? (
           <>
             <Alert variant="destructive" className="mb-4 text-left">
@@ -519,13 +509,16 @@ function ChooseInner() {
       : null;
     return (
       <div className="space-y-2.5">
-        <MobileBackHome />
         <button
           type="button"
-          className="text-sm font-medium text-primary"
+          className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-white py-1.5 pl-2 pr-3 text-xs font-medium text-slate-600 shadow-sm ring-1 ring-slate-200/70 active:scale-[0.98]"
           onClick={() => setPickedPrice(null)}
         >
-          ← {pickedPrice.name}
+          <ChevronLeft className="h-4 w-4 shrink-0 text-slate-400" />
+          <span className="truncate">
+            Forfait : <span className="font-semibold text-slate-900">{pickedPrice.name}</span>
+          </span>
+          <span className="shrink-0 text-indigo-600">· Changer</span>
         </button>
         <div>
           <h1 className="text-xl font-bold">
@@ -662,29 +655,37 @@ function ChooseInner() {
 
   return (
     <div>
-      <MobileBackHome />
-      <div className="mb-3 flex gap-2">
-        <Button
-          type="button"
-          className="h-10 flex-1 rounded-full"
-          variant={mode !== "subscription" ? "default" : "outline"}
-          onClick={() => router.replace(href("/choose?mode=day"))}
-        >
-          Forfait
-        </Button>
-        <Button
-          type="button"
-          className="h-10 flex-1 rounded-full"
-          variant={mode === "subscription" ? "default" : "outline"}
-          onClick={() => router.replace(href("/choose?mode=subscription"))}
-        >
-          Abonnement
-        </Button>
+      <div className="mb-3 grid grid-cols-2 gap-1 rounded-full bg-white p-1 shadow-sm">
+        {(
+          [
+            { id: "day", label: "Forfait", icon: Timer },
+            { id: "subscription", label: "Abonnement", icon: Crown },
+          ] as const
+        ).map((tab) => {
+          const active =
+            tab.id === "subscription"
+              ? mode === "subscription"
+              : mode !== "subscription";
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => router.replace(href(`/choose?mode=${tab.id}`))}
+              className={cn(
+                "flex h-9 items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition",
+                active
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
-      <h1 className="text-xl font-bold">
-        {mode === "subscription" ? "Abonnement" : "Forfait"}
-      </h1>
-      <p className="mb-3 text-xs text-slate-500">{hint}</p>
+      <p className="mb-3 px-1 text-xs text-slate-500">{hint}</p>
       {mode === "subscription" && status?.session ? (
         <Alert className="mb-3 border-indigo-200 bg-indigo-50">
           <AlertDescription className="text-indigo-800">

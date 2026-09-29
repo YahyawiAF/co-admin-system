@@ -7,7 +7,6 @@ import { fr } from "date-fns/locale";
 import { Armchair, DoorOpen, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MobileBackHome } from "@/components/visitor/MobileBackHome";
 import { mobileApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
@@ -123,8 +122,7 @@ export default function MyReservationsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <MobileBackHome />
+      <div className="flex justify-end">
         <Button size="sm" className="rounded-full" asChild>
           <Link href={href("/reserve")}>
             <Plus className="mr-1 h-4 w-4" />
