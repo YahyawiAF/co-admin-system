@@ -20,16 +20,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -39,6 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MemberFormModal } from "@/components/admin/MemberFormModal";
+import { DeleteMemberDialog } from "@/components/admin/DeleteMemberDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
 import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
@@ -250,10 +241,12 @@ export default function MembersPage() {
     demandMemberIds,
   ]);
 
+  const [toDelete, setToDelete] = useState<Member | null>(null);
   const remove = useMutation({
     mutationFn: (id: string) => membersApi.remove(id),
     onSuccess: () => {
       toast.success("Membre supprimé");
+      setToDelete(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -261,6 +254,12 @@ export default function MembersPage() {
 
   return (
     <div className="space-y-6">
+      <DeleteMemberDialog
+        member={toDelete}
+        pending={remove.isPending}
+        onCancel={() => setToDelete(null)}
+        onConfirm={(m) => remove.mutate(m.id)}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Members</h1>
@@ -495,28 +494,14 @@ export default function MembersPage() {
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="icon" variant="ghost">
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>
-                              Supprimer ce membre ?
-                            </AlertDialogTitle>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>Annuler</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => remove.mutate(m.id)}
-                            >
-                              Supprimer
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        title="Supprimer"
+                        onClick={() => setToDelete(m)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}

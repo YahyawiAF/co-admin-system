@@ -104,7 +104,10 @@ export class MemberService {
    */
   async findAll(organizationId?: string): Promise<MemberEntity[]> {
     const members = await this.prisma.member.findMany({
-      where: organizationId ? { organizationId } : undefined,
+      where: {
+        deletedAt: null,
+        ...(organizationId ? { organizationId } : {}),
+      },
       include: { group: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -134,7 +137,7 @@ export class MemberService {
     const paginatedResult = await paginate(
       this.prisma.member,
       {
-        where,
+        where: { ...where, deletedAt: null },
         orderBy,
         include: { group: true },
       },
@@ -445,7 +448,9 @@ export class MemberService {
    * @returns List of members matching the criteria.
    */
   async findByCriteria(criteria: Prisma.MemberWhereInput): Promise<Member[]> {
-    return this.prisma.member.findMany({ where: criteria });
+    return this.prisma.member.findMany({
+      where: { ...criteria, deletedAt: null },
+    });
   }
 
   /**
@@ -478,23 +483,38 @@ export class MemberService {
   }
 
   /**
-   * Delete a member by ID.
+   * Soft-delete a member: hidden everywhere and signed out, but journals,
+   * payments and subscriptions keep pointing at the row (hard delete is
+   * blocked by those foreign keys and would wipe history).
    * @param id - Member ID.
    * @returns The deleted member.
    */
   async remove(id: string): Promise<MemberEntity> {
-    try {
-      const member = await this.prisma.member.delete({
-        where: { id },
-      });
-      return new MemberEntity(member);
-    } catch (error) {
-      throw new GeneralException(
-        HttpStatus.NOT_FOUND,
-        ErrorCode.NOT_EXIST,
-        `Failed to delete member with ID ${id}: ${(error as Error).message}`,
-      );
+    const existing = await this.prisma.member.findUnique({ where: { id } });
+    if (!existing || existing.deletedAt) {
+      throw new NotFoundException('Membre introuvable');
     }
+    const member = await this.prisma.$transaction(async (tx) => {
+      await tx.memberLoginToken.deleteMany({ where: { memberId: id } });
+      await tx.pushSubscription.deleteMany({ where: { memberId: id } });
+      await tx.communityNote.deleteMany({ where: { memberId: id } });
+      return tx.member.update({
+        where: { id },
+        data: {
+          deletedAt: new Date(),
+          isActive: false,
+          showInDirectory: false,
+          // Free the per-org unique phone so the person can register again
+          phone: null,
+          pinHash: null,
+          passwordHash: null,
+          groupId: null,
+          todayFocus: null,
+          todayFocusAt: null,
+        },
+      });
+    });
+    return new MemberEntity(member);
   }
 
   async listLedger(memberId: string) {
