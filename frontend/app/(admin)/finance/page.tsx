@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,9 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { cn } from "@/lib/utils";
 import {
   Table,
   TableBody,
@@ -55,7 +54,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   caisseApi,
-  dailyExpensesApi,
   dailyProductsApi,
   expensesApi,
   productsApi,
@@ -63,6 +61,10 @@ import {
 } from "@/lib/api/resources";
 import { FinanceMonthCharts } from "@/components/admin/finance/FinanceMonthCharts";
 import { FinanceServicesInsight } from "@/components/admin/finance/FinanceServicesInsight";
+import { FinanceWeeklyTraffic } from "@/components/admin/finance/FinanceWeeklyTraffic";
+import { FinanceRegulars } from "@/components/admin/finance/FinanceRegulars";
+import { FinanceTopPoints } from "@/components/admin/finance/FinanceTopPoints";
+import { DayExpensesPanel } from "@/components/admin/finance/DayExpensesPanel";
 
 const expenseSchema = z.object({
   name: z.string().min(1),
@@ -82,8 +84,6 @@ export default function FinancePage() {
   const [moveLabel, setMoveLabel] = useState("");
   const [productId, setProductId] = useState("");
   const [productQty, setProductQty] = useState("1");
-  const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>([]);
-  const [expenseNote, setExpenseNote] = useState("");
   const [coffreAmount, setCoffreAmount] = useState("");
   const [coffreLabel, setCoffreLabel] = useState("");
   const [monthKey, setMonthKey] = useState(format(new Date(), "yyyy-MM"));
@@ -204,45 +204,6 @@ export default function FinancePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const addExpense = useMutation({
-    mutationFn: async () => {
-      if (!selectedExpenseIds.length) {
-        throw new Error("Choisissez au moins une dépense");
-      }
-      const note = expenseNote.trim() || undefined;
-      await Promise.all(
-        selectedExpenseIds.map((id) =>
-          dailyExpensesApi.create({
-            expenseId: id,
-            date,
-            Summary: note,
-          }),
-        ),
-      );
-      return selectedExpenseIds.length;
-    },
-    onSuccess: (n) => {
-      toast.success(
-        n === 1
-          ? "Dépense enregistrée"
-          : `${n} dépenses enregistrées pour ce jour`,
-      );
-      setSelectedExpenseIds([]);
-      setExpenseNote("");
-      invalidate();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const removeDailyExpense = useMutation({
-    mutationFn: (id: string) => dailyExpensesApi.remove(id),
-    onSuccess: () => {
-      toast.success("Dépense retirée du jour");
-      invalidate();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
   const addCoffre = useMutation({
     mutationFn: (type: "IN" | "OUT") =>
       caisseApi.addCoffre({
@@ -316,203 +277,6 @@ export default function FinancePage() {
   const expenseList = Array.isArray(expenses) ? expenses : [];
   const dailyCatalog = expenseList.filter((e) => e.type === "JOURNALIER");
   const monthlyCatalog = expenseList.filter((e) => e.type === "MENSUEL");
-  const dayExpenses = summary?.dailyExpenses || [];
-  const dayExpenseTotal = dayExpenses.reduce(
-    (s, de) => s + (de.expense?.amount || 0),
-    0,
-  );
-  const selectedExpenseTotal = useMemo(
-    () =>
-      selectedExpenseIds.reduce((s, id) => {
-        const e = expenseList.find((x) => x.id === id);
-        return s + (e?.amount || 0);
-      }, 0),
-    [selectedExpenseIds, expenseList],
-  );
-
-  const toggleExpenseSelect = (id: string) => {
-    setSelectedExpenseIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  };
-
-  const DayExpensesPanel = (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">Dépenses du jour</CardTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {format(new Date(date + "T12:00:00"), "EEEE d MMMM yyyy", {
-                locale: fr,
-              })}{" "}
-              — cochez une ou plusieurs lignes du catalogue, puis ajoutez.
-            </p>
-          </div>
-          <Badge variant="secondary" className="text-sm">
-            Total jour {dayExpenseTotal.toFixed(1)} DT
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {!expenseList.length ? (
-          <Alert>
-            <AlertDescription>
-              Aucun modèle de dépense. Créez-en dans l&apos;onglet{" "}
-              <strong>Dépenses</strong> (ex. Café, Loyer, Eau).
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {(
-                [
-                  { title: "Journalières", list: dailyCatalog },
-                  { title: "Mensuelles", list: monthlyCatalog },
-                ] as const
-              ).map((group) => (
-                <div
-                  key={group.title}
-                  className="rounded-lg border bg-muted/20 p-3"
-                >
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    {group.title}
-                  </p>
-                  {group.list.length ? (
-                    <ul className="space-y-1.5">
-                      {group.list.map((e) => {
-                        const checked = selectedExpenseIds.includes(e.id);
-                        return (
-                          <li key={e.id}>
-                            <label
-                              className={cn(
-                                "flex cursor-pointer items-center gap-2.5 rounded-md border px-2.5 py-2 text-sm transition-colors",
-                                checked
-                                  ? "border-primary/40 bg-primary/5"
-                                  : "border-transparent bg-background hover:bg-muted/60",
-                              )}
-                            >
-                              <Checkbox
-                                checked={checked}
-                                onCheckedChange={() =>
-                                  toggleExpenseSelect(e.id)
-                                }
-                              />
-                              <span className="min-w-0 flex-1 font-medium">
-                                {e.name}
-                              </span>
-                              <span className="shrink-0 tabular-nums text-muted-foreground">
-                                {e.amount} DT
-                              </span>
-                            </label>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Aucune</p>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="expense-note">Note (optionnel)</Label>
-              <Input
-                id="expense-note"
-                placeholder="Ex. facture électricité, courses…"
-                value={expenseNote}
-                onChange={(e) => setExpenseNote(e.target.value)}
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed p-3">
-              <p className="text-sm text-muted-foreground">
-                {selectedExpenseIds.length === 0
-                  ? "Aucune sélection"
-                  : selectedExpenseIds.length === 1
-                    ? "1 dépense · "
-                    : `${selectedExpenseIds.length} dépenses · `}
-                {selectedExpenseIds.length > 0 ? (
-                  <span className="font-semibold text-foreground">
-                    {selectedExpenseTotal.toFixed(1)} DT
-                  </span>
-                ) : null}
-              </p>
-              <Button
-                disabled={
-                  !selectedExpenseIds.length ||
-                  addExpense.isPending ||
-                  isClosed
-                }
-                onClick={() => addExpense.mutate()}
-              >
-                <Plus className="mr-1.5 h-4 w-4" />
-                Ajouter au jour
-              </Button>
-            </div>
-            {isClosed ? (
-              <p className="text-xs text-amber-700">
-                Caisse clôturée — les dépenses du jour ne peuvent plus être
-                modifiées.
-              </p>
-            ) : null}
-          </>
-        )}
-
-        <div className="space-y-2 border-t pt-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-medium">Enregistrées ce jour</p>
-            <span className="text-xs text-muted-foreground">
-              {dayExpenses.length} ligne
-              {dayExpenses.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-          {dayExpenses.length ? (
-            <ul className="divide-y rounded-lg border">
-              {dayExpenses.map((de) => (
-                <li
-                  key={de.id}
-                  className="flex items-center gap-2 px-3 py-2.5 text-sm"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      {de.expense?.name || "Dépense"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {de.expense?.type === "MENSUEL"
-                        ? "Mensuel"
-                        : "Journalier"}
-                      {de.Summary ? ` · ${de.Summary}` : ""}
-                    </p>
-                  </div>
-                  <span className="shrink-0 tabular-nums font-medium text-destructive">
-                    −{(de.expense?.amount || 0).toFixed(1)} DT
-                  </span>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 shrink-0 text-destructive"
-                    disabled={isClosed || removeDailyExpense.isPending}
-                    onClick={() => removeDailyExpense.mutate(de.id)}
-                    title="Retirer du jour"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-              Aucune dépense sur cette date. Cochez ci-dessus pour en ajouter
-              plusieurs d&apos;un coup.
-            </p>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   const openCreateExpense = () => {
     setEditExpense(null);
     expenseForm.reset({
@@ -581,6 +345,7 @@ export default function FinancePage() {
           <TabsTrigger value="depenses">Dépenses</TabsTrigger>
           <TabsTrigger value="coffre">Coffre</TabsTrigger>
           <TabsTrigger value="mois">Analyse</TabsTrigger>
+          <TabsTrigger value="frequentation">Fréquentation</TabsTrigger>
         </TabsList>
 
         <TabsContent value="caisse" className="mt-4 space-y-4">
@@ -789,11 +554,11 @@ export default function FinancePage() {
             </Card>
           </div>
 
-          {DayExpensesPanel}
+          <DayExpensesPanel date={date} />
         </TabsContent>
 
         <TabsContent value="depenses" className="mt-4 space-y-4">
-          {DayExpensesPanel}
+          <DayExpensesPanel date={date} />
 
           <div className="flex items-center justify-between">
             <div>
@@ -1127,6 +892,19 @@ export default function FinancePage() {
           ) : (
             <p className="text-sm text-muted-foreground">Chargement…</p>
           )}
+        </TabsContent>
+
+        <TabsContent value="frequentation" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button asChild variant="outline" size="sm">
+              <Link href="/analyse-jour">Analyser un jour en détail</Link>
+            </Button>
+          </div>
+          <FinanceWeeklyTraffic />
+          <div className="grid gap-4 xl:grid-cols-[3fr_2fr]">
+            <FinanceRegulars />
+            <FinanceTopPoints />
+          </div>
         </TabsContent>
       </Tabs>
     </div>

@@ -318,6 +318,8 @@ model Journal {
   /// Amount actually collected (payedAmount = amount owed)
   paidAmount         Float     @default(0)
   paidAt             DateTime?
+  /// Amount owed when the visitor checked out unpaid; payedAmount is re-billed up to the late payment time
+  amountAtCheckout   Float?
   /// Last pricing push sent (e.g. "warn:2", "tier:4") — dedupes cron notifications
   lastPricingNotice  String?
   /// Promo snapshot: amount before the promo, DT saved, label ("Promo app −10 %")
@@ -355,6 +357,10 @@ model Abonnement {
   priceBeforePromo Float?
   promoDiscount    Float?
   promoLabel       String?
+  /// Member / group abonnement discount applied at sale time (%)
+  discountPercent  Float?
+  /// Price owed after discounts (payedAmount = collected so far)
+  amountDue        Float?
   hoursQuota         Float?
   hoursUsed          Float     @default(0)
   reservedSeatLabel  String?

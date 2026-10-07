@@ -32,6 +32,7 @@ import { BOOKING_EVENT_KEY } from "@/lib/facility-spaces";
 import { queryKeys } from "@/lib/query-client";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { type Member, type SeatOccupant } from "@/lib/types";
+import { memberDiscountPercent } from "@/lib/member-discount";
 import { isJournalPack } from "@/lib/journal-utils";
 import { isHourlyVisitTarif } from "@/lib/tarif-labels";
 import {
@@ -186,13 +187,7 @@ export function ReservationPanel({ journalDate, onDone }: Props) {
           : pack && isHourlyVisitTarif(pack) && pack.durationHours
             ? pack.durationHours
             : null;
-      const cat = pack.category || "JOURNEE";
-      const discountPct =
-        (cat === "SALLE"
-          ? host?.discountSalle ?? host?.group?.discountSalle
-          : cat === "OPEN_SPACE"
-            ? host?.discountOpenSpace ?? host?.group?.discountOpenSpace
-            : host?.discountForfait ?? host?.group?.discountForfait) || 0;
+      const discountPct = memberDiscountPercent(host, pack);
       const raw = isHourlyVisitTarif(pack)
         ? billedHours
           ? pack.price * billedHours

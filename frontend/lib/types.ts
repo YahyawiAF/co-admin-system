@@ -234,7 +234,23 @@ export interface Journal {
   priceBeforePromo?: number | null;
   promoDiscount?: number | null;
   promoLabel?: string | null;
+  /** Amount owed at checkout, kept after a late payment re-billed `payedAmount` */
+  amountAtCheckout?: number | null;
+  /** Server-computed re-billing for visitors who checked out without paying */
+  latePayment?: JournalLatePayment | null;
 }
+
+export interface JournalLatePayment {
+  amountAtCheckout: number;
+  amountIfPaidNow: number;
+  /** Chosen forfait price (fixed pack / non-hourly tariff), null when the visit has none. */
+  amountFixed?: number | null;
+  extra: number;
+  computedAt: string;
+}
+
+/** Which amount to bill when someone who left unpaid pays later. */
+export type LateBillingMode = "now" | "checkout" | "fixed";
 
 export type JournalPricingMode = "FIXED" | "AUTO";
 
@@ -292,6 +308,10 @@ export interface Abonnement {
   priceBeforePromo?: number | null;
   promoDiscount?: number | null;
   promoLabel?: string | null;
+  /** Member / group abonnement discount applied at sale time (%) */
+  discountPercent?: number | null;
+  /** Price owed after discounts (payedAmount = collected so far) */
+  amountDue?: number | null;
 }
 
 export type ProductOrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED";
@@ -468,6 +488,10 @@ export interface DayFinanceSummary {
   movementsOut: number;
   openingFloat: number;
   expectedClose: number;
+  /** Expected amount frozen when the caisse was closed (null while open). */
+  closedExpected?: number | null;
+  /** expectedClose − closedExpected: changes made after closing. */
+  driftSinceClose?: number | null;
   net: number;
   unpaidJournal: number;
   occupancy: OccupancyStats;
@@ -605,6 +629,79 @@ export interface AnalyticsClientRow {
   abonnementCount?: number;
   revenue?: number;
   hours?: number;
+}
+
+export interface AnalyticsMemberRef {
+  id: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  visitorNumber?: number | null;
+  phone?: string | null;
+  avatarUrl?: string | null;
+  points?: number;
+}
+
+export interface RegularMemberRow {
+  member: AnalyticsMemberRef;
+  visitDays: number;
+  visits: number;
+  totalHours: number;
+  daysPerWeek: number;
+  avgArrivalHour: number;
+  lastVisit: string;
+  /** 0 = dimanche … 6 = samedi, most frequent first */
+  usualWeekdays: number[];
+}
+
+export interface TopPointsMember extends AnalyticsMemberRef {
+  points: number;
+  sessions: number;
+  level: { id: string; name: string; sessions: number };
+}
+
+export interface WeeklyTrafficDay {
+  /** 0 = dimanche … 6 = samedi */
+  weekday: number;
+  occurrences: number;
+  avgVisits: number;
+  peakHour: number;
+  peakArrivals: number;
+  peakPresentHour: number;
+  peakPresent: number;
+  hours: { hour: number; avgArrivals: number; avgPresent: number }[];
+}
+
+export interface DayTrafficTotals {
+  visits: number;
+  uniqueVisitors: number;
+  revenue: number;
+  avgDurationMin: number;
+  leftUnpaid: number;
+  peakHour: number;
+  peakPresent: number;
+}
+
+export interface DayTrafficSeries {
+  date: string;
+  weekday: number;
+  arrivals: number[];
+  present: number[];
+  totals: DayTrafficTotals;
+}
+
+export type DayTrafficCompare = "weekday" | "previous";
+
+export interface DayTrafficResponse {
+  date: string;
+  compare: DayTrafficCompare;
+  count: number;
+  target: DayTrafficSeries;
+  comparisons: DayTrafficSeries[];
+  average: {
+    arrivals: number[];
+    present: number[];
+    totals: Omit<DayTrafficTotals, "peakHour">;
+  };
 }
 
 export type VisitRequestType = "DAY" | "SUBSCRIPTION";

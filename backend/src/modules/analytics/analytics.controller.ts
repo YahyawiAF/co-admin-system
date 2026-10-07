@@ -52,6 +52,56 @@ export class AnalyticsController {
     return this.analytics.spaceClients(spaceId, from, to);
   }
 
+  @Get('attendance/regulars')
+  attendanceRegulars(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.analytics.attendanceRegulars({
+      from,
+      to,
+      limit: Number(limit) || undefined,
+      organizationId,
+    });
+  }
+
+  @Get('members/top-points')
+  topPoints(
+    @Query('limit') limit?: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.analytics.topPoints({
+      limit: Number(limit) || undefined,
+      organizationId,
+    });
+  }
+
+  @Get('traffic/weekly')
+  trafficWeekly(
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.analytics.trafficWeekly({ from, to, organizationId });
+  }
+
+  @Get('traffic/day')
+  trafficDay(
+    @Query('date') date?: string,
+    @Query('compare') compare?: string,
+    @Query('count') count?: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.analytics.trafficDay({
+      date,
+      compare: compare === 'previous' ? 'previous' : 'weekday',
+      count: Number(count) || undefined,
+      organizationId,
+    });
+  }
+
   @Get('members')
   members(
     @Query('topServiceId') topServiceId?: string,

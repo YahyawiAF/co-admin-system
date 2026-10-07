@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format, startOfDay, subMilliseconds } from "date-fns";
+import { endOfDay, format, parse, startOfDay, subMilliseconds } from "date-fns";
 import { Pencil, MapPin, MoreHorizontal, Banknote } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -112,6 +112,12 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+
+/** "yyyy-MM-dd" as local midnight (not UTC). */
+function parseLocalDay(s: string) {
+  const d = parse(s, "yyyy-MM-dd", new Date());
+  return Number.isNaN(d.getTime()) ? startOfDay(new Date()) : d;
+}
 
 function asList(
   data: Abonnement[] | PaginatedResponse<Abonnement> | undefined,
@@ -388,21 +394,34 @@ function AbonnementsInner() {
     },
   });
 
+  const discountPctFor = (memberId: string) => {
+    const m = members.find((x) => x.id === memberId);
+    return m?.discountAbonnement ?? m?.group?.discountAbonnement ?? 0;
+  };
+
+  const remisedPriceFor = (priceId: string, memberId: string) => {
+    const p = subPrices.find((x) => x.id === priceId);
+    if (!p) return null;
+    const pct = discountPctFor(memberId);
+    return pct > 0
+      ? Math.round(p.price * (1 - pct / 100) * 100) / 100
+      : p.price;
+  };
+
+  const syncPaidAmount = () => {
+    const remised = remisedPriceFor(
+      form.getValues("priceId"),
+      form.getValues("memberID"),
+    );
+    if (remised == null) return;
+    form.setValue("payedAmount", form.getValues("isPayed") ? remised : 0);
+  };
+
   const fillFromPrice = (priceId: string, startStr: string) => {
     const p = subPrices.find((x) => x.id === priceId);
     if (!p) return;
-    const memberId = form.getValues("memberID");
-    const m = members.find((x) => x.id === memberId);
-    const pct =
-      m?.discountAbonnement ??
-      m?.group?.discountAbonnement ??
-      0;
-    const remised =
-      pct > 0
-        ? Math.round(p.price * (1 - pct / 100) * 100) / 100
-        : p.price;
-    form.setValue("payedAmount", form.getValues("isPayed") ? remised : 0);
-    const start = new Date(startStr || form.getValues("registredDate"));
+    syncPaidAmount();
+    const start = parseLocalDay(startStr || form.getValues("registredDate"));
     const leave = leaveDateFromPeriodStart(start, p.periodDays || 30);
     form.setValue("leaveDate", format(leave, "yyyy-MM-dd"));
   };
@@ -460,25 +479,20 @@ function AbonnementsInner() {
       if (price?.reserveSeat && !v.reservedSeatLabel?.trim()) {
         throw new Error("Choisissez une place dédiée pour ce tarif");
       }
-      const start = new Date(v.registredDate);
-      const leave = v.leaveDate
-        ? new Date(v.leaveDate)
-        : leaveDateFromPeriodStart(start, price?.periodDays || 30);
-      const m = members.find((x) => x.id === v.memberID);
-      const pct =
-        m?.discountAbonnement ?? m?.group?.discountAbonnement ?? 0;
-      const listPrice = price?.price || 0;
-      const catalog =
-        pct > 0
-          ? Math.round(listPrice * (1 - pct / 100) * 100) / 100
-          : listPrice;
+      const start = parseLocalDay(v.registredDate);
+      const leave = endOfDay(
+        v.leaveDate
+          ? parseLocalDay(v.leaveDate)
+          : leaveDateFromPeriodStart(start, price?.periodDays || 30),
+      );
+      const catalog = remisedPriceFor(v.priceId, v.memberID) ?? 0;
       let payedAmount = Number(v.payedAmount || 0);
       let isPayed = v.isPayed;
       // payedAmount = already received. Remaining = catalog − payedAmount.
       if (isPayed) {
         if (payedAmount < catalog - 0.009) {
           isPayed = false;
-        } else if (payedAmount < catalog) {
+        } else {
           payedAmount = catalog;
         }
       }
@@ -511,6 +525,8 @@ function AbonnementsInner() {
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
       queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
       setOpen(false);
       setEditing(null);
     },
@@ -676,9 +692,10 @@ function AbonnementsInner() {
                     members={Array.isArray(members) ? members : []}
                     lockedFor={aboLockFor}
                     value={form.watch("memberID")}
-                    onChange={(v) =>
-                      form.setValue("memberID", v, { shouldValidate: true })
-                    }
+                    onChange={(v) => {
+                      form.setValue("memberID", v, { shouldValidate: true });
+                      if (!editing) syncPaidAmount();
+                    }}
                   />
                 </div>
                 <div className="space-y-2">
@@ -730,10 +747,13 @@ function AbonnementsInner() {
                     checked={form.watch("isPayed")}
                     onCheckedChange={(v) => {
                       form.setValue("isPayed", v);
-                      const p = subPrices.find(
-                        (x) => x.id === form.getValues("priceId"),
+                      const remised = remisedPriceFor(
+                        form.getValues("priceId"),
+                        form.getValues("memberID"),
                       );
-                      if (v && p) form.setValue("payedAmount", p.price);
+                      if (v && remised != null) {
+                        form.setValue("payedAmount", remised);
+                      }
                     }}
                   />
                 </div>
@@ -771,7 +791,8 @@ function AbonnementsInner() {
                             <span className="line-through opacity-70">
                               {listPrice} DT
                             </span>{" "}
-                            → {catalog} DT (−{pct}%)
+                            → {catalog} DT (−{pct}% remise{" "}
+                            {m?.discountAbonnement != null ? "membre" : "groupe"})
                           </>
                         ) : (
                           <>Tarif : {catalog} DT</>
@@ -1053,6 +1074,11 @@ function AbonnementsInner() {
                       </TableCell>
                       <TableCell>
                         {a.payedAmount} DT
+                        {a.discountPercent ? (
+                          <Badge variant="outline" className="ml-1 h-5 text-[10px]">
+                            −{a.discountPercent}%
+                          </Badge>
+                        ) : null}
                         {promoPriceOf(a) != null ? (
                           <div>
                             <PromoPriceTag row={a} compact />
@@ -1061,7 +1087,8 @@ function AbonnementsInner() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const catalog = promoPriceOf(a) ?? (a.price?.price || 0);
+                          const catalog =
+                            a.amountDue ?? promoPriceOf(a) ?? (a.price?.price || 0);
                           const received = a.payedAmount || 0;
                           const remaining = Math.max(0, catalog - received);
                           const remindLeft = paymentRemindDaysLeft(a);
@@ -1371,7 +1398,8 @@ function AbonnementsInner() {
             !ledgerAbo.isPayed
               ? Math.max(
                   0,
-                  (ledgerAbo.price?.price || 0) - (ledgerAbo.payedAmount || 0)
+                  (ledgerAbo.amountDue ?? ledgerAbo.price?.price ?? 0) -
+                    (ledgerAbo.payedAmount || 0)
                 )
               : undefined
           }

@@ -60,4 +60,11 @@ export const queryKeys = {
       "seat-history",
       typeof date === "string" ? date : format(date, "yyyy-MM-dd"),
     ] as const,
+  analyticsRegulars: (from: string, to: string) =>
+    ["analytics", "regulars", from, to] as const,
+  analyticsTopPoints: ["analytics", "top-points"] as const,
+  analyticsTrafficWeekly: (from: string, to: string) =>
+    ["analytics", "traffic-weekly", from, to] as const,
+  analyticsTrafficDay: (date: string, compare: string, count: number) =>
+    ["analytics", "traffic-day", date, compare, count] as const,
 };

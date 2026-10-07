@@ -78,11 +78,19 @@ import { switchOpenSessionToSubscription } from './session-to-subscription';
 import { ladderFor, pricingNoticeKey } from './session-pricing';
 import {
   computeRowPricing,
+  DiscountPrice,
   loadPricingContext,
   memberDiscountPercent,
   pricingPayload,
   PricedJournalRow,
 } from './session-pricing-context';
+import {
+  LateBillingMode,
+  lateAmountForMode,
+  LatePaymentRow,
+  latePaymentInfo,
+  visitAmountAt,
+} from './visit-amount';
 
 export const roundsOfHashing = 10;
 
@@ -405,15 +413,6 @@ export class MobileService {
     return (price.durationHours || 0) >= 12;
   }
 
-  private discountKind(price: {
-    category?: string | null;
-  }): 'forfait' | 'abonnement' | 'salle' | 'open' {
-    if (price.category === PriceCategory.SALLE) return 'salle';
-    if (price.category === PriceCategory.OPEN_SPACE) return 'open';
-    if (price.category === PriceCategory.ABONNEMENT) return 'abonnement';
-    return 'forfait';
-  }
-
   private applyPercentOff(amount: number, percent: number) {
     if (!percent) return Math.round(amount * 100) / 100;
     return Math.round(amount * (1 - percent / 100) * 100) / 100;
@@ -546,7 +545,7 @@ export class MobileService {
 
   private async resolveVisitDiscount(
     memberId: string | null | undefined,
-    price: { category?: string | null },
+    price: DiscountPrice,
   ): Promise<{ percent: number; groupName: string | null }> {
     if (!memberId) return { percent: 0, groupName: null };
     const member = await this.prisma.member.findUnique({
@@ -554,28 +553,10 @@ export class MobileService {
       include: { group: true },
     });
     if (!member) return { percent: 0, groupName: null };
-    const kind = this.discountKind(price);
-    const override =
-      kind === 'salle'
-        ? member.discountSalle
-        : kind === 'open'
-          ? member.discountOpenSpace
-          : kind === 'abonnement'
-            ? member.discountAbonnement
-            : member.discountForfait;
-    if (override != null) {
-      return { percent: override, groupName: member.group?.name || null };
-    }
-    if (!member.group) return { percent: 0, groupName: null };
-    const percent =
-      kind === 'salle'
-        ? member.group.discountSalle
-        : kind === 'open'
-          ? member.group.discountOpenSpace
-          : kind === 'abonnement'
-            ? member.group.discountAbonnement
-            : member.group.discountForfait;
-    return { percent: percent || 0, groupName: member.group.name };
+    return {
+      percent: memberDiscountPercent(member, price),
+      groupName: member.group?.name || null,
+    };
   }
 
   private seatBookKey(spaceId: string, label: string) {
@@ -1984,36 +1965,22 @@ export class MobileService {
     let promoSnapshot: Awaited<
       ReturnType<MobileService['applyAppPromo']>
     >['snapshot'] | null = null;
-    if (
-      !isSubscriptionVisit &&
-      journal.prices &&
-      this.isHourlyVisit(journal.prices)
-    ) {
-      const elapsed = this.billableHours(new Date(journal.registredTime), now);
-      const discount = await this.resolveVisitDiscount(
-        journal.memberID,
-        journal.prices,
-      );
-      const rate = this.applyPercentOff(journal.prices.price, discount.percent);
-      payedAmount = Math.max(journal.payedAmount || 0, elapsed * rate);
-    } else if (isSubscriptionVisit) {
+    if (isSubscriptionVisit) {
       payedAmount = 0;
     } else {
       const ctx = await loadPricingContext(
         this.prisma,
         journal.members?.organizationId,
       );
-      const pricing = computeRowPricing(
-        journal as unknown as PricedJournalRow,
-        ctx,
-        now,
-      );
-      if (pricing) {
-        payedAmount = pricing.amountDue;
+      const row = journal as unknown as PricedJournalRow;
+      const due = visitAmountAt(row, ctx, now);
+      if (due != null) {
+        payedAmount = due;
         if (journal.pricingMode === 'AUTO' && journal.memberID) {
+          const pricing = computeRowPricing(row, ctx, now);
           const promo = await this.applyAppPromo(
             journal.memberID,
-            pricing.currentTier.priceId || journal.priceId || '',
+            pricing?.currentTier.priceId || journal.priceId || '',
             payedAmount,
           );
           payedAmount = promo.amount;
@@ -2137,7 +2104,11 @@ export class MobileService {
   }
 
   /** Mark payment without checking out — visitor can stay. */
-  async setPaymentStatus(journalId: string, isPayed: boolean) {
+  async setPaymentStatus(
+    journalId: string,
+    isPayed: boolean,
+    billing: LateBillingMode = 'now',
+  ) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
       include: { prices: true, members: { include: { group: true } } },
@@ -2145,17 +2116,44 @@ export class MobileService {
     if (!journal) throw new NotFoundException('Session not found');
 
     let paidAmount = 0;
+    let lateBilling: { payedAmount: number; amountAtCheckout: number } | null =
+      null;
     if (isPayed) {
       paidAmount = journal.payedAmount || 0;
       if (!journal.leaveTime) {
         const enriched = await this.enrichSessionWithSeat(journal as any);
         paidAmount = Number(enriched?.amountDue ?? paidAmount);
+      } else if (!journal.isPayed) {
+        const ctx = await loadPricingContext(
+          this.prisma,
+          journal.members?.organizationId ?? journal.prices?.organizationId,
+        );
+        const late = latePaymentInfo(
+          journal as unknown as LatePaymentRow,
+          ctx,
+          new Date(),
+        );
+        if (late) {
+          const amount = lateAmountForMode(late, billing);
+          if (Math.abs(amount - paidAmount) > 0.001) {
+            paidAmount = amount;
+            lateBilling = {
+              payedAmount: amount,
+              amountAtCheckout: late.amountAtCheckout,
+            };
+          }
+        }
       }
     }
 
     const updated = await this.prisma.journal.update({
       where: { id: journalId },
-      data: { isPayed, paidAmount, paidAt: isPayed ? new Date() : null },
+      data: {
+        isPayed,
+        paidAmount,
+        paidAt: isPayed ? new Date() : null,
+        ...(lateBilling ?? {}),
+      },
       include: { prices: true, members: true },
     });
 
@@ -2248,7 +2246,7 @@ export class MobileService {
     });
     if (!price) throw new NotFoundException('Price not found');
 
-    const discountPercent = memberDiscountPercent(member, price.category);
+    const discountPercent = memberDiscountPercent(member, price);
     const payedAmount = this.applyPercentOff(price.price, discountPercent);
     const settings = await this.getSeatSettings(
       member.organization?.slug || undefined,
@@ -2395,7 +2393,7 @@ export class MobileService {
         );
       }
     }
-    const percent = memberDiscountPercent(journal.members, price.category);
+    const percent = memberDiscountPercent(journal.members, price);
     const amount = this.applyPercentOff(price.price, percent);
 
     const updated = await this.prisma.journal.update({
@@ -2511,6 +2509,8 @@ export class MobileService {
         // When unpaid: payedAmount = already received (0). When paid: full remised.
         payedAmount: isPayed ? remisedPrice : 0,
         ...promoSnapshot,
+        discountPercent: discount.percent > 0 ? discount.percent : null,
+        amountDue: remisedPrice,
         hoursQuota:
           price.billingUnit === BillingUnit.HOURLY ? price.durationHours : null,
         hoursUsed: 0,
@@ -4911,11 +4911,15 @@ export class MobileService {
     return this.mapOrder(updated);
   }
 
-  async payMemberDayOrders(memberId: string, isPayed: boolean) {
-    const now = new Date();
+  /** `date` is a local yyyy-MM-dd day (defaults to today). */
+  async payMemberDayOrders(memberId: string, isPayed: boolean, date?: string) {
+    const day =
+      date && /^\d{4}-\d{2}-\d{2}$/.test(date)
+        ? new Date(`${date}T12:00:00`)
+        : new Date();
     const dayFilter = {
       OR: [{ memberId }, { externalRef: memberId }],
-      date: { gte: startOfDay(now), lt: endOfDay(now) },
+      date: { gte: startOfDay(day), lt: endOfDay(day) },
       status: { not: ProductOrderStatus.CANCELLED },
     };
     const targets = await this.prisma.dailyProduct.findMany({

@@ -154,6 +154,14 @@ export class CaisseService {
       movementsIn -
       expenses -
       movementsOut;
+    const closedExpected =
+      session?.closedAt && session.expectedClose != null
+        ? session.expectedClose
+        : null;
+    const driftSinceClose =
+      closedExpected != null
+        ? Math.round((expectedClose - closedExpected) * 100) / 100
+        : null;
 
     const normalSeats = seats.filter((s) => !s.isOverflow);
     const overflowSeats = seats.filter((s) => s.isOverflow);
@@ -176,6 +184,8 @@ export class CaisseService {
       movementsOut,
       openingFloat,
       expectedClose,
+      closedExpected,
+      driftSinceClose,
       net: revenueJournal + revenueAbonnements + revenueProducts - expenses,
       unpaidJournal: journals.filter((j) => !j.isPayed).length,
       occupancy: {

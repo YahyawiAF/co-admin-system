@@ -246,8 +246,14 @@ export class MobileController {
   }
 
   @Patch('admin/orders/pay-member-day')
-  payMemberDay(@Body() body: { memberId: string; isPayed: boolean }) {
-    return this.mobileService.payMemberDayOrders(body.memberId, !!body.isPayed);
+  payMemberDay(
+    @Body() body: { memberId: string; isPayed: boolean; date?: string },
+  ) {
+    return this.mobileService.payMemberDayOrders(
+      body.memberId,
+      !!body.isPayed,
+      body.date,
+    );
   }
 
   @Get('admin/visitor-day/:memberId')
@@ -333,9 +339,13 @@ export class MobileController {
   @Patch('session/:id/payment')
   setPayment(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { isPayed: boolean },
+    @Body() body: { isPayed: boolean; billing?: string },
   ) {
-    return this.mobileService.setPaymentStatus(id, !!body.isPayed);
+    const billing =
+      body.billing === 'checkout' || body.billing === 'fixed'
+        ? body.billing
+        : 'now';
+    return this.mobileService.setPaymentStatus(id, !!body.isPayed, billing);
   }
 
   @Post('subscription/start')

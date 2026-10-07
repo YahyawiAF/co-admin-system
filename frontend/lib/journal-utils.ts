@@ -1,4 +1,9 @@
-import type { Journal, SessionPricingPayload } from "@/lib/types";
+import type {
+  Journal,
+  LateBillingMode,
+  SessionPricingPayload,
+} from "@/lib/types";
+import { memberDiscountPercent } from "@/lib/member-discount";
 import {
   computeSessionPricing,
   liveRowPricing,
@@ -84,6 +89,16 @@ export function isPendingReservation(row: Journal) {
 
 export function isActiveVisit(row: Journal) {
   return !row.isReservation && !row.leaveTime;
+}
+
+/** Checked out while still owing money (a later payment is billed up to the payment time). */
+export function isLeftUnpaid(row: Journal) {
+  return (
+    !row.isReservation &&
+    !!row.leaveTime &&
+    !row.isPayed &&
+    (row.payedAmount || 0) > 0
+  );
 }
 
 /** One list row per person; reservations stay unique. */
@@ -219,9 +234,57 @@ export function visitAmountDue(row: Journal, now = Date.now()): number {
     price.category !== "ABONNEMENT"
   ) {
     const hours = billableHours(new Date(row.registredTime).getTime(), now);
-    return Math.max(row.payedAmount || 0, hours * (price.price || 0));
+    const pct = memberDiscountPercent(memberOf(row), price);
+    const rate = (price.price || 0) * (1 - pct / 100);
+    return Math.max(row.payedAmount || 0, Math.round(hours * rate * 100) / 100);
   }
   return row.payedAmount || 0;
+}
+
+/**
+ * What a visitor who checked out unpaid owes if they pay now: billed as if they
+ * stayed until now, capped at the end of the visit day (mirrors the backend).
+ */
+export type LatePaymentAmounts = {
+  amountAtCheckout: number;
+  amountIfPaidNow: number;
+  /** Forfait price (time-independent, computed by the backend), null when none. */
+  amountFixed: number | null;
+  extra: number;
+};
+
+export function amountIfPaidNow(
+  row: Journal,
+  now = Date.now()
+): LatePaymentAmounts | null {
+  if (!isLeftUnpaid(row)) return null;
+  const amountAtCheckout = row.amountAtCheckout ?? row.payedAmount ?? 0;
+  const dayEnd = new Date(row.registredTime);
+  dayEnd.setHours(23, 59, 59, 999);
+  const leave = new Date(row.leaveTime!).getTime();
+  const billAt = Math.max(leave, Math.min(now, dayEnd.getTime()));
+  const live = rowPricingAt(row, billAt);
+  let due: number | null = live
+    ? Math.max(0, live.amountDue - (row.promoDiscount || 0))
+    : row.latePayment?.amountIfPaidNow ?? null;
+  if (due == null) return null;
+  due = Math.round(Math.max(row.payedAmount || 0, due) * 1000) / 1000;
+  return {
+    amountAtCheckout,
+    amountIfPaidNow: due,
+    amountFixed: row.latePayment?.amountFixed ?? null,
+    extra: Math.max(0, Math.round((due - amountAtCheckout) * 1000) / 1000),
+  };
+}
+
+/** Amount billed for a late payment in the chosen mode (mirrors the backend). */
+export function lateAmountForMode(
+  info: LatePaymentAmounts,
+  mode: LateBillingMode
+): number {
+  if (mode === "checkout") return info.amountAtCheckout;
+  if (mode === "fixed" && info.amountFixed != null) return info.amountFixed;
+  return info.amountIfPaidNow;
 }
 
 export function isOverstay(row: Journal, now = Date.now()): boolean {

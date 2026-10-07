@@ -12,23 +12,106 @@ import {
   visitPaidAmount,
 } from "@/lib/journal-utils";
 import { formatDt, formatMinutes, stageLabel } from "@/lib/session-pricing";
-import type { Journal } from "@/lib/types";
+import { daysLeft, hoursLeft } from "@/lib/subscription-utils";
+import type { Abonnement, Journal } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-/** Forfait column: fixed tariff (original) or AUTO tier. */
-export function JournalForfaitCell({ row, now }: { row: Journal; now: number }) {
+function DiscountChip({ percent }: { percent?: number | null }) {
+  if (!percent || percent <= 0) return null;
+  return (
+    <Badge
+      variant="outline"
+      className="h-5 border-amber-300 bg-amber-50 text-[10px] text-amber-800"
+      title="Remise membre / groupe"
+    >
+      −{percent}%
+    </Badge>
+  );
+}
+
+function ActiveSubChip({ sub }: { sub: Abonnement }) {
+  return (
+    <Badge
+      variant="outline"
+      className="h-5 border-violet-300 bg-violet-50 text-[10px] text-violet-700"
+      title={`Abonnement actif : ${sub.price?.name || "abonnement"}`}
+    >
+      Abo actif
+    </Badge>
+  );
+}
+
+function SubscriptionForfait({
+  row,
+  sub,
+}: {
+  row: Journal;
+  sub?: Abonnement | null;
+}) {
+  const p = priceOf(row);
+  const hours = sub ? hoursLeft(sub) : null;
+  const days = sub ? daysLeft(sub) : null;
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge className="h-5 bg-violet-600 text-[10px] hover:bg-violet-600">
+          Abonnement
+        </Badge>
+        <DiscountChip percent={sub?.discountPercent} />
+      </div>
+      <span className="text-sm font-medium">
+        {sub?.price?.name || p?.name || "Abonnement"}
+      </span>
+      {hours != null ? (
+        <span className="text-[11px] text-muted-foreground">
+          {hours.toFixed(1)} h restantes
+        </span>
+      ) : days != null ? (
+        <span className="text-[11px] text-muted-foreground">
+          {days < 0 ? "Expiré" : days === 0 ? "Dernier jour" : `${days} j restants`}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Forfait column: subscription, fixed tariff (original) or AUTO tier. */
+export function JournalForfaitCell({
+  row,
+  now,
+  sub,
+}: {
+  row: Journal;
+  now: number;
+  /** Member's active abonnement, if any */
+  sub?: Abonnement | null;
+}) {
   const pricing = rowPricing(row, now);
   const p = priceOf(row);
-  if (!pricing) return <>{p?.name || "—"}</>;
+  if (p?.category === "ABONNEMENT" || p?.type === "abonnement") {
+    return <SubscriptionForfait row={row} sub={sub} />;
+  }
+  if (!pricing) {
+    return (
+      <div className="flex flex-col items-start gap-0.5">
+        <span>{p?.name || "—"}</span>
+        {sub ? <ActiveSubChip sub={sub} /> : null}
+      </div>
+    );
+  }
   if (pricing.mode === "AUTO") {
     return (
       <div className="flex flex-col items-start gap-0.5">
-        <Badge
-          variant="outline"
-          className="h-5 border-indigo-300 bg-indigo-50 text-[10px] text-indigo-700"
-        >
-          Auto
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge
+            variant="outline"
+            className="h-5 border-indigo-300 bg-indigo-50 text-[10px] text-indigo-700"
+          >
+            Auto
+          </Badge>
+          <DiscountChip percent={pricing.discountPercent} />
+          {sub ? <ActiveSubChip sub={sub} /> : null}
+        </div>
         <span className="text-sm">Palier {pricing.currentTier.name}</span>
       </div>
     );
@@ -36,13 +119,17 @@ export function JournalForfaitCell({ row, now }: { row: Journal; now: number }) 
   const moved = pricing.tierSteps > 0;
   return (
     <div className="flex flex-col items-start gap-0.5">
-      <Badge
-        variant="outline"
-        className="h-5 border-emerald-300 bg-emerald-50 text-[10px] text-emerald-800"
-        title="Tarif fixé (original)"
-      >
-        Fixé
-      </Badge>
+      <div className="flex flex-wrap items-center gap-1">
+        <Badge
+          variant="outline"
+          className="h-5 border-emerald-300 bg-emerald-50 text-[10px] text-emerald-800"
+          title="Tarif fixé (original)"
+        >
+          Fixé
+        </Badge>
+        <DiscountChip percent={pricing.discountPercent} />
+        {sub ? <ActiveSubChip sub={sub} /> : null}
+      </div>
       <span className="text-sm font-medium">
         {pricing.fixedServiceName || p?.name || "—"}{" "}
         <span className="text-xs text-muted-foreground">

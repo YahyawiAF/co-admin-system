@@ -84,23 +84,71 @@ type DiscountFields = {
   discountOpenSpace?: number | null;
 };
 
-/** Same rules as MobileService.resolveVisitDiscount, from an already-loaded member (+ group). */
+/** A price (or just its category) as far as discounts are concerned. */
+export type DiscountPrice =
+  | string
+  | null
+  | undefined
+  | {
+      category?: string | null;
+      categories?: string[] | null;
+      billingUnit?: string | null;
+    };
+
+function discountField(category: string | null | undefined) {
+  switch (category) {
+    case PriceCategory.SALLE:
+      return 'discountSalle' as const;
+    case PriceCategory.OPEN_SPACE:
+      return 'discountOpenSpace' as const;
+    case PriceCategory.ABONNEMENT:
+      return 'discountAbonnement' as const;
+    default:
+      return 'discountForfait' as const;
+  }
+}
+
+/**
+ * Discount fields to look at for a price, most specific first. A price can belong
+ * to several categories (e.g. a 4h pack tagged OPEN_SPACE + JOURNEE); day packs
+ * use the "Forfait / journée" discount first.
+ */
+function discountFieldsFor(price: DiscountPrice) {
+  if (typeof price === 'string') return [discountField(price)];
+  if (!price) return [discountField(null)];
+  const cats = [price.category, ...(price.categories ?? [])].filter(
+    (c): c is string => !!c,
+  );
+  if (
+    price.billingUnit !== BillingUnit.HOURLY &&
+    cats.includes(PriceCategory.JOURNEE)
+  ) {
+    cats.unshift(PriceCategory.JOURNEE);
+  }
+  if (!cats.length) cats.push(PriceCategory.JOURNEE);
+  return [...new Set(cats.map(discountField))];
+}
+
+/**
+ * Member discount for a price: the member's own % (first one set among the price's
+ * categories) wins, otherwise the group's (first non-zero).
+ */
 export function memberDiscountPercent(
   member: (DiscountFields & { group?: DiscountFields | null }) | null | undefined,
-  category?: string | null,
+  price?: DiscountPrice,
 ): number {
   if (!member) return 0;
-  const pick = (src: DiscountFields) =>
-    category === PriceCategory.SALLE
-      ? src.discountSalle
-      : category === PriceCategory.OPEN_SPACE
-        ? src.discountOpenSpace
-        : category === PriceCategory.ABONNEMENT
-          ? src.discountAbonnement
-          : src.discountForfait;
-  const override = pick(member);
-  if (override != null) return override;
-  return (member.group ? pick(member.group) : 0) || 0;
+  const fields = discountFieldsFor(price);
+  for (const f of fields) {
+    const v = member[f];
+    if (v != null) return v;
+  }
+  if (!member.group) return 0;
+  for (const f of fields) {
+    const v = member.group[f];
+    if (v) return v;
+  }
+  return 0;
 }
 
 export type PricedJournalRow = {
@@ -125,6 +173,7 @@ export type PricedJournalRow = {
     durationHours?: number | null;
     billingUnit?: string | null;
     category?: string | null;
+    categories?: string[] | null;
     type?: string | null;
   } | null;
   members?: (DiscountFields & { group?: DiscountFields | null }) | null;
@@ -170,7 +219,7 @@ export function computeRowPricing(
     at: when,
     ladder: ctx.ladder,
     rules: ctx.rules,
-    discountPercent: memberDiscountPercent(row.members, p?.category),
+    discountPercent: memberDiscountPercent(row.members, p),
     fixed: {
       priceId: row.fixedPriceId ?? row.priceId ?? null,
       name: row.fixedServiceName ?? row.serviceName ?? p?.name ?? null,
@@ -220,7 +269,7 @@ export function pricingPayload(
     balanceDue: Math.max(0, Math.round((amountDue - paidAmount) * 1000) / 1000),
     discountPercent: memberDiscountPercent(
       row.members,
-      row.pricingMode === 'AUTO' ? PriceCategory.JOURNEE : row.prices?.category,
+      row.pricingMode === 'AUTO' ? PriceCategory.JOURNEE : row.prices,
     ),
     rules: ctx.rules,
   };

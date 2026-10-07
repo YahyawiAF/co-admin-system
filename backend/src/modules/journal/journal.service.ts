@@ -18,6 +18,11 @@ import {
   PricingContext,
   pricingPayload,
 } from '../mobile/session-pricing-context';
+import {
+  isLeftUnpaid,
+  LatePaymentRow,
+  latePaymentInfo,
+} from '../mobile/visit-amount';
 
 export const roundsOfHashing = 10;
 
@@ -160,14 +165,14 @@ export class JournalService {
 
   async findMany({
     where,
-    orderBy = {
-      id: 'desc',
-    },
+    orderBy = [{ registredTime: 'asc' }, { id: 'asc' }],
     page,
     perPage = 20,
   }: {
     where?: Prisma.JournalWhereInput;
-    orderBy?: Prisma.UserOrderByWithRelationInput;
+    orderBy?:
+      | Prisma.JournalOrderByWithRelationInput
+      | Prisma.JournalOrderByWithRelationInput[];
     page?: number;
     perPage: number;
   }): Promise<PaginatedResult<Journal>> {
@@ -211,6 +216,7 @@ export class JournalService {
       return ctxByOrg.get(key)!;
     };
 
+    const now = new Date();
     const data: Journal[] = [];
     for (const row of rows) {
       const flags = row.memberID ? debt.get(row.memberID) : undefined;
@@ -222,13 +228,13 @@ export class JournalService {
         members?: { organizationId?: string | null } | null;
         prices?: { organizationId?: string | null } | null;
       };
+      const orgId =
+        priced.members?.organizationId ?? priced.prices?.organizationId;
       const pricing = isTierPricedRow(priced)
-        ? pricingPayload(
-            priced,
-            await ctxFor(
-              priced.members?.organizationId ?? priced.prices?.organizationId,
-            ),
-          )
+        ? pricingPayload(priced, await ctxFor(orgId))
+        : null;
+      const latePayment = isLeftUnpaid(priced)
+        ? latePaymentInfo(priced as LatePaymentRow, await ctxFor(orgId), now)
         : null;
       data.push(
         new JournalEntity({
@@ -236,6 +242,7 @@ export class JournalService {
           hasOpenDebt: past > 0.009,
           openDebtAmount: Math.round(past * 100) / 100,
           pricing,
+          latePayment,
         } as any) as unknown as Journal,
       );
     }
@@ -256,7 +263,12 @@ export class JournalService {
       }),
       this.prisma.abonnement.findMany({
         where: { memberID: { in: memberIds }, isPayed: false },
-        select: { memberID: true, payedAmount: true, price: { select: { price: true } } },
+        select: {
+          memberID: true,
+          payedAmount: true,
+          amountDue: true,
+          price: { select: { price: true } },
+        },
       }),
       this.prisma.memberLedger.findMany({
         where: {
@@ -277,7 +289,7 @@ export class JournalService {
       add(j.memberID, Number(j.payedAmount ?? j.prices?.price ?? 0));
     }
     for (const a of abos) {
-      const catalog = Number(a.price?.price ?? 0);
+      const catalog = Number(a.amountDue ?? a.price?.price ?? 0);
       const paid = Number(a.payedAmount ?? 0);
       let remaining = Math.max(0, catalog - paid);
       if (paid <= 0) remaining = catalog;

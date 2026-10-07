@@ -31,6 +31,7 @@ import {
   Coffee,
   UserRound,
   Banknote,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,7 @@ import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
+import { DayExpensesPanel } from "@/components/admin/finance/DayExpensesPanel";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
   abonnementsApi,
@@ -120,7 +122,13 @@ import {
   hasUnpaidOvertime,
   rowPricing,
   setJournalPricingLadder,
+  isLeftUnpaid,
+  amountIfPaidNow,
+  lateAmountForMode,
+  type JournalListRow,
 } from "@/lib/journal-utils";
+import { LateBillingChoice } from "@/components/admin/LateBillingChoice";
+import { JournalCaisseDrawer } from "@/components/admin/JournalCaisseDrawer";
 import { usePricingContext } from "@/lib/hooks/use-pricing-context";
 import { getAdminOrganizationId } from "@/lib/admin-org";
 import {
@@ -138,7 +146,13 @@ import {
   buildDayWhatsAppText,
   openDayPrintView,
 } from "@/lib/journal-export";
-import type { Abonnement, Journal, Member, Space } from "@/lib/types";
+import type {
+  Abonnement,
+  Journal,
+  LateBillingMode,
+  Member,
+  Space,
+} from "@/lib/types";
 import { compareNaturalLabel } from "@/lib/seat-booking";
 import {
   activeSubByMember,
@@ -166,7 +180,18 @@ type QuickFilter =
   | "overtime_unpaid"
   | "leaving_soon"
   | "first_out"
-  | "unpaid_present";
+  | "unpaid_present"
+  | "left_unpaid";
+
+type JournalSortMode = "arrival" | "seat";
+const SORT_MODE_STORAGE_KEY = "journal-sort-mode";
+
+function firstArrivalMs(row: JournalListRow): number {
+  const times = (row.passages?.length ? row.passages : [row]).map((p) =>
+    new Date(p.registredTime).getTime()
+  );
+  return Math.min(...times);
+}
 
 export default function JournalClient() {
   const router = useRouter();
@@ -197,6 +222,15 @@ export default function JournalClient() {
   const [spaceFilter, setSpaceFilter] = useState("all");
   const [tableFilter, setTableFilter] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [sortMode, setSortModeState] = useState<JournalSortMode>("arrival");
+  useEffect(() => {
+    const saved = window.localStorage.getItem(SORT_MODE_STORAGE_KEY);
+    if (saved === "arrival" || saved === "seat") setSortModeState(saved);
+  }, []);
+  const setSortMode = (mode: JournalSortMode) => {
+    setSortModeState(mode);
+    window.localStorage.setItem(SORT_MODE_STORAGE_KEY, mode);
+  };
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedPassages, setExpandedPassages] = useState<Set<string>>(
     new Set()
@@ -204,6 +238,8 @@ export default function JournalClient() {
   const [editRow, setEditRow] = useState<Journal | null>(null);
   const [seatRow, setSeatRow] = useState<Journal | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
+  const [expensesOpen, setExpensesOpen] = useState(false);
+  const [caisseOpen, setCaisseOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
   const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
   const [identityRow, setIdentityRow] = useState<Journal | null>(null);
@@ -554,7 +590,9 @@ export default function JournalClient() {
       list = list.filter((r) => !isAbonnementVisit(r, subByMember));
     if (payFilter === "paid") list = list.filter((r) => r.isPayed);
     if (payFilter === "unpaid") list = list.filter((r) => !r.isPayed);
-    if (tarifFilter !== "all") {
+    if (tarifFilter === "abonnements") {
+      list = list.filter((r) => isAbonnementVisit(r, subByMember));
+    } else if (tarifFilter !== "all") {
       list = list.filter(
         (r) => r.priceId === tarifFilter || priceOf(r)?.id === tarifFilter,
       );
@@ -575,6 +613,8 @@ export default function JournalClient() {
       });
     } else if (quickFilter === "unpaid_present") {
       list = list.filter((r) => isActiveVisit(r) && !r.isPayed);
+    } else if (quickFilter === "left_unpaid") {
+      list = list.filter(isLeftUnpaid);
     }
 
     if (search.trim().length >= 2) {
@@ -609,6 +649,9 @@ export default function JournalClient() {
       );
     }
     if (quickFilter === "first_out") return grouped;
+    if (sortMode === "arrival") {
+      return [...grouped].sort((a, b) => firstArrivalMs(a) - firstArrivalMs(b));
+    }
     return [...grouped].sort((a, b) => {
       const sa = resolveSeat(a);
       const sb = resolveSeat(b);
@@ -624,10 +667,17 @@ export default function JournalClient() {
       if (t !== 0) return t;
       return compareNaturalLabel(sa.seatId, sb.seatId);
     });
-  }, [filtered, spaceFilter, tableFilter, quickFilter, resolveSeat]);
+  }, [filtered, spaceFilter, tableFilter, quickFilter, sortMode, resolveSeat]);
 
   const reservations = rows.filter(isPendingReservation).length;
-  const present = rows.filter(isActiveVisit).length;
+  const people = useMemo(
+    () => groupJournalByPerson(rows.filter((r) => !r.isReservation)),
+    [rows]
+  );
+  const present = people.filter((p) => p.passages.some(isActiveVisit)).length;
+  const arrived = people.length;
+  const leftCount = arrived - present;
+  const leftUnpaidCount = rows.filter(isLeftUnpaid).length;
   const revenueVisits = rows
     .filter((r) => r.isPayed)
     .reduce((a, r) => a + (r.payedAmount || 0), 0);
@@ -653,6 +703,10 @@ export default function JournalClient() {
     [displayRows, selectedIds]
   );
   const selectedPresent = selectedRows.filter(isActiveVisit);
+  const selectedJournalRows = useMemo(
+    () => rows.filter((r) => selectedIds.has(r.id)),
+    [rows, selectedIds]
+  );
   const allFilteredSelected =
     displayRows.length > 0 &&
     displayRows.every((r) => {
@@ -740,8 +794,15 @@ export default function JournalClient() {
   });
 
   const setPayment = useMutation({
-    mutationFn: ({ id, isPayed }: { id: string; isPayed: boolean }) =>
-      mobileApi.setPayment(id, isPayed),
+    mutationFn: ({
+      id,
+      isPayed,
+      billing,
+    }: {
+      id: string;
+      isPayed: boolean;
+      billing?: LateBillingMode;
+    }) => mobileApi.setPayment(id, isPayed, billing),
     onSuccess: (res, vars) => {
       invalidateJournal();
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
@@ -761,6 +822,25 @@ export default function JournalClient() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const [latePayRow, setLatePayRow] = useState<Journal | null>(null);
+  const [latePayMode, setLatePayMode] = useState<LateBillingMode>("now");
+  const latePayInfo = latePayRow ? amountIfPaidNow(latePayRow, now) : null;
+
+  const requestPayment = (journal: Journal, isPayed: boolean) => {
+    const late = isPayed ? amountIfPaidNow(journal, now) : null;
+    const hasChoice =
+      !!late &&
+      (late.extra > 0.001 ||
+        (late.amountFixed != null &&
+          Math.abs(late.amountFixed - late.amountAtCheckout) > 0.001));
+    if (hasChoice) {
+      setLatePayMode("now");
+      setLatePayRow(journal);
+      return;
+    }
+    setPayment.mutate({ id: journal.id, isPayed });
+  };
 
   const redeemVisit = useMutation({
     mutationFn: ({ journalId, points }: { journalId: string; points: number }) =>
@@ -1007,6 +1087,13 @@ export default function JournalClient() {
       icon: <Wallet className="h-3.5 w-3.5" />,
       tone: "border-rose-300 bg-rose-50 text-rose-900 data-[active=true]:bg-rose-600 data-[active=true]:text-white",
     },
+    {
+      id: "left_unpaid",
+      label: "Partis sans payer",
+      count: leftUnpaidCount,
+      icon: <LogOut className="h-3.5 w-3.5" />,
+      tone: "border-orange-400 bg-orange-50 text-orange-900 data-[active=true]:bg-orange-600 data-[active=true]:text-white",
+    },
   ];
 
   return (
@@ -1061,6 +1148,15 @@ export default function JournalClient() {
                 focusSpaceId={focusSpaceId}
               />
               <JournalCommandesRail date={selectedDate} />
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setExpensesOpen(true)}
+                title="Ajouter une dépense pour ce jour"
+              >
+                <Receipt className="mr-2 h-4 w-4" />
+                Dépense
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="lg">
@@ -1130,8 +1226,30 @@ export default function JournalClient() {
       <JournalAlertStrip />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Présents
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-1">
+            <div className="text-2xl font-bold">{present}</div>
+            <p className="text-xs text-muted-foreground">
+              {arrived} venu{arrived > 1 ? "s" : ""} · {leftCount} parti
+              {leftCount > 1 ? "s" : ""}
+            </p>
+            {leftUnpaidCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setQuickFilter("left_unpaid")}
+                className="text-xs font-semibold text-red-600 hover:underline"
+              >
+                {leftUnpaidCount} parti{leftUnpaidCount > 1 ? "s" : ""} sans payer
+              </button>
+            ) : null}
+          </CardContent>
+        </Card>
         {[
-          { label: "Présents", value: String(present) },
           { label: "Réservations", value: String(reservations) },
           { label: "Revenu du jour", value: `${revenue.toFixed(1)} DT` },
           { label: "Impayés", value: String(unpaid), href: "/impayes" },
@@ -1240,6 +1358,28 @@ export default function JournalClient() {
               Effacer filtre
             </button>
           ) : null}
+          <div className="ml-auto inline-flex items-center rounded-full border bg-card p-0.5 text-xs">
+            {(
+              [
+                { id: "arrival", label: "Ordre d'arrivée" },
+                { id: "seat", label: "Par place" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                onClick={() => setSortMode(opt.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 font-medium transition-colors",
+                  sortMode === opt.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -1296,6 +1436,7 @@ export default function JournalClient() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tous les tarifs</SelectItem>
+              <SelectItem value="abonnements">Abonnements</SelectItem>
               {journalTarifs.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name}
@@ -1414,6 +1555,10 @@ export default function JournalClient() {
                   );
                   const seatInfo = resolveSeat(row);
                   const seat = seatInfo?.seatId || null;
+                  const leftUnpaid = (row.passages?.length
+                    ? row.passages
+                    : [row]
+                  ).some(isLeftUnpaid);
                   return (
                     <TableRow
                       key={row.id}
@@ -1429,6 +1574,8 @@ export default function JournalClient() {
                           "bg-rose-50/80 dark:bg-rose-950/25",
                         over && "bg-amber-50/70 dark:bg-amber-950/20",
                         soon && !over && row.isPayed && "bg-sky-50/50 dark:bg-sky-950/15",
+                        leftUnpaid &&
+                          "bg-orange-100/80 shadow-[inset_4px_0_0_0_rgb(234_88_12)] dark:bg-orange-950/30",
                         selected && "bg-primary/5"
                       )}
                     >
@@ -1542,7 +1689,14 @@ export default function JournalClient() {
                         })()}
                       </TableCell>
                       <TableCell>
-                        <JournalForfaitCell row={row} now={now} />
+                        <JournalForfaitCell
+                          row={row}
+                          now={now}
+                          sub={(() => {
+                            const mid = row.memberID || m?.id;
+                            return mid ? subByMember.get(mid) ?? null : null;
+                          })()}
+                        />
                       </TableCell>
                       <TableCell>
                         {status === "present" || status === "reservation" ? (
@@ -1689,6 +1843,15 @@ export default function JournalClient() {
                                           )}`
                                         : " · en cours"}{" "}
                                       · {visitAmountDue(p, now).toFixed(1)} DT
+                                      {(() => {
+                                        const late = amountIfPaidNow(p, now);
+                                        if (!late || late.extra <= 0.001) return null;
+                                        return (
+                                          <span className="ml-1 font-semibold text-orange-700">
+                                            → {late.amountIfPaidNow.toFixed(1)} DT maintenant
+                                          </span>
+                                        );
+                                      })()}
                                       {promoPriceOf(p) != null ? (
                                         <s className="ml-1 text-muted-foreground">
                                           {p.priceBeforePromo?.toFixed(1)}
@@ -1765,10 +1928,7 @@ export default function JournalClient() {
                                       <Switch
                                         checked={p.isPayed}
                                         onCheckedChange={(v) =>
-                                          setPayment.mutate({
-                                            id: p.id,
-                                            isPayed: v,
-                                          })
+                                          requestPayment(p, v)
                                         }
                                       />
                                     </div>
@@ -1776,6 +1936,10 @@ export default function JournalClient() {
                                 ))
                               : null}
                           </div>
+                        ) : amountIfPaidNow(row, now) ? (
+                          <LeftUnpaidAmount
+                            info={amountIfPaidNow(row, now)!}
+                          />
                         ) : rowPricing(row, now) ? (
                           <JournalPricingAmountCell row={row} now={now} />
                         ) : (
@@ -1828,9 +1992,7 @@ export default function JournalClient() {
                           <div className="flex flex-col items-start gap-1.5">
                             <Switch
                               checked={row.isPayed}
-                              onCheckedChange={(v) =>
-                                setPayment.mutate({ id: row.id, isPayed: v })
-                              }
+                              onCheckedChange={(v) => requestPayment(row, v)}
                             />
                             {!row.isPayed &&
                             row.memberID &&
@@ -1856,6 +2018,10 @@ export default function JournalClient() {
                             className="border-violet-400 text-violet-800"
                           >
                             Réservé
+                          </Badge>
+                        ) : status === "left" && leftUnpaid ? (
+                          <Badge className="bg-orange-600 hover:bg-orange-600">
+                            Parti sans payer
                           </Badge>
                         ) : status === "left" ? (
                           <Badge variant="secondary">Terminé</Badge>
@@ -2020,6 +2186,14 @@ export default function JournalClient() {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => setCaisseOpen(true)}
+            >
+              <Banknote className="mr-1.5 h-3.5 w-3.5" />
+              Encaisser ({selectedRows.length})
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               disabled={
                 !selectedPresent.length || bulkCheckout.isPending
@@ -2111,6 +2285,59 @@ export default function JournalClient() {
           if (!o) setCloseRow(null);
         }}
       />
+      <AlertDialog
+        open={!!latePayRow}
+        onOpenChange={(o) => {
+          if (!o) setLatePayRow(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Paiement après départ</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {latePayRow ? (
+                  <p>
+                    {visitorLabel(latePayRow)} a fait son check-out à{" "}
+                    {latePayRow.leaveTime
+                      ? format(new Date(latePayRow.leaveTime), "HH:mm")
+                      : "—"}{" "}
+                    sans payer. Choisissez le montant à encaisser.
+                  </p>
+                ) : null}
+                {latePayInfo ? (
+                  <LateBillingChoice
+                    value={latePayMode}
+                    onChange={setLatePayMode}
+                    info={latePayInfo}
+                  />
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={() => {
+                if (!latePayRow) return;
+                setPayment.mutate({
+                  id: latePayRow.id,
+                  isPayed: true,
+                  billing: latePayMode,
+                });
+                setLatePayRow(null);
+              }}
+            >
+              Encaisser{" "}
+              {latePayInfo
+                ? lateAmountForMode(latePayInfo, latePayMode).toFixed(1)
+                : ""}{" "}
+              DT
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog
         open={!!redeemRow}
         onOpenChange={(o) => {
@@ -2330,6 +2557,50 @@ export default function JournalClient() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <JournalCaisseDrawer
+        open={caisseOpen}
+        onOpenChange={setCaisseOpen}
+        rows={selectedJournalRows}
+        dailyProducts={dailyProducts}
+        date={selectedDate}
+        now={now}
+        onDone={clearSelection}
+      />
+
+      <Dialog open={expensesOpen} onOpenChange={setExpensesOpen}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Dépenses</DialogTitle>
+          </DialogHeader>
+          <DayExpensesPanel
+            date={format(selectedDate, "yyyy-MM-dd")}
+            className="border-0 shadow-none"
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function LeftUnpaidAmount({
+  info,
+}: {
+  info: { amountAtCheckout: number; amountIfPaidNow: number; extra: number };
+}) {
+  return (
+    <div className="space-y-0.5 leading-tight">
+      <div className="text-xs text-muted-foreground">
+        Dû au départ {info.amountAtCheckout.toFixed(1)} DT
+      </div>
+      <div className="font-semibold text-orange-700 dark:text-orange-400">
+        Si paie maintenant {info.amountIfPaidNow.toFixed(1)} DT
+        {info.extra > 0.001 ? (
+          <span className="ml-1 text-xs font-bold">
+            (+{info.extra.toFixed(1)})
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

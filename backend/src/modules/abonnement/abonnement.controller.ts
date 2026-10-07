@@ -49,8 +49,8 @@ export class AbonnementController {
     @Query('search') search?: string,
   ): Promise<PaginatedResult<AbonnementEntity>> {
     return this.abonnementService.findMany({
-      page,
-      perPage: perPage || 20,
+      page: Number(page) || undefined,
+      perPage: Math.min(2000, Number(perPage) || 20),
       where: search
         ? {
             OR: [

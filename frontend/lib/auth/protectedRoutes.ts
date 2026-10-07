@@ -2,6 +2,7 @@ const PROTECTED_PATH_PATTERNS: RegExp[] = [
   /\/dashboard(\/|$)/,
   /\/journal(\/|$)/,
   /\/finance(\/|$)/,
+  /\/analyse-jour(\/|$)/,
   /\/members(\/|$)/,
   /\/tarifs(\/|$)/,
   /\/abonnements(\/|$)/,

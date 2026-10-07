@@ -1,6 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
 import {
+  addDays,
   endOfDay,
   endOfMonth,
   startOfDay,
@@ -8,6 +10,14 @@ import {
   subDays,
 } from 'date-fns';
 import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
+import { levelForSessions } from '../mobile/points';
+import {
+  addVisitToSeries,
+  emptySeries,
+  peakIndex,
+  round1,
+  visitEnd,
+} from './traffic';
 
 @Injectable()
 export class AnalyticsService {
@@ -676,6 +686,351 @@ export class AnalyticsService {
       from: start.toISOString(),
       to: end.toISOString(),
       memberIds,
+    };
+  }
+
+  /** Visits of an organization (anonymous walk-ins matched through the price org). */
+  private journalOrgWhere(organizationId?: string): Prisma.JournalWhereInput {
+    if (!organizationId) return {};
+    return {
+      OR: [
+        { members: { organizationId } },
+        {
+          AND: [
+            { OR: [{ isAnonymous: true }, { memberID: null }] },
+            {
+              OR: [
+                { prices: { organizationId } },
+                { prices: { organizationId: null } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  /** Members who come most regularly: ranked by distinct visit days. */
+  async attendanceRegulars(opts: {
+    from?: string;
+    to?: string;
+    limit?: number;
+    organizationId?: string;
+  }) {
+    const { start, end } = this.parseRange(opts.from, opts.to);
+    const limit = Math.min(100, Math.max(1, opts.limit || 10));
+    const now = new Date();
+    const journals = await this.prisma.journal.findMany({
+      where: {
+        registredTime: { gte: start, lte: end },
+        isReservation: false,
+        isAnonymous: false,
+        memberID: { not: null },
+        ...(opts.organizationId
+          ? { members: { organizationId: opts.organizationId } }
+          : {}),
+      },
+      select: { memberID: true, registredTime: true, leaveTime: true },
+    });
+
+    const byMember = new Map<
+      string,
+      {
+        days: Set<string>;
+        visits: number;
+        hours: number;
+        arrivalHourSum: number;
+        lastVisit: Date;
+        weekdays: number[];
+      }
+    >();
+    for (const j of journals) {
+      if (!j.memberID) continue;
+      let m = byMember.get(j.memberID);
+      if (!m) {
+        m = {
+          days: new Set(),
+          visits: 0,
+          hours: 0,
+          arrivalHourSum: 0,
+          lastVisit: j.registredTime,
+          weekdays: Array(7).fill(0),
+        };
+        byMember.set(j.memberID, m);
+      }
+      const key = localDayKey(j.registredTime);
+      if (!m.days.has(key)) {
+        m.days.add(key);
+        m.weekdays[j.registredTime.getDay()] += 1;
+      }
+      m.visits += 1;
+      m.hours +=
+        Math.max(0, visitEnd(j, now).getTime() - j.registredTime.getTime()) /
+        3_600_000;
+      m.arrivalHourSum +=
+        j.registredTime.getHours() + j.registredTime.getMinutes() / 60;
+      if (j.registredTime > m.lastVisit) m.lastVisit = j.registredTime;
+    }
+
+    const ranked = [...byMember.entries()]
+      .map(([memberId, m]) => ({ memberId, ...m, visitDays: m.days.size }))
+      .sort(
+        (a, b) =>
+          b.visitDays - a.visitDays || b.visits - a.visits || b.hours - a.hours,
+      )
+      .slice(0, limit);
+
+    const members = await this.prisma.member.findMany({
+      where: { id: { in: ranked.map((r) => r.memberId) } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        visitorNumber: true,
+        phone: true,
+        avatarUrl: true,
+        points: true,
+      },
+    });
+    const memberById = new Map(members.map((m) => [m.id, m]));
+    const weeks = Math.max(
+      1,
+      (end.getTime() - start.getTime()) / (7 * 86_400_000),
+    );
+
+    return {
+      from: start.toISOString(),
+      to: end.toISOString(),
+      regulars: ranked.map((r) => ({
+        member: memberById.get(r.memberId) ?? { id: r.memberId },
+        visitDays: r.visitDays,
+        visits: r.visits,
+        totalHours: round1(r.hours),
+        daysPerWeek: round1(r.visitDays / weeks),
+        avgArrivalHour: round1(r.arrivalHourSum / Math.max(1, r.visits)),
+        lastVisit: r.lastVisit.toISOString(),
+        usualWeekdays: r.weekdays
+          .map((count, weekday) => ({ weekday, count }))
+          .filter((w) => w.count > 0)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3)
+          .map((w) => w.weekday),
+      })),
+    };
+  }
+
+  /** Members with the most loyalty points. */
+  async topPoints(opts: { limit?: number; organizationId?: string }) {
+    const limit = Math.min(100, Math.max(1, opts.limit || 10));
+    const members = await this.prisma.member.findMany({
+      where: {
+        points: { gt: 0 },
+        deletedAt: null,
+        ...(opts.organizationId
+          ? { organizationId: opts.organizationId }
+          : {}),
+      },
+      orderBy: [{ points: 'desc' }, { createdAt: 'asc' }],
+      take: limit,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        visitorNumber: true,
+        phone: true,
+        avatarUrl: true,
+        points: true,
+      },
+    });
+    const sessions = members.length
+      ? await this.prisma.journal.groupBy({
+          by: ['memberID'],
+          where: {
+            memberID: { in: members.map((m) => m.id) },
+            isReservation: false,
+          },
+          _count: { _all: true },
+        })
+      : [];
+    const sessionsBy = new Map(
+      sessions.map((s) => [s.memberID as string, s._count._all]),
+    );
+    return {
+      members: members.map((m) => {
+        const count = sessionsBy.get(m.id) ?? 0;
+        return { ...m, sessions: count, level: levelForSessions(count) };
+      }),
+    };
+  }
+
+  /** Average arrivals / presence per weekday and hour over a range (default 8 weeks). */
+  async trafficWeekly(opts: {
+    from?: string;
+    to?: string;
+    organizationId?: string;
+  }) {
+    const { start, end } = this.parseRange(
+      opts.from ?? localDayKey(subDays(new Date(), 55)),
+      opts.to,
+    );
+    const now = new Date();
+    const journals = await this.prisma.journal.findMany({
+      where: {
+        registredTime: { gte: start, lte: end },
+        isReservation: false,
+        ...this.journalOrgWhere(opts.organizationId),
+      },
+      select: { registredTime: true, leaveTime: true },
+    });
+
+    const occurrences = Array(7).fill(0);
+    for (let d = startOfDay(start); d <= end; d = addDays(d, 1)) {
+      occurrences[d.getDay()] += 1;
+    }
+    const series = Array.from({ length: 7 }, () => emptySeries());
+    for (const j of journals) {
+      addVisitToSeries(series[j.registredTime.getDay()], j, now);
+    }
+
+    const days = series.map((s, weekday) => {
+      const n = Math.max(1, occurrences[weekday]);
+      const hours = s.arrivals.map((a, hour) => ({
+        hour,
+        avgArrivals: round1(a / n),
+        avgPresent: round1(s.present[hour] / n),
+      }));
+      const peakHour = peakIndex(s.arrivals);
+      const peakPresentHour = peakIndex(s.present);
+      return {
+        weekday,
+        occurrences: occurrences[weekday],
+        avgVisits: round1(s.arrivals.reduce((a, b) => a + b, 0) / n),
+        peakHour,
+        peakArrivals: round1(s.arrivals[peakHour] / n),
+        peakPresentHour,
+        peakPresent: round1(s.present[peakPresentHour] / n),
+        hours,
+      };
+    });
+
+    return { from: start.toISOString(), to: end.toISOString(), days };
+  }
+
+  /** One day vs previous same weekdays (or previous days): hourly series + totals. */
+  async trafficDay(opts: {
+    date?: string;
+    compare?: 'weekday' | 'previous';
+    count?: number;
+    organizationId?: string;
+  }) {
+    const target = parseLocalDay(opts.date);
+    const compare = opts.compare === 'previous' ? 'previous' : 'weekday';
+    const count = Math.min(12, Math.max(1, opts.count || 4));
+    const comparisonDays = Array.from({ length: count }, (_, i) =>
+      subDays(target, compare === 'weekday' ? 7 * (i + 1) : i + 1),
+    );
+    const allDays = [target, ...comparisonDays];
+    const rangeStart = startOfDay(allDays[allDays.length - 1]);
+    const rangeEnd = endOfDay(target);
+    const now = new Date();
+
+    const journals = await this.prisma.journal.findMany({
+      where: {
+        registredTime: { gte: rangeStart, lte: rangeEnd },
+        isReservation: false,
+        ...this.journalOrgWhere(opts.organizationId),
+      },
+      select: {
+        memberID: true,
+        guestName: true,
+        id: true,
+        registredTime: true,
+        leaveTime: true,
+        isPayed: true,
+        payedAmount: true,
+      },
+    });
+
+    const wanted = new Set(allDays.map(localDayKey));
+    const buckets = new Map<string, typeof journals>();
+    for (const j of journals) {
+      const key = localDayKey(j.registredTime);
+      if (!wanted.has(key)) continue;
+      if (!buckets.has(key)) buckets.set(key, []);
+      buckets.get(key)!.push(j);
+    }
+
+    const summarize = (day: Date) => {
+      const key = localDayKey(day);
+      const list = buckets.get(key) ?? [];
+      const series = emptySeries();
+      const people = new Set<string>();
+      let revenue = 0;
+      let durationMs = 0;
+      let closed = 0;
+      let leftUnpaid = 0;
+      for (const j of list) {
+        addVisitToSeries(series, j, now);
+        people.add(
+          j.memberID
+            ? `m:${j.memberID}`
+            : j.guestName?.trim()
+              ? `g:${j.guestName.trim().toLowerCase()}`
+              : `v:${j.id}`,
+        );
+        if (j.isPayed) revenue += j.payedAmount || 0;
+        if (j.leaveTime) {
+          closed += 1;
+          durationMs += j.leaveTime.getTime() - j.registredTime.getTime();
+          if (!j.isPayed && (j.payedAmount || 0) > 0) leftUnpaid += 1;
+        }
+      }
+      const peakHour = peakIndex(series.present);
+      return {
+        date: key,
+        weekday: day.getDay(),
+        arrivals: series.arrivals,
+        present: series.present,
+        totals: {
+          visits: list.length,
+          uniqueVisitors: people.size,
+          revenue: Math.round(revenue * 100) / 100,
+          avgDurationMin: closed ? Math.round(durationMs / closed / 60_000) : 0,
+          leftUnpaid,
+          peakHour,
+          peakPresent: series.present[peakHour],
+        },
+      };
+    };
+
+    const targetDay = summarize(target);
+    const comparisons = comparisonDays.map(summarize);
+    const n = Math.max(1, comparisons.length);
+    const avgArr = (pick: (d: typeof targetDay) => number[]) =>
+      Array.from({ length: 24 }, (_, h) =>
+        round1(comparisons.reduce((s, d) => s + pick(d)[h], 0) / n),
+      );
+    const avgTotal = (pick: (d: typeof targetDay) => number) =>
+      round1(comparisons.reduce((s, d) => s + pick(d), 0) / n);
+
+    return {
+      date: targetDay.date,
+      compare,
+      count,
+      target: targetDay,
+      comparisons,
+      average: {
+        arrivals: avgArr((d) => d.arrivals),
+        present: avgArr((d) => d.present),
+        totals: {
+          visits: avgTotal((d) => d.totals.visits),
+          uniqueVisitors: avgTotal((d) => d.totals.uniqueVisitors),
+          revenue: avgTotal((d) => d.totals.revenue),
+          avgDurationMin: avgTotal((d) => d.totals.avgDurationMin),
+          leftUnpaid: avgTotal((d) => d.totals.leftUnpaid),
+          peakPresent: avgTotal((d) => d.totals.peakPresent),
+        },
+      },
     };
   }
 }

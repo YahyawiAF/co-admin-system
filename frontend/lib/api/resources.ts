@@ -49,6 +49,12 @@ import type {
   PromoValueKind,
   AppInstallGlobalPromo,
   MemberAvailability,
+  RegularMemberRow,
+  TopPointsMember,
+  WeeklyTrafficDay,
+  DayTrafficCompare,
+  DayTrafficResponse,
+  LateBillingMode,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -316,6 +322,38 @@ export const analyticsApi = {
       to: string;
     }>(`/analytics/members?${q.toString()}`);
   },
+  regulars(opts: { from?: string; to?: string; limit?: number } = {}) {
+    const q = new URLSearchParams();
+    if (opts.from) q.set("from", opts.from);
+    if (opts.to) q.set("to", opts.to);
+    if (opts.limit) q.set("limit", String(opts.limit));
+    return http.get<{ from: string; to: string; regulars: RegularMemberRow[] }>(
+      withOrgQuery(`/analytics/attendance/regulars?${q.toString()}`),
+    );
+  },
+  topPoints(limit = 10) {
+    return http.get<{ members: TopPointsMember[] }>(
+      withOrgQuery(`/analytics/members/top-points?limit=${limit}`),
+    );
+  },
+  trafficWeekly(opts: { from?: string; to?: string } = {}) {
+    const q = new URLSearchParams();
+    if (opts.from) q.set("from", opts.from);
+    if (opts.to) q.set("to", opts.to);
+    return http.get<{ from: string; to: string; days: WeeklyTrafficDay[] }>(
+      withOrgQuery(`/analytics/traffic/weekly?${q.toString()}`),
+    );
+  },
+  trafficDay(opts: { date: string; compare: DayTrafficCompare; count: number }) {
+    const q = new URLSearchParams({
+      date: opts.date,
+      compare: opts.compare,
+      count: String(opts.count),
+    });
+    return http.get<DayTrafficResponse>(
+      withOrgQuery(`/analytics/traffic/day?${q.toString()}`),
+    );
+  },
 };
 
 export const facilityApi = {
@@ -546,7 +584,7 @@ export const dailyExpensesApi = {
 export const abonnementsApi = {
   list() {
     return http.get<Abonnement[] | PaginatedResponse<Abonnement>>(
-      "/abonnements",
+      "/abonnements?perPage=1000",
     );
   },
   create(data: Partial<Abonnement>) {
@@ -768,13 +806,13 @@ export const mobileApi = {
       skipAuth: true,
     });
   },
-  setPayment(id: string, isPayed: boolean) {
+  setPayment(id: string, isPayed: boolean, billing?: LateBillingMode) {
     return http.patch<{
       id: string;
       pointsAwarded?: number;
       newTrophies?: string[];
       memberPoints?: number;
-    }>(`/mobile/session/${id}/payment`, { isPayed });
+    }>(`/mobile/session/${id}/payment`, { isPayed, billing });
   },
   register(data: {
     phone: string;
@@ -1055,10 +1093,12 @@ export const mobileApi = {
       isPayed,
     });
   },
-  payMemberDayOrders(memberId: string, isPayed: boolean) {
+  /** `date` is a local yyyy-MM-dd day (defaults to today on the server). */
+  payMemberDayOrders(memberId: string, isPayed: boolean, date?: string) {
     return http.patch<ProductOrder[]>("/mobile/admin/orders/pay-member-day", {
       memberId,
       isPayed,
+      date,
     });
   },
   visitorDay(memberId: string) {

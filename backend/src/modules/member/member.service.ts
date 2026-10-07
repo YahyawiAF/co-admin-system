@@ -595,7 +595,7 @@ export class MemberService {
         0,
       );
     const unpaidAboSum = abos.reduce((s, a) => {
-      const catalog = Number(a.price?.price ?? 0);
+      const catalog = Number(a.amountDue ?? a.price?.price ?? 0);
       const paid = Number(a.payedAmount ?? 0);
       // payedAmount = already received; remaining = catalog − paid
       const remaining = Math.max(0, catalog - paid);
@@ -616,7 +616,7 @@ export class MemberService {
       todayVisit: today ? visitOf(today) : null,
       unpaidVisits,
       unpaidAbos: abos.map((a) => {
-        const catalog = Number(a.price?.price ?? 0);
+        const catalog = Number(a.amountDue ?? a.price?.price ?? 0);
         const paid = Number(a.payedAmount ?? 0);
         let remaining = Math.max(0, catalog - paid);
         if (!a.isPayed && paid > 0 && paid >= catalog - 0.009) {
@@ -949,7 +949,7 @@ export class MemberService {
     for (const a of abos) {
       if (!a.members) continue;
       const row = ensure(a.members);
-      const catalog = Number(a.price?.price ?? 0);
+      const catalog = Number(a.amountDue ?? a.price?.price ?? 0);
       const paid = Number(a.payedAmount ?? 0);
       let amount = Math.max(0, catalog - paid);
       if (paid <= 0) amount = catalog;

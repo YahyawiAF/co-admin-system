@@ -28,6 +28,7 @@ import {
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { type Member, type Abonnement, type SeatOccupant } from "@/lib/types";
+import { memberDiscountPercent } from "@/lib/member-discount";
 import { isJournalPack, memberDisplayName } from "@/lib/journal-utils";
 import { isActiveSub } from "@/lib/subscription-utils";
 import { isHourlyVisitTarif } from "@/lib/tarif-labels";
@@ -163,24 +164,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
 
   const memberDiscount = useMemo(() => {
     if (!member || !selectedPack) return null;
-    const cat = selectedPack.category || "JOURNEE";
-    const override =
-      cat === "SALLE"
-        ? member.discountSalle
-        : cat === "OPEN_SPACE"
-          ? member.discountOpenSpace
-          : cat === "ABONNEMENT"
-            ? member.discountAbonnement
-            : member.discountForfait;
-    const groupPct =
-      cat === "SALLE"
-        ? member.group?.discountSalle
-        : cat === "OPEN_SPACE"
-          ? member.group?.discountOpenSpace
-          : cat === "ABONNEMENT"
-            ? member.group?.discountAbonnement
-            : member.group?.discountForfait;
-    const percent = override ?? groupPct ?? 0;
+    const percent = memberDiscountPercent(member, selectedPack);
     if (!percent) return member.group?.name
       ? { name: member.group.name, percent: 0 }
       : null;

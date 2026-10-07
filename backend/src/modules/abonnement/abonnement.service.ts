@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { UpdateAbonnementDto } from './dtos/updateAbonnement.dto';
-import { Abonnement, Prisma, Subscription } from '@prisma/client';
+import { Abonnement, PriceCategory, Prisma, Subscription } from '@prisma/client';
+import { memberDiscountPercent } from '../mobile/session-pricing-context';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { AddAbonnementDto } from './dtos/createAbonnement.dto';
@@ -74,15 +75,23 @@ export class AbonnementService {
         id: spaceId,
         name: spaceName,
       });
+      const discount = await this.discountFor(memberID, existingPrice);
+      const payment = this.settlePayment(
+        createAbonnementDto.isPayed,
+        createAbonnementDto.payedAmount,
+        discount.amountDue,
+      );
 
       const created = await this.prisma.abonnement.create({
         data: {
           memberID: createAbonnementDto.memberID,
           registredDate: createAbonnementDto.registredDate,
           leaveDate: createAbonnementDto.leaveDate,
-          isPayed: createAbonnementDto.isPayed,
+          isPayed: payment.isPayed,
           isReservation: createAbonnementDto.isReservation,
-          payedAmount: createAbonnementDto.payedAmount,
+          payedAmount: payment.payedAmount,
+          discountPercent: discount.discountPercent,
+          amountDue: discount.amountDue,
           stayedPeriode: createAbonnementDto.stayedPeriode, // fornt end calculate leave time
           priceId: priceId,
           hoursQuota,
@@ -127,6 +136,17 @@ export class AbonnementService {
           amountDue: 0,
         });
       }
+      await this.refreshMemberPlan(created.memberID);
+      this.eventsGateway.sendMemberStatusChanged({
+        memberId: created.memberID,
+        reason: 'abonnement_created',
+        abonnementId: created.id,
+      });
+      this.eventsGateway.sendTableUpdates({
+        type: 'abonnement_created',
+        memberId: created.memberID,
+        abonnementId: created.id,
+      });
       return created;
     } catch (error) {
       throw new GeneralException(
@@ -157,12 +177,14 @@ export class AbonnementService {
 
   async findMany({
     where,
-    orderBy = { id: 'desc' },
+    orderBy = [{ registredDate: 'desc' }, { id: 'desc' }],
     page,
     perPage = 20,
   }: {
     where?: Prisma.AbonnementWhereInput;
-    orderBy?: Prisma.AbonnementOrderByWithRelationInput;
+    orderBy?:
+      | Prisma.AbonnementOrderByWithRelationInput
+      | Prisma.AbonnementOrderByWithRelationInput[];
     page?: number;
     perPage: number;
   }): Promise<PaginatedResult<AbonnementEntity & { stayedPeriode: string }>> {
@@ -229,12 +251,49 @@ export class AbonnementService {
         }
       }
 
+      const current = await this.prisma.abonnement.findUnique({
+        where: { id },
+        include: { price: true },
+      });
+      if (!current) {
+        throw new GeneralException(
+          HttpStatus.NOT_FOUND,
+          ErrorCode.NOT_FOUND,
+          `Abonnement not found.`,
+        );
+      }
+      const priceChanged = !!priceId && priceId !== current.priceId;
+      const memberChanged = !!memberID && memberID !== current.memberID;
+      let discount: { discountPercent: number | null; amountDue: number } | null =
+        null;
+      if (priceChanged || memberChanged || current.amountDue == null) {
+        const price = priceChanged
+          ? await this.prisma.price.findUnique({ where: { id: priceId } })
+          : current.price;
+        if (price) {
+          discount = await this.discountFor(memberID || current.memberID, price);
+        }
+      }
+      const amountDue = discount?.amountDue ?? current.amountDue;
+      const payment =
+        amountDue != null &&
+        (updateAbonnementDto.isPayed !== undefined ||
+          updateAbonnementDto.payedAmount !== undefined)
+          ? this.settlePayment(
+              updateAbonnementDto.isPayed ?? current.isPayed,
+              updateAbonnementDto.payedAmount ?? current.payedAmount,
+              amountDue,
+            )
+          : null;
+
       const { reservedSeatLabel, reservedSeatSpaceId, ...rest } =
         updateAbonnementDto;
       const updated = await this.prisma.abonnement.update({
         where: { id },
         data: {
           ...rest,
+          ...(discount ?? {}),
+          ...(payment ?? {}),
           ...(reservedSeatLabel !== undefined
             ? { reservedSeatLabel: reservedSeatLabel?.trim() || null }
             : {}),
@@ -316,6 +375,30 @@ export class AbonnementService {
       });
     }
     return deleted;
+  }
+
+  /** Member (or group) abonnement discount and the resulting price owed. */
+  private async discountFor(memberId: string, price: { price: number }) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      include: { group: true },
+    });
+    const percent = memberDiscountPercent(member, PriceCategory.ABONNEMENT);
+    const amountDue =
+      Math.round((price.price || 0) * (1 - (percent || 0) / 100) * 100) / 100;
+    return { discountPercent: percent > 0 ? percent : null, amountDue };
+  }
+
+  /** A full payment is snapped to the discounted price; a partial one stays unpaid. */
+  private settlePayment(
+    isPayed: boolean | undefined,
+    payedAmount: number | undefined,
+    amountDue: number,
+  ) {
+    const paid = Number(payedAmount ?? 0);
+    if (!isPayed) return { isPayed: false, payedAmount: paid };
+    if (paid < amountDue - 0.009) return { isPayed: false, payedAmount: paid };
+    return { isPayed: true, payedAmount: amountDue };
   }
 
   private async refreshMemberPlan(memberId: string) {
