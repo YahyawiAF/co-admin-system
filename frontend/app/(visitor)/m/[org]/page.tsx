@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Armchair,
   CalendarDays,
   CreditCard,
   MessageSquare,
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress } from "@/components/ui/progress";
 import { mobileApi } from "@/lib/api/resources";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { WelcomeRegister } from "@/components/visitor/WelcomeRegister";
@@ -33,14 +31,18 @@ import {
 } from "@/components/visitor/PointageGraceWindow";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
-import { ScanQrPresence } from "@/components/visitor/ScanQrPresence";
+import {
+  QrWelcome,
+  StartSessionCard,
+} from "@/components/visitor/StartSessionCard";
+import { EventsPreview } from "@/components/visitor/EventCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { spacesForPrice } from "@/lib/space-occupy";
 import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
-import { consumeQrEntry } from "@/lib/visitorCache";
+import { clearQrEntry, hasRecentQrEntry } from "@/lib/visitorCache";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 
 export default function MobileHomePage() {
@@ -51,19 +53,17 @@ export default function MobileHomePage() {
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
   const [graceDismissed, setGraceDismissed] = useState(false);
+  const [fromQr, setFromQr] = useState(false);
 
   useEffect(() => {
     setIsApp(isStandalonePwa());
   }, []);
 
-  const {
-    data: status,
-    refetch,
-    isSuccess,
-    isPlaceholderData,
-  } = useMobileStatus();
-  // Cached status can be stale (e.g. "no session"): never start / route on it
-  const statusReady = isSuccess && !isPlaceholderData;
+  useEffect(() => {
+    setFromQr(hasRecentQrEntry(slug));
+  }, [slug]);
+
+  const { data: status, refetch } = useMobileStatus();
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug, memberId],
     queryFn: async () => {
@@ -74,10 +74,18 @@ export default function MobileHomePage() {
     staleTime: 5 * 60_000,
     placeholderData: () => readLocalCache("floor-plan", slug) ?? undefined,
   });
+  const { data: tarifs = [] } = useQuery({
+    queryKey: ["mobile-tarifs", slug],
+    queryFn: () => mobileApi.tarifs(slug),
+    staleTime: 5 * 60_000,
+  });
 
   useEffect(() => {
-    if (status?.session) setShowCheckoutPromo(false);
-  }, [status?.session]);
+    if (!status?.session) return;
+    setShowCheckoutPromo(false);
+    clearQrEntry(slug);
+    setFromQr(false);
+  }, [status?.session, slug]);
 
   useEffect(() => {
     setGraceDismissed(false);
@@ -110,10 +118,6 @@ export default function MobileHomePage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-  const scanInRef = useRef(scanIn.mutate);
-  scanInRef.current = scanIn.mutate;
-
-  const [routeDone, setRouteDone] = useState(false);
 
   /** No subscription (or day credit used): the counter starts now, price follows tiers. */
   const startAuto = useMutation({
@@ -127,90 +131,32 @@ export default function MobileHomePage() {
       }
       refetch();
     },
-    onError: (e: Error) => {
-      toast.error(e.message);
-      setRouteDone(true);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
-  const startAutoRef = useRef(startAuto.mutate);
-  startAutoRef.current = startAuto.mutate;
 
-  const afterScan = () => {
-    if (!statusReady || !status) return;
-    if (status.session || status.pendingRequest) {
+  /** One tap: abonnement → presence; otherwise the AUTO counter (tiers) starts now. */
+  const startSession = () => {
+    if (!memberId || scanIn.isPending || startAuto.isPending) return;
+    if (status?.session || status?.pendingRequest) {
       setGraceDismissed(true);
       toast.message("Votre session est déjà en cours");
       return;
     }
-    if (status.hasActiveSubscription) {
+    if (status?.hasActiveSubscription) {
       const rem =
         status.dailyCreditRemainingHours ??
         (status.subscription as { dailyCreditRemainingHours?: number } | null)
           ?.dailyCreditRemainingHours;
       if (rem != null && rem <= 0) {
-        startAutoRef.current();
+        startAuto.mutate();
         return;
       }
-      scanInRef.current();
+      scanIn.mutate();
       return;
     }
-    startAutoRef.current();
+    // Server falls back to the subscription session when one is active
+    startAuto.mutate();
   };
-
-  useEffect(() => {
-    if (!onboarded || !memberId || !statusReady || !status) return;
-
-    const routedKey = `accueil_routed_${memberId}`;
-    const fromQr = consumeQrEntry(slug);
-
-    // Active session / pending — stay and show it (scanning again never checks out)
-    if (status.session || status.pendingRequest) {
-      try {
-        sessionStorage.setItem(routedKey, "1");
-      } catch {
-        /* ignore */
-      }
-      if (fromQr && status.session) {
-        setGraceDismissed(true);
-        toast.message("Votre session est déjà en cours");
-      }
-      return;
-    }
-
-    // Returning to Accueil from Events/Café/etc. — do not force forfait again
-    if (!fromQr) {
-      try {
-        if (sessionStorage.getItem(routedKey) === "1") return;
-      } catch {
-        /* ignore */
-      }
-    }
-
-    try {
-      sessionStorage.setItem(routedKey, "1");
-    } catch {
-      /* ignore */
-    }
-
-    // Active abonnement → mark presence directly
-    if (status.hasActiveSubscription) {
-      const rem =
-        status.dailyCreditRemainingHours ??
-        (status.subscription as { dailyCreditRemainingHours?: number } | null)
-          ?.dailyCreditRemainingHours;
-      if (rem != null && rem <= 0) {
-        if (fromQr) startAutoRef.current();
-        else setRouteDone(true);
-        return;
-      }
-      scanInRef.current();
-      return;
-    }
-
-    // Scanned the entry QR → counter starts now (AUTO tiers); else stay on Accueil
-    if (fromQr) startAutoRef.current();
-    else setRouteDone(true);
-  }, [onboarded, memberId, statusReady, status, slug]);
 
   const pending = status?.pendingRequest;
   const session = status?.session;
@@ -288,58 +234,32 @@ export default function MobileHomePage() {
     [sessionPrice, layout?.spaces]
   );
 
-  const subDaysRemaining = status?.subscription?.daysRemaining;
-  const subPeriodDays =
-    (status?.subscription as { periodDays?: number | null } | null)?.periodDays ??
-    null;
-  const subProgress =
-    subDaysRemaining != null && subPeriodDays && subPeriodDays > 0
-      ? Math.min(100, Math.max(0, (subDaysRemaining / subPeriodDays) * 100))
-      : subDaysRemaining != null
-        ? Math.min(100, Math.max(0, subDaysRemaining * 5))
-        : null;
-
   if (!ready) return <p className="text-slate-500">Chargement…</p>;
   if (!onboarded) return <WelcomeRegister />;
 
-  // First land only: wait for status / auto-route. Returning from Events stays put.
-  const alreadyRouted =
-    typeof window !== "undefined" &&
-    !!memberId &&
-    (() => {
-      try {
-        return sessionStorage.getItem(`accueil_routed_${memberId}`) === "1";
-      } catch {
-        return false;
-      }
-    })();
-  const routingAway =
-    (!alreadyRouted && !routeDone && !startAuto.isError &&
-      (!statusReady ||
-        (!!status && !status.session && !status.pendingRequest))) ||
-    startAuto.isPending;
-  if (routingAway && !session && !pending) {
-    return <p className="text-slate-500">Chargement…</p>;
-  }
-
   const openWifi = () => setWifiOpen(true);
 
-  const goChooseDay = () => {
-    router.push(href("/choose?mode=day"));
+  const goChooseDay = (priceId?: string) => {
+    router.push(
+      href(
+        priceId
+          ? `/choose?mode=day&priceId=${encodeURIComponent(priceId)}`
+          : "/choose?mode=day"
+      )
+    );
   };
 
   const goSubscription = () => {
-    if (status?.hasActiveSubscription) {
-      router.push(href("/subscription"));
-      return;
-    }
-    if (!status?.member?.hasPin) {
-      toast.message("Créez un compte (app + PIN) pour souscrire un abonnement");
-      router.push(href("/profile?upgrade=1"));
-      return;
-    }
-    router.push(href("/choose?mode=subscription"));
+    router.push(
+      href(
+        status?.hasActiveSubscription
+          ? "/subscription"
+          : "/choose?mode=subscription"
+      )
+    );
   };
+  const idle = !session && !pending;
+  const showQrWelcome = fromQr && idle;
 
   return (
     <div className="space-y-3">
@@ -350,8 +270,15 @@ export default function MobileHomePage() {
         onClose={() => setWifiOpen(false)}
       />
 
+      {showQrWelcome ? (
+        <QrWelcome
+          facilityName={facilityName}
+          receptionAway={!!layout?.facility?.receptionAway}
+        />
+      ) : null}
+
       {/* App install promo — once only; hidden after claim */}
-      {showInstallPromo ? (
+      {showInstallPromo && !showQrWelcome ? (
         <AppInstallPromo
           globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
           promos={layout?.facility?.appInstallPromos ?? null}
@@ -408,8 +335,9 @@ export default function MobileHomePage() {
               ? pending.price?.name || "abonnement"
               : null
           }
+          aboveTracking={<EventsPreview embedded />}
         />
-      ) : (
+      ) : showQrWelcome ? null : (
         <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
           <div
             className="absolute inset-0 bg-cover bg-center opacity-60"
@@ -457,92 +385,34 @@ export default function MobileHomePage() {
       {/* Announcement slot */}
       <AnnouncementBanner />
 
-      {/* Two clear entry points: on site (scan) vs book a place */}
-      {!session && !pending ? (
-        <div className="rounded-3xl bg-white p-3 shadow-sm">
-          <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Votre accès
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <ScanQrPresence
-              variant="tile"
-              slug={slug}
-              pending={scanIn.isPending || startAuto.isPending || !statusReady}
-              onConfirmed={afterScan}
-            />
-            <button
-              type="button"
-              disabled={!canChooseForfait}
-              onClick={goChooseDay}
-              className="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-indigo-100 bg-white px-3 py-4 text-center transition hover:bg-indigo-50/50 active:scale-[0.98] disabled:opacity-50"
-            >
-              <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Armchair className="h-7 w-7" />
-              </span>
-              <span className="text-sm font-bold leading-tight text-slate-900">
-                Réserver ma place
-              </span>
-              <span className="text-[11px] leading-tight text-slate-500">
-                Choisir forfait et place
-              </span>
-            </button>
-          </div>
-          {scanError ? (
-            <p className="mt-2 text-center text-xs text-rose-600">{scanError}</p>
-          ) : null}
-          <p className="mt-2 text-center text-[11px] text-slate-500">
-            {status?.hasActiveSubscription
-              ? periodSub && dailyRem != null && dailyRem <= 0
-                ? "Crédit du jour terminé — le compteur démarre au scan"
-                : periodSub && dailyRem != null
-                  ? `${Number(dailyRem).toFixed(1)} h restantes aujourd’hui`
-                  : "Abonné : scannez simplement en arrivant"
-              : "Sur place : le prix suit le temps passé"}
-          </p>
-        </div>
+      {idle ? <EventsPreview /> : null}
+
+      {idle ? (
+        <StartSessionCard
+          tarifs={tarifs}
+          hasActiveSubscription={!!status?.hasActiveSubscription}
+          subscriptionName={status?.subscription?.price?.name}
+          subscriptionDaysRemaining={status?.subscription?.daysRemaining}
+          subscriptionHoursRemaining={status?.subscription?.hoursRemaining}
+          dailyRemainingHours={periodSub ? dailyRem : null}
+          pending={scanIn.isPending || startAuto.isPending}
+          error={scanError}
+          canChooseForfait={canChooseForfait}
+          onStart={startSession}
+          onPickForfait={goChooseDay}
+          onSubscription={goSubscription}
+        />
       ) : null}
 
-      {/* Abonnement summary (idle) — app only */}
-      {isApp && status?.hasActiveSubscription && !session ? (
-        <div className="rounded-3xl bg-white px-4 py-3.5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Abonnement
-            </p>
-            <Link
-              href={href("/subscription")}
-              className="text-xs font-medium text-indigo-600"
-            >
-              Détail ›
-            </Link>
-          </div>
-          <div className="mt-2 flex items-end justify-between gap-3">
-            <p className="text-base font-bold">
-              {status.subscription?.price?.name || "Abonnement actif"}
-            </p>
-            <div className="text-right">
-              <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                Jours restants
-              </p>
-              <p className="text-2xl font-bold tabular-nums text-indigo-600">
-                {subDaysRemaining != null ? subDaysRemaining : "—"}
-              </p>
-            </div>
-          </div>
-          {subProgress != null ? (
-            <div className="mt-3 space-y-1.5">
-              <Progress value={subProgress} className="h-2" />
-              <p className="text-[11px] text-slate-500">
-                {status.subscription?.hoursRemaining != null
-                  ? `${status.subscription.hoursRemaining}h restantes`
-                  : "En cours"}
-                {status.subscription?.reservedSeatLabel
-                  ? ` · place ${status.subscription.reservedSeatLabel}`
-                  : ""}
-              </p>
-            </div>
-          ) : null}
-        </div>
+      {showQrWelcome && showInstallPromo ? (
+        <AppInstallPromo
+          globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
+          promos={layout?.facility?.appInstallPromos ?? null}
+          unlocked={
+            !!status?.member?.appInstallPromoActive ||
+            !!status?.member?.pwaInstalledAt
+          }
+        />
       ) : null}
 
       {/* Pending request */}
@@ -582,42 +452,6 @@ export default function MobileHomePage() {
         </Alert>
       ) : null}
 
-      {/* Secondary booking options — installed app only */}
-      {isApp && !session ? (
-        <div className="grid grid-cols-2 gap-2">
-          <Button
-            variant="outline"
-            className="h-11 rounded-full border-indigo-200 bg-white text-indigo-700 shadow-sm"
-            disabled={!!pending && pending.type === "SUBSCRIPTION"}
-            onClick={goSubscription}
-          >
-            <CreditCard className="mr-1.5 h-4 w-4" />
-            Abonnement
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11 rounded-full border-slate-200 bg-white text-slate-700 shadow-sm"
-            asChild
-          >
-            <Link href={href("/reserve")}>
-              <CalendarDays className="mr-1.5 h-4 w-4" />
-              Autre jour
-            </Link>
-          </Button>
-        </div>
-      ) : isApp && status?.hasActiveSubscription ? (
-        <Button
-          variant="outline"
-          className="h-11 w-full rounded-full border-slate-200 bg-white text-slate-700 shadow-sm"
-          asChild
-        >
-          <Link href={href("/subscription")}>
-            <CreditCard className="mr-1.5 h-4 w-4" />
-            Mon abonnement
-          </Link>
-        </Button>
-      ) : null}
-
       {/* Wi-Fi during session */}
       {session && hasWifi ? (
         <Button
@@ -630,13 +464,33 @@ export default function MobileHomePage() {
         </Button>
       ) : null}
 
+      {pending && !session ? <EventsPreview /> : null}
+
       {memberId ? (
         <PointsCard memberId={memberId} hideLocked={showInstallPromo && !isApp} />
       ) : null}
       <ProfileMissionEntry hideWhenComplete />
 
       {/* Secondary: contact + install (Café/Communauté live in the bottom nav) */}
-      <div className="flex items-center justify-center gap-4 pt-1">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-1">
+        {isApp && !session ? (
+          <>
+            <Link
+              href={href(
+                status?.hasActiveSubscription ? "/subscription" : "/reserve"
+              )}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+            >
+              {status?.hasActiveSubscription ? (
+                <CreditCard className="h-3.5 w-3.5" />
+              ) : (
+                <CalendarDays className="h-3.5 w-3.5" />
+              )}
+              {status?.hasActiveSubscription ? "Mon abonnement" : "Autre jour"}
+            </Link>
+            <span className="text-slate-300">·</span>
+          </>
+        ) : null}
         <Link
           href={href("/staff")}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"

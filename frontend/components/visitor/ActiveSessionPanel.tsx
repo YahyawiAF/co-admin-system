@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,14 +10,17 @@ import { mobileApi } from "@/lib/api/resources";
 import { VisitorSeatMap } from "@/components/visitor/VisitorSeatMap";
 import { formatDurationHm } from "@/lib/journal-utils";
 import { usePageVisible } from "@/lib/hooks/use-page-visible";
-import type {
-  AppInstallGlobalPromo,
-  AppInstallPromo,
-  Journal,
-  MobileSeatMode,
-  MobileSeatSettings,
-  SeatAssignmentInfo,
+import {
+  BillingUnit,
+  type AppInstallGlobalPromo,
+  type AppInstallPromo,
+  type Journal,
+  type MobileSeatMode,
+  type MobileSeatSettings,
+  type PriceCategory,
+  type SeatAssignmentInfo,
 } from "@/lib/types";
+import { TarifOptionCard } from "@/components/visitor/TarifOption";
 import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import {
@@ -43,6 +46,7 @@ import {
   Crown,
   RefreshCw,
   Timer,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -139,6 +143,8 @@ type Props = {
   onSwitchToSubscription?: () => void;
   /** Subscription request waiting for reception */
   pendingSubscriptionName?: string | null;
+  /** Rendered right above the forfait tracking block (e.g. events strip). */
+  aboveTracking?: ReactNode;
 };
 
 export function ActiveSessionPanel({
@@ -154,6 +160,7 @@ export function ActiveSessionPanel({
   globalPromo,
   onSwitchToSubscription,
   pendingSubscriptionName,
+  aboveTracking,
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
@@ -161,6 +168,13 @@ export function ActiveSessionPanel({
   const { slug } = useOrg();
   const [confirmCheckout, setConfirmCheckout] = useState(false);
   const [tariffOpen, setTariffOpen] = useState(false);
+  const [pickedTierId, setPickedTierId] = useState<string | null>(null);
+  const tariffRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tariffOpen) return;
+    tariffRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [tariffOpen]);
   const { data: pricingCtx } = usePricingContext({
     orgSlug: slug,
     enabled: !!session.pricing,
@@ -313,9 +327,11 @@ export function ActiveSessionPanel({
       mobileApi.fixMySessionTariff(session.id, priceId, memberId),
     onSuccess: () => {
       setTariffOpen(false);
+      setPickedTierId(null);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
+  const pickedTier = tiers.find((t) => t.priceId === pickedTierId) || null;
 
   return (
     <div className="rounded-3xl bg-white p-3 text-center shadow-sm">
@@ -378,6 +394,7 @@ export function ActiveSessionPanel({
             : "Demandez à l’accueil de confirmer le paiement pour collecter vos points au check-out."}
         </p>
       ) : null}
+      {aboveTracking}
       {/* Timer + forfait on top */}
       {isHoursPool ? (
         <>
@@ -596,7 +613,8 @@ export function ActiveSessionPanel({
               }
               onClick={() => {
                 fixTariff.reset();
-                setTariffOpen(true);
+                setPickedTierId(null);
+                setTariffOpen((open) => !open);
               }}
             />
           ) : null}
@@ -617,6 +635,88 @@ export function ActiveSessionPanel({
               />
             )
           ) : null}
+        </div>
+      ) : null}
+
+      {tariffOpen && canChangeTariff ? (
+        <div
+          ref={tariffRef}
+          className="mb-2.5 scroll-mt-20 rounded-2xl bg-slate-50 p-2.5 text-left ring-1 ring-slate-200/70"
+        >
+          <div className="flex items-start justify-between gap-2 px-0.5">
+            <div>
+              <p className="text-sm font-bold text-slate-900">
+                Choisir mon forfait
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Arrivé à {format(sessionStart, "HH:mm")} · supplément au-delà
+                du forfait
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Fermer"
+              disabled={fixTariff.isPending}
+              onClick={() => setTariffOpen(false)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {tiers.map((t) => {
+              const endsAt = sessionStart + t.durationHours * 3_600_000;
+              const tooShort = endsAt <= now;
+              const isCurrent =
+                live?.mode === "FIXED" && live.fixedPriceId === t.priceId;
+              return (
+                <TarifOptionCard
+                  key={t.priceId}
+                  price={{
+                    name: t.name,
+                    durationHours: t.durationHours,
+                    category: (t.category as PriceCategory | null) ?? null,
+                    billingUnit: BillingUnit.PACK,
+                  }}
+                  selected={pickedTierId === t.priceId}
+                  disabled={fixTariff.isPending || tooShort || isCurrent}
+                  meta={
+                    isCurrent
+                      ? "Forfait actuel"
+                      : tooShort
+                        ? "Déjà dépassé"
+                        : `Jusqu’à ${format(endsAt, "HH:mm")}`
+                  }
+                  priceNode={
+                    <span className="text-sm font-bold tabular-nums text-indigo-600">
+                      {formatDt(t.price)}
+                    </span>
+                  }
+                  onSelect={() =>
+                    setPickedTierId((cur) =>
+                      cur === t.priceId ? null : t.priceId
+                    )
+                  }
+                />
+              );
+            })}
+          </div>
+          {fixTariff.isError ? (
+            <p className="mt-2 text-xs text-rose-600">
+              {(fixTariff.error as Error).message}
+            </p>
+          ) : null}
+          <Button
+            className="mt-2.5 h-11 w-full rounded-full bg-indigo-600 text-sm font-semibold hover:bg-indigo-700"
+            disabled={!pickedTier || fixTariff.isPending}
+            onClick={() => pickedTier && fixTariff.mutate(pickedTier.priceId)}
+          >
+            {fixTariff.isPending
+              ? "Enregistrement…"
+              : pickedTier
+                ? `Fixer « ${pickedTier.name} »`
+                : "Choisissez un forfait"}
+          </Button>
         </div>
       ) : null}
 
@@ -749,67 +849,6 @@ export function ActiveSessionPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={tariffOpen}
-        onOpenChange={(open) => {
-          if (!fixTariff.isPending) setTariffOpen(open);
-        }}
-      >
-        <DialogContent className="max-w-sm rounded-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                <Timer className="h-4 w-4" />
-              </span>
-              Choisir mon forfait
-            </DialogTitle>
-            <DialogDescription>
-              Arrivé à {format(sessionStart, "HH:mm")} · supplément au-delà du
-              forfait.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
-            {tiers.map((t) => {
-              const endsAt = sessionStart + t.durationHours * 3_600_000;
-              const tooShort = endsAt <= now;
-              const isCurrent =
-                live?.mode === "FIXED" && live.fixedPriceId === t.priceId;
-              return (
-                <button
-                  key={t.priceId}
-                  type="button"
-                  disabled={fixTariff.isPending || tooShort || isCurrent}
-                  onClick={() => fixTariff.mutate(t.priceId)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-2xl border px-3.5 py-3 text-left text-sm transition",
-                    isCurrent
-                      ? "border-indigo-300 bg-indigo-50"
-                      : "border-slate-200 hover:bg-slate-50",
-                    tooShort && "opacity-50"
-                  )}
-                >
-                  <span>
-                    <span className="font-semibold text-slate-900">{t.name}</span>
-                    <span className="block text-[11px] text-slate-500">
-                      Jusqu&apos;à {format(endsAt, "HH:mm")}
-                      {tooShort ? " · déjà dépassé" : ""}
-                      {isCurrent ? " · actuel" : ""}
-                    </span>
-                  </span>
-                  <span className="font-semibold tabular-nums text-indigo-600">
-                    {formatDt(t.price)}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          {fixTariff.isError ? (
-            <p className="text-xs text-rose-600">
-              {(fixTariff.error as Error).message}
-            </p>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -57,7 +57,8 @@ The user has asked many times for blocks to take less space. Treat every new or 
 
 - Announcement slot: `AnnouncementBanner` right under the hero — white card, sparkles icon in `bg-indigo-50` circle, one-line truncated text, dismissible (sessionStorage).
 - Wi-Fi: circular glass button (`bg-white/20 backdrop-blur-sm`) in hero top-right; modal via `WifiCredentialsModal`.
-- Scan QR stays the visually dominant action when the visitor has no session.
+- No session: one-tap "Démarrer ma session" (`StartSessionCard`) is the dominant action — no in-app QR scan. The entry QR only adds the `QrWelcome` header.
+- Forfait / abonnement pickers use `TarifOptionCard` / `TarifIcon` (one icon + soft tint per tarif kind, select then confirm).
 - Empty/pending states use a white card with centered slate text, never a bare `<Alert>` with default border.
 - Engagement nudges (e.g. `CommunityNotePopup`) are transient toasts, not cards: floating above the bottom nav, auto-hide after ~6 s, dismissible, each item shown once (localStorage).
 

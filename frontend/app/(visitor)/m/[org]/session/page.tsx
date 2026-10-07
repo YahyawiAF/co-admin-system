@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
 import { PointsCard } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
+import { EventsPreview } from "@/components/visitor/EventCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -119,6 +120,7 @@ export default function SessionPage() {
             ? null
             : layout?.facility?.appInstallGlobalPromo ?? null
         }
+        aboveTracking={<EventsPreview embedded />}
       />
     </div>
   );

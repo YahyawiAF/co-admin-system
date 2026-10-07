@@ -194,13 +194,31 @@ export function skipInstall(org: string) {
 
 const qrEntryKey = (org: string) => `visitor-qr-entry:${org}`;
 
+/** Survives the sign-up step and a tab switch (camera app → browser / PWA). */
+const QR_ENTRY_TTL_MS = 20 * 60_000;
+
 export function markQrEntry(org: string) {
-  sessionStorage.setItem(qrEntryKey(org), "1");
+  try {
+    localStorage.setItem(qrEntryKey(org), String(Date.now()));
+  } catch {
+    /* ignore */
+  }
 }
 
-export function consumeQrEntry(org: string): boolean {
-  const key = qrEntryKey(org);
-  if (sessionStorage.getItem(key) !== "1") return false;
-  sessionStorage.removeItem(key);
-  return true;
+export function hasRecentQrEntry(org: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const at = Number(localStorage.getItem(qrEntryKey(org)));
+    return !!at && Date.now() - at < QR_ENTRY_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+export function clearQrEntry(org: string) {
+  try {
+    localStorage.removeItem(qrEntryKey(org));
+  } catch {
+    /* ignore */
+  }
 }

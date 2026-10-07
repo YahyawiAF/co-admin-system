@@ -31,6 +31,7 @@ import {
 } from "@/lib/space-occupy";
 import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
+import { TarifOptionCard } from "@/components/visitor/TarifOption";
 import { toast } from "sonner";
 
 function ChooseInner() {
@@ -44,6 +45,11 @@ function ChooseInner() {
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [pickedPrice, setPickedPrice] = useState<Price | null>(null);
+  const presetPriceId = searchParams.get("priceId");
+  const [selectedId, setSelectedId] = useState<string | null>(presetPriceId);
+  useEffect(() => {
+    setSelectedId(presetPriceId);
+  }, [mode, presetPriceId]);
   const [seatLabel, setSeatLabel] = useState("");
   const [seatSpaceId, setSeatSpaceId] = useState("");
   const [occupyWhole, setOccupyWhole] = useState(false);
@@ -177,6 +183,7 @@ function ChooseInner() {
     }
     return tarifs.filter((t) => isJournalPack(t));
   }, [tarifs, mode]);
+  const selectedOption = options.find((o) => o.id === selectedId) || null;
 
   const create = useMutation({
     mutationFn: (opts: {
@@ -695,48 +702,54 @@ function ChooseInner() {
           </AlertDescription>
         </Alert>
       ) : null}
-      <div className="space-y-2">
-        {options.map((o) => {
-          const priced = pricedWithPromo(o.price, o.id, {
-            ...promoOpts,
-            categories: promoCategoriesOf(o),
-          });
-          return (
-          <button
-            key={o.id}
-            type="button"
-            disabled={create.isPending}
-            onClick={() => onPickTarif(o)}
-            className={cn(
-              "flex w-full items-center justify-between rounded-xl border bg-white px-4 py-3.5 text-left",
-              "hover:border-primary/50"
-            )}
+      {options.length ? (
+        <div className="grid grid-cols-2 gap-2.5">
+          {options.map((o) => {
+            const priced = pricedWithPromo(o.price, o.id, {
+              ...promoOpts,
+              categories: promoCategoriesOf(o),
+            });
+            return (
+              <TarifOptionCard
+                key={o.id}
+                price={o}
+                selected={selectedOption?.id === o.id}
+                disabled={create.isPending}
+                badge={priced.hasPromo ? "Promo" : null}
+                priceNode={<PromoPrice {...priced} size="sm" align="start" />}
+                onSelect={() =>
+                  setSelectedId((cur) => (cur === o.id ? null : o.id))
+                }
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-white py-5 text-center text-sm text-slate-500 shadow-sm">
+          Aucun tarif disponible.
+        </div>
+      )}
+      {options.length ? (
+        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-4">
+          <Button
+            className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold shadow-lg hover:bg-indigo-700"
+            disabled={!selectedOption || create.isPending}
+            onClick={() => selectedOption && onPickTarif(selectedOption)}
           >
-            <div>
-              <div className="font-semibold">{o.name}</div>
-              <div className="text-sm text-slate-500">
-                {o.durationHours
-                  ? `${o.durationHours}h`
-                  : o.periodDays
-                    ? `${o.periodDays} jours`
-                    : ""}
-                {priced.hasPromo ? (
-                  <span className="ml-1.5 text-[11px] font-medium text-amber-600">
-                    Promo
-                  </span>
-                ) : null}
-              </div>
-            </div>
-            <PromoPrice {...priced} />
-          </button>
-          );
-        })}
-        {!options.length ? (
-          <Alert>
-            <AlertDescription>Aucun tarif disponible.</AlertDescription>
-          </Alert>
-        ) : null}
-      </div>
+            {create.isPending
+              ? "Envoi…"
+              : !selectedOption
+                ? mode === "subscription"
+                  ? "Choisissez votre abonnement"
+                  : "Choisissez votre forfait"
+                : mode === "subscription"
+                  ? `Demander « ${selectedOption.name} »`
+                  : needPlaceStep
+                    ? `Continuer avec « ${selectedOption.name} »`
+                    : `Prendre « ${selectedOption.name} »`}
+          </Button>
+        </div>
+      ) : null}
     </div>
   );
 }
