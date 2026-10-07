@@ -41,10 +41,14 @@ function discountFieldsFor(price: DiscountPrice): (keyof DiscountFields)[] {
   const cats = [price.category, ...(price.categories ?? [])].filter(
     (c): c is string => !!c
   );
-  if (price.billingUnit !== "HOURLY" && cats.includes("JOURNEE")) {
-    cats.unshift("JOURNEE");
+  const isPack = price.billingUnit === "PACK";
+  if (isPack && cats.includes("JOURNEE")) cats.unshift("JOURNEE");
+  if (
+    !cats.length ||
+    (isPack && !cats.includes("SALLE") && !cats.includes("ABONNEMENT"))
+  ) {
+    cats.push("JOURNEE");
   }
-  if (!cats.length) cats.push("JOURNEE");
   return [...new Set(cats.map(discountField))];
 }
 

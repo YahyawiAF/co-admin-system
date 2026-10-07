@@ -3461,6 +3461,7 @@ export class MobileService {
         name: string;
         category?: PriceCategory | null;
       } | null;
+      members?: Parameters<typeof memberDiscountPercent>[0];
     } | null,
   ) {
     if (!session) return null;
@@ -3488,10 +3489,11 @@ export class MobileService {
         new Date(session.registredTime),
         new Date(now),
       );
-      amountDue = Math.max(
-        session.payedAmount || 0,
-        elapsed * session.prices.price,
+      const rate = this.applyPercentOff(
+        session.prices.price,
+        memberDiscountPercent(session.members, session.prices),
       );
+      amountDue = Math.max(session.payedAmount || 0, elapsed * rate);
     }
 
     return {

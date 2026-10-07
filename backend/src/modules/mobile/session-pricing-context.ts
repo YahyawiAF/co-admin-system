@@ -110,8 +110,9 @@ function discountField(category: string | null | undefined) {
 
 /**
  * Discount fields to look at for a price, most specific first. A price can belong
- * to several categories (e.g. a 4h pack tagged OPEN_SPACE + JOURNEE); day packs
- * use the "Forfait / journée" discount first.
+ * to several categories (e.g. a 4h pack tagged OPEN_SPACE + JOURNEE). Packs tagged
+ * JOURNEE use the "Forfait / journée" discount first; other non-salle packs fall
+ * back to it.
  */
 function discountFieldsFor(price: DiscountPrice) {
   if (typeof price === 'string') return [discountField(price)];
@@ -119,13 +120,18 @@ function discountFieldsFor(price: DiscountPrice) {
   const cats = [price.category, ...(price.categories ?? [])].filter(
     (c): c is string => !!c,
   );
-  if (
-    price.billingUnit !== BillingUnit.HOURLY &&
-    cats.includes(PriceCategory.JOURNEE)
-  ) {
+  const isPack = price.billingUnit === BillingUnit.PACK;
+  if (isPack && cats.includes(PriceCategory.JOURNEE)) {
     cats.unshift(PriceCategory.JOURNEE);
   }
-  if (!cats.length) cats.push(PriceCategory.JOURNEE);
+  if (
+    !cats.length ||
+    (isPack &&
+      !cats.includes(PriceCategory.SALLE) &&
+      !cats.includes(PriceCategory.ABONNEMENT))
+  ) {
+    cats.push(PriceCategory.JOURNEE);
+  }
   return [...new Set(cats.map(discountField))];
 }
 
