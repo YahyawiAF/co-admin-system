@@ -29,28 +29,24 @@ export default function SubscriptionPage() {
   const hasSession = !!data?.hasOpenSession;
   const seat = data?.seat;
 
-  if (!hasAccount && !sub) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Abonnement</h1>
-        <AccountUpgradeCard
-          title="Compte requis"
-          description="Pour souscrire un abonnement, créez un compte avec PIN dans l’app installée (même profil)."
-        />
-      </div>
-    );
-  }
-
   if (!sub) {
     return (
-      <div>
-        <h1 className="text-2xl font-bold">Abonnement</h1>
-        <p className="mb-4 mt-2 text-slate-500">Aucun abonnement actif.</p>
-        <Button asChild>
-          <Link href={href("/choose?mode=subscription")}>
-            Choisir un abonnement
-          </Link>
-        </Button>
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-2xl font-bold">Abonnement</h1>
+          <p className="mb-4 mt-2 text-slate-500">Aucun abonnement actif.</p>
+          <Button asChild>
+            <Link href={href("/choose?mode=subscription")}>
+              Choisir un abonnement
+            </Link>
+          </Button>
+        </div>
+        {!hasAccount ? (
+          <AccountUpgradeCard
+            title="Gardez votre abonnement sur l’app"
+            description="Créez un code PIN pour retrouver votre abonnement depuis l’app installée."
+          />
+        ) : null}
       </div>
     );
   }

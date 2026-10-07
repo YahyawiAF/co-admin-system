@@ -59,6 +59,7 @@ function isLightAllowed(rest: string) {
     rest.startsWith("/events") ||
     rest.startsWith("/tarifs") ||
     rest.startsWith("/history") ||
+    rest.startsWith("/subscription") ||
     rest.startsWith("/session") ||
     rest.startsWith("/reserve") ||
     rest.startsWith("/reservations") ||
