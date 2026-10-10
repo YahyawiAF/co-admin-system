@@ -2502,6 +2502,7 @@ export class MobileService {
         leaveDate,
         stayedPeriode: `${periodDays} days`,
         isPayed,
+        paidAt: isPayed ? now : null,
         isReservation: false,
         // When unpaid: payedAmount = already received (0). When paid: full remised.
         payedAmount: isPayed ? remisedPrice : 0,

@@ -324,7 +324,8 @@ export default function MobileHomePage() {
               ? pending.price?.name || "abonnement"
               : null
           }
-          aboveTracking={<EventsPreview embedded />}
+          onWifi={hasWifi ? openWifi : undefined}
+          belowSession={<EventsPreview />}
         />
       ) : showQrWelcome ? null : (
         <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
@@ -439,18 +440,6 @@ export default function MobileHomePage() {
             </div>
           </AlertDescription>
         </Alert>
-      ) : null}
-
-      {/* Wi-Fi during session */}
-      {session && hasWifi ? (
-        <Button
-          variant="outline"
-          className="h-11 w-full rounded-full border-slate-200 bg-white text-slate-700 shadow-sm"
-          onClick={openWifi}
-        >
-          <Wifi className="mr-1.5 h-4 w-4" />
-          Wi‑Fi de l&apos;espace
-        </Button>
       ) : null}
 
       {pending && !session ? <EventsPreview /> : null}

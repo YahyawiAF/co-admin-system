@@ -337,6 +337,8 @@ model Journal {
 model Abonnement {
   id            String    @id @default(uuid())
   isPayed       Boolean
+  /// When the abonnement was fully paid — revenue is counted on this day (not the start date)
+  paidAt        DateTime?
   registredDate DateTime
   leaveDate     DateTime?
   stayedPeriode String?
@@ -373,6 +375,7 @@ model Abonnement {
   @@index([priceId])
   @@index([spaceId])
   @@index([memberID, priceId])
+  @@index([paidAt])
   @@map("abonnements")
 }
 

@@ -120,7 +120,7 @@ export default function SessionPage() {
             ? null
             : layout?.facility?.appInstallGlobalPromo ?? null
         }
-        aboveTracking={<EventsPreview embedded />}
+        belowSession={<EventsPreview />}
       />
     </div>
   );

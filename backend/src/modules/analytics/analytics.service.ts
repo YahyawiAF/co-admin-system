@@ -18,6 +18,10 @@ import {
   round1,
   visitEnd,
 } from './traffic';
+import {
+  abonnementPaidInRange,
+  abonnementRevenueDate,
+} from '../abonnement/abonnement-revenue';
 
 @Injectable()
 export class AnalyticsService {
@@ -60,7 +64,7 @@ export class AnalyticsService {
             select: { payedAmount: true },
           }),
           this.prisma.abonnement.findMany({
-            where: { registredDate: { gte: start, lte: end }, isPayed: true },
+            where: abonnementPaidInRange(start, end),
             select: { payedAmount: true },
           }),
           this.prisma.dailyProduct.findMany({
@@ -120,8 +124,8 @@ export class AnalyticsService {
           select: { registredTime: true, payedAmount: true },
         }),
         this.prisma.abonnement.findMany({
-          where: { registredDate: { gte: start, lte: end }, isPayed: true },
-          select: { registredDate: true, payedAmount: true },
+          where: abonnementPaidInRange(start, end),
+          select: { registredDate: true, paidAt: true, payedAmount: true },
         }),
         this.prisma.dailyProduct.findMany({
           where: {
@@ -168,7 +172,7 @@ export class AnalyticsService {
       row.revenueJournal += j.payedAmount || 0;
     }
     for (const a of abonnements) {
-      const row = ensure(a.registredDate);
+      const row = ensure(abonnementRevenueDate(a));
       row.revenueAbonnements += a.payedAmount || 0;
     }
     for (const dp of dailyProducts) {
@@ -951,7 +955,28 @@ export class AnalyticsService {
       },
     });
 
+    const abonnements = await this.prisma.abonnement.findMany({
+      where: {
+        AND: [
+          abonnementPaidInRange(rangeStart, rangeEnd),
+          opts.organizationId
+            ? { members: { organizationId: opts.organizationId } }
+            : {},
+        ],
+      },
+      select: { paidAt: true, registredDate: true, payedAmount: true },
+    });
+
     const wanted = new Set(allDays.map(localDayKey));
+    const aboByDay = new Map<string, { revenue: number; count: number }>();
+    for (const a of abonnements) {
+      const key = localDayKey(abonnementRevenueDate(a));
+      if (!wanted.has(key)) continue;
+      const row = aboByDay.get(key) ?? { revenue: 0, count: 0 };
+      row.revenue += a.payedAmount || 0;
+      row.count += 1;
+      aboByDay.set(key, row);
+    }
     const buckets = new Map<string, typeof journals>();
     for (const j of journals) {
       const key = localDayKey(j.registredTime);
@@ -986,6 +1011,8 @@ export class AnalyticsService {
         }
       }
       const peakHour = peakIndex(series.present);
+      const abo = aboByDay.get(key) ?? { revenue: 0, count: 0 };
+      const round2 = (v: number) => Math.round(v * 100) / 100;
       return {
         date: key,
         weekday: day.getDay(),
@@ -994,7 +1021,10 @@ export class AnalyticsService {
         totals: {
           visits: list.length,
           uniqueVisitors: people.size,
-          revenue: Math.round(revenue * 100) / 100,
+          revenueVisits: round2(revenue),
+          revenueAbonnements: round2(abo.revenue),
+          abonnementsPaid: abo.count,
+          revenue: round2(revenue + abo.revenue),
           avgDurationMin: closed ? Math.round(durationMs / closed / 60_000) : 0,
           leftUnpaid,
           peakHour,
@@ -1025,6 +1055,9 @@ export class AnalyticsService {
         totals: {
           visits: avgTotal((d) => d.totals.visits),
           uniqueVisitors: avgTotal((d) => d.totals.uniqueVisitors),
+          revenueVisits: avgTotal((d) => d.totals.revenueVisits),
+          revenueAbonnements: avgTotal((d) => d.totals.revenueAbonnements),
+          abonnementsPaid: avgTotal((d) => d.totals.abonnementsPaid),
           revenue: avgTotal((d) => d.totals.revenue),
           avgDurationMin: avgTotal((d) => d.totals.avgDurationMin),
           leftUnpaid: avgTotal((d) => d.totals.leftUnpaid),

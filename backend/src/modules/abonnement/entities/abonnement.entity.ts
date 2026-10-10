@@ -19,6 +19,9 @@ export class AbonnementEntity {
   @ApiProperty()
   isPayed: boolean;
 
+  @ApiProperty({ required: false, nullable: true })
+  paidAt?: Date | null;
+
   @ApiProperty()
   registredDate: Date;
 

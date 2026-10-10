@@ -1251,7 +1251,11 @@ export default function JournalClient() {
         </Card>
         {[
           { label: "Réservations", value: String(reservations) },
-          { label: "Revenu du jour", value: `${revenue.toFixed(1)} DT` },
+          {
+            label: "Revenu du jour",
+            value: `${revenue.toFixed(1)} DT`,
+            hint: `Visites ${revenueVisits.toFixed(1)} · Abonnements ${revenueAbo.toFixed(1)} DT`,
+          },
           { label: "Impayés", value: String(unpaid), href: "/impayes" },
         ].map((k) => (
           <Card key={k.label}>
@@ -1268,6 +1272,9 @@ export default function JournalClient() {
               ) : (
                 <div className="text-2xl font-bold">{k.value}</div>
               )}
+              {"hint" in k && k.hint ? (
+                <p className="mt-1 text-xs text-muted-foreground">{k.hint}</p>
+              ) : null}
             </CardContent>
           </Card>
         ))}

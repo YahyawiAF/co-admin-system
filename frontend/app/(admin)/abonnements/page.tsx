@@ -525,6 +525,9 @@ function AbonnementsInner() {
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
       queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-finance-days"] });
+      queryClient.invalidateQueries({ queryKey: ["analytics-finance-year"] });
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
       setOpen(false);
@@ -539,6 +542,9 @@ function AbonnementsInner() {
     queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
     queryClient.invalidateQueries({ queryKey: queryKeys.members });
     queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics-finance-days"] });
+    queryClient.invalidateQueries({ queryKey: ["analytics-finance-year"] });
     queryClient.invalidateQueries({ queryKey: ["caisse-month"] });
     queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
   };

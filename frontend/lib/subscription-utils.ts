@@ -61,7 +61,7 @@ export function paidSubscriptionRevenueOnDay(
   return abos
     .filter((a) => {
       if (!a.isPayed) return false;
-      const d = new Date(a.registredDate);
+      const d = new Date(a.paidAt ?? a.registredDate);
       const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       return k === key;
     })

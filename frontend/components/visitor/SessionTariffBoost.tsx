@@ -66,7 +66,7 @@ export function TierLevelUp({
 
   if (!next) {
     return (
-      <div className="mb-2.5 flex items-center gap-2.5 rounded-2xl border border-amber-100 bg-amber-50/60 px-3 py-2.5 text-left">
+      <div className="flex items-center gap-2.5 rounded-3xl border border-amber-100 bg-amber-50/60 px-3 py-2.5 text-left">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-amber-500 shadow-sm">
           <Sparkles className="h-4 w-4" />
         </span>
@@ -93,7 +93,7 @@ export function TierLevelUp({
   const track = tiers.slice(0, Math.min(tiers.length, Math.max(nextIdx + 2, 4)));
 
   return (
-    <div className="relative mb-2.5 overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 px-3.5 py-3 text-left text-white shadow-md">
+    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-600 to-violet-600 px-3.5 py-3 text-left text-white shadow-md">
       <span className="pointer-events-none absolute -right-6 -top-8 h-24 w-24 rounded-full bg-white/10" />
       <span className="pointer-events-none absolute -bottom-10 right-10 h-20 w-20 rounded-full bg-white/5" />
 

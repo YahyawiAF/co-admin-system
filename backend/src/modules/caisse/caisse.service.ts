@@ -11,6 +11,7 @@ import {
   isLocalToday,
   parseLocalDay,
 } from '../../../common/parse-local-day';
+import { abonnementPaidInRange } from '../abonnement/abonnement-revenue';
 
 @Injectable()
 export class CaisseService {
@@ -106,7 +107,7 @@ export class CaisseService {
         include: { prices: true },
       }),
       this.prisma.abonnement.findMany({
-        where: { registredDate: { gte: start, lte: end } },
+        where: abonnementPaidInRange(start, end),
       }),
       this.prisma.dailyProduct.findMany({
         where: { date: { gte: start, lte: end } },
@@ -391,7 +392,7 @@ export class CaisseService {
         where: { registredTime: { gte: start, lte: end } },
       }),
       this.prisma.abonnement.findMany({
-        where: { registredDate: { gte: start, lte: end } },
+        where: abonnementPaidInRange(start, end),
       }),
       this.prisma.dailyProduct.findMany({
         where: { date: { gte: start, lte: end } },

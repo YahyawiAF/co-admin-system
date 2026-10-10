@@ -153,10 +153,11 @@ export default function DayAnalysisClient() {
           fmt: (v: number) => String(v),
         },
         {
-          label: "Revenu visites payées",
+          label: "Revenu du jour",
           value: data.target.totals.revenue,
           avg: data.average.totals.revenue,
           fmt: (v: number) => `${v.toFixed(1)} DT`,
+          detail: `Visites ${(data.target.totals.revenueVisits ?? 0).toFixed(1)} · Abonnements ${(data.target.totals.revenueAbonnements ?? 0).toFixed(1)} DT`,
         },
         {
           label: "Durée moyenne",
@@ -308,6 +309,9 @@ export default function DayAnalysisClient() {
                         </span>
                       ) : null}
                     </div>
+                    {"detail" in k && k.detail ? (
+                      <p className="text-xs text-muted-foreground">{k.detail}</p>
+                    ) : null}
                     <p className="text-xs text-muted-foreground">
                       <span
                         className={cn(
@@ -406,7 +410,9 @@ export default function DayAnalysisClient() {
                     <TableHead>Jour</TableHead>
                     <TableHead className="text-right">Visites</TableHead>
                     <TableHead className="text-right">Personnes</TableHead>
-                    <TableHead className="text-right">Revenu</TableHead>
+                    <TableHead className="text-right">Revenu visites</TableHead>
+                    <TableHead className="text-right">Abonnements</TableHead>
+                    <TableHead className="text-right">Revenu total</TableHead>
                     <TableHead className="text-right">Durée moy.</TableHead>
                     <TableHead className="text-right">Pic</TableHead>
                     <TableHead className="text-right">Partis sans payer</TableHead>
@@ -431,6 +437,17 @@ export default function DayAnalysisClient() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {day.totals.uniqueVisitors}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(day.totals.revenueVisits ?? 0).toFixed(1)} DT
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {(day.totals.revenueAbonnements ?? 0).toFixed(1)} DT
+                        {day.totals.abonnementsPaid ? (
+                          <span className="ml-1 text-xs text-muted-foreground">
+                            ({day.totals.abonnementsPaid})
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {day.totals.revenue.toFixed(1)} DT

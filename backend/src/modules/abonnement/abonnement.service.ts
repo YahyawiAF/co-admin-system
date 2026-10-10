@@ -88,6 +88,7 @@ export class AbonnementService {
           registredDate: createAbonnementDto.registredDate,
           leaveDate: createAbonnementDto.leaveDate,
           isPayed: payment.isPayed,
+          paidAt: payment.isPayed ? new Date() : null,
           isReservation: createAbonnementDto.isReservation,
           payedAmount: payment.payedAmount,
           discountPercent: discount.discountPercent,
@@ -293,7 +294,16 @@ export class AbonnementService {
         data: {
           ...rest,
           ...(discount ?? {}),
-          ...(payment ?? {}),
+          ...(payment
+            ? {
+                ...payment,
+                paidAt: !payment.isPayed
+                  ? null
+                  : current.isPayed
+                    ? current.paidAt ?? current.createdAt ?? new Date()
+                    : new Date(),
+              }
+            : {}),
           ...(reservedSeatLabel !== undefined
             ? { reservedSeatLabel: reservedSeatLabel?.trim() || null }
             : {}),

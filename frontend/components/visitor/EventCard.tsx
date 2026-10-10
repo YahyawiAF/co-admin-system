@@ -164,11 +164,8 @@ export function EventListCard({
   );
 }
 
-/**
- * Compact one-row event strip (Accueil / session). Renders nothing without events.
- * `embedded`: inside another card (no own card surface).
- */
-export function EventsPreview({ embedded = false }: { embedded?: boolean }) {
+/** Compact one-row event strip (Accueil / session). Renders nothing without events. */
+export function EventsPreview() {
   const { slug, href } = useOrg();
   const { data = [] } = useQuery({
     queryKey: ["mobile-events", slug, "upcoming"],
@@ -179,18 +176,8 @@ export function EventsPreview({ embedded = false }: { embedded?: boolean }) {
   if (!events.length) return null;
 
   return (
-    <div
-      className={cn(
-        "text-left",
-        embedded ? "my-2.5" : "rounded-3xl bg-white py-2.5 shadow-sm"
-      )}
-    >
-      <div
-        className={cn(
-          "flex items-center justify-between",
-          embedded ? "px-0.5" : "px-4"
-        )}
-      >
+    <div className="rounded-3xl bg-white py-2.5 text-left shadow-sm">
+      <div className="flex items-center justify-between px-4">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
           Événements
         </p>
@@ -203,10 +190,7 @@ export function EventsPreview({ embedded = false }: { embedded?: boolean }) {
         </Link>
       </div>
       <div
-        className={cn(
-          "mt-1.5 flex snap-x gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
-          embedded ? "" : "px-4"
-        )}
+        className="mt-1.5 flex snap-x gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {events.map((event) => {
           const style = KIND_STYLE[event.kind] || KIND_STYLE.OTHER;

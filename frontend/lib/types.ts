@@ -289,6 +289,8 @@ export type SeatAssignmentInfo = {
 export interface Abonnement {
   id: string;
   isPayed: boolean;
+  /** When the abonnement was paid — revenue is counted on this day */
+  paidAt?: string | null;
   registredDate: string;
   leaveDate?: string | null;
   paymentRemindAt?: string | null;
@@ -674,7 +676,11 @@ export interface WeeklyTrafficDay {
 export interface DayTrafficTotals {
   visits: number;
   uniqueVisitors: number;
+  /** revenueVisits + revenueAbonnements */
   revenue: number;
+  revenueVisits: number;
+  revenueAbonnements: number;
+  abonnementsPaid: number;
   avgDurationMin: number;
   leftUnpaid: number;
   peakHour: number;
