@@ -984,8 +984,13 @@ function AbonnementsInner() {
                           className="font-medium text-left hover:underline"
                           onClick={() => setDetailMemberId(a.memberID)}
                         >
-                          {a.members?.firstName || a.memberID.slice(0, 8)}
+                          {[a.members?.firstName, a.members?.lastName]
+                            .filter(Boolean)
+                            .join(" ") || a.memberID.slice(0, 8)}
                         </button>
+                        <div className="text-xs text-muted-foreground">
+                          {a.members?.phone || "—"}
+                        </div>
                         <div className="mt-1 flex flex-wrap gap-1">
                           <MemberRewardsBadges
                             member={
