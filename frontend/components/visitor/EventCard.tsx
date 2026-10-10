@@ -61,7 +61,7 @@ function eventSpots(event: SpaceEvent): { label: string; tone: string } {
       tone: "bg-amber-50 text-amber-700",
     };
   }
-  return { label: `${left} places`, tone: "bg-slate-100 text-slate-600" };
+  return { label: "Places disponibles", tone: "bg-slate-100 text-slate-600" };
 }
 
 function EventCover({

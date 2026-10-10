@@ -77,7 +77,7 @@ export default function SubscriptionPage() {
         <p className="mt-3 text-sm text-slate-500">
           Place réservée
           {sub.reservedSeatLabel ? ` : ${sub.reservedSeatLabel}` : ""}. Pointez
-          pour indiquer votre présence. Vous pouvez aussi prendre un forfait.
+          pour indiquer votre présence. Vous pouvez aussi prendre un pass.
         </p>
       )}
       {hasSession && seat?.seatLabel ? (

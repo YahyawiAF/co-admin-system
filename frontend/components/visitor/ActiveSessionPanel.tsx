@@ -40,16 +40,19 @@ import {
   stageLabel,
 } from "@/lib/session-pricing";
 import { format } from "date-fns";
+import { toast } from "sonner";
 import {
   ChevronRight,
+  Check,
   Clock,
   Crown,
+  Info,
   RefreshCw,
-  Timer,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 
 function ActionTile({
   icon: Icon,
@@ -143,7 +146,7 @@ type Props = {
   onSwitchToSubscription?: () => void;
   /** Subscription request waiting for reception */
   pendingSubscriptionName?: string | null;
-  /** Rendered right above the forfait tracking block (e.g. events strip). */
+  /** Rendered right under the session hero (e.g. events strip). */
   aboveTracking?: ReactNode;
 };
 
@@ -264,11 +267,18 @@ export function ActiveSessionPanel({
           }
         )
       : null;
-  const forfaitName = live
+  const passTitle = live
     ? live.mode === "AUTO"
-      ? `Palier ${live.currentTier.name}`
+      ? `Pass ${live.currentTier.name}`
       : live.fixedServiceName || live.currentTier.name
-    : session.prices?.name || session.price?.name || "Forfait";
+    : session.prices?.name || session.price?.name || "Pass";
+  const passSubtitle = live
+    ? live.mode === "AUTO"
+      ? "Tarif auto · le prix suit le temps passé"
+      : `Pass fixé · ${formatDt(live.fixedAmount ?? live.baseAmount)}`
+    : covered
+      ? "Abonnement actif"
+      : null;
 
   const checkout = useMutation({
     mutationFn: () => mobileApi.checkout(session.id),
@@ -317,85 +327,190 @@ export function ActiveSessionPanel({
     !session.isPayed &&
     !(live.paidAmount > 0) &&
     tiers.length > 0;
-  const showTariffTile = canChangeTariff;
   const showSubTile =
     !covered &&
     (!!pendingSubscriptionName || (!!onSwitchToSubscription && !isOptimistic));
 
   const fixTariff = useMutation({
-    mutationFn: (priceId: string) =>
-      mobileApi.fixMySessionTariff(session.id, priceId, memberId),
-    onSuccess: () => {
+    mutationFn: (vars: { priceId: string; upgrade?: boolean }) =>
+      mobileApi.fixMySessionTariff(session.id, vars.priceId, memberId),
+    onSuccess: (_res, vars) => {
+      const name = tiers.find((t) => t.priceId === vars.priceId)?.name;
+      if (vars.upgrade) {
+        toast.success(`Niveau supérieur ! Pass ${name ?? ""} activé`);
+      } else {
+        toast.success(`Pass ${name ?? ""} fixé ✓`);
+      }
       setTariffOpen(false);
       setPickedTierId(null);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
   const pickedTier = tiers.find((t) => t.priceId === pickedTierId) || null;
+  const recommendedTierId =
+    tiers.find((t) => sessionStart + t.durationHours * 3_600_000 > now)
+      ?.priceId ?? null;
+  const openTariffPicker = (open: boolean) => {
+    fixTariff.reset();
+    setPickedTierId(null);
+    setTariffOpen(open);
+  };
 
   return (
     <div className="rounded-3xl bg-white p-3 text-center shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-        Session en cours
-      </p>
-      <h2 className="mt-1 text-2xl font-bold leading-tight">{forfaitName}</h2>
-      {isOptimistic ? (
-        <p className="mt-1 text-xs font-medium text-amber-600">
-          Confirmation en cours…
-        </p>
-      ) : null}
-      <div className="mt-2 flex flex-wrap justify-center gap-2">
-        {covered ? (
-          <Badge className="px-2.5 py-1 text-sm">Abonnement actif</Badge>
-        ) : (
-          <Badge
-            variant={session.isPayed ? "default" : "secondary"}
-            className="px-2.5 py-1 text-sm"
+      {/* Hero: which pass, hours left, payment, change pass */}
+      <div className="text-left">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Session en cours
+          </p>
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold",
+              covered
+                ? "bg-indigo-50 text-indigo-700"
+                : session.isPayed
+                  ? "bg-emerald-50 text-emerald-700"
+                  : "bg-amber-50 text-amber-700"
+            )}
           >
-            {session.isPayed ? "Payé" : "Non payé"}
-          </Badge>
-        )}
-        {subKind === "SEMI_DAY" ? (
-          <Badge variant="outline" className="px-2.5 py-1 text-sm">
-            Demi-journée 6h
-          </Badge>
+            <span
+              className={cn(
+                "h-1.5 w-1.5 rounded-full",
+                covered
+                  ? "bg-indigo-500"
+                  : session.isPayed
+                    ? "bg-emerald-500"
+                    : "bg-amber-500"
+              )}
+            />
+            {covered ? "Abonnement actif" : session.isPayed ? "Payé" : "Non payé"}
+          </span>
+        </div>
+
+        <div className="mt-2 flex items-center gap-2.5">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+            {covered || isHoursPool ? (
+              <Crown className="h-5 w-5" />
+            ) : (
+              <Clock className="h-5 w-5" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
+              {passTitle}
+            </h2>
+            {passSubtitle ? (
+              <p className="truncate text-[11px] text-slate-500">
+                {passSubtitle}
+              </p>
+            ) : null}
+          </div>
+          {canChangeTariff ? (
+            <button
+              type="button"
+              aria-label="Changer de pass"
+              aria-expanded={tariffOpen}
+              onClick={() => openTariffPicker(!tariffOpen)}
+              className={cn(
+                "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition active:scale-95",
+                tariffOpen
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100"
+              )}
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Changer
+            </button>
+          ) : null}
+        </div>
+
+        {isOptimistic ? (
+          <p className="mt-1.5 text-xs font-medium text-amber-600">
+            Confirmation en cours…
+          </p>
         ) : null}
-        {subKind === "FULL_DAY" ? (
-          <Badge variant="outline" className="px-2.5 py-1 text-sm">
-            Journée
-          </Badge>
+
+        {!isHoursPool ? (
+          <div className="mt-3 rounded-2xl bg-slate-50 px-3.5 py-3">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p
+                  className={cn(
+                    "text-2xl font-bold leading-none tabular-nums",
+                    overtime ? "text-rose-600" : "text-indigo-600"
+                  )}
+                >
+                  {remainingMs == null ? "—" : formatDurationHm(remainingMs)}
+                </p>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {overtime ? "de dépassement" : "restantes"}
+                </p>
+              </div>
+              {dayProgress ? (
+                <div className="text-right">
+                  <p className="text-sm font-bold tabular-nums text-slate-900">
+                    {formatDurationHm(dayProgress.totalMs)}
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">incluses</p>
+                </div>
+              ) : null}
+            </div>
+            {dayProgress ? (
+              <div className="mt-3 space-y-1.5">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${dayProgress.remainingPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] text-slate-500">
+                  <span>
+                    Utilisé ·{" "}
+                    {elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
+                  </span>
+                  <span>
+                    {live
+                      ? `Jusqu’à ${format(live.tierEndsAt, "HH:mm")}`
+                      : "Expiration à minuit"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div
+                className={`mt-2 font-mono text-3xl font-bold tabular-nums ${
+                  overtime ? "text-rose-600" : "text-indigo-600"
+                }`}
+              >
+                {remainingMs === null
+                  ? "—"
+                  : overtime
+                    ? `+${formatClock(remainingMs)}`
+                    : formatClock(remainingMs)}
+              </div>
+            )}
+          </div>
         ) : null}
-        {isHoursPool ? (
-          <Badge variant="outline" className="px-2.5 py-1 text-sm">
-            Heures
-          </Badge>
-        ) : null}
-        {live ? (
-          <Badge
-            variant="secondary"
-            className="rounded-md bg-indigo-50 px-2.5 py-1 text-sm text-indigo-700"
+
+        {!covered ? (
+          <p
+            className={cn(
+              "mt-2.5 flex items-start gap-1.5 text-[11px] leading-snug",
+              session.isPayed ? "text-emerald-700" : "text-amber-700"
+            )}
           >
-            {live.mode === "AUTO"
-              ? "Tarif auto"
-              : `Forfait fixé ${live.fixedServiceName ?? ""} · ${formatDt(live.fixedAmount ?? live.baseAmount)}`}
-          </Badge>
+            {session.isPayed ? (
+              <Check className="mt-px h-3.5 w-3.5 shrink-0" />
+            ) : (
+              <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+            )}
+            {session.isPayed
+              ? "Payé — vos points s’ajoutent au check-out."
+              : "Demandez à l’accueil de confirmer le paiement pour collecter vos points au check-out."}
+          </p>
         ) : null}
       </div>
-
-      {!covered ? (
-        <p
-          className={cn(
-            "mx-auto mt-2 max-w-xs text-xs leading-snug",
-            session.isPayed ? "text-emerald-700" : "text-amber-700"
-          )}
-        >
-          {session.isPayed
-            ? "Payé ✓ — vos points s’ajoutent au check-out (vous ou l’accueil)."
-            : "Demandez à l’accueil de confirmer le paiement pour collecter vos points au check-out."}
-        </p>
-      ) : null}
       {aboveTracking}
-      {/* Timer + forfait on top */}
       {isHoursPool ? (
         <>
           <div className="my-2.5 rounded-2xl border bg-slate-50 px-3 py-3.5">
@@ -445,72 +560,7 @@ export function ActiveSessionPanel({
             ) : null}
           </div>
         </>
-      ) : (
-        <div className="my-2.5 rounded-2xl border bg-white px-3.5 py-3.5 text-left shadow-sm">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Suivi du forfait
-            </p>
-            <Badge
-              variant="secondary"
-              className="rounded-md bg-indigo-50 text-indigo-700"
-            >
-              {live ? (live.mode === "AUTO" ? "Auto" : "Fixé") : "Heures"}
-            </Badge>
-          </div>
-          <div className="mt-2 flex items-end justify-between gap-2">
-            <p
-              className={`text-lg font-bold leading-tight ${
-                overtime ? "text-red-600" : "text-slate-900"
-              }`}
-            >
-              {remainingMs == null
-                ? "—"
-                : overtime
-                  ? `+${formatDurationHm(remainingMs)}`
-                  : `${formatDurationHm(remainingMs)} restantes`}
-            </p>
-            {dayProgress ? (
-              <p className="shrink-0 text-xs text-slate-500">
-                sur {formatDurationHm(dayProgress.totalMs)} disponibles
-              </p>
-            ) : null}
-          </div>
-          {dayProgress ? (
-            <div className="mt-3 space-y-2">
-              <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-indigo-600 transition-all"
-                  style={{ width: `${dayProgress.remainingPct}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-[11px] text-slate-500">
-                <span>
-                  Utilisé aujourd&apos;hui ·{" "}
-                  {elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
-                </span>
-                <span>
-                  {live
-                    ? `Fin ${live.mode === "AUTO" ? "palier" : "forfait"} ${format(live.tierEndsAt, "HH:mm")}`
-                    : "Expiration à minuit"}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div
-              className={`mt-3 font-mono text-3xl font-bold tabular-nums ${
-                overtime ? "text-red-600" : "text-primary"
-              }`}
-            >
-              {remainingMs === null
-                ? "—"
-                : overtime
-                  ? `+${formatClock(remainingMs)}`
-                  : formatClock(remainingMs)}
-            </div>
-          )}
-        </div>
-      )}
+      ) : null}
 
       {live && !covered ? (
         <div className="mb-2.5 rounded-2xl border bg-white px-3.5 py-3 text-left shadow-sm">
@@ -528,7 +578,7 @@ export function ActiveSessionPanel({
                     : "bg-rose-50 text-rose-700"
               )}
             >
-              {stageLabel(live, now)}
+              {stageLabel(live, now, "visitor")}
             </span>
           </div>
           <p className="mt-1 text-2xl font-bold tabular-nums text-indigo-600">
@@ -536,7 +586,7 @@ export function ActiveSessionPanel({
           </p>
           {live.mode === "FIXED" && live.overtime ? (
             <p className="mt-1 text-[11px] font-medium text-rose-600">
-              Forfait {live.fixedServiceName} ({formatDt(live.fixedAmount)})
+              Pass {live.fixedServiceName} ({formatDt(live.fixedAmount)})
               dépassé de {formatMinutes(live.overtimeMs)}
               {live.extraAmount > 0 ? ` · +${formatDt(live.extraAmount)}` : ""}
             </p>
@@ -565,14 +615,14 @@ export function ActiveSessionPanel({
           ) : null}
           {!canChangeTariff ? (
             <p className="mt-2 text-[11px] text-slate-500">
-              Pour changer votre forfait, demandez à l&apos;accueil.
+              Pour changer votre pass, demandez à l&apos;accueil.
             </p>
           ) : null}
         </div>
       ) : overtime && !isHoursPool ? (
         <Alert className="mb-4 text-left">
           <AlertDescription>
-            Le prix du forfait reste affiché ; l&apos;accueil peut ajuster.
+            Le prix du pass reste affiché ; l&apos;accueil peut ajuster.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -595,31 +645,24 @@ export function ActiveSessionPanel({
         </>
       ) : null}
 
-      {showTariffTile || showSubTile ? (
-        <div
-          className={cn(
-            "mb-2.5 grid gap-2",
-            showTariffTile && showSubTile ? "grid-cols-2" : "grid-cols-1"
-          )}
-        >
-          {showTariffTile ? (
-            <ActionTile
-              icon={live?.mode === "AUTO" ? Timer : RefreshCw}
-              label={live?.mode === "AUTO" ? "Fixer forfait" : "Changer forfait"}
-              hint={
-                live?.mode === "AUTO"
-                  ? "2h, 4h, journée…"
-                  : live?.fixedServiceName ?? undefined
-              }
-              onClick={() => {
-                fixTariff.reset();
-                setPickedTierId(null);
-                setTariffOpen((open) => !open);
-              }}
-            />
-          ) : null}
-          {showSubTile ? (
-            pendingSubscriptionName ? (
+      {canChangeTariff && live?.mode === "FIXED" && !tariffOpen ? (
+        <TierLevelUp
+          live={live}
+          tiers={tiers}
+          sessionStart={sessionStart}
+          now={now}
+          pending={fixTariff.isPending}
+          error={
+            fixTariff.isError ? (fixTariff.error as Error).message : null
+          }
+          onUpgrade={(id) => fixTariff.mutate({ priceId: id, upgrade: true })}
+          onOpenAll={() => openTariffPicker(true)}
+        />
+      ) : null}
+
+      {showSubTile ? (
+        <div className="mb-2.5 grid grid-cols-1 gap-2">
+          {pendingSubscriptionName ? (
               <ActionTile
                 icon={Clock}
                 label="Abonnement"
@@ -633,8 +676,7 @@ export function ActiveSessionPanel({
                 hint="Sans compteur"
                 onClick={onSwitchToSubscription}
               />
-            )
-          ) : null}
+            )}
         </div>
       ) : null}
 
@@ -646,18 +688,19 @@ export function ActiveSessionPanel({
           <div className="flex items-start justify-between gap-2 px-0.5">
             <div>
               <p className="text-sm font-bold text-slate-900">
-                Choisir mon forfait
+                Choisir mon pass
               </p>
               <p className="text-[11px] text-slate-500">
-                Arrivé à {format(sessionStart, "HH:mm")} · supplément au-delà
-                du forfait
+                {live?.mode === "AUTO"
+                  ? "Fixez un pass pour connaître votre prix à l’avance."
+                  : `Arrivé à ${format(sessionStart, "HH:mm")} · supplément au-delà du pass`}
               </p>
             </div>
             <button
               type="button"
               aria-label="Fermer"
               disabled={fixTariff.isPending}
-              onClick={() => setTariffOpen(false)}
+              onClick={() => openTariffPicker(false)}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white text-slate-400 shadow-sm"
             >
               <X className="h-4 w-4" />
@@ -680,9 +723,14 @@ export function ActiveSessionPanel({
                   }}
                   selected={pickedTierId === t.priceId}
                   disabled={fixTariff.isPending || tooShort || isCurrent}
+                  badge={
+                    live?.mode === "AUTO" && t.priceId === recommendedTierId
+                      ? "Recommandé"
+                      : null
+                  }
                   meta={
                     isCurrent
-                      ? "Forfait actuel"
+                      ? "Pass actuel"
                       : tooShort
                         ? "Déjà dépassé"
                         : `Jusqu’à ${format(endsAt, "HH:mm")}`
@@ -709,13 +757,15 @@ export function ActiveSessionPanel({
           <Button
             className="mt-2.5 h-11 w-full rounded-full bg-indigo-600 text-sm font-semibold hover:bg-indigo-700"
             disabled={!pickedTier || fixTariff.isPending}
-            onClick={() => pickedTier && fixTariff.mutate(pickedTier.priceId)}
+            onClick={() =>
+              pickedTier && fixTariff.mutate({ priceId: pickedTier.priceId })
+            }
           >
             {fixTariff.isPending
               ? "Enregistrement…"
               : pickedTier
-                ? `Fixer « ${pickedTier.name} »`
-                : "Choisissez un forfait"}
+                ? `Choisir « ${pickedTier.name} »`
+                : "Choisissez un pass"}
           </Button>
         </div>
       ) : null}
@@ -738,7 +788,7 @@ export function ActiveSessionPanel({
         </div>
       ) : canPickSeat && allowedSpaceIds && allowedSpaceIds.length === 0 ? (
         <p className="mb-2 text-xs text-slate-500">
-          Aucun espace pour ce forfait — l’accueil vous placera.
+          Aucun espace pour ce pass — l’accueil vous placera.
         </p>
       ) : canPickSeat ? (
         <p className="mb-1.5 text-left text-xs font-medium text-slate-600">
@@ -823,7 +873,7 @@ export function ActiveSessionPanel({
             <p className="text-xs text-amber-700">
               Votre session a commencé il y a moins de 5 min.{" "}
               {canChangeTariff
-                ? "Pour changer de tarif, utilisez plutôt « Fixer forfait »."
+                ? "Pour changer de tarif, utilisez plutôt « Changer »."
                 : "Pour changer de tarif, demandez plutôt à l’accueil."}
             </p>
           ) : null}

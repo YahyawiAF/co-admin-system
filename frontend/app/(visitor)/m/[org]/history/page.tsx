@@ -38,7 +38,7 @@ export default function HistoryPage() {
                 {format(new Date(v.date), "dd/MM/yyyy")}
               </div>
               <div className="text-sm text-slate-500">
-                {v.priceName || "Forfait"} · {v.durationLabel}
+                {v.priceName || "Pass"} · {v.durationLabel}
               </div>
             </div>
             <div className="text-right">

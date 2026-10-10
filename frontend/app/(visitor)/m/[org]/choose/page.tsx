@@ -136,7 +136,9 @@ function ChooseInner() {
       sessionStorage.removeItem("pendingVisitRequestId");
       setPendingId(null);
       router.push(
-        pendingRequest.type === "SUBSCRIPTION" ? href("/subscription") : href()
+        pendingRequest.type === "SUBSCRIPTION"
+          ? href("/subscription")
+          : href("/session")
       );
     }
     if (pendingRequest.status === "REJECTED") {
@@ -163,7 +165,9 @@ function ChooseInner() {
         sessionStorage.removeItem("pendingVisitRequestId");
         setPendingId(null);
         router.replace(
-          payload.type === "SUBSCRIPTION" ? href("/subscription") : href()
+          payload.type === "SUBSCRIPTION"
+            ? href("/subscription")
+            : href("/session")
         );
       }
     };
@@ -209,7 +213,7 @@ function ChooseInner() {
           queryKey: ["mobile-status", memberId],
         });
         router.replace(
-          req.type === "SUBSCRIPTION" ? href("/subscription") : href()
+          req.type === "SUBSCRIPTION" ? href("/subscription") : href("/session")
         );
         return;
       }
@@ -303,7 +307,7 @@ function ChooseInner() {
         session,
         seat: seat || old?.seat || null,
       }));
-      router.replace(href());
+      router.replace(href("/session"));
       return;
     }
 
@@ -409,10 +413,10 @@ function ChooseInner() {
         <Alert>
           <AlertDescription>
             {subKind === "HOURS_POOL"
-              ? "Abonnement heures actif : pointez pour entrer. Pas de forfait tant que l’abonnement est actif."
+              ? "Abonnement heures actif : pointez pour entrer. Pas de pass tant que l’abonnement est actif."
               : `Crédit abonnement du jour encore disponible${
                   rem != null ? ` (${Number(rem).toFixed(1)} h)` : ""
-                }. Pointez votre présence et utilisez votre forfait abonnement avant d’acheter un forfait.`}
+                }. Pointez votre présence et utilisez votre crédit abonnement avant d’acheter un pass.`}
           </AlertDescription>
         </Alert>
         <Button onClick={() => router.push(href())}>
@@ -430,7 +434,7 @@ function ChooseInner() {
           <>
             <Alert variant="destructive" className="mb-4 text-left">
               <AlertDescription>
-                Demande refusée. Choisissez un autre forfait.
+                Demande refusée. Choisissez un autre pass.
               </AlertDescription>
             </Alert>
             <Button
@@ -448,7 +452,7 @@ function ChooseInner() {
             <h2 className="text-lg font-semibold">En attente de confirmation</h2>
             <p className="mt-2 text-slate-500">
               L&apos;accueil a reçu votre demande. Vous pouvez annuler pour
-              choisir un autre forfait.
+              choisir un autre pass.
             </p>
             {status?.session ? (
               <p className="mt-2 text-sm font-medium text-indigo-600">
@@ -477,8 +481,8 @@ function ChooseInner() {
 
   const hint = autoAccept
     ? visitorChoose
-      ? "Choisissez un forfait — votre place ensuite."
-      : "Choisissez un forfait — place auto."
+      ? "Choisissez un pass — votre place ensuite."
+      : "Choisissez un pass — place auto."
     : visitorChoose
       ? "L’accueil confirme, puis vous choisissez votre place."
       : "L’accueil confirmera.";
@@ -516,7 +520,7 @@ function ChooseInner() {
         >
           <ChevronLeft className="h-4 w-4 shrink-0 text-slate-400" />
           <span className="truncate">
-            Forfait : <span className="font-semibold text-slate-900">{pickedPrice.name}</span>
+            Pass : <span className="font-semibold text-slate-900">{pickedPrice.name}</span>
           </span>
           <span className="shrink-0 text-indigo-600">· Changer</span>
         </button>
@@ -658,7 +662,7 @@ function ChooseInner() {
       <div className="mb-3 grid grid-cols-2 gap-1 rounded-full bg-white p-1 shadow-sm">
         {(
           [
-            { id: "day", label: "Forfait", icon: Timer },
+            { id: "day", label: "Pass", icon: Timer },
             { id: "subscription", label: "Abonnement", icon: Crown },
           ] as const
         ).map((tab) => {
@@ -741,7 +745,7 @@ function ChooseInner() {
               : !selectedOption
                 ? mode === "subscription"
                   ? "Choisissez votre abonnement"
-                  : "Choisissez votre forfait"
+                  : "Choisissez votre pass"
                 : mode === "subscription"
                   ? `Demander « ${selectedOption.name} »`
                   : needPlaceStep

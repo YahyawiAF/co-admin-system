@@ -60,7 +60,7 @@ export default function MobileTarifsPage() {
     <div>
       <h1 className="mb-2 text-2xl font-bold">Tarifs</h1>
       <p className="mb-4 text-sm text-slate-500">
-        En cas de dépassement, le prix du forfait reste affiché ; l&apos;accueil
+        En cas de dépassement, le prix du pass reste affiché ; l&apos;accueil
         peut ajuster.
         {promoEligible && !promoActive ? (
           <>

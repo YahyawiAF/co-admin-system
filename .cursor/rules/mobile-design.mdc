@@ -57,8 +57,12 @@ The user has asked many times for blocks to take less space. Treat every new or 
 
 - Announcement slot: `AnnouncementBanner` right under the hero — white card, sparkles icon in `bg-indigo-50` circle, one-line truncated text, dismissible (sessionStorage).
 - Wi-Fi: circular glass button (`bg-white/20 backdrop-blur-sm`) in hero top-right; modal via `WifiCredentialsModal`.
-- No session: one-tap "Démarrer ma session" (`StartSessionCard`) is the dominant action — no in-app QR scan. The entry QR only adds the `QrWelcome` header.
-- Forfait / abonnement pickers use `TarifOptionCard` / `TarifIcon` (one icon + soft tint per tarif kind, select then confirm).
+- No session: one-tap "Démarrer ma session" (`StartSessionCard`) is the dominant action — no in-app QR scan. The entry QR adds the `QrWelcome` header and auto-starts the session once (no extra tap).
+- Wording: on mobile say **pass** (never "forfait"/"palier"): "Pass 2h", "Changer de pass", "Choisir mon pass".
+- Active session = one hero card (`ActiveSessionPanel`): pass name + paid status chip, hours left / included with progress bar, one-line payment note, and a **Changer** button that opens the pass picker (AUTO and FIXED). FIXED sessions also get the `TierLevelUp` nudge to the next tier (arrow-up, level track, two-tap confirm).
+- After pointage/check-in go straight to `/session` — no intermediate "Pointage OK" screen.
+- Event attendee counts are admin-only: visitors never see "N inscrits"/"x/y places" (only "Complet" / "Inscrit ✓").
+- Pass / abonnement pickers use `TarifOptionCard` / `TarifIcon` (one icon + soft tint per tarif kind, select then confirm).
 - Empty/pending states use a white card with centered slate text, never a bare `<Alert>` with default border.
 - Engagement nudges (e.g. `CommunityNotePopup`) are transient toasts, not cards: floating above the bottom nav, auto-hide after ~6 s, dismissible, each item shown once (localStorage).
 

@@ -351,18 +351,29 @@ export function formatMinutes(ms: number) {
   return `${h} h ${String(m).padStart(2, '0')}`;
 }
 
-/** Short French label for the current stage (chips / badges). */
-export function stageLabel(p: SessionPricingResult, now = Date.now()): string {
+/**
+ * Short French label for the current stage (chips / badges).
+ * `audience: "visitor"` uses the mobile wording ("pass" instead of forfait/palier).
+ */
+export function stageLabel(
+  p: SessionPricingResult,
+  now = Date.now(),
+  audience: 'admin' | 'visitor' = 'admin',
+): string {
+  const visitor = audience === 'visitor';
   const untilNext = p.nextChangeAt != null ? formatMinutes(p.nextChangeAt - now) : null;
+  const unit = visitor ? 'pass' : p.mode === 'AUTO' ? 'palier' : 'forfait';
   switch (p.stage) {
     case 'WITHIN':
-      return p.mode === 'AUTO' ? `Palier ${p.currentTier.name}` : 'Dans le forfait';
+      return p.mode === 'AUTO'
+        ? `${visitor ? 'Pass' : 'Palier'} ${p.currentTier.name}`
+        : `Dans le ${visitor ? 'pass' : 'forfait'}`;
     case 'WARNING':
-      return `Fin ${p.mode === 'AUTO' ? 'palier' : 'forfait'} dans ${formatMinutes(p.tierEndsAt - now)}`;
+      return `Fin ${unit} dans ${formatMinutes(p.tierEndsAt - now)}`;
     case 'GRACE':
       return untilNext
         ? p.mode === 'AUTO'
-          ? `Grâce · ${p.nextTierName ?? 'palier suivant'} dans ${untilNext}`
+          ? `Grâce · ${p.nextTierName ?? (visitor ? 'pass suivant' : 'palier suivant')} dans ${untilNext}`
           : `Grâce · +${formatDt(p.nextAmount != null ? p.nextAmount - p.amountDue : 0)} dans ${untilNext}`
         : 'Grâce';
     case 'SURCHARGE':
@@ -397,12 +408,12 @@ export function pricingNoticeText(
   switch (p.stage) {
     case 'WARNING':
       return {
-        title: `${p.mode === 'AUTO' ? 'Palier' : 'Forfait'} ${tier} : fin dans ${inMin(p.tierEndsAt)} min`,
+        title: `Pass ${tier} : fin dans ${inMin(p.tierEndsAt)} min`,
         body: `${nextLine} Pensez au check-out si vous partez.`.trim(),
       };
     case 'GRACE':
       return {
-        title: p.mode === 'AUTO' ? `Palier ${tier} terminé` : `Forfait ${tier} dépassé`,
+        title: p.mode === 'AUTO' ? `Pass ${tier} terminé` : `Pass ${tier} dépassé`,
         body: nextLine || 'Pensez au check-out.',
       };
     case 'SURCHARGE':

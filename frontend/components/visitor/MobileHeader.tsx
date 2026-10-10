@@ -40,7 +40,7 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "/events": "Événements",
   "/tarifs": "Tarifs",
   "/subscription": "Abonnement",
-  "/choose": "Forfaits",
+  "/choose": "Pass",
   "/staff": "Accueil",
   "/reserve": "Réserver",
   "/reservations": "Mes réservations",
@@ -123,7 +123,7 @@ export function MobileHeader() {
     if (status?.pendingRequest) {
       items.push({
         id: "pending",
-        title: `Demande en attente : ${status.pendingRequest.price?.name || "forfait"}`,
+        title: `Demande en attente : ${status.pendingRequest.price?.name || "pass"}`,
         href: href("/choose"),
       });
     }

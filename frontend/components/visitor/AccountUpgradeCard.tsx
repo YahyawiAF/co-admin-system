@@ -74,7 +74,7 @@ export function AccountUpgradeCard({
             <p className="mt-1 text-sm text-slate-500">{description}</p>
             <p className="mt-2 text-xs text-slate-400">
               Installez l’app, puis choisissez un PIN quand vous voulez.
-              Pointage et forfait marchent déjà sans PIN.
+              Pointage et pass marchent déjà sans PIN.
             </p>
           </div>
         </div>

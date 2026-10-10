@@ -12,6 +12,7 @@ import {
 import {
   AVAILABILITY,
   EMPTY_FILTERS,
+  activeFilterCount,
   countValues,
   filterMembers,
   type CommunityFilters,
@@ -114,6 +115,9 @@ export function CommunityFilterSheet({
     return q ? skills.filter((s) => s.label.toLowerCase().includes(q)) : skills;
   }, [skills, skillQuery]);
 
+  const hasDraftFilters =
+    activeFilterCount(draft) + activeFilterCount(value) > 0;
+
   const resultCount = useMemo(
     () => filterMembers(people, draft, query).length,
     [people, draft, query],
@@ -136,13 +140,6 @@ export function CommunityFilterSheet({
                 Parmi les membres sur place
               </SheetDescription>
             </div>
-            <button
-              type="button"
-              className="text-xs font-medium text-indigo-600"
-              onClick={() => setDraft(EMPTY_FILTERS)}
-            >
-              Effacer
-            </button>
           </SheetHeader>
 
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-4">
@@ -275,14 +272,25 @@ export function CommunityFilterSheet({
             </button>
           </div>
 
-          <div className="border-t border-slate-100 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+          <div className="flex items-center gap-2 border-t border-slate-100 px-5 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            <button
+              type="button"
+              disabled={!hasDraftFilters}
+              onClick={() => {
+                setDraft(EMPTY_FILTERS);
+                onApply(EMPTY_FILTERS);
+              }}
+              className="h-12 shrink-0 rounded-full border border-slate-200 px-5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
+            >
+              Tout annuler
+            </button>
             <button
               type="button"
               onClick={() => {
                 onApply(draft);
                 onOpenChange(false);
               }}
-              className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold text-white hover:bg-indigo-700"
+              className="h-12 min-w-0 flex-1 rounded-full bg-indigo-600 text-sm font-semibold text-white hover:bg-indigo-700"
             >
               {resultCount === 0
                 ? "Aucun membre"

@@ -71,7 +71,7 @@ export default function SessionPage() {
             Aucune session en cours
           </p>
           <p className="mt-1 text-[13px] text-slate-500">
-            Scannez le QR ou choisissez un forfait depuis l&apos;accueil.
+            Scannez le QR ou choisissez un pass depuis l&apos;accueil.
           </p>
           <Button
             className="mt-4 h-11 w-full rounded-full bg-indigo-600 hover:bg-indigo-700"

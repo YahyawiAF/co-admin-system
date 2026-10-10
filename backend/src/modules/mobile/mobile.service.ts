@@ -222,16 +222,13 @@ export class MobileService {
     switch (p.stage) {
       case 'WARNING':
         return {
-          title:
-            p.mode === 'AUTO'
-              ? `Palier ${tier} : fin dans ${inMin(p.tierEndsAt)} min`
-              : `Forfait ${tier} : fin dans ${inMin(p.tierEndsAt)} min`,
+          title: `Pass ${tier} : fin dans ${inMin(p.tierEndsAt)} min`,
           body: `${nextLine} Pensez au check-out si vous partez.`.trim(),
         };
       case 'GRACE':
         return {
           title:
-            p.mode === 'AUTO' ? `Palier ${tier} terminé` : `Forfait ${tier} dépassé`,
+            p.mode === 'AUTO' ? `Pass ${tier} terminé` : `Pass ${tier} dépassé`,
           body: nextLine || 'Pensez au check-out.',
         };
       case 'SURCHARGE':
@@ -1802,7 +1799,7 @@ export class MobileService {
       );
       if (used < quota - 0.01) {
         throw new BadRequestException(
-          `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un forfait.`,
+          `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un pass.`,
         );
       }
     }
@@ -2238,7 +2235,7 @@ export class MobileService {
     const first = ladderFor(ctx.ladder, PriceCategory.JOURNEE)[0];
     if (!first) {
       throw new BadRequestException(
-        'Aucun forfait (2h, 4h…) configuré pour le démarrage automatique',
+        'Aucun pass (2h, 4h…) configuré pour le démarrage automatique',
       );
     }
     const price = await this.prisma.price.findUnique({
@@ -2366,7 +2363,7 @@ export class MobileService {
       !price.durationHours ||
       price.durationHours <= 0
     ) {
-      throw new BadRequestException('Choisissez un forfait (2h, 4h, …)');
+      throw new BadRequestException('Choisissez un pass (2h, 4h, …)');
     }
     const now = new Date();
     if (!opts.byAdmin) {
@@ -2375,7 +2372,7 @@ export class MobileService {
       }
       if (journal.isPayed || (journal.paidAmount || 0) > 0) {
         throw new ForbiddenException(
-          'Session déjà payée — pour changer de forfait, demandez à l’accueil',
+          'Session déjà payée — pour changer de pass, demandez à l’accueil',
         );
       }
       const ctx = await loadPricingContext(
@@ -2383,13 +2380,13 @@ export class MobileService {
         journal.members?.organizationId ?? null,
       );
       if (!ctx.ladder.some((t) => t.priceId === price.id)) {
-        throw new BadRequestException('Forfait indisponible');
+        throw new BadRequestException('Pass indisponible');
       }
       const elapsedH =
         (now.getTime() - new Date(journal.registredTime).getTime()) / 3_600_000;
       if (price.durationHours <= elapsedH) {
         throw new BadRequestException(
-          'Ce forfait est plus court que le temps déjà passé',
+          'Ce pass est plus court que le temps déjà passé',
         );
       }
     }
@@ -2428,7 +2425,7 @@ export class MobileService {
     });
     if (updated.memberID) {
       void this.pushService.sendToMember(updated.memberID, {
-        title: `Forfait ${price.name} fixé`,
+        title: `Pass ${price.name} fixé`,
         body: `Montant ${amount.toFixed(3)} DT.`,
         tag: `session-pricing-${journalId}`,
         url: '/m',
@@ -3345,7 +3342,7 @@ export class MobileService {
       remainingCredit = Math.max(0, quota - used);
       if (remainingCredit <= 0.01) {
         throw new BadRequestException(
-          'Crédit abonnement du jour épuisé. Vous pouvez prendre un forfait.',
+          'Crédit abonnement du jour épuisé. Vous pouvez prendre un pass.',
         );
       }
     }
@@ -3625,7 +3622,7 @@ export class MobileService {
         : null;
       if (subKind === 'HOURS_POOL') {
         throw new BadRequestException(
-          'Abonnement heures : pointez (scan) pour entrer. Pas de forfait.',
+          'Abonnement heures : pointez (scan) pour entrer. Pas de pass.',
         );
       }
       if (this.isPeriodKind(subKind) && activeSub?.price) {
@@ -3639,7 +3636,7 @@ export class MobileService {
         );
         if (used < quota - 0.01) {
           throw new BadRequestException(
-            `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un forfait.`,
+            `Crédit abonnement du jour restant (${Math.max(0, quota - used).toFixed(1)} h). Pointez votre présence avant d’acheter un pass.`,
           );
         }
       }

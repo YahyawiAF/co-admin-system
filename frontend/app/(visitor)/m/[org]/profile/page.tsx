@@ -266,7 +266,7 @@ function ProfileInner() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block font-medium">Tarifs</span>
-              <span className="block text-xs text-slate-500">Forfaits du jour</span>
+              <span className="block text-xs text-slate-500">Pass du jour</span>
             </span>
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </Link>
@@ -375,7 +375,7 @@ function ProfileInner() {
           {
             href: href("/tarifs"),
             label: "Tarifs",
-            hint: "Forfaits et packs",
+            hint: "Pass et abonnements",
             icon: Tags,
           },
           {

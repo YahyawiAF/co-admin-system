@@ -96,70 +96,73 @@ export default function EventDetailPage() {
     ended && mine?.status === "ATTENDED" && !mine.feedbackRating;
 
   return (
-    <div className="space-y-4">
-      {event.coverImage ? (
-        <img
-          src={event.coverImage}
-          alt=""
-          className="-mx-4 h-48 w-[calc(100%+2rem)] object-cover sm:mx-0 sm:w-full sm:rounded-2xl"
-        />
-      ) : null}
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
-        <Badge variant="outline">{KIND_LABEL[event.kind]}</Badge>
-        {cancelled ? (
-          <Badge variant="destructive" className="ml-2">
-            Annulé
-          </Badge>
+    <div className="space-y-3">
+      <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+        {event.coverImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={event.coverImage}
+            alt=""
+            className="block h-44 w-full object-cover"
+          />
         ) : null}
-        <h1 className="mt-2 text-xl font-bold">{event.title}</h1>
-        <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
-          <CalendarDays className="h-4 w-4" />
-          {format(new Date(event.startAt), "EEEE d MMMM · HH:mm", { locale: fr })}
-          {" → "}
-          {format(new Date(event.endAt), "HH:mm")}
-        </p>
-        {event.location ? (
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-            <MapPin className="h-4 w-4" />
-            {event.location}
+        <div className="p-4">
+          <Badge variant="outline">{KIND_LABEL[event.kind]}</Badge>
+          {cancelled ? (
+            <Badge variant="destructive" className="ml-2">
+              Annulé
+            </Badge>
+          ) : null}
+          <h1 className="mt-2 text-xl font-bold">{event.title}</h1>
+          <p className="mt-2 flex items-center gap-1.5 text-sm text-slate-500">
+            <CalendarDays className="h-4 w-4" />
+            {format(new Date(event.startAt), "EEEE d MMMM · HH:mm", { locale: fr })}
+            {" → "}
+            {format(new Date(event.endAt), "HH:mm")}
           </p>
-        ) : null}
-        <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-          <Users className="h-4 w-4" />
-          {event.capacity == null
-            ? `${event.registeredCount || 0} inscrits · Illimité`
-            : `${event.registeredCount || 0}/${event.capacity} places`}
-        </p>
-        {event.description ? (
-          <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">
-            {event.description}
-          </p>
-        ) : null}
+          {event.location ? (
+            <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
+              <MapPin className="h-4 w-4" />
+              {event.location}
+            </p>
+          ) : null}
+          {full ? (
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-rose-600">
+              <Users className="h-4 w-4" />
+              Complet
+            </p>
+          ) : null}
+          {event.description ? (
+            <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600">
+              {event.description}
+            </p>
+          ) : null}
 
-        {!cancelled && !ended ? (
-          active ? (
-            <Button
-              variant="outline"
-              className="mt-4 h-11 w-full rounded-full"
-              disabled={unregister.isPending || mine?.status === "ATTENDED"}
-              onClick={() => unregister.mutate()}
-            >
-              Annuler mon inscription
-            </Button>
-          ) : (
-            <Button
-              className="mt-4 h-11 w-full rounded-full"
-              disabled={!memberId || register.isPending || full}
-              onClick={() => register.mutate()}
-            >
-              {full ? "Complet" : "S’inscrire"}
-            </Button>
-          )
-        ) : null}
+          {!cancelled && !ended ? (
+            active ? (
+              <Button
+                variant="outline"
+                className="mt-4 h-11 w-full rounded-full"
+                disabled={unregister.isPending || mine?.status === "ATTENDED"}
+                onClick={() => unregister.mutate()}
+              >
+                Annuler mon inscription
+              </Button>
+            ) : (
+              <Button
+                className="mt-4 h-11 w-full rounded-full"
+                disabled={!memberId || register.isPending || full}
+                onClick={() => register.mutate()}
+              >
+                {full ? "Complet" : "S’inscrire"}
+              </Button>
+            )
+          ) : null}
+        </div>
       </div>
 
       {showQr ? (
-        <div className="rounded-2xl bg-white p-4 text-center shadow-sm">
+        <div className="rounded-3xl bg-white p-4 text-center shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
             Présence
           </p>
@@ -180,15 +183,8 @@ export default function EventDetailPage() {
         </div>
       ) : null}
 
-      <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="rounded-3xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold">Qui y va ?</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          {who?.total || 0} inscrit
-          {(who?.total || 0) > 1 ? "s" : ""}
-          {who?.hiddenCount
-            ? ` · ${who.hiddenCount} profil${who.hiddenCount > 1 ? "s" : ""} masqué${who.hiddenCount > 1 ? "s" : ""}`
-            : ""}
-        </p>
         <div className="mt-2 divide-y">
           {(who?.attendees || []).length === 0 ? (
             <p className="py-4 text-sm text-slate-400">
@@ -207,7 +203,7 @@ export default function EventDetailPage() {
       </div>
 
       {showFeedback ? (
-        <div className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="rounded-3xl bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold">Votre avis</h2>
           <div className="mt-2 flex gap-1">
             {[1, 2, 3, 4, 5].map((n) => (

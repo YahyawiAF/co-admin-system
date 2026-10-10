@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -25,10 +25,6 @@ import {
   PointsCard,
 } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
-import {
-  isWithinPointageGrace,
-  PointageGraceWindow,
-} from "@/components/visitor/PointageGraceWindow";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import {
@@ -52,7 +48,6 @@ export default function MobileHomePage() {
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
-  const [graceDismissed, setGraceDismissed] = useState(false);
   const [fromQr, setFromQr] = useState(false);
 
   useEffect(() => {
@@ -63,7 +58,12 @@ export default function MobileHomePage() {
     setFromQr(hasRecentQrEntry(slug));
   }, [slug]);
 
-  const { data: status, refetch } = useMobileStatus();
+  const {
+    data: status,
+    refetch,
+    isPlaceholderData: statusIsPlaceholder,
+  } = useMobileStatus();
+  const qrAutoStartedRef = useRef(false);
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug, memberId],
     queryFn: async () => {
@@ -87,10 +87,6 @@ export default function MobileHomePage() {
     setFromQr(false);
   }, [status?.session, slug]);
 
-  useEffect(() => {
-    setGraceDismissed(false);
-  }, [status?.session?.id]);
-
   const cancel = useMutation({
     mutationFn: () => {
       const id = status?.pendingRequest?.id;
@@ -109,12 +105,12 @@ export default function MobileHomePage() {
     mutationFn: () => mobileApi.scanIn(memberId!),
     onSuccess: (res) => {
       if (res?.alreadyOpen) {
-        setGraceDismissed(true);
         toast.message("Votre session est déjà en cours");
       } else {
         toast.success("Présence enregistrée ✓");
       }
       refetch();
+      router.push(href("/session"));
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -124,12 +120,12 @@ export default function MobileHomePage() {
     mutationFn: () => mobileApi.startAutoSession(memberId!),
     onSuccess: (res) => {
       if (res?.alreadyOpen) {
-        setGraceDismissed(true);
         toast.message("Votre session est déjà en cours");
       } else {
-        toast.success("Présence enregistrée ✓ — le compteur démarre");
+        toast.success("Présence enregistrée ✓");
       }
       refetch();
+      router.push(href("/session"));
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -138,8 +134,8 @@ export default function MobileHomePage() {
   const startSession = () => {
     if (!memberId || scanIn.isPending || startAuto.isPending) return;
     if (status?.session || status?.pendingRequest) {
-      setGraceDismissed(true);
       toast.message("Votre session est déjà en cours");
+      if (status.session) router.push(href("/session"));
       return;
     }
     if (status?.hasActiveSubscription) {
@@ -158,16 +154,19 @@ export default function MobileHomePage() {
     startAuto.mutate();
   };
 
+  /** First QR scan → the session starts immediately (no extra tap). */
+  useEffect(() => {
+    if (!fromQr || qrAutoStartedRef.current) return;
+    if (!ready || !onboarded || !memberId) return;
+    if (!status || statusIsPlaceholder) return;
+    if (status.session || status.pendingRequest) return;
+    qrAutoStartedRef.current = true;
+    clearQrEntry(slug);
+    startSession();
+  });
+
   const pending = status?.pendingRequest;
   const session = status?.session;
-  const isOptimisticSession =
-    !!(session as { _optimistic?: boolean } | null | undefined)?._optimistic ||
-    String(session?.id || "").startsWith("optimistic");
-  const showGrace =
-    !!session &&
-    !graceDismissed &&
-    !isOptimisticSession &&
-    isWithinPointageGrace(session.registredTime);
   const seat = session?.seat || status?.seat || null;
   const member = status?.member;
   const subKind = (status?.subscription as { kind?: string } | null)?.kind;
@@ -291,17 +290,7 @@ export default function MobileHomePage() {
       ) : null}
 
       {/* Hero — compact greeting / post-pointage grace */}
-      {session && showGrace ? (
-        <PointageGraceWindow
-          forfaitName={
-            session.pricingMode === "AUTO"
-              ? "Tarif auto — le prix suit le temps passé"
-              : session.prices?.name || session.price?.name || "Forfait"
-          }
-          registredTime={session.registredTime}
-          onExpired={() => setGraceDismissed(true)}
-        />
-      ) : session ? (
+      {session ? (
         <ActiveSessionPanel
           memberId={memberId!}
           session={session}
