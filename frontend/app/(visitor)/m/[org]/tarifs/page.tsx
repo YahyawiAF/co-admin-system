@@ -7,7 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { mobileApi } from "@/lib/api/resources";
 import { PriceCategory } from "@/lib/types";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
-import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
+import {
+  memberAppPromos,
+  pricedWithPromo,
+  promoCategoriesOf,
+} from "@/lib/promo-price";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -28,19 +32,11 @@ export default function MobileTarifsPage() {
     queryFn: () => mobileApi.floorPlan(slug, memberId ?? undefined),
     staleTime: 60_000,
   });
-  const promoEligible =
-    layout?.facility?.appInstallPromoEligible !== false &&
-    !status?.member?.appInstallPromoClaimedAt &&
-    status?.member?.appInstallPromoEligible !== false;
-  const promoActive =
-    promoEligible &&
-    (!!status?.member?.appInstallPromoActive ||
-      !!status?.member?.pwaInstalledAt);
+  const appPromos = memberAppPromos(layout?.facility, status?.member);
+  const promoEligible = appPromos.eligible;
+  const promoActive = appPromos.active;
   const promoOpts = promoActive
-    ? {
-        promos: layout?.facility?.appInstallPromos ?? null,
-        globalPromo: layout?.facility?.appInstallGlobalPromo ?? null,
-      }
+    ? { promos: appPromos.promos, globalPromo: appPromos.globalPromo }
     : { promos: null, globalPromo: null };
 
   const groups = useMemo(() => {

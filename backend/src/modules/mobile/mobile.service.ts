@@ -93,6 +93,7 @@ import {
   latePaymentInfo,
   visitAmountAt,
 } from './visit-amount';
+import { appPromoUsage, GLOBAL_APP_PROMO_KEY } from './app-install-promo-usage';
 
 export const roundsOfHashing = 10;
 
@@ -433,26 +434,27 @@ export class MobileService {
   }
 
   /**
-   * One-time app-install promo (global or tarif-linked).
-   * Returns null if already claimed.
+   * App-install promo for this tarif: an unused tarif-linked promo first, else the
+   * global one if unused and in scope. Each promo is single-use per member.
    */
   private async resolveAppInstallPromo(
     memberId: string | null | undefined,
     priceId: string,
-  ): Promise<{ valueKind: PromoValueKind; value: number } | null> {
+  ): Promise<{ valueKind: PromoValueKind; value: number; key: string } | null> {
     if (!memberId) return null;
     const member = await this.prisma.member.findUnique({
       where: { id: memberId },
       select: {
         appInstallPromoClaimedAt: true,
+        appInstallPromosUsed: true,
         pwaInstalledAt: true,
         organizationId: true,
       },
     });
     // Promo only activates after the visitor has installed the PWA
-    if (!member || member.appInstallPromoClaimedAt || !member.pwaInstalledAt) {
-      return null;
-    }
+    if (!member || !member.pwaInstalledAt) return null;
+    const usage = appPromoUsage(member);
+    if (usage.exhausted) return null;
 
     const facility = await this.prisma.facility.findFirst({
       where: { organizationId: member.organizationId },
@@ -466,14 +468,16 @@ export class MobileService {
         priceId,
         isActive: true,
         value: { gt: 0 },
+        ...(usage.used.length ? { id: { notIn: usage.used } } : {}),
       },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
     if (linked) {
-      return { valueKind: linked.valueKind, value: linked.value };
+      return { valueKind: linked.valueKind, value: linked.value, key: linked.id };
     }
 
     if (
+      !usage.isUsed(GLOBAL_APP_PROMO_KEY) &&
       facility.appInstallGlobalPromoActive &&
       facility.appInstallGlobalPromoValue != null &&
       facility.appInstallGlobalPromoValue > 0 &&
@@ -492,6 +496,7 @@ export class MobileService {
       return {
         valueKind: facility.appInstallGlobalPromoKind,
         value: facility.appInstallGlobalPromoValue,
+        key: GLOBAL_APP_PROMO_KEY,
       };
     }
     return null;
@@ -527,7 +532,10 @@ export class MobileService {
     if (next >= amountAfterGroupDiscount - 0.001) return none;
     await this.prisma.member.update({
       where: { id: memberId },
-      data: { appInstallPromoClaimedAt: new Date() },
+      data: {
+        appInstallPromoClaimedAt: new Date(),
+        appInstallPromosUsed: { push: promo.key },
+      },
     });
     return {
       amount: next,
@@ -1155,9 +1163,11 @@ export class MobileService {
     todayFocusAt?: Date | null;
     shareAttendance?: boolean | null;
     appInstallPromoClaimedAt?: Date | null;
+    appInstallPromosUsed?: string[] | null;
     pwaInstalledAt?: Date | null;
     points?: number | null;
   }) {
+    const promoUsage = appPromoUsage(member);
     // "Focus du jour" expires daily
     const focusFresh =
       !!member.todayFocus &&
@@ -1195,9 +1205,9 @@ export class MobileService {
       pwaInstalledAt: member.pwaInstalledAt
         ? member.pwaInstalledAt.toISOString?.() ?? String(member.pwaInstalledAt)
         : null,
-      appInstallPromoEligible: !member.appInstallPromoClaimedAt,
-      appInstallPromoActive:
-        !member.appInstallPromoClaimedAt && !!member.pwaInstalledAt,
+      appInstallPromosUsed: promoUsage.used,
+      appInstallPromoEligible: !promoUsage.exhausted,
+      appInstallPromoActive: !promoUsage.exhausted && !!member.pwaInstalledAt,
     };
   }
 
@@ -1694,14 +1704,17 @@ export class MobileService {
       facility.appInstallGlobalPromoValue > 0 &&
       !!facility.appInstallGlobalPromoKind;
 
-    let promoEligible = true;
-    if (memberId) {
-      const m = await this.prisma.member.findUnique({
-        where: { id: memberId },
-        select: { appInstallPromoClaimedAt: true },
-      });
-      if (m?.appInstallPromoClaimedAt) promoEligible = false;
-    }
+    const usage = appPromoUsage(
+      memberId
+        ? (await this.prisma.member.findUnique({
+            where: { id: memberId },
+            select: { appInstallPromoClaimedAt: true, appInstallPromosUsed: true },
+          })) ?? {}
+        : {},
+    );
+    const remainingPromos = promos.filter((p) => !usage.isUsed(p.id));
+    const globalRemaining = globalActive && !usage.isUsed(GLOBAL_APP_PROMO_KEY);
+    const promoEligible = globalRemaining || remainingPromos.length > 0;
 
     return {
       facility: facility
@@ -1711,7 +1724,7 @@ export class MobileService {
             mobileSeatMode: facility.mobileSeatMode,
             receptionAway: facility.receptionAway,
             appInstallGlobalPromo:
-              globalActive && promoEligible
+              globalRemaining
                 ? {
                     valueKind: facility.appInstallGlobalPromoKind,
                     value: facility.appInstallGlobalPromoValue,
@@ -1720,7 +1733,7 @@ export class MobileService {
                   }
                 : null,
             appInstallPromos: promoEligible
-              ? promos.map((p) => ({
+              ? remainingPromos.map((p) => ({
                   id: p.id,
                   priceId: p.priceId,
                   priceName: p.price.name,
@@ -2016,8 +2029,13 @@ export class MobileService {
       const due = visitAmountAt(row, ctx, now);
       if (due != null) {
         payedAmount = due;
-        if (journal.pricingMode === 'AUTO' && journal.memberID) {
-          const pricing = computeRowPricing(row, ctx, now);
+        if (
+          journal.memberID &&
+          !journal.promoDiscount &&
+          (journal.pricingMode === 'AUTO' || !(journal.payedAmount > 0))
+        ) {
+          const pricing =
+            journal.pricingMode === 'AUTO' ? computeRowPricing(row, ctx, now) : null;
           const promo = await this.applyAppPromo(
             journal.memberID,
             pricing?.currentTier.priceId || journal.priceId || '',

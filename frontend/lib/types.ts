@@ -91,6 +91,8 @@ export interface Member {
   points?: number;
   /** When the member used the one-time app-install promo */
   appInstallPromoClaimedAt?: string | null;
+  /** App-install promos already used (promo ids or "global"), each single-use */
+  appInstallPromosUsed?: string[];
   /** First open as installed PWA */
   pwaInstalledAt?: string | null;
   /** False once the one-time install promo was used */

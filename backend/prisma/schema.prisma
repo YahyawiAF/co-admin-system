@@ -55,8 +55,10 @@ model Member {
   discountAbonnement  Float?
   discountSalle       Float?
   discountOpenSpace   Float?
-  /// When the member already used the one-time app-install promo
+  /// Last time the member used an app-install promo
   appInstallPromoClaimedAt DateTime?
+  /// App-install promos already used: AppInstallPromo ids, or "global" (each is single-use)
+  appInstallPromosUsed String[] @default([])
   /// First time the member opened the app as an installed PWA
   pwaInstalledAt DateTime?
   /// Gamification score — only credited when client is installed PWA

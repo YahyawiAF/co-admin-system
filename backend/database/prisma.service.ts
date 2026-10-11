@@ -13,6 +13,7 @@ END $$`,
   `ALTER TABLE "facilities" ADD COLUMN IF NOT EXISTS "appInstallGlobalPromoKind" "PromoValueKind"`,
   `ALTER TABLE "facilities" ADD COLUMN IF NOT EXISTS "appInstallGlobalPromoValue" DOUBLE PRECISION`,
   `ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "appInstallPromoClaimedAt" TIMESTAMP(3)`,
+  `ALTER TABLE "members" ADD COLUMN IF NOT EXISTS "appInstallPromosUsed" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]`,
   `CREATE TABLE IF NOT EXISTS "app_install_promos" (
     "id" TEXT NOT NULL,
     "facilityId" TEXT NOT NULL,

@@ -35,6 +35,7 @@ import { EventsPreview } from "@/components/visitor/EventCard";
 import { SubscriptionStatusCard } from "@/components/visitor/SubscriptionStatusCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { spacesForPrice } from "@/lib/space-occupy";
+import { memberAppPromos } from "@/lib/promo-price";
 import {
   readLocalCache,
   writeLocalCache,
@@ -220,10 +221,12 @@ export default function MobileHomePage() {
     : startAuto.isError
       ? (startAuto.error as Error).message
       : null;
+  const appPromos = memberAppPromos(layout?.facility, status?.member);
   const showInstallPromo =
-    status?.member?.appInstallPromoEligible !== false &&
-    !status?.member?.appInstallPromoClaimedAt &&
-    layout?.facility?.appInstallPromoEligible !== false;
+    appPromos.eligible ||
+    (!!status?.member &&
+      !status.member.pwaInstalledAt &&
+      status.member.appInstallPromoEligible !== false);
 
   const sessionPrice = session?.prices || session?.price || null;
   const allowedSpaceIds = useMemo(
@@ -296,16 +299,13 @@ export default function MobileHomePage() {
         />
       ) : null}
 
-      {/* App install promo — once only; hidden after claim */}
+      {/* App install promo — each promo once; hidden when all are used */}
       {showInstallPromo && !showQrWelcome ? (
         <AppInstallPromo
-          globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
-          promos={layout?.facility?.appInstallPromos ?? null}
+          globalPromo={appPromos.globalPromo}
+          promos={appPromos.promos}
           emphasize={showCheckoutPromo && !session}
-          unlocked={
-            !!status?.member?.appInstallPromoActive ||
-            !!status?.member?.pwaInstalledAt
-          }
+          unlocked={appPromos.active}
         />
       ) : null}
 
@@ -319,20 +319,6 @@ export default function MobileHomePage() {
           hasActiveSubscription={!!status?.hasActiveSubscription}
           subscriptionKind={subKind}
           allowedSpaceIds={allowedSpaceIds}
-          promos={
-            status?.member?.appInstallPromoEligible === false ||
-            status?.member?.appInstallPromoClaimedAt ||
-            layout?.facility?.appInstallPromoEligible === false
-              ? null
-              : layout?.facility?.appInstallPromos ?? null
-          }
-          globalPromo={
-            status?.member?.appInstallPromoEligible === false ||
-            status?.member?.appInstallPromoClaimedAt ||
-            layout?.facility?.appInstallPromoEligible === false
-              ? null
-              : layout?.facility?.appInstallGlobalPromo ?? null
-          }
           onCheckoutSuccess={() => {
             if (!isStandalonePwa()) setShowCheckoutPromo(true);
           }}
@@ -423,12 +409,9 @@ export default function MobileHomePage() {
 
       {showQrWelcome && showInstallPromo ? (
         <AppInstallPromo
-          globalPromo={layout?.facility?.appInstallGlobalPromo ?? null}
-          promos={layout?.facility?.appInstallPromos ?? null}
-          unlocked={
-            !!status?.member?.appInstallPromoActive ||
-            !!status?.member?.pwaInstalledAt
-          }
+          globalPromo={appPromos.globalPromo}
+          promos={appPromos.promos}
+          unlocked={appPromos.active}
         />
       ) : null}
 

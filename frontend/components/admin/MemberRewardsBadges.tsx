@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 type MemberRewards = {
   points?: number | null;
   appInstallPromoClaimedAt?: string | Date | null;
+  appInstallPromosUsed?: string[] | null;
 };
 
 type Props = {
@@ -24,6 +25,7 @@ export function MemberRewardsBadges({
 
   const points = Number(member.points ?? 0);
   const claimed = !!member.appInstallPromoClaimedAt;
+  const usedCount = member.appInstallPromosUsed?.length ?? 0;
   const showPoints = Number.isFinite(points);
   if (!showPoints && !showPromo) return null;
 
@@ -43,10 +45,14 @@ export function MemberRewardsBadges({
         claimed ? (
           <Badge
             className="h-5 gap-0.5 bg-emerald-600 px-1.5 text-[10px] hover:bg-emerald-600"
-            title="Promo installation déjà utilisée"
+            title={
+              usedCount > 1
+                ? `${usedCount} promos installation utilisées`
+                : "Promo installation déjà utilisée"
+            }
           >
             <Gift className="h-3 w-3" />
-            Promo ✓
+            Promo ✓{usedCount > 1 ? ` ×${usedCount}` : ""}
           </Badge>
         ) : (
           <Badge

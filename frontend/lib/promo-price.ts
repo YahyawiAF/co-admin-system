@@ -109,6 +109,49 @@ export function pricedWithPromo(
   };
 }
 
+export const GLOBAL_APP_PROMO_KEY = "global";
+
+type PromoFacility = {
+  appInstallPromos?: AppInstallPromo[] | null;
+  appInstallGlobalPromo?: AppInstallGlobalPromo | null;
+  appInstallPromoEligible?: boolean;
+} | null | undefined;
+
+type PromoMember = {
+  appInstallPromoClaimedAt?: string | null;
+  appInstallPromosUsed?: string[] | null;
+  appInstallPromoEligible?: boolean;
+  appInstallPromoActive?: boolean;
+  pwaInstalledAt?: string | null;
+} | null | undefined;
+
+/**
+ * App-install promos still available to this member. Each promo (global + every
+ * tarif-linked one) is single-use: once used it disappears everywhere in the app.
+ * Usage lives on the member server-side, so reinstalling the app never resets it;
+ * nothing is shown until the member is known.
+ * `active` = discounted prices apply now (app installed); otherwise only teasers.
+ */
+export function memberAppPromos(facility: PromoFacility, member: PromoMember) {
+  const used = member?.appInstallPromosUsed ?? [];
+  const exhausted =
+    !member ||
+    member.appInstallPromoEligible === false ||
+    facility?.appInstallPromoEligible === false ||
+    (!!member.appInstallPromoClaimedAt && !used.length);
+  const promos = exhausted
+    ? []
+    : (facility?.appInstallPromos ?? []).filter((p) => !used.includes(p.id));
+  const globalPromo =
+    exhausted || used.includes(GLOBAL_APP_PROMO_KEY)
+      ? null
+      : facility?.appInstallGlobalPromo ?? null;
+  const eligible = promos.length > 0 || !!globalPromo;
+  const active =
+    eligible && (!!member?.appInstallPromoActive || !!member?.pwaInstalledAt);
+  return { promos, globalPromo, eligible, active };
+}
+
 export function formatDt(n: number) {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
 }

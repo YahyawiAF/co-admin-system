@@ -106,20 +106,6 @@ export default function SessionPage() {
         hasActiveSubscription={!!status?.hasActiveSubscription}
         subscriptionKind={subKind}
         allowedSpaceIds={allowedSpaceIds}
-        promos={
-          status?.member?.appInstallPromoEligible === false ||
-          status?.member?.appInstallPromoClaimedAt ||
-          layout?.facility?.appInstallPromoEligible === false
-            ? null
-            : layout?.facility?.appInstallPromos ?? null
-        }
-        globalPromo={
-          status?.member?.appInstallPromoEligible === false ||
-          status?.member?.appInstallPromoClaimedAt ||
-          layout?.facility?.appInstallPromoEligible === false
-            ? null
-            : layout?.facility?.appInstallGlobalPromo ?? null
-        }
         belowSession={<EventsPreview />}
       />
     </div>

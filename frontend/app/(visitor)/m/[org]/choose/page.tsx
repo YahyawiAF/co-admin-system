@@ -29,7 +29,11 @@ import {
   priceAllowsWholeIn,
   spacesForPrice,
 } from "@/lib/space-occupy";
-import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
+import {
+  memberAppPromos,
+  pricedWithPromo,
+  promoCategoriesOf,
+} from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { TarifOptionCard } from "@/components/visitor/TarifOption";
 import { toast } from "sonner";
@@ -100,20 +104,11 @@ function ChooseInner() {
     staleTime: 60_000,
   });
   const layoutSpaces = (layout?.spaces || []) as Space[];
-  const promoEligible =
-    layout?.facility?.appInstallPromoEligible !== false &&
-    !status?.member?.appInstallPromoClaimedAt &&
-    status?.member?.appInstallPromoEligible !== false;
+  const appPromos = memberAppPromos(layout?.facility, status?.member);
   /** Discounted price only once the app is installed (promo activated). */
-  const promoActive =
-    promoEligible &&
-    (!!status?.member?.appInstallPromoActive ||
-      !!status?.member?.pwaInstalledAt);
+  const promoActive = appPromos.active;
   const promoOpts = promoActive
-    ? {
-        promos: layout?.facility?.appInstallPromos ?? null,
-        globalPromo: layout?.facility?.appInstallGlobalPromo ?? null,
-      }
+    ? { promos: appPromos.promos, globalPromo: appPromos.globalPromo }
     : { promos: null, globalPromo: null };
 
   const { data: pendingRequest } = useQuery({

@@ -106,9 +106,15 @@ export class MemberEntity implements Member {
   @ApiProperty({
     required: false,
     nullable: true,
-    description: 'When the member already used the one-time app-install promo',
+    description: 'Last time the member used an app-install promo',
   })
   appInstallPromoClaimedAt: Date | null;
+
+  @ApiProperty({
+    type: [String],
+    description: 'App-install promos already used (promo ids or "global"), each single-use',
+  })
+  appInstallPromosUsed: string[];
 
   @ApiProperty({
     required: false,

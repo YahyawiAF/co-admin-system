@@ -10,14 +10,11 @@ import { mobileApi } from "@/lib/api/resources";
 import { formatDurationHm } from "@/lib/journal-utils";
 import { usePageVisible } from "@/lib/hooks/use-page-visible";
 import type {
-  AppInstallGlobalPromo,
-  AppInstallPromo,
   Journal,
   MobileSeatMode,
   MobileSeatSettings,
   SeatAssignmentInfo,
 } from "@/lib/types";
-import { pricedWithPromo, promoCategoriesOf } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { useOrg } from "@/lib/org";
 import { usePricingContext } from "@/lib/hooks/use-pricing-context";
@@ -61,8 +58,6 @@ type Props = {
   allowedSpaceIds?: string[];
   /** Called after a successful check-out (web promo CTA). */
   onCheckoutSuccess?: () => void;
-  promos?: AppInstallPromo[] | null;
-  globalPromo?: AppInstallGlobalPromo | null;
   /** Open the subscription picker (session switches to the abo once approved) */
   onSwitchToSubscription?: () => void;
   /** Subscription request waiting for reception */
@@ -117,8 +112,6 @@ export function ActiveSessionPanel({
   subscriptionKind,
   allowedSpaceIds,
   onCheckoutSuccess,
-  promos,
-  globalPromo,
   onSwitchToSubscription,
   pendingSubscriptionName,
   onWifi,
@@ -210,23 +203,20 @@ export function ActiveSessionPanel({
   const isOptimistic =
     !!(session as { _optimistic?: boolean })._optimistic ||
     String(session.id || "").startsWith("optimistic");
-  const catalogPrice =
-    session.prices?.price ?? session.price?.price ?? null;
-  const priceId = session.priceId || session.prices?.id || session.price?.id;
   const amountRaw = covered
     ? 0
     : live?.amountDue ?? session.amountDue ?? session.payedAmount ?? 0;
+  const promoOff =
+    !covered && session.promoDiscount && session.promoDiscount > 0.0005
+      ? session.promoDiscount
+      : null;
   const priced =
-    !covered && !live
-      ? pricedWithPromo(
-          catalogPrice != null && catalogPrice > 0 ? catalogPrice : amountRaw,
-          priceId,
-          {
-            promos,
-            globalPromo,
-            categories: promoCategoriesOf(session.prices || session.price),
-          }
-        )
+    promoOff && !live
+      ? {
+          original: session.priceBeforePromo ?? amountRaw + promoOff,
+          final: amountRaw,
+          hasPromo: true,
+        }
       : null;
   const passTitle = live
     ? live.mode === "AUTO"
@@ -370,7 +360,9 @@ export function ActiveSessionPanel({
       tone="slate"
       value={formatDt(live.amountDue)}
       sub={
-        live.paidAmount > 0
+        promoOff && live.paidAmount <= 0 && !session.isPayed
+          ? `Promo appliquée · −${formatDt(promoOff)}`
+          : live.paidAmount > 0
           ? `Payé ${formatDt(live.paidAmount)}${
               live.balanceDue > 0 ? ` · reste ${formatDt(live.balanceDue)}` : ""
             }`

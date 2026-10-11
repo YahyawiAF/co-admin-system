@@ -1111,7 +1111,10 @@ export default function TarifsPage() {
                 <p className="text-sm text-muted-foreground">
                   Jusqu&apos;à 3 offres supplémentaires, chacune liée à un tarif
                   précis — journée, salle, open space ou abonnement (% ou DT).
-                  Prioritaires sur la promo globale pour ce tarif.
+                  Prioritaires sur la promo globale pour ce tarif. Chaque promo
+                  est utilisable une seule fois par membre : avec 2 promos, le
+                  membre en profite 2 fois, puis elles disparaissent de
+                  l&apos;app.
                 </p>
               </div>
 
