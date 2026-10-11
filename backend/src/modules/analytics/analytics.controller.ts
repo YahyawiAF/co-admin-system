@@ -1,9 +1,69 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Put, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
+import { PerformanceService, PerformanceSettings } from './performance.service';
 
 @Controller('analytics')
 export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsService) {}
+  constructor(
+    private readonly analytics: AnalyticsService,
+    private readonly performance: PerformanceService,
+  ) {}
+
+  @Get('performance/settings')
+  performanceSettings(@Query('facilityId') facilityId?: string) {
+    return this.performance.settings(facilityId);
+  }
+
+  @Patch('performance/settings')
+  updatePerformanceSettings(
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: Partial<Omit<PerformanceSettings, 'facilityId'>>,
+  ) {
+    return this.performance.updateSettings(facilityId, body);
+  }
+
+  @Get('performance/targets')
+  performanceTargets(
+    @Query('facilityId') facilityId?: string,
+    @Query('year') year?: string,
+  ) {
+    return this.performance.targets(
+      facilityId,
+      Number(year) || new Date().getFullYear(),
+    );
+  }
+
+  @Put('performance/targets')
+  setPerformanceTarget(
+    @Body()
+    body: {
+      facilityId?: string;
+      year: number;
+      month: number;
+      revenue?: number | null;
+      occupancyPct?: number | null;
+    },
+  ) {
+    return this.performance.setTarget(body);
+  }
+
+  @Get('performance/overview')
+  performanceOverview(
+    @Query('facilityId') facilityId?: string,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+  ) {
+    return this.performance.overview({
+      facilityId,
+      year: Number(year) || undefined,
+      month: Number(month) || undefined,
+    });
+  }
+
+  @Get('performance/insights')
+  performanceInsights(@Query('facilityId') facilityId?: string) {
+    return this.performance.insights(facilityId);
+  }
 
   @Get('finance/monthly')
   financeMonthly(@Query('year') year?: string) {

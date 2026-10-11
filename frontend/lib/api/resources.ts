@@ -55,6 +55,10 @@ import type {
   DayTrafficCompare,
   DayTrafficResponse,
   LateBillingMode,
+  PerformanceSettings,
+  PerformanceOverview,
+  PerformanceInsight,
+  MonthlyTarget,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -358,6 +362,49 @@ export const analyticsApi = {
     });
     return http.get<DayTrafficResponse>(
       withOrgQuery(`/analytics/traffic/day?${q.toString()}`),
+    );
+  },
+  performanceSettings(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${facilityId}` : "";
+    return http.get<PerformanceSettings>(`/analytics/performance/settings${q}`);
+  },
+  updatePerformanceSettings(
+    facilityId: string | undefined,
+    data: Partial<Omit<PerformanceSettings, "facilityId">>,
+  ) {
+    const q = facilityId ? `?facilityId=${facilityId}` : "";
+    return http.patch<PerformanceSettings>(
+      `/analytics/performance/settings${q}`,
+      data,
+    );
+  },
+  performanceTargets(year: number, facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year) });
+    if (facilityId) q.set("facilityId", facilityId);
+    return http.get<{ facilityId: string; year: number; targets: MonthlyTarget[] }>(
+      `/analytics/performance/targets?${q.toString()}`,
+    );
+  },
+  setPerformanceTarget(data: {
+    facilityId?: string;
+    year: number;
+    month: number;
+    revenue: number | null;
+    occupancyPct?: number | null;
+  }) {
+    return http.put<MonthlyTarget | null>("/analytics/performance/targets", data);
+  },
+  performanceOverview(year: number, month: number, facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month) });
+    if (facilityId) q.set("facilityId", facilityId);
+    return http.get<PerformanceOverview>(
+      `/analytics/performance/overview?${q.toString()}`,
+    );
+  },
+  performanceInsights(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${facilityId}` : "";
+    return http.get<{ generatedAt: string; insights: PerformanceInsight[] }>(
+      `/analytics/performance/insights${q}`,
     );
   },
 };

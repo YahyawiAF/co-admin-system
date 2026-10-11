@@ -76,7 +76,9 @@ function dayLabel(date: string) {
   return format(parseISO(date), "EEE d MMM", { locale: fr });
 }
 
-export default function DayAnalysisClient() {
+const dayHref = (q: URLSearchParams) => `/finance?tab=jour&${q.toString()}`;
+
+export function FinanceDayAnalysis() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const date = useMemo(
@@ -99,7 +101,7 @@ export default function DayAnalysisClient() {
       compare: next.compare ?? compare,
       count: String(next.count ?? count),
     });
-    router.replace(`/analyse-jour?${q.toString()}`);
+    router.replace(dayHref(q), { scroll: false });
   };
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -197,7 +199,7 @@ export default function DayAnalysisClient() {
     <div className="space-y-6 pb-16">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Analyse du jour</h1>
+          <h2 className="text-lg font-semibold tracking-tight">Analyse du jour</h2>
           <p className="text-sm text-muted-foreground">
             {format(date, "EEEE d MMMM yyyy", { locale: fr })} comparé aux{" "}
             {compareLabel}
@@ -426,7 +428,14 @@ export default function DayAnalysisClient() {
                     >
                       <TableCell>
                         <Link
-                          href={`/analyse-jour?date=${day.date}&compare=${compare}&count=${count}`}
+                          href={dayHref(
+                            new URLSearchParams({
+                              date: day.date,
+                              compare,
+                              count: String(count),
+                            }),
+                          )}
+                          scroll={false}
                           className="capitalize hover:underline"
                         >
                           {dayLabel(day.date)}

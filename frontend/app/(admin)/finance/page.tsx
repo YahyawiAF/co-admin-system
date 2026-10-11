@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import Link from "next/link";
+import { Suspense, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -65,6 +65,19 @@ import { FinanceWeeklyTraffic } from "@/components/admin/finance/FinanceWeeklyTr
 import { FinanceRegulars } from "@/components/admin/finance/FinanceRegulars";
 import { FinanceTopPoints } from "@/components/admin/finance/FinanceTopPoints";
 import { DayExpensesPanel } from "@/components/admin/finance/DayExpensesPanel";
+import { FinanceOverview } from "@/components/admin/finance/FinanceOverview";
+import { FinanceDayAnalysis } from "@/components/admin/finance/FinanceDayAnalysis";
+
+const FINANCE_TABS = [
+  "apercu",
+  "jour",
+  "caisse",
+  "depenses",
+  "coffre",
+  "mois",
+  "frequentation",
+] as const;
+type FinanceTab = (typeof FINANCE_TABS)[number];
 
 const expenseSchema = z.object({
   name: z.string().min(1),
@@ -75,7 +88,28 @@ const expenseSchema = z.object({
 type ExpenseForm = z.infer<typeof expenseSchema>;
 
 export default function FinancePage() {
+  return (
+    <Suspense fallback={<div className="text-muted-foreground">Chargement…</div>}>
+      <FinanceInner />
+    </Suspense>
+  );
+}
+
+function FinanceInner() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const tab: FinanceTab = FINANCE_TABS.includes(tabParam as FinanceTab)
+    ? (tabParam as FinanceTab)
+    : "apercu";
+  const setTab = (next: string) => {
+    router.replace(next === "apercu" ? "/finance" : `/finance?tab=${next}`, {
+      scroll: false,
+    });
+  };
+  const showCaisseHeader =
+    tab === "caisse" || tab === "depenses" || tab === "coffre";
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [openingFloat, setOpeningFloat] = useState("0");
   const [countedClose, setCountedClose] = useState("");
@@ -305,48 +339,62 @@ export default function FinancePage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Finance</h1>
           <p className="text-muted-foreground">
-            Caisse du jour, coffre, et analyse mensuelle (services &amp; espaces)
+            Performance de l&apos;espace, caisse du jour, coffre et analyses
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Input
-            type="date"
-            className="w-auto"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <Badge
-            variant={isClosed ? "secondary" : isOpen ? "default" : "outline"}
-            className="h-9 px-3 text-sm"
-          >
-            {isClosed ? "Clôturée" : isOpen ? "Ouverte" : "Fermée"}
-          </Badge>
+        {showCaisseHeader ? (
+          <div className="flex items-center gap-2">
+            <Input
+              type="date"
+              className="w-auto"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <Badge
+              variant={isClosed ? "secondary" : isOpen ? "default" : "outline"}
+              className="h-9 px-3 text-sm"
+            >
+              {isClosed ? "Clôturée" : isOpen ? "Ouverte" : "Fermée"}
+            </Badge>
+          </div>
+        ) : null}
+      </div>
+
+      {showCaisseHeader ? (
+        <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+          {kpis.map((k) => (
+            <Card key={k.label} className="shadow-none">
+              <CardHeader className="p-3 pb-1">
+                <CardTitle className="text-xs font-medium text-muted-foreground">
+                  {k.label}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="text-lg font-semibold tracking-tight">{k.value}</div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
-      </div>
+      ) : null}
 
-      <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
-        {kpis.map((k) => (
-          <Card key={k.label} className="shadow-none">
-            <CardHeader className="p-3 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground">
-                {k.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <div className="text-lg font-semibold tracking-tight">{k.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <Tabs defaultValue="caisse">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="flex h-auto flex-wrap">
+          <TabsTrigger value="apercu">Vue d&apos;ensemble</TabsTrigger>
+          <TabsTrigger value="jour">Jour</TabsTrigger>
           <TabsTrigger value="caisse">Caisse</TabsTrigger>
           <TabsTrigger value="depenses">Dépenses</TabsTrigger>
           <TabsTrigger value="coffre">Coffre</TabsTrigger>
-          <TabsTrigger value="mois">Analyse</TabsTrigger>
+          <TabsTrigger value="mois">Mois</TabsTrigger>
           <TabsTrigger value="frequentation">Fréquentation</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="apercu" className="mt-4">
+          <FinanceOverview monthKey={monthKey} onMonthChange={setMonthKey} />
+        </TabsContent>
+
+        <TabsContent value="jour" className="mt-4">
+          {tab === "jour" ? <FinanceDayAnalysis /> : null}
+        </TabsContent>
 
         <TabsContent value="caisse" className="mt-4 space-y-4">
           <div className="grid gap-4 lg:grid-cols-2">
@@ -896,8 +944,8 @@ export default function FinancePage() {
 
         <TabsContent value="frequentation" className="mt-4 space-y-4">
           <div className="flex justify-end">
-            <Button asChild variant="outline" size="sm">
-              <Link href="/analyse-jour">Analyser un jour en détail</Link>
+            <Button variant="outline" size="sm" onClick={() => setTab("jour")}>
+              Analyser un jour en détail
             </Button>
           </div>
           <FinanceWeeklyTraffic />

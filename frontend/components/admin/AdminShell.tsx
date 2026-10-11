@@ -18,7 +18,6 @@ import {
   Menu,
   Globe2,
   Wallet,
-  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -43,7 +42,6 @@ const NAV = [
   { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },
   { href: "/finance", label: "Finance", icon: Banknote },
-  { href: "/analyse-jour", label: "Analyse jour", icon: BarChart3 },
   { href: "/members", label: "Members", icon: Users },
   { href: "/members?tab=groups", label: "Groupes", icon: UsersRound },
   { href: "/tarifs", label: "Services", icon: Tags },

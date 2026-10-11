@@ -575,6 +575,15 @@ model Facility {
   overtimeSurchargeDt  Float @default(0.75)
   /// FIXED sessions: switch to next tier price after N minutes over
   overtimeNextTierMin  Int   @default(30)
+  /// Opening hours used for occupancy; closeHour > 24 means after midnight (25 = 1h)
+  openHour             Int     @default(8)
+  closeHour            Int     @default(25)
+  /// Open 24h/24 (special periods)
+  alwaysOpen           Boolean @default(false)
+  /// "Habitué" = at least N visit days per week
+  regularVisitsPerWeek Int     @default(4)
+  /// Alert when a regular has not come for N days
+  inactiveAlertDays    Int     @default(7)
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())
@@ -583,9 +592,26 @@ model Facility {
   events         Event[]
   memberships    FacilityMembership[]
   appInstallPromos AppInstallPromo[]
+  monthlyTargets MonthlyTarget[]
 
   @@index([organizationId])
   @@map("facilities")
+}
+
+/// Monthly goals shown in Finance → Vue d'ensemble
+model MonthlyTarget {
+  id           String   @id @default(uuid())
+  facilityId   String
+  facility     Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  year         Int
+  month        Int
+  revenue      Float
+  occupancyPct Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([facilityId, year, month])
+  @@map("monthly_targets")
 }
 
 /// App-install promo linked to an abonnement tarif (max ~3 per facility)

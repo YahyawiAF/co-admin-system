@@ -716,6 +716,125 @@ export interface DayTrafficResponse {
   };
 }
 
+export interface PerformanceSettings {
+  facilityId: string;
+  openHour: number;
+  /** > 24 = after midnight (25 = 1h) */
+  closeHour: number;
+  alwaysOpen: boolean;
+  regularVisitsPerWeek: number;
+  inactiveAlertDays: number;
+}
+
+export interface PerformanceWeekday {
+  weekday: number;
+  occurrences: number;
+  avgRevenue: number;
+  avgVisits: number;
+  occupancyPct: number | null;
+}
+
+export interface PerformancePeriodMetrics {
+  revenue: number;
+  revenueJournal: number;
+  revenueAbonnements: number;
+  revenueProducts: number;
+  expenses: number;
+  net: number;
+  marginPct: number | null;
+  recurringSharePct: number | null;
+  days: number;
+  revenuePerDay: number;
+  revenuePerSeatDay: number | null;
+  visits: number;
+  uniqueVisitors: number;
+  avgVisitsPerDay: number;
+  avgDurationMin: number | null;
+  avgTicket: number | null;
+  seatHoursUsed: number;
+  capacityHours: number;
+  occupancyPct: number | null;
+  weekdays: PerformanceWeekday[];
+}
+
+export interface PerformanceOverview {
+  settings: PerformanceSettings;
+  seats: number;
+  period: {
+    year: number;
+    month: number;
+    from: string;
+    to: string;
+    daysInMonth: number;
+    elapsedDays: number;
+    remainingDays: number;
+    isCurrent: boolean;
+    isFuture: boolean;
+    comparedTo: { from: string; to: string; likeForLike: boolean };
+  };
+  current: PerformancePeriodMetrics | null;
+  previous: PerformancePeriodMetrics;
+  deltas: {
+    revenue: number | null;
+    net: number | null;
+    visits: number | null;
+    occupancyPct: number | null;
+    revenuePerSeatDay: number | null;
+    recurringSharePct: number | null;
+    avgTicket: number | null;
+    marginPct: number | null;
+  } | null;
+  projected: number | null;
+  target: {
+    revenue: number;
+    occupancyPct: number | null;
+    inherited: boolean;
+    fromMonth: { year: number; month: number } | null;
+    progressPct: number;
+    expectedPct: number;
+    expectedByNow: number;
+    gap: number;
+    remaining: number;
+    neededPerDay: number | null;
+    projectedPct: number | null;
+  } | null;
+  bestWeekday: number | null;
+  worstWeekday: number | null;
+  week: {
+    revenue: number;
+    visits: number;
+    occupancyPct: number | null;
+    revenueDelta: number | null;
+    visitsDelta: number | null;
+    bestWeekday: number | null;
+  };
+}
+
+export type InsightSeverity =
+  | "critical"
+  | "warning"
+  | "opportunity"
+  | "info"
+  | "success";
+
+export interface PerformanceInsight {
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  detail: string;
+  cta?: { label: string; href?: string; action?: "target" };
+  items?: Array<{ label: string; detail?: string; href?: string }>;
+}
+
+export interface MonthlyTarget {
+  id: string;
+  facilityId: string;
+  year: number;
+  month: number;
+  revenue: number;
+  occupancyPct: number | null;
+}
+
 export type VisitRequestType = "DAY" | "SUBSCRIPTION";
 export type VisitRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 

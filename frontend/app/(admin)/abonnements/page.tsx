@@ -177,11 +177,12 @@ function AbonnementsInner() {
   const [renewFrom, setRenewFrom] = useState<Abonnement | null>(null);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<AboQuickFilter>(
-    focusFilter === "remind"
-      ? "remind"
-      : focusFilter === "unpaid"
-        ? "unpaid"
-        : "active",
+    focusFilter === "remind" ||
+      focusFilter === "unpaid" ||
+      focusFilter === "expiring" ||
+      focusFilter === "expired"
+      ? focusFilter
+      : "active",
   );
   const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
   const [occupancyOpen, setOccupancyOpen] = useState(false);

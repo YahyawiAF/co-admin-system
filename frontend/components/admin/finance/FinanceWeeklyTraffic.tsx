@@ -146,7 +146,7 @@ export function FinanceWeeklyTraffic() {
                   <div className="mb-1 flex items-start justify-between gap-2">
                     <div>
                       <Link
-                        href={`/analyse-jour?weekday=${wd}`}
+                        href={`/finance?tab=jour&weekday=${wd}`}
                         className="group inline-flex items-center gap-1 text-sm font-semibold hover:underline"
                       >
                         {WEEKDAY_LABELS[wd]}
