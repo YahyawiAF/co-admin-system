@@ -326,11 +326,14 @@ model Journal {
   priceBeforePromo   Float?
   promoDiscount      Float?
   promoLabel         String?
+  /// Per check-in code (QR on the visitor session screen); not unique — lookups prefer today's open visit
+  checkInCode        String    @default(dbgenerated("gen_checkin_code()"))
 
   @@index([groupVisitId])
   @@index([priceId])
   @@index([spaceId])
   @@index([memberID, priceId])
+  @@index([checkInCode])
   @@map("journals")
 }
 
@@ -371,12 +374,28 @@ model Abonnement {
   paymentRemindAt    DateTime?
   members            Member    @relation(fields: [memberID], references: [id])
   price              Price     @relation(fields: [priceId], references: [id])
+  payments           AbonnementPayment[]
 
   @@index([priceId])
   @@index([spaceId])
   @@index([memberID, priceId])
   @@index([paidAt])
   @@map("abonnements")
+}
+
+/// Money collected for an abonnement (advance, remainder…) — revenue is counted on paidAt.
+/// Sum of amounts = Abonnement.payedAmount.
+model AbonnementPayment {
+  id           String     @id @default(uuid())
+  abonnementId String
+  abonnement   Abonnement @relation(fields: [abonnementId], references: [id], onDelete: Cascade)
+  amount       Float
+  paidAt       DateTime   @default(now())
+  createdAt    DateTime   @default(now())
+
+  @@index([paidAt])
+  @@index([abonnementId])
+  @@map("abonnement_payments")
 }
 
 model Reservation {

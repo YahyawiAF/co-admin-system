@@ -200,6 +200,8 @@ export interface Price {
 export interface Journal {
   id: string;
   isPayed: boolean;
+  /** Per check-in code — the visitor shows it as a QR, reception scans it */
+  checkInCode?: string;
   registredTime: string;
   leaveTime?: string | null;
   payedAmount: number;
@@ -314,6 +316,8 @@ export interface Abonnement {
   discountPercent?: number | null;
   /** Price owed after discounts (payedAmount = collected so far) */
   amountDue?: number | null;
+  /** Each amount collected (advance, remainder…) — revenue is counted on its paidAt */
+  payments?: { id: string; amount: number; paidAt: string }[];
 }
 
 export type ProductOrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED";

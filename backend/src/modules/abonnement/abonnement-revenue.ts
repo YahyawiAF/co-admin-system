@@ -1,22 +1,50 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 
-/** Paid abonnements whose money was collected in [start, end] (falls back to start date for legacy rows). */
-export function abonnementPaidInRange(
+type Db = PrismaClient | Prisma.TransactionClient;
+
+/** Abonnement money collected in [start, end] (advances and remainders each on their own day). */
+export function abonnementPaymentsInRange(
   start: Date,
   end: Date,
-): Prisma.AbonnementWhereInput {
-  return {
-    isPayed: true,
-    OR: [
-      { paidAt: { gte: start, lte: end } },
-      { paidAt: null, registredDate: { gte: start, lte: end } },
-    ],
-  };
+): Prisma.AbonnementPaymentWhereInput {
+  return { paidAt: { gte: start, lte: end } };
 }
 
-export function abonnementRevenueDate(a: {
-  paidAt?: Date | null;
-  registredDate: Date;
-}): Date {
-  return a.paidAt ?? a.registredDate;
+/**
+ * Keeps the payment log in step with `payedAmount`: new money is dated `at`,
+ * a lowered amount (correction) trims the most recent payments first.
+ */
+export async function syncAbonnementPayments(
+  db: Db,
+  abonnementId: string,
+  before: number,
+  after: number,
+  at: Date = new Date(),
+) {
+  const delta = Math.round(((after || 0) - (before || 0)) * 100) / 100;
+  if (delta > 0.009) {
+    await db.abonnementPayment.create({
+      data: { abonnementId, amount: delta, paidAt: at },
+    });
+    return;
+  }
+  if (delta >= -0.009) return;
+  let toRemove = -delta;
+  const payments = await db.abonnementPayment.findMany({
+    where: { abonnementId },
+    orderBy: [{ paidAt: 'desc' }, { createdAt: 'desc' }],
+  });
+  for (const p of payments) {
+    if (toRemove <= 0.009) break;
+    if (p.amount <= toRemove + 0.009) {
+      await db.abonnementPayment.delete({ where: { id: p.id } });
+      toRemove -= p.amount;
+    } else {
+      await db.abonnementPayment.update({
+        where: { id: p.id },
+        data: { amount: Math.round((p.amount - toRemove) * 100) / 100 },
+      });
+      toRemove = 0;
+    }
+  }
 }

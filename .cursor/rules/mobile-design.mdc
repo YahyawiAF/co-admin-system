@@ -62,6 +62,7 @@ The user has asked many times for blocks to take less space. Treat every new or 
 - Active session (`ActiveSessionPanel`) = **hero → steps → check-out**, nothing else inline:
   - Hero card: paid status chip, pass name + **Changer** button, two `StatTile`s (time left / amount, or session time / pool hours), progress bar, one-line next-change or overtime hint.
   - `SessionSteps`: Pointé · Place · Pass · Paiement; tappable steps open the matching sheet; unpaid note sits under the steps.
+  - `SessionCodeCard` under the steps: per-check-in QR (`CHECKIN:<code>`) + 6-char code; tap → bottom sheet with the large QR. Highlighted (indigo ring) when reception assigns the place; the "Place · Accueil" step opens it too. Reception scans it from Journal → **Scanner** (`CheckInScanDialog`) to open `AssignSeatDialog`.
   - "Terminer ma session" primary button with text links (Wi-Fi, abonnement) below; events strip after.
   - FIXED sessions also get the `TierLevelUp` nudge to the next tier (arrow-up, level track, two-tap confirm).
 - Pickers and confirmations open in a **bottom sheet** (`BottomSheet`: handle, title + close, scrollable body, sticky footer with safe-area) — never an inline expansion that scrolls the page. Examples: `PassPickerSheet` (row list, "Conseillé" badge, price delta in footer), `SeatPickerSheet`, check-out confirmation.

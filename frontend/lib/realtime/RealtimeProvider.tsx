@@ -245,6 +245,15 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         qc.invalidateQueries({ queryKey: queryKeys.members });
         qc.invalidateQueries({ queryKey: ["journal"] });
       }
+      if (type.startsWith("product_order")) {
+        debouncedInvalidate(qc, [
+          ["daily-products"],
+          ["product-orders"],
+          ["mobile-orders"],
+          ["visitor-day"],
+          ["caisse-summary"],
+        ]);
+      }
       if (type.includes("abonnement") || type === "payment_updated") {
         debouncedInvalidate(qc, [
           queryKeys.abonnements,

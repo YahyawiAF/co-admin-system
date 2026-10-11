@@ -1,4 +1,4 @@
-import { addDays, differenceInCalendarDays } from "date-fns";
+import { addDays, differenceInCalendarDays, isSameDay } from "date-fns";
 import type { Abonnement } from "@/lib/types";
 
 /** End date for a period pack: N calendar days including start day. */
@@ -53,19 +53,26 @@ export function asAbonnementList(
   return raw.data || [];
 }
 
+/** Money collected for abonnements on `day` (advances and remainders included). */
 export function paidSubscriptionRevenueOnDay(
   abos: Abonnement[],
   day: Date,
 ) {
-  const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}`;
-  return abos
-    .filter((a) => {
-      if (!a.isPayed) return false;
-      const d = new Date(a.paidAt ?? a.registredDate);
-      const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-      return k === key;
-    })
-    .reduce((sum, a) => sum + (a.payedAmount || 0), 0);
+  const sameDay = (iso: string) => isSameDay(new Date(iso), day);
+  return abos.reduce((sum, a) => {
+    if (a.payments) {
+      return (
+        sum +
+        a.payments
+          .filter((p) => sameDay(p.paidAt))
+          .reduce((s, p) => s + p.amount, 0)
+      );
+    }
+    if (a.isPayed && sameDay(a.paidAt ?? a.registredDate)) {
+      return sum + (a.payedAmount || 0);
+    }
+    return sum;
+  }, 0);
 }
 
 export function isActiveSub(a: Abonnement) {

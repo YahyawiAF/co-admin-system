@@ -28,10 +28,10 @@ import {
   Trash2,
   Wallet,
   X,
-  Coffee,
   UserRound,
   Banknote,
   Receipt,
+  ScanLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -85,6 +85,8 @@ import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
+import { CheckInScanDialog } from "@/components/admin/CheckInScanDialog";
+import { JournalCoffeeCell } from "@/components/admin/JournalCoffeeCell";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
@@ -237,6 +239,7 @@ export default function JournalClient() {
   );
   const [editRow, setEditRow] = useState<Journal | null>(null);
   const [seatRow, setSeatRow] = useState<Journal | null>(null);
+  const [scanOpen, setScanOpen] = useState(false);
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [expensesOpen, setExpensesOpen] = useState(false);
   const [caisseOpen, setCaisseOpen] = useState(false);
@@ -491,22 +494,30 @@ export default function JournalClient() {
     return [...new Set(names)].sort(compareNaturalLabel);
   }, [journalSpaces, spaceFilter]);
 
-  /** Coffee orders for journal day: memberId -> { qty, allPaid } */
+  /** Coffee / shop orders for the journal day, by member */
   const coffeeByMember = useMemo(() => {
-    const map = new Map<string, { qty: number; allPaid: boolean }>();
+    const map = new Map<string, typeof dailyProducts>();
     for (const dp of dailyProducts) {
       const mid = dp.memberId || dp.externalRef;
       if (!mid) continue;
       if (dp.status === "CANCELLED") continue;
       const d = dp.date ? new Date(dp.date) : null;
       if (d && !isSameDay(d, selectedDate)) continue;
-      const cur = map.get(mid) || { qty: 0, allPaid: true };
-      cur.qty += dp.quantite || 0;
-      if (!dp.isPayed) cur.allPaid = false;
-      map.set(mid, cur);
+      const list = map.get(mid) || [];
+      list.push(dp);
+      map.set(mid, list);
     }
     return map;
   }, [dailyProducts, selectedDate]);
+  /** Most ordered products first in the quick-add picker */
+  const productPopularity = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const dp of dailyProducts) {
+      if (dp.status === "CANCELLED") continue;
+      map.set(dp.productId, (map.get(dp.productId) ?? 0) + (dp.quantite || 0));
+    }
+    return map;
+  }, [dailyProducts]);
 
   const rows = useMemo(() => data?.data ?? [], [data?.data]);
 
@@ -1210,6 +1221,15 @@ export default function JournalClient() {
                 journalDate={selectedDate}
                 onDone={() => refetch()}
               />
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => setScanOpen(true)}
+                title="Scanner le QR de session d’un visiteur"
+              >
+                <ScanLine className="mr-2 h-4 w-4" />
+                Scanner
+              </Button>
               <Button size="lg" variant="outline" asChild>
                 <Link href="/abonnements">Abonnements</Link>
               </Button>
@@ -1671,27 +1691,18 @@ export default function JournalClient() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const mid = row.memberID || m?.id;
-                          if (!mid) return "—";
-                          const coffee = coffeeByMember.get(mid);
-                          if (!coffee?.qty) return "—";
+                          const mid = isAnonymousVisit(row)
+                            ? null
+                            : row.memberID || m?.id || null;
                           return (
-                            <span
-                              className={cn(
-                                "inline-flex items-center gap-1 text-xs font-medium",
-                                coffee.allPaid
-                                  ? "text-emerald-600"
-                                  : "text-red-600"
-                              )}
-                              title={
-                                coffee.allPaid
-                                  ? "Café / boutique payé"
-                                  : "Café / boutique impayé"
-                              }
-                            >
-                              <Coffee className="h-3.5 w-3.5" />
-                              {coffee.qty}×
-                            </span>
+                            <JournalCoffeeCell
+                              memberId={mid}
+                              memberName={visitorLabel(row)}
+                              journalId={row.id}
+                              dateKey={format(selectedDate, "yyyy-MM-dd")}
+                              orders={(mid && coffeeByMember.get(mid)) || []}
+                              popularity={productPopularity}
+                            />
                           );
                         })()}
                       </TableCell>
@@ -2446,6 +2457,14 @@ export default function JournalClient() {
         open={!!detailMember}
         onOpenChange={(o) => {
           if (!o) setDetailMember(null);
+        }}
+      />
+      <CheckInScanDialog
+        open={scanOpen}
+        onOpenChange={setScanOpen}
+        onFound={(j) => {
+          toast.success(`${visitorLabel(j)} · pointé à ${format(new Date(j.registredTime), "HH:mm")}`);
+          setSeatRow(j);
         }}
       />
       <AssignSeatDialog

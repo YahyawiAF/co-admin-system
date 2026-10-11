@@ -69,4 +69,7 @@ export class AbonnementEntity {
 
   @ApiProperty({ required: false, nullable: true })
   paymentRemindAt?: Date | null;
+
+  @ApiProperty({ required: false })
+  payments?: { id: string; amount: number; paidAt: Date }[];
 }

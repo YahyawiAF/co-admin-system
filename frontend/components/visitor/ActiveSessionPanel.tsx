@@ -32,6 +32,7 @@ import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
 import { SeatPickerSheet } from "@/components/visitor/SeatPickerSheet";
 import { BottomSheet } from "@/components/visitor/BottomSheet";
+import { SessionCodeCard } from "@/components/visitor/SessionCodeCard";
 import {
   SessionSteps,
   type SessionStep,
@@ -130,6 +131,7 @@ export function ActiveSessionPanel({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
   const [seatOpen, setSeatOpen] = useState(false);
+  const [codeOpen, setCodeOpen] = useState(false);
 
   const { data: pricingCtx } = usePricingContext({
     orgSlug: slug,
@@ -440,6 +442,9 @@ export function ActiveSessionPanel({
     };
   }
 
+  const checkInCode = !isOptimistic ? session.checkInCode || null : null;
+  const receptionAssignsSeat = !seatLabel && !seatSheetAvailable && !isHoursPool;
+
   // ----- Steps -----
   const steps: SessionStep[] = [
     {
@@ -464,7 +469,13 @@ export function ActiveSessionPanel({
             state: "todo",
             onClick: () => setSeatOpen(true),
           }
-        : { key: "seat", label: "Place", value: "Accueil", state: "info" },
+        : {
+            key: "seat",
+            label: "Place",
+            value: "Accueil",
+            state: "info",
+            onClick: checkInCode ? () => setCodeOpen(true) : undefined,
+          },
     covered
       ? {
           key: "pass",
@@ -625,6 +636,15 @@ export function ActiveSessionPanel({
       ) : null}
 
       <SessionSteps steps={steps} hint={stepsHint} />
+
+      {checkInCode ? (
+        <SessionCodeCard
+          code={checkInCode}
+          needsSeat={receptionAssignsSeat}
+          open={codeOpen}
+          onOpenChange={setCodeOpen}
+        />
+      ) : null}
 
       <div className="space-y-2">
         {checkout.isError && !checkoutOpen ? (

@@ -15,6 +15,7 @@ import {
   addHours,
   endOfDay,
   format,
+  isSameDay,
   startOfDay,
   subDays,
 } from 'date-fns';
@@ -75,6 +76,7 @@ import {
 } from './space-occupy';
 import { saleSnapshotFromPrice } from './sale-snapshot';
 import { switchOpenSessionToSubscription } from './session-to-subscription';
+import { syncAbonnementPayments } from '../abonnement/abonnement-revenue';
 import { ladderFor, pricingNoticeKey } from './session-pricing';
 import {
   computeRowPricing,
@@ -2521,6 +2523,13 @@ export class MobileService {
       },
       include: { price: true, members: true },
     });
+    await syncAbonnementPayments(
+      this.prisma,
+      abonnement.id,
+      0,
+      abonnement.payedAmount,
+      now,
+    );
 
     await this.prisma.member.update({
       where: { id: dto.memberId },
@@ -4709,6 +4718,77 @@ export class MobileService {
       orderId: order.id,
     });
     return mapped;
+  }
+
+  /** Reception adds a product to a member's tab (served at the desk → already confirmed). */
+  async createAdminOrder(dto: {
+    memberId: string;
+    productId: string;
+    quantity?: number;
+    isPayed?: boolean;
+    journalId?: string | null;
+  }) {
+    const qty = Math.max(1, Math.floor(Number(dto.quantity) || 1));
+    const [member, product, journal] = await Promise.all([
+      this.prisma.member.findUnique({ where: { id: dto.memberId } }),
+      this.prisma.product.findUnique({ where: { id: dto.productId } }),
+      dto.journalId
+        ? this.prisma.journal.findUnique({
+            where: { id: dto.journalId },
+            select: { id: true, memberID: true, registredTime: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    if (!member) throw new NotFoundException('Membre introuvable');
+    if (!product) throw new NotFoundException('Produit introuvable');
+    if (product.stock < qty) {
+      throw new BadRequestException(`Stock insuffisant (${product.stock})`);
+    }
+    if (journal && journal.memberID !== dto.memberId) {
+      throw new BadRequestException('Ce pointage appartient à un autre membre');
+    }
+    const open = journal ? null : await this.getOpenSession(dto.memberId);
+    const now = new Date();
+    // Past journal day: keep the order on that day so caisse/journal totals match
+    const date =
+      journal && !isSameDay(journal.registredTime, now)
+        ? journal.registredTime
+        : now;
+
+    const [order] = await this.prisma.$transaction([
+      this.prisma.dailyProduct.create({
+        data: {
+          productId: product.id,
+          quantite: qty,
+          date,
+          externalRef: dto.memberId,
+          memberId: dto.memberId,
+          journalId: journal?.id || open?.id || null,
+          status: ProductOrderStatus.CONFIRMED,
+          isPayed: !!dto.isPayed,
+        },
+        include: { product: true },
+      }),
+      this.prisma.product.update({
+        where: { id: product.id },
+        data: { stock: { decrement: qty } },
+      }),
+    ]);
+    this.eventsGateway.sendProductUpdated({
+      type: 'product_updated',
+      productId: product.id,
+      name: product.name,
+      stock: product.stock - qty,
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'product_order_admin',
+      memberId: dto.memberId,
+      productId: product.id,
+      quantity: qty,
+      label: product.name,
+      orderId: order.id,
+    });
+    return this.mapOrder(order);
   }
 
   async listOrders(memberId: string) {

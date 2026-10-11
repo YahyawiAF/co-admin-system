@@ -98,6 +98,19 @@ export class JournalController {
     return journals.map((journal) => new JournalEntity(journal as any));
   }
 
+  @Get('check-in/:code')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOkResponse({ type: JournalEntity })
+  async findByCheckInCode(
+    @Param('code') code: string,
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return new JournalEntity(
+      (await this.JournalService.findByCheckInCode(code, organizationId)) as any,
+    );
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()

@@ -31,6 +31,9 @@ export class JournalEntity {
   @ApiProperty()
   isPayed: boolean;
 
+  @ApiProperty({ description: 'Per check-in code shown as a QR to the visitor' })
+  checkInCode: string;
+
   @ApiProperty()
   registredTime: Date;
 

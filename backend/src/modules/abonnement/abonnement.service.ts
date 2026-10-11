@@ -12,6 +12,12 @@ import { AbonnementEntity } from './entities/abonnement.entity';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
+import { syncAbonnementPayments } from './abonnement-revenue';
+
+const PAYMENTS_INCLUDE = {
+  select: { id: true, amount: true, paidAt: true },
+  orderBy: { paidAt: 'asc' },
+} satisfies Prisma.Abonnement$paymentsArgs;
 
 @Injectable()
 export class AbonnementService {
@@ -111,6 +117,7 @@ export class AbonnementService {
           price: true,
         },
       });
+      await syncAbonnementPayments(this.prisma, created.id, 0, created.payedAmount);
       await this.syncReservedSeat(
         created.memberID,
         created.reservedSeatLabel,
@@ -163,6 +170,7 @@ export class AbonnementService {
       include: {
         members: true,
         price: true,
+        payments: PAYMENTS_INCLUDE,
       },
     });
   }
@@ -172,6 +180,7 @@ export class AbonnementService {
       include: {
         members: true,
         price: true,
+        payments: PAYMENTS_INCLUDE,
       },
     });
   }
@@ -195,7 +204,7 @@ export class AbonnementService {
       {
         where,
         orderBy,
-        include: { members: true, price: true },
+        include: { members: true, price: true, payments: PAYMENTS_INCLUDE },
       },
       { page },
     );
@@ -214,6 +223,7 @@ export class AbonnementService {
       include: {
         members: true,
         price: true,
+        payments: PAYMENTS_INCLUDE,
       },
     });
   }
@@ -276,13 +286,20 @@ export class AbonnementService {
         }
       }
       const amountDue = discount?.amountDue ?? current.amountDue;
+      // "Marquer payé" without an amount means the remainder was collected now.
+      const markedPaid =
+        updateAbonnementDto.isPayed === true &&
+        updateAbonnementDto.payedAmount === undefined &&
+        !current.isPayed;
       const payment =
         amountDue != null &&
         (updateAbonnementDto.isPayed !== undefined ||
           updateAbonnementDto.payedAmount !== undefined)
           ? this.settlePayment(
               updateAbonnementDto.isPayed ?? current.isPayed,
-              updateAbonnementDto.payedAmount ?? current.payedAmount,
+              markedPaid
+                ? amountDue
+                : updateAbonnementDto.payedAmount ?? current.payedAmount,
               amountDue,
             )
           : null;
@@ -316,6 +333,12 @@ export class AbonnementService {
           price: true,
         },
       });
+      await syncAbonnementPayments(
+        this.prisma,
+        updated.id,
+        current.payedAmount,
+        updated.payedAmount,
+      );
       await this.syncReservedSeat(
         updated.memberID,
         updated.reservedSeatLabel,

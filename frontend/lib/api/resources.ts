@@ -136,6 +136,11 @@ export const journalApi = {
   remove(id: string) {
     return http.delete<void>(`/journal/${id}`);
   },
+  byCheckInCode(code: string) {
+    return http.get<Journal>(
+      withOrgQuery(`/journal/check-in/${encodeURIComponent(code)}`),
+    );
+  },
   linkMember(id: string, memberId: string) {
     return http.post<Journal>(`/journal/${id}/link-member`, { memberId });
   },
@@ -1077,6 +1082,16 @@ export const mobileApi = {
   },
   pendingOrders() {
     return http.get<ProductOrder[]>("/mobile/admin/orders/pending");
+  },
+  /** Reception adds a product to a member's tab (confirmed immediately). */
+  adminCreateOrder(data: {
+    memberId: string;
+    productId: string;
+    quantity?: number;
+    isPayed?: boolean;
+    journalId?: string | null;
+  }) {
+    return http.post<ProductOrder>("/mobile/admin/orders", data);
   },
   adminOrders(date?: string) {
     const q = date ? `?date=${date}` : "";

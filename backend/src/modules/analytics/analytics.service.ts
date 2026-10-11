@@ -18,10 +18,7 @@ import {
   round1,
   visitEnd,
 } from './traffic';
-import {
-  abonnementPaidInRange,
-  abonnementRevenueDate,
-} from '../abonnement/abonnement-revenue';
+import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 
 @Injectable()
 export class AnalyticsService {
@@ -63,9 +60,9 @@ export class AnalyticsService {
             where: { registredTime: { gte: start, lte: end }, isPayed: true },
             select: { payedAmount: true },
           }),
-          this.prisma.abonnement.findMany({
-            where: abonnementPaidInRange(start, end),
-            select: { payedAmount: true },
+          this.prisma.abonnementPayment.findMany({
+            where: abonnementPaymentsInRange(start, end),
+            select: { amount: true },
           }),
           this.prisma.dailyProduct.findMany({
             where: {
@@ -85,7 +82,7 @@ export class AnalyticsService {
         0,
       );
       const revenueAbonnements = abonnements.reduce(
-        (a, x) => a + (x.payedAmount || 0),
+        (a, p) => a + p.amount,
         0,
       );
       const revenueProducts = dailyProducts.reduce(
@@ -123,9 +120,9 @@ export class AnalyticsService {
           where: { registredTime: { gte: start, lte: end }, isPayed: true },
           select: { registredTime: true, payedAmount: true },
         }),
-        this.prisma.abonnement.findMany({
-          where: abonnementPaidInRange(start, end),
-          select: { registredDate: true, paidAt: true, payedAmount: true },
+        this.prisma.abonnementPayment.findMany({
+          where: abonnementPaymentsInRange(start, end),
+          select: { paidAt: true, amount: true },
         }),
         this.prisma.dailyProduct.findMany({
           where: {
@@ -171,9 +168,9 @@ export class AnalyticsService {
       const row = ensure(j.registredTime);
       row.revenueJournal += j.payedAmount || 0;
     }
-    for (const a of abonnements) {
-      const row = ensure(abonnementRevenueDate(a));
-      row.revenueAbonnements += a.payedAmount || 0;
+    for (const p of abonnements) {
+      const row = ensure(p.paidAt);
+      row.revenueAbonnements += p.amount;
     }
     for (const dp of dailyProducts) {
       const row = ensure(dp.date);
@@ -955,26 +952,30 @@ export class AnalyticsService {
       },
     });
 
-    const abonnements = await this.prisma.abonnement.findMany({
+    const aboPayments = await this.prisma.abonnementPayment.findMany({
       where: {
         AND: [
-          abonnementPaidInRange(rangeStart, rangeEnd),
+          abonnementPaymentsInRange(rangeStart, rangeEnd),
           opts.organizationId
-            ? { members: { organizationId: opts.organizationId } }
+            ? { abonnement: { members: { organizationId: opts.organizationId } } }
             : {},
         ],
       },
-      select: { paidAt: true, registredDate: true, payedAmount: true },
+      select: { paidAt: true, amount: true, abonnementId: true },
     });
 
     const wanted = new Set(allDays.map(localDayKey));
-    const aboByDay = new Map<string, { revenue: number; count: number }>();
-    for (const a of abonnements) {
-      const key = localDayKey(abonnementRevenueDate(a));
+    const aboByDay = new Map<
+      string,
+      { revenue: number; count: number; ids: Set<string> }
+    >();
+    for (const p of aboPayments) {
+      const key = localDayKey(p.paidAt);
       if (!wanted.has(key)) continue;
-      const row = aboByDay.get(key) ?? { revenue: 0, count: 0 };
-      row.revenue += a.payedAmount || 0;
-      row.count += 1;
+      const row = aboByDay.get(key) ?? { revenue: 0, count: 0, ids: new Set() };
+      row.revenue += p.amount;
+      row.ids.add(p.abonnementId);
+      row.count = row.ids.size;
       aboByDay.set(key, row);
     }
     const buckets = new Map<string, typeof journals>();

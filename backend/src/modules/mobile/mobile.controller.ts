@@ -8,8 +8,10 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
 import { VisitRequestStatus } from '@prisma/client';
 import { MobileService } from './mobile.service';
 import {
@@ -215,6 +217,24 @@ export class MobileController {
   @Get('orders/:memberId')
   orders(@Param('memberId', ParseUUIDPipe) memberId: string) {
     return this.mobileService.listOrders(memberId);
+  }
+
+  @Post('admin/orders')
+  @UseGuards(JwtAuthGuard)
+  createAdminOrder(
+    @Body()
+    body: {
+      memberId: string;
+      productId: string;
+      quantity?: number;
+      isPayed?: boolean;
+      journalId?: string | null;
+    },
+  ) {
+    if (!body?.memberId || !body?.productId) {
+      throw new BadRequestException('memberId et productId requis');
+    }
+    return this.mobileService.createAdminOrder(body);
   }
 
   @Get('admin/orders')

@@ -303,6 +303,63 @@ export class JournalService {
     return this.prisma.journal.findUnique({ where: { id } });
   }
 
+  /** Accepts the raw code, `CHECKIN:CODE`, or any text ending with the code. */
+  static parseCheckInCode(raw: string): string | null {
+    const cleaned = (raw || '').trim().toUpperCase().replace(/[\s-]/g, '');
+    const match = cleaned.match(/(?:CHECKIN[:=/])?([A-Z0-9]{6})$/);
+    return match ? match[1] : null;
+  }
+
+  /** Check-in by its QR / short code — today's open visit first, then the latest one. */
+  async findByCheckInCode(raw: string, organizationId?: string) {
+    const code = JournalService.parseCheckInCode(raw);
+    if (!code) {
+      throw new BadRequestException('Code de pointage invalide');
+    }
+    const orgWhere: Prisma.JournalWhereInput = organizationId
+      ? {
+          OR: [
+            { members: { organizationId } },
+            {
+              AND: [
+                { OR: [{ isAnonymous: true }, { memberID: null }] },
+                {
+                  OR: [
+                    { prices: { organizationId } },
+                    { prices: { organizationId: null } },
+                  ],
+                },
+              ],
+            },
+          ],
+        }
+      : {};
+    const rows = await this.prisma.journal.findMany({
+      where: { checkInCode: code, isReservation: false, ...orgWhere },
+      include: { members: true, prices: true },
+      orderBy: { registredTime: 'desc' },
+      take: 5,
+    });
+    const now = new Date();
+    const todayStart = startOfDay(now);
+    const todayEnd = endOfDay(now);
+    const journal =
+      rows.find(
+        (j) =>
+          !j.leaveTime &&
+          j.registredTime >= todayStart &&
+          j.registredTime <= todayEnd,
+      ) ?? rows[0];
+    if (!journal) {
+      throw new GeneralException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        `Aucun pointage pour le code ${code}`,
+      );
+    }
+    return journal;
+  }
+
   findByDate(criteria: SearchCriteria) {
     return this.prisma.journal.findMany({ where: { ...criteria } });
   }
