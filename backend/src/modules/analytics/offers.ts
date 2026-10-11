@@ -23,6 +23,9 @@ export type AbonnementOffer = {
   /** projectedSpend − plan price (negative = the plan costs a bit more). */
   savings: number;
   strength: 'save' | 'close';
+  /** "4 visites en 12 jours · 36,8 DT payés en passes" */
+  observed: string;
+  /** "À ce rythme ~92 DT par mois en passes · « Plan » = 120 DT → +28 DT pour venir tous les jours" */
   headline: string;
 };
 
@@ -31,6 +34,17 @@ function periodLabel(days: number) {
   if (days === 14) return '2 semaines';
   if (days >= 28 && days <= 31) return '1 mois';
   return `${days} jours`;
+}
+
+function perPeriodLabel(days: number) {
+  if (days === 7) return 'par semaine';
+  if (days === 14) return 'toutes les 2 semaines';
+  if (days >= 28 && days <= 31) return 'par mois';
+  return `sur ${days} jours`;
+}
+
+function dt(n: number) {
+  return `${Math.round(n * 10) / 10} DT`.replace('.', ',');
 }
 
 function median(values: number[]) {
@@ -159,6 +173,8 @@ export async function computeOffers(
 
     const savings = round1(best.projected - best.price);
     const period = periodLabel(best.plan.periodDays!);
+    const paceText = `À ce rythme ~${Math.round(best.projected)} DT ${perPeriodLabel(best.plan.periodDays!)} en passes`;
+    const deal = `« ${best.plan.name} » = ${dt(best.price)}`;
     out.set(memberId, {
       memberId,
       visitDays,
@@ -175,10 +191,13 @@ export async function computeOffers(
       projectedSpend: round1(best.projected),
       savings,
       strength: savings >= 0 ? 'save' : 'close',
+      observed: `${visitDays} visite${visitDays > 1 ? 's' : ''} en ${spanDays} jours · ${dt(acc.spend)} payés en passes`,
       headline:
-        savings >= 0
-          ? `Économise ~${Math.round(savings)} DT sur ${period} avec « ${best.plan.name} »`
-          : `Pour ~${Math.round(-savings)} DT de plus sur ${period}, illimité avec « ${best.plan.name} »`,
+        savings >= 1
+          ? `${paceText} · ${deal} → économise ~${Math.round(savings)} DT sur ${period}`
+          : savings > -1
+            ? `${paceText} · ${deal} → même prix, sans compter les jours`
+            : `${paceText} · ${deal} → +${Math.round(-savings)} DT pour venir tous les jours (${period})`,
     });
   }
   return out;

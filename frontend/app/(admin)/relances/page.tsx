@@ -34,7 +34,12 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { outreachApi } from "@/lib/api/resources";
-import type { OutreachChannel, OutreachItem, OutreachReason } from "@/lib/types";
+import type {
+  AbonnementOffer,
+  OutreachChannel,
+  OutreachItem,
+  OutreachReason,
+} from "@/lib/types";
 
 const REASON_UI: Record<
   OutreachReason,
@@ -68,7 +73,7 @@ const REASON_UI: Record<
     label: "À passer en abonnement",
     icon: Sparkles,
     tone: "bg-emerald-100 text-emerald-800",
-    why: "Paie presque un abonnement en passes : revenu garanti s'il passe abonné.",
+    why: "Ses passes, ramenées sur un mois, coûtent presque autant (ou plus) qu'un abonnement : proposez-lui de passer abonné.",
   },
   REVIEW: {
     label: "Avis Google",
@@ -86,6 +91,40 @@ const CHANNEL_LABEL: Record<OutreachChannel, string> = {
 };
 
 const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
+
+function perPeriodLabel(days: number) {
+  if (days === 7) return "par semaine";
+  if (days === 14) return "toutes les 2 semaines";
+  if (days >= 28 && days <= 31) return "par mois";
+  return `sur ${days} jours`;
+}
+
+/** Passes at the current pace vs the abonnement price, and what it means for the client. */
+function OfferCompare({ offer }: { offer: AbonnementOffer }) {
+  const diff = offer.savings;
+  const verdict =
+    diff >= 1
+      ? { text: `Économise ~${Math.round(diff)} DT`, tone: "bg-emerald-600 text-white" }
+      : diff > -1
+        ? { text: "Même prix", tone: "bg-emerald-100 text-emerald-800" }
+        : { text: `+${Math.round(-diff)} DT pour venir tous les jours`, tone: "bg-amber-100 text-amber-800" };
+  return (
+    <div className="my-1 flex flex-wrap items-center gap-1.5 text-xs">
+      <span className="rounded-md border bg-muted/40 px-2 py-1">
+        Passes à ce rythme :{" "}
+        <b className="tabular-nums">~{Math.round(offer.projectedSpend)} DT</b>{" "}
+        {perPeriodLabel(offer.plan.periodDays)}
+      </span>
+      <span className="text-muted-foreground">vs</span>
+      <span className="rounded-md border bg-muted/40 px-2 py-1">
+        {offer.plan.name} : <b className="tabular-nums">{dt(offer.plan.price)}</b>
+      </span>
+      <span className={cn("rounded-full px-2 py-0.5 font-semibold", verdict.tone)}>
+        {verdict.text}
+      </span>
+    </div>
+  );
+}
 
 function actionLink(item: OutreachItem) {
   if (item.reason === "CONVERT" && item.offer) {
@@ -243,11 +282,16 @@ function OutreachRow({
           ) : null}
         </div>
         <div className="text-sm">{item.title}</div>
+        {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
         <div className="text-xs text-muted-foreground">
-          {item.detail}
-          {item.lastContact
-            ? ` · contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${CHANNEL_LABEL[item.lastContact.channel]})`
-            : ""}
+          {[
+            item.reason === "CONVERT" && item.offer ? null : item.detail,
+            item.lastContact
+              ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${CHANNEL_LABEL[item.lastContact.channel]})`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </div>
       </div>
       <div className="flex items-center gap-1.5">

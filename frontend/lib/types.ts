@@ -904,6 +904,8 @@ export interface AbonnementOffer {
   projectedSpend: number;
   savings: number;
   strength: "save" | "close";
+  /** "4 visites en 12 jours · 36,8 DT payés en passes" */
+  observed: string;
   headline: string;
 }
 

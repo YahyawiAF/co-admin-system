@@ -239,7 +239,7 @@ export class OutreachService {
       add({
         memberId: offer.memberId,
         reason: 'CONVERT',
-        title: `${money(offer.spend)} en passes · ${offer.visitDays} jours`,
+        title: offer.observed,
         detail: offer.headline,
         value: offer.plan.price,
         owed: 0,
@@ -348,11 +348,15 @@ export class OutreachService {
         return `${hi}, merci pour vos ${c.visits} visites chez ${c.place} ! Si vous aimez l'espace, un petit avis Google nous aiderait énormément (30 secondes) : ${c.url}`;
       case 'CONVERT': {
         if (!offer) return `${hi}, merci pour vos visites chez ${c.place} !`;
-        const gain =
+        const visits = `${offer.visitDays} fois en ${offer.spanDays} jours`;
+        const pace = `soit environ ${money(offer.projectedSpend)} par mois à ce rythme`;
+        const verdict =
           offer.savings >= 1
-            ? ` et vous économisez environ ${money(offer.savings)}`
-            : '';
-        return `${hi}, ces dernières semaines vous avez payé ${money(offer.spend)} en passes chez ${c.place}. Avec l'${offer.plan.name} à ${money(offer.plan.price)}, vous venez autant que vous voulez${gain}. On vous le prépare ?${debt}`;
+            ? `vous économisez environ ${money(offer.savings)} et vous venez autant que vous voulez`
+            : offer.savings > -1
+              ? `c'est le même prix et vous venez autant que vous voulez`
+              : `pour seulement ${money(-offer.savings)} de plus, vous venez tous les jours sans compter`;
+        return `${hi}, vous êtes venu(e) ${visits} chez ${c.place} (${money(offer.spend)} en passes), ${pace}. Avec l'${offer.plan.name} à ${money(offer.plan.price)}, ${verdict}. On vous le prépare ?${debt}`;
       }
     }
   }

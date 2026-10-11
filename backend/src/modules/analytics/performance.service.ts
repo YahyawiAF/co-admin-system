@@ -795,7 +795,7 @@ export class PerformanceService {
       cta: { label: 'Relancer', href: '/relances' },
       items: offers.slice(0, 6).map((o) => ({
         label: name.get(o.memberId) || 'Client',
-        detail: `${money(o.spend)} en ${o.visitDays} jours · ${o.headline}`,
+        detail: `${o.observed} · ${o.headline}`,
         href: `/abonnements?new=1&memberId=${o.memberId}&priceId=${o.plan.id}`,
       })),
     });

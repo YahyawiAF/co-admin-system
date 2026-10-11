@@ -54,7 +54,7 @@ export function AbonnementOfferBadge({
             <div className="text-[11px] text-muted-foreground">Payé en passes</div>
             <div className="text-sm font-semibold tabular-nums">{dt(offer.spend)}</div>
             <div className="text-[11px] text-muted-foreground">
-              {offer.visitDays} jours en {offer.spanDays} j
+              {offer.visitDays} visite{offer.visitDays > 1 ? "s" : ""} en {offer.spanDays} jours
             </div>
           </div>
           <div className="rounded-md bg-muted p-2">
@@ -68,16 +68,18 @@ export function AbonnementOfferBadge({
                 save ? "text-emerald-700" : "text-muted-foreground",
               )}
             >
-              {save
-                ? `économise ${dt(offer.savings)}`
-                : `abonnement +${dt(-offer.savings)}`}
+              {offer.savings >= 1
+                ? `abonnement moins cher de ${dt(offer.savings)}`
+                : offer.savings > -1
+                  ? "même prix que l'abonnement"
+                  : `abonnement : +${dt(-offer.savings)} seulement`}
             </div>
           </div>
         </div>
         <p className="text-xs text-muted-foreground">
           {save
             ? `Dites à ${name.split(" ")[0]} : « Avec l'abonnement vous payez moins et vous venez autant que vous voulez. »`
-            : `Presque le même prix que ses passes, sans compter les heures : un bon argument pour ${name.split(" ")[0]}.`}
+            : `Pour ${dt(-offer.savings)} de plus que ses passes, ${name.split(" ")[0]} vient tous les jours sans compter : un bon argument.`}
         </p>
         <Button asChild size="sm" className="w-full">
           <Link
