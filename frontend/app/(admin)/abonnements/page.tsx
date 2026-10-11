@@ -6,8 +6,17 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { endOfDay, format, parse, startOfDay, subMilliseconds } from "date-fns";
-import { Pencil, MapPin, MoreHorizontal, Banknote } from "lucide-react";
+import {
+  addDays,
+  differenceInCalendarDays,
+  endOfDay,
+  format,
+  parse,
+  startOfDay,
+  subMilliseconds,
+} from "date-fns";
+import { fr } from "date-fns/locale";
+import { Pencil, MapPin, MoreHorizontal, Banknote, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +128,17 @@ function parseLocalDay(s: string) {
   return Number.isNaN(d.getTime()) ? startOfDay(new Date()) : d;
 }
 
+/** First day of the renewal: the day after the previous abonnement's last day. */
+function renewalStart(a: Abonnement) {
+  return a.leaveDate
+    ? addDays(startOfDay(new Date(a.leaveDate)), 1)
+    : startOfDay(new Date());
+}
+
+function shortDay(d: Date) {
+  return format(d, "EEE d MMM", { locale: fr });
+}
+
 function asList(
   data: Abonnement[] | PaginatedResponse<Abonnement> | undefined,
 ) {
@@ -154,6 +174,7 @@ function AbonnementsInner() {
   const focusFilter = searchParams.get("filter");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Abonnement | null>(null);
+  const [renewFrom, setRenewFrom] = useState<Abonnement | null>(null);
   const [search, setSearch] = useState("");
   const [quickFilter, setQuickFilter] = useState<AboQuickFilter>(
     focusFilter === "remind"
@@ -213,9 +234,20 @@ function AbonnementsInner() {
     }
     return map;
   }, [rows]);
+  /** Latest abonnement per member (by start) — the one a renewal follows. */
+  const latestAboByMember = useMemo(() => {
+    const map = new Map<string, Abonnement>();
+    for (const a of rows) {
+      const cur = map.get(a.memberID);
+      if (!cur || new Date(a.registredDate) > new Date(cur.registredDate)) {
+        map.set(a.memberID, a);
+      }
+    }
+    return map;
+  }, [rows]);
   const aboLockFor = (m: Member): MemberLock | null => {
     const a = activeAboByMember.get(m.id);
-    if (!a || a.id === editing?.id) return null;
+    if (!a || a.id === editing?.id || m.id === renewFrom?.memberID) return null;
     const left = daysLeft(a);
     const hLeft = hoursLeft(a);
     return {
@@ -426,8 +458,38 @@ function AbonnementsInner() {
     form.setValue("leaveDate", format(leave, "yyyy-MM-dd"));
   };
 
+  const openRenew = (a: Abonnement) => {
+    setEditing(null);
+    setRenewFrom(a);
+    setDetailMemberId(null);
+    const start = format(renewalStart(a), "yyyy-MM-dd");
+    const priceId = subPrices.some((p) => p.id === a.priceId) ? a.priceId : "";
+    form.reset({
+      memberID: a.memberID,
+      priceId,
+      registredDate: start,
+      leaveDate: "",
+      paymentRemindAt: "",
+      isPayed: true,
+      payedAmount: 0,
+      hoursUsed: 0,
+      reservedSeatLabel: a.reservedSeatLabel || "",
+      reservedSeatSpaceId: a.reservedSeatSpaceId || "",
+    });
+    if (priceId) fillFromPrice(priceId, start);
+    setOpen(true);
+  };
+
+  const setRenewStart = (day: Date) => {
+    const start = format(day, "yyyy-MM-dd");
+    form.setValue("registredDate", start);
+    const priceId = form.getValues("priceId");
+    if (priceId) fillFromPrice(priceId, start);
+  };
+
   const openCreate = () => {
     setEditing(null);
+    setRenewFrom(null);
     form.reset({
       memberID: focusMember || "",
       priceId: "",
@@ -445,6 +507,7 @@ function AbonnementsInner() {
 
   const openEdit = (a: Abonnement) => {
     setEditing(a);
+    setRenewFrom(null);
     form.reset({
       memberID: a.memberID,
       priceId: a.priceId,
@@ -519,7 +582,14 @@ function AbonnementsInner() {
         : abonnementsApi.create(payload);
     },
     onSuccess: () => {
-      toast.success(editing ? "Abonnement mis à jour" : "Abonnement créé");
+      toast.success(
+        editing
+          ? "Abonnement mis à jour"
+          : renewFrom
+            ? "Abonnement renouvelé"
+            : "Abonnement créé",
+      );
+      setRenewFrom(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.abonnements });
       queryClient.invalidateQueries({ queryKey: ["bookings"] });
       queryClient.invalidateQueries({ queryKey: ["facility-occupancy"] });
@@ -674,7 +744,10 @@ function AbonnementsInner() {
             open={open}
             onOpenChange={(o) => {
               setOpen(o);
-              if (!o) setEditing(null);
+              if (!o) {
+                setEditing(null);
+                setRenewFrom(null);
+              }
             }}
           >
             <DialogTrigger asChild>
@@ -685,13 +758,57 @@ function AbonnementsInner() {
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
               <DialogHeader>
                 <DialogTitle>
-                  {editing ? "Modifier l’abonnement" : "Nouvel abonnement"}
+                  {editing
+                    ? "Modifier l’abonnement"
+                    : renewFrom
+                      ? "Renouveler l’abonnement"
+                      : "Nouvel abonnement"}
                 </DialogTitle>
               </DialogHeader>
               <form
                 className="space-y-3"
                 onSubmit={form.handleSubmit((v) => save.mutate(v))}
               >
+                {renewFrom ? (
+                  (() => {
+                    const prevEnd = renewFrom.leaveDate
+                      ? new Date(renewFrom.leaveDate)
+                      : null;
+                    const start = parseLocalDay(form.watch("registredDate"));
+                    const today = startOfDay(new Date());
+                    const startsInPast = start < today;
+                    return (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-sm">
+                        <RefreshCw className="h-4 w-4 shrink-0 text-indigo-600" />
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-slate-900">
+                            Suite de « {renewFrom.price?.name || "abonnement"} »
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {prevEnd
+                              ? `${prevEnd < today ? "Terminé" : "Se termine"} le ${shortDay(prevEnd)}`
+                              : "Sans date de fin"}{" "}
+                            · nouveau début le{" "}
+                            <span className="font-medium text-slate-900">
+                              {shortDay(start)}
+                            </span>
+                          </p>
+                        </div>
+                        {startsInPast ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs"
+                            onClick={() => setRenewStart(today)}
+                          >
+                            Commencer aujourd’hui
+                          </Button>
+                        ) : null}
+                      </div>
+                    );
+                  })()
+                ) : null}
                 <div className="space-y-2">
                   <Label>Membre</Label>
                   <MemberSearchSelect
@@ -720,6 +837,7 @@ function AbonnementsInner() {
                       {subPrices.map((p) => (
                         <SelectItem key={p.id} value={p.id}>
                           {p.name} — {p.price} DT
+                          {renewFrom?.priceId === p.id ? " · précédent" : ""}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -972,6 +1090,13 @@ function AbonnementsInner() {
                   const left = daysLeft(a);
                   const hLeft = hoursLeft(a);
                   const active = isActiveSub(a);
+                  const startsIn = differenceInCalendarDays(
+                    new Date(a.registredDate),
+                    new Date(),
+                  );
+                  const canRenew =
+                    !!a.leaveDate &&
+                    latestAboByMember.get(a.memberID)?.id === a.id;
                   const debt = debtByMember.get(a.memberID);
                   const visitDebt =
                     (debt?.owedFromVisits || 0) + (debt?.owedFromLedger || 0);
@@ -1053,7 +1178,14 @@ function AbonnementsInner() {
                           : "—"}
                       </TableCell>
                       <TableCell>
-                        {left == null ? (
+                        {startsIn > 0 ? (
+                          <Badge
+                            variant="outline"
+                            className="border-indigo-200 text-indigo-700"
+                          >
+                            Débute {startsIn === 1 ? "demain" : `dans ${startsIn} j.`}
+                          </Badge>
+                        ) : left == null ? (
                           "—"
                         ) : (
                           <Badge
@@ -1142,6 +1274,23 @@ function AbonnementsInner() {
                         })()}
                       </TableCell>
                       <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                        {canRenew ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              "h-8 gap-1.5 whitespace-nowrap px-2.5 text-xs",
+                              (!active || (left != null && left <= 3)) &&
+                                "border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100",
+                            )}
+                            title={`Nouvel abonnement à partir du ${format(renewalStart(a), "dd/MM/yyyy")}`}
+                            onClick={() => openRenew(a)}
+                          >
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            Renouveler · {format(renewalStart(a), "dd/MM")}
+                          </Button>
+                        ) : null}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button size="icon" variant="ghost">
@@ -1152,6 +1301,10 @@ function AbonnementsInner() {
                             <DropdownMenuItem onClick={() => openEdit(a)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Modifier
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openRenew(a)}>
+                              <RefreshCw className="mr-2 h-4 w-4" />
+                              Renouveler (dès le {shortDay(renewalStart(a))})
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setLedgerAbo(a)}>
                               <Banknote className="mr-2 h-4 w-4" />
@@ -1209,6 +1362,7 @@ function AbonnementsInner() {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -1369,11 +1523,27 @@ function AbonnementsInner() {
                   setOccupancyOpen(true);
                 }}
               />
+              {latestAboByMember.get(detailMemberId)?.leaveDate ? (
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => openRenew(latestAboByMember.get(detailMemberId)!)}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Renouveler dès le{" "}
+                  {shortDay(renewalStart(latestAboByMember.get(detailMemberId)!))}
+                </Button>
+              ) : null}
               <Button
                 className="w-full"
+                variant={
+                  latestAboByMember.get(detailMemberId)?.leaveDate
+                    ? "outline"
+                    : "default"
+                }
                 onClick={() => {
                   setDetailMemberId(null);
                   setEditing(null);
+                  setRenewFrom(null);
                   form.reset({
                     memberID: detailMemberId,
                     priceId: "",

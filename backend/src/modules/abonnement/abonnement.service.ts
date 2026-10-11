@@ -13,6 +13,7 @@ import { EventsGateway } from '../webSocket/events.gateway';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
 import { syncAbonnementPayments } from './abonnement-revenue';
+import { endOfDay } from 'date-fns';
 
 const PAYMENTS_INCLUDE = {
   select: { id: true, amount: true, paidAt: true },
@@ -124,12 +125,15 @@ export class AbonnementService {
         existingPrice,
         created.leaveDate,
         created.reservedSeatSpaceId,
+        created.registredDate,
       );
-      const switchedJournalId = await switchOpenSessionToSubscription(
-        this.prisma,
-        created.memberID,
-        existingPrice,
-      );
+      const switchedJournalId = this.startsAfterToday(created.registredDate)
+        ? null
+        : await switchOpenSessionToSubscription(
+            this.prisma,
+            created.memberID,
+            existingPrice,
+          );
       if (switchedJournalId) {
         this.eventsGateway.sendTableUpdates({
           type: 'session_switched_to_subscription',
@@ -345,6 +349,7 @@ export class AbonnementService {
         updated.price,
         updated.leaveDate,
         updated.reservedSeatSpaceId,
+        updated.registredDate,
       );
       await this.refreshMemberPlan(updated.memberID);
       this.eventsGateway.sendMemberStatusChanged({
@@ -495,6 +500,10 @@ export class AbonnementService {
     });
   }
 
+  private startsAfterToday(registredDate?: Date | string | null) {
+    return !!registredDate && new Date(registredDate) > endOfDay(new Date());
+  }
+
   private async syncReservedSeat(
     memberId: string,
     seatLabel: string | null | undefined,
@@ -506,7 +515,10 @@ export class AbonnementService {
     } | null,
     leaveDate?: Date | null,
     spaceId?: string | null,
+    registredDate?: Date | null,
   ) {
+    // A renewal starting later must not move or release the seat of the current abonnement.
+    if (this.startsAfterToday(registredDate)) return;
     const expired = !!leaveDate && new Date(leaveDate) <= new Date();
     const label = seatLabel?.trim() || '';
     if (expired || !this.shouldReserveSeat(price, label)) {
