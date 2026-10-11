@@ -9,7 +9,8 @@ export type PointEvent =
   | "REDEEM_VISIT"
   | "REDEEM_ORDER"
   | "PROFILE_DETAILS"
-  | "PROFILE_AVATAR";
+  | "PROFILE_AVATAR"
+  | "REFERRAL";
 
 /** Fixed awards — visit/product earn are server-side via dtToPoints */
 export const POINT_AMOUNTS: Partial<Record<PointEvent, number>> = {

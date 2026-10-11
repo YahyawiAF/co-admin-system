@@ -11,6 +11,7 @@ import {
   ArrowRight,
   CalendarClock,
   QrCode,
+  Megaphone,
 } from "lucide-react";
 import {
   Card,
@@ -37,7 +38,10 @@ import {
   visitRequestsApi,
   caisseApi,
   organizationsApi,
+  analyticsApi,
+  outreachApi,
 } from "@/lib/api/resources";
+import { BreakEvenCard } from "@/components/admin/finance/BreakEvenCard";
 import { queryKeys } from "@/lib/query-client";
 import { isPendingReservation, memberOf } from "@/lib/journal-utils";
 import {
@@ -99,6 +103,23 @@ export default function DashboardPage() {
     queryFn: () => organizationsApi.list(),
     enabled: qrOpen,
   });
+
+  const facilityId = facilities[0]?.id;
+  const { data: perf } = useQuery({
+    queryKey: ["performance", "overview", today.getFullYear(), today.getMonth() + 1, facilityId],
+    queryFn: () =>
+      analyticsApi.performanceOverview(today.getFullYear(), today.getMonth() + 1, facilityId),
+    enabled: facilities.length > 0,
+  });
+  const { data: outreach } = useQuery({
+    queryKey: ["outreach"],
+    queryFn: () => outreachApi.list(),
+    staleTime: 5 * 60_000,
+  });
+  const outreachCounts = (outreach?.todo ?? []).reduce<Record<string, number>>((acc, i) => {
+    acc[i.reason] = (acc[i.reason] ?? 0) + 1;
+    return acc;
+  }, {});
 
   const rows = journalPage?.data ?? [];
   const tomorrowReservations = (tomorrowJournal?.data ?? []).filter(
@@ -207,6 +228,43 @@ export default function DashboardPage() {
           </CardHeader>
         </Card>
       ) : null}
+
+      <div className="grid gap-4 lg:grid-cols-[3fr_2fr]">
+        {perf && !perf.period.isFuture ? <BreakEvenCard data={perf} compact /> : null}
+        <Card className="shadow-none">
+          <CardContent className="flex h-full flex-col justify-between gap-3 p-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <Megaphone className="h-3.5 w-3.5" />
+                Relances du jour
+              </div>
+              <div className="text-2xl font-semibold tabular-nums">
+                {outreach?.todo.length ?? "…"}{" "}
+                <span className="text-base font-normal text-muted-foreground">
+                  client{(outreach?.todo.length ?? 0) > 1 ? "s" : ""} à contacter
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {[
+                  outreachCounts.ABO_EXPIRING ? `${outreachCounts.ABO_EXPIRING} fin d'abonnement` : null,
+                  outreachCounts.ABO_ENDED ? `${outreachCounts.ABO_ENDED} pas renouvelé${outreachCounts.ABO_ENDED > 1 ? "s" : ""}` : null,
+                  outreachCounts.UNPAID ? `${outreachCounts.UNPAID} impayé${outreachCounts.UNPAID > 1 ? "s" : ""}` : null,
+                  outreachCounts.INACTIVE ? `${outreachCounts.INACTIVE} absent${outreachCounts.INACTIVE > 1 ? "s" : ""}` : null,
+                  outreachCounts.CONVERT ? `${outreachCounts.CONVERT} à passer abonné${outreachCounts.CONVERT > 1 ? "s" : ""}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "Personne à relancer pour le moment"}
+              </p>
+            </div>
+            <Button asChild size="sm" variant="outline" className="self-start">
+              <Link href="/relances">
+                Ouvrir les relances
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>

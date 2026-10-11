@@ -526,11 +526,25 @@ function AbonnementsInner() {
     setOpen(true);
   };
 
+  const createFor = searchParams.get("new") === "1" ? focusMember : null;
+  const createPriceId = searchParams.get("priceId");
+  const [createdFromLink, setCreatedFromLink] = useState(false);
   useEffect(() => {
+    if (createFor) return;
     if (!focusMember || !rows.length) return;
     setDetailMemberId(focusMember);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMember, rows.length]);
+  useEffect(() => {
+    if (!createFor || createdFromLink || !subPrices.length || !members.length) return;
+    setCreatedFromLink(true);
+    openCreate();
+    if (createPriceId && subPrices.some((p) => p.id === createPriceId)) {
+      form.setValue("priceId", createPriceId);
+      fillFromPrice(createPriceId, form.getValues("registredDate"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createFor, createPriceId, subPrices.length, members.length]);
 
   const detailMember = useMemo(
     () => members.find((m) => m.id === detailMemberId) || null,
@@ -618,6 +632,9 @@ function AbonnementsInner() {
     queryClient.invalidateQueries({ queryKey: ["analytics-finance-year"] });
     queryClient.invalidateQueries({ queryKey: ["caisse-month"] });
     queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
+    queryClient.invalidateQueries({ queryKey: ["outreach"] });
+    queryClient.invalidateQueries({ queryKey: ["abo-offers"] });
+    queryClient.invalidateQueries({ queryKey: ["performance"] });
   };
 
   const endNow = useMutation({

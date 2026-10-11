@@ -79,4 +79,13 @@ export class PriceEntity {
 
   @ApiPropertyOptional({ description: 'If false, tarif is hidden from pickers' })
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  availableFromHour?: number | null;
+
+  @ApiPropertyOptional()
+  availableToHour?: number | null;
+
+  @ApiPropertyOptional({ type: [Number] })
+  availableDays?: number[];
 }

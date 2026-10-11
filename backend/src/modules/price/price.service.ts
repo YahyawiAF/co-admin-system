@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { BillingUnit, PriceCategory, PriceType, Prisma } from '@prisma/client';
 import { PriceEntity } from './entities/price.entity';
 import { PrismaService } from 'database/prisma.service';
@@ -194,6 +194,9 @@ export class PriceService {
     reserveSeatFromHour?: number | null;
     reserveSeatToHour?: number | null;
     isActive?: boolean;
+    availableFromHour?: number | null;
+    availableToHour?: number | null;
+    availableDays?: number[];
     createdAt: Date;
     updatedAt: Date;
     space?: { id: string; name: string } | null;
@@ -234,6 +237,9 @@ export class PriceService {
       reserveSeatFromHour: price.reserveSeatFromHour ?? null,
       reserveSeatToHour: price.reserveSeatToHour ?? null,
       isActive: price.isActive !== false,
+      availableFromHour: price.availableFromHour ?? null,
+      availableToHour: price.availableToHour ?? null,
+      availableDays: price.availableDays ?? [],
       timePeriod: price.timePeriod as { start: string; end: string },
     });
   }
@@ -282,6 +288,29 @@ export class PriceService {
     await this.prisma.priceSpace.createMany({
       data: spaceIds.map((spaceId) => ({ priceId, spaceId })),
     });
+  }
+
+  /** Créneau fields: both hours or none; days deduplicated. */
+  private creneauFromDto(dto: {
+    availableFromHour?: number | null;
+    availableToHour?: number | null;
+    availableDays?: number[];
+  }) {
+    const from = dto.availableFromHour;
+    const to = dto.availableToHour;
+    if (from == null || to == null) {
+      return { availableFromHour: null, availableToHour: null, availableDays: [] as number[] };
+    }
+    if (to <= from) {
+      throw new BadRequestException(
+        "L'heure de fin du créneau doit suivre le début (25 = 1h du matin)",
+      );
+    }
+    return {
+      availableFromHour: from,
+      availableToHour: to,
+      availableDays: [...new Set(dto.availableDays ?? [])].sort(),
+    };
   }
 
   async create(createPriceDto: CreatePriceDto): Promise<PriceEntity> {
@@ -333,6 +362,7 @@ export class PriceService {
         billingUnit,
         periodDays,
         isActive: isActive !== false,
+        ...this.creneauFromDto(createPriceDto),
         occupySeat: occupy.occupySeat,
         occupyWhole: occupy.occupyWhole,
         reserveSeat: !!reserveSeat,
@@ -413,10 +443,32 @@ export class PriceService {
       throw new NotFoundException(`Price with ID ${id} not found`);
     }
 
-    const { spaceId, spaceIds, timePeriod, occupySeat, occupyWhole, categories, category, ...rest } =
-      updatePriceDto;
+    const {
+      spaceId,
+      spaceIds,
+      timePeriod,
+      occupySeat,
+      occupyWhole,
+      categories,
+      category,
+      availableFromHour,
+      availableToHour,
+      availableDays,
+      ...rest
+    } = updatePriceDto;
+    const creneau =
+      availableFromHour !== undefined || availableToHour !== undefined
+        ? this.creneauFromDto({
+            availableFromHour: availableFromHour ?? null,
+            availableToHour: availableToHour ?? null,
+            availableDays: availableDays ?? existingPrice.availableDays,
+          })
+        : availableDays !== undefined
+          ? { availableDays: [...new Set(availableDays)].sort() }
+          : {};
     const updateData: Prisma.PriceUpdateInput = {
       ...rest,
+      ...creneau,
       ...(timePeriod && {
         timePeriod: {
           start: timePeriod.start,

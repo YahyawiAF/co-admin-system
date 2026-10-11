@@ -29,6 +29,7 @@ import type {
   FinanceYearMonthRow,
   FinanceMonthDayRow,
   ServiceDemandRow,
+  ProductsPerformance,
   SpaceUsageRow,
   AnalyticsClientRow,
   MemberGroup,
@@ -59,6 +60,10 @@ import type {
   PerformanceOverview,
   PerformanceInsight,
   MonthlyTarget,
+  AbonnementOffer,
+  OutreachList,
+  OutreachReason,
+  OutreachChannel,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -104,6 +109,7 @@ export type DailyProduct = {
   isPayed?: boolean;
   memberId?: string | null;
   externalRef?: string | null;
+  journalId?: string | null;
   createdAt?: string;
 };
 
@@ -313,6 +319,11 @@ export const analyticsApi = {
       `/analytics/finance/month-days?year=${year}&month=${month}`,
     );
   },
+  productsPerformance(from: string, to: string) {
+    return http.get<ProductsPerformance>(
+      `/analytics/products/performance?from=${from}&to=${to}`,
+    );
+  },
   servicesDemand(from?: string, to?: string) {
     const q = new URLSearchParams();
     if (from) q.set("from", from);
@@ -450,6 +461,28 @@ export const analyticsApi = {
     return http.get<{ generatedAt: string; insights: PerformanceInsight[] }>(
       `/analytics/performance/insights${q}`,
     );
+  },
+  offers(memberIds: string[]) {
+    return http.get<Record<string, AbonnementOffer>>(
+      `/analytics/performance/offers?memberIds=${encodeURIComponent(memberIds.join(","))}`,
+    );
+  },
+};
+
+export const outreachApi = {
+  list() {
+    return http.get<OutreachList>("/analytics/outreach");
+  },
+  log(data: {
+    memberId: string;
+    reason: OutreachReason;
+    channel: OutreachChannel;
+    message?: string;
+  }) {
+    return http.post("/analytics/outreach/log", data);
+  },
+  push(data: { memberId: string; reason: OutreachReason; message: string }) {
+    return http.post("/analytics/outreach/push", data);
   },
 };
 
@@ -1265,7 +1298,8 @@ export const mobileApi = {
   },
   /** Reception adds a product to a member's tab (confirmed immediately). */
   adminCreateOrder(data: {
-    memberId: string;
+    /** Omit for an anonymous order (anonymous visit via journalId, or counter sale). */
+    memberId?: string | null;
     productId: string;
     quantity?: number;
     isPayed?: boolean;
@@ -1295,11 +1329,18 @@ export const mobileApi = {
     });
   },
   /** `date` is a local yyyy-MM-dd day (defaults to today on the server). */
-  payMemberDayOrders(memberId: string, isPayed: boolean, date?: string) {
+  payMemberDayOrders(
+    memberId: string | null,
+    isPayed: boolean,
+    date?: string,
+    journalId?: string | null,
+  ) {
     return http.patch<ProductOrder[]>("/mobile/admin/orders/pay-member-day", {
       memberId,
       isPayed,
       date,
+      anonymous: !memberId,
+      journalId: memberId ? undefined : journalId ?? null,
     });
   },
   visitorDay(memberId: string) {
@@ -1449,6 +1490,53 @@ export const mobileApi = {
     return http.post<BookingRequest>("/mobile/booking-request", data, {
       skipAuth: true,
     });
+  },
+  reviewPrompt(memberId: string) {
+    return http.get<{ show: boolean; url: string | null; visits: number }>(
+      `/mobile/review/${memberId}`,
+      { skipAuth: true },
+    );
+  },
+  markReview(memberId: string, action: "click" | "dismiss") {
+    return http.post<{ ok: boolean }>(`/mobile/review/${memberId}/${action}`, {}, {
+      skipAuth: true,
+    });
+  },
+  referral(memberId: string) {
+    return http.get<{
+      code: string;
+      invited: number;
+      rewarded: number;
+      pointsEach: number;
+      referred: boolean;
+    }>(`/mobile/referral/${memberId}`, { skipAuth: true });
+  },
+  claimReferral(memberId: string, code: string) {
+    return http.post<{ ok: boolean; already: boolean; sponsorFirstName?: string | null }>(
+      "/mobile/referral/claim",
+      { memberId, code },
+      { skipAuth: true },
+    );
+  },
+  publicBookingRequest(data: {
+    orgSlug: string;
+    firstName: string;
+    lastName?: string;
+    phone: string;
+    kind: "ROOM" | "SEAT";
+    spaceId?: string;
+    seatLabel?: string;
+    seatSpaceId?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    note?: string;
+  }) {
+    return http.post<{
+      booking: BookingRequest;
+      member: Member;
+      accessToken: string;
+    }>("/mobile/public/booking-request", data, { skipAuth: true });
   },
   myBookingRequests(memberId: string) {
     return http.get<BookingRequest[]>(`/mobile/booking-request/${memberId}`, {

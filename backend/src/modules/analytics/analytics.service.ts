@@ -196,6 +196,168 @@ export class AnalyticsService {
     return { year: y, month: m, days };
   }
 
+  /** Café / products: best sellers, margin per item, attach rate, sales by hour. */
+  async productsPerformance(from?: string, to?: string) {
+    const { start, end } = this.parseRange(from, to);
+    const [orders, products, visits] = await Promise.all([
+      this.prisma.dailyProduct.findMany({
+        where: {
+          date: { gte: start, lte: end },
+          status: { notIn: ['PENDING', 'CANCELLED'] },
+        },
+        select: {
+          productId: true,
+          quantite: true,
+          memberId: true,
+          externalRef: true,
+          date: true,
+          createdAt: true,
+          product: {
+            select: { name: true, purchasePrice: true, sellingPrice: true },
+          },
+        },
+      }),
+      this.prisma.product.findMany({
+        select: {
+          id: true,
+          name: true,
+          stock: true,
+          purchasePrice: true,
+          sellingPrice: true,
+        },
+      }),
+      this.prisma.journal.findMany({
+        where: {
+          registredTime: { gte: start, lte: end },
+          isReservation: false,
+          memberID: { not: null },
+        },
+        select: { memberID: true, registredTime: true },
+      }),
+    ]);
+
+    type Row = {
+      productId: string;
+      name: string;
+      quantity: number;
+      revenue: number;
+      cost: number;
+      margin: number;
+      marginPct: number | null;
+      unitMargin: number;
+      stock: number | null;
+    };
+    const rows = new Map<string, Row>();
+    const revenueByHour = Array.from({ length: 24 }, () => 0);
+    const buyerDays = new Set<string>();
+    for (const o of orders) {
+      const sell = o.product?.sellingPrice || 0;
+      const buy = o.product?.purchasePrice || 0;
+      const qty = o.quantite || 0;
+      const row =
+        rows.get(o.productId) ||
+        ({
+          productId: o.productId,
+          name: o.product?.name || 'Produit',
+          quantity: 0,
+          revenue: 0,
+          cost: 0,
+          margin: 0,
+          marginPct: null,
+          unitMargin: sell - buy,
+          stock: null,
+        } as Row);
+      row.quantity += qty;
+      row.revenue += sell * qty;
+      row.cost += buy * qty;
+      rows.set(o.productId, row);
+      revenueByHour[o.createdAt.getHours()] += sell * qty;
+      const who = o.memberId || o.externalRef;
+      if (who) buyerDays.add(`${who}|${localDayKey(o.date || o.createdAt)}`);
+    }
+
+    const stockById = new Map(products.map((p) => [p.id, p.stock]));
+    const list = [...rows.values()]
+      .map((r) => {
+        const margin = r.revenue - r.cost;
+        return {
+          ...r,
+          revenue: round1(r.revenue),
+          cost: round1(r.cost),
+          margin: round1(margin),
+          unitMargin: round1(r.unitMargin),
+          marginPct: r.revenue > 0 ? Math.round((margin / r.revenue) * 100) : null,
+          stock: stockById.get(r.productId) ?? null,
+        };
+      })
+      .sort((a, b) => b.margin - a.margin);
+
+    const visitDays = new Set(
+      visits.map((v) => `${v.memberID}|${localDayKey(v.registredTime)}`),
+    );
+    let visitsWithOrder = 0;
+    for (const k of visitDays) if (buyerDays.has(k)) visitsWithOrder += 1;
+
+    const revenue = list.reduce((a, r) => a + r.revenue, 0);
+    const cost = list.reduce((a, r) => a + r.cost, 0);
+    const sold = new Set(list.map((r) => r.productId));
+    const dormant = products
+      .filter((p) => !sold.has(p.id) && p.stock > 0)
+      .map((p) => ({ productId: p.id, name: p.name, stock: p.stock }));
+    const lowMargin = list.filter(
+      (r) => r.marginPct != null && r.marginPct < 30 && r.quantity >= 3,
+    );
+    const attachRate = visitDays.size
+      ? Math.round((visitsWithOrder / visitDays.size) * 100)
+      : null;
+    const avgBasket = visitsWithOrder ? round1(revenue / visitsWithOrder) : null;
+
+    const tips: string[] = [];
+    if (attachRate != null && attachRate < 40 && visitDays.size >= 10) {
+      tips.push(
+        `Seulement ${attachRate} % des visites prennent un produit : proposez un café à l'arrivée, ou un pack « journée + café ».`,
+      );
+    }
+    if (lowMargin.length) {
+      tips.push(
+        `Marge faible (< 30 %) sur ${lowMargin
+          .slice(0, 3)
+          .map((r) => r.name)
+          .join(', ')} : revoyez le prix de vente ou le fournisseur.`,
+      );
+    }
+    const best = list[0];
+    if (best && best.margin > 0) {
+      tips.push(
+        `« ${best.name} » rapporte le plus (${best.margin} DT de marge) : mettez-le en avant sur le comptoir et dans l'app.`,
+      );
+    }
+    if (dormant.length) {
+      tips.push(
+        `${dormant.length} produit${dormant.length > 1 ? 's' : ''} en stock sans aucune vente sur la période : promo ou retrait du menu.`,
+      );
+    }
+
+    return {
+      from: localDayKey(start),
+      to: localDayKey(end),
+      totals: {
+        revenue: round1(revenue),
+        cost: round1(cost),
+        margin: round1(revenue - cost),
+        marginPct: revenue > 0 ? Math.round(((revenue - cost) / revenue) * 100) : null,
+        quantity: list.reduce((a, r) => a + r.quantity, 0),
+        attachRate,
+        avgBasket,
+        visits: visitDays.size,
+      },
+      products: list,
+      dormant,
+      revenueByHour: revenueByHour.map((v, hour) => ({ hour, revenue: round1(v) })),
+      tips,
+    };
+  }
+
   async servicesDemand(from?: string, to?: string) {
     const { start, end } = this.parseRange(from, to);
 

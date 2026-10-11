@@ -229,15 +229,15 @@ export class MobileController {
   createAdminOrder(
     @Body()
     body: {
-      memberId: string;
+      memberId?: string | null;
       productId: string;
       quantity?: number;
       isPayed?: boolean;
       journalId?: string | null;
     },
   ) {
-    if (!body?.memberId || !body?.productId) {
-      throw new BadRequestException('memberId et productId requis');
+    if (!body?.productId) {
+      throw new BadRequestException('productId requis');
     }
     return this.mobileService.createAdminOrder(body);
   }
@@ -281,12 +281,23 @@ export class MobileController {
 
   @Patch('admin/orders/pay-member-day')
   payMemberDay(
-    @Body() body: { memberId: string; isPayed: boolean; date?: string },
+    @Body()
+    body: {
+      memberId?: string | null;
+      isPayed: boolean;
+      date?: string;
+      anonymous?: boolean;
+      journalId?: string | null;
+    },
   ) {
+    if (!body.memberId && !body.anonymous) {
+      throw new BadRequestException('memberId requis');
+    }
     return this.mobileService.payMemberDayOrders(
-      body.memberId,
+      body.memberId || null,
       !!body.isPayed,
       body.date,
+      body.memberId ? null : body.journalId || null,
     );
   }
 
@@ -558,6 +569,53 @@ export class MobileController {
     },
   ) {
     return this.mobileService.createBookingRequest(body);
+  }
+
+  @Get('review/:memberId')
+  reviewPrompt(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.reviewPrompt(memberId);
+  }
+
+  @Post('review/:memberId/:action')
+  markReview(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Param('action') action: string,
+  ) {
+    if (action !== 'click' && action !== 'dismiss') {
+      throw new BadRequestException('Action invalide');
+    }
+    return this.mobileService.markReview(memberId, action);
+  }
+
+  @Get('referral/:memberId')
+  referral(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.referral(memberId);
+  }
+
+  @Post('referral/claim')
+  claimReferral(@Body() body: { memberId: string; code: string }) {
+    return this.mobileService.claimReferral(body.memberId, body.code);
+  }
+
+  @Post('public/booking-request')
+  publicBooking(
+    @Body()
+    body: {
+      orgSlug?: string;
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      kind: 'ROOM' | 'SEAT';
+      spaceId?: string;
+      seatLabel?: string;
+      seatSpaceId?: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      note?: string;
+    },
+  ) {
+    return this.mobileService.publicBookingRequest(body);
   }
 
   @Get('booking-request/:memberId')

@@ -8,6 +8,7 @@ import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
 import { PointsCard } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
 import { EventsPreview } from "@/components/visitor/EventCard";
+import { EnergyBoostCard } from "@/components/visitor/EnergyBoostCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -96,6 +97,9 @@ export default function SessionPage() {
 
   return (
     <div className="space-y-3">
+      {session.registredTime ? (
+        <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
+      ) : null}
       {memberId ? <PointsCard memberId={memberId} /> : null}
       <ProfileMissionEntry hideWhenComplete />
       <ActiveSessionPanel

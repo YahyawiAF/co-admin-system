@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { PrismaService } from 'database/prisma.service';
 import { earnPoints } from './points-ledger';
 import { dtToPoints, pointsToDt } from './points';
+import { maybeAwardReferral } from './referral';
 
 /**
  * Earn when visit has leaveTime + isPayed.
@@ -35,6 +36,8 @@ export async function maybeAwardVisitPaidPoints(
   ) {
     return null;
   }
+
+  await maybeAwardReferral(prisma, journal.memberID).catch(() => null);
 
   const redeem = await prisma.memberPointEntry.findFirst({
     where: {

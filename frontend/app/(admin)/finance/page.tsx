@@ -23,6 +23,7 @@ import { caisseApi } from "@/lib/api/resources";
 import { dt } from "@/lib/finance-queries";
 import { FinanceMonthCharts } from "@/components/admin/finance/FinanceMonthCharts";
 import { FinanceServicesInsight } from "@/components/admin/finance/FinanceServicesInsight";
+import { FinanceProductsInsight } from "@/components/admin/finance/FinanceProductsInsight";
 import { FinanceWeeklyTraffic } from "@/components/admin/finance/FinanceWeeklyTraffic";
 import { FinanceRegulars } from "@/components/admin/finance/FinanceRegulars";
 import { FinanceTopPoints } from "@/components/admin/finance/FinanceTopPoints";
@@ -156,6 +157,7 @@ function FinanceInner() {
 
           <FinanceMonthCharts year={year} month={month} monthData={monthData} />
           <FinanceServicesInsight year={year} month={month} />
+          <FinanceProductsInsight year={year} month={month} />
 
           {monthData ? (
             <Card>

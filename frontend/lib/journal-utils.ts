@@ -1,3 +1,4 @@
+import { priceAvailableAt, type CreneauPrice } from "@/lib/price-availability";
 import type {
   Journal,
   LateBillingMode,
@@ -11,12 +12,16 @@ import {
   type SessionPricingResult,
 } from "@/lib/session-pricing";
 
-export function isJournalPack(p: {
-  category?: string | null;
-  type?: string;
-  billingUnit?: string | null;
-}) {
+/** Day / space tarifs sellable right now (créneau tarifs only inside their hours). */
+export function isJournalPack(
+  p: {
+    category?: string | null;
+    type?: string;
+    billingUnit?: string | null;
+  } & CreneauPrice,
+) {
   if (p.category === "ABONNEMENT" || p.type === "abonnement") return false;
+  if (!priceAvailableAt(p)) return false;
   if (p.category === "SALLE" || p.category === "OPEN_SPACE") return true;
   return p.category === "JOURNEE" || p.type === "journal";
 }

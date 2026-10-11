@@ -14,10 +14,12 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { MemberService } from '../member/member.service';
+import { ExpensesService } from '../expense/expense.service';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 import { expenseAmount } from '../expense/expense-amount';
 import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
+import { computeOffers } from './offers';
 
 const HOUR_MS = 3_600_000;
 const WEEKDAYS = [
@@ -37,6 +39,9 @@ export type PerformanceSettings = {
   alwaysOpen: boolean;
   regularVisitsPerWeek: number;
   inactiveAlertDays: number;
+  googleReviewUrl: string | null;
+  reviewAfterVisits: number;
+  referralPoints: number;
 };
 
 export type InsightSeverity =
@@ -87,7 +92,47 @@ export class PerformanceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly members: MemberService,
+    private readonly expenses: ExpensesService,
   ) {}
+
+  /** Revenue needed this month to pay every charge and the daily spending. */
+  private async breakEven(
+    year: number,
+    month: number,
+    revenue: number,
+    elapsedDays: number,
+    daysInMonth: number,
+    remainingDays: number,
+    avgTicket: number | null,
+    projected: number | null,
+  ) {
+    const m = await this.expenses.monthOverview(year, month);
+    const fixed = m.totals.chargesPaid + m.totals.chargesRemaining;
+    const dailyProjected =
+      elapsedDays > 0.5 && elapsedDays < daysInMonth
+        ? (m.totals.daily / elapsedDays) * daysInMonth
+        : m.totals.daily;
+    const total = round1(fixed + dailyProjected);
+    const remaining = round1(Math.max(0, total - revenue));
+    const neededPerDay = remainingDays > 0 ? round1(remaining / remainingDays) : null;
+    return {
+      hasCharges: m.recurring.length > 0 || m.oneOff.length > 0,
+      fixed: round1(fixed),
+      fixedRemaining: round1(m.totals.chargesRemaining),
+      dailyProjected: round1(dailyProjected),
+      total,
+      covered: round1(Math.min(revenue, total)),
+      coveredPct: total > 0 ? round1(Math.min(100, (revenue / total) * 100)) : null,
+      remaining,
+      reached: total > 0 && revenue >= total,
+      neededPerDay,
+      visitsPerDay:
+        neededPerDay != null && avgTicket && avgTicket > 0
+          ? Math.ceil(neededPerDay / avgTicket)
+          : null,
+      projectedProfit: projected != null ? round1(projected - total) : null,
+    };
+  }
 
   /** The facility the admin works on (explicit id, else the one with the most spaces). */
   private async facility(facilityId?: string) {
@@ -116,6 +161,9 @@ export class PerformanceService {
       alwaysOpen: f.alwaysOpen,
       regularVisitsPerWeek: f.regularVisitsPerWeek,
       inactiveAlertDays: f.inactiveAlertDays,
+      googleReviewUrl: f.googleReviewUrl,
+      reviewAfterVisits: f.reviewAfterVisits,
+      referralPoints: f.referralPoints,
     };
   }
 
@@ -139,6 +187,17 @@ export class PerformanceService {
       data.regularVisitsPerWeek = int(body.regularVisitsPerWeek, 1, 7);
     if (body.inactiveAlertDays != null)
       data.inactiveAlertDays = int(body.inactiveAlertDays, 2, 60);
+    if (body.reviewAfterVisits != null)
+      data.reviewAfterVisits = int(body.reviewAfterVisits, 1, 100);
+    if (body.referralPoints != null)
+      data.referralPoints = int(body.referralPoints, 0, 10000);
+    if (body.googleReviewUrl !== undefined) {
+      const url = (body.googleReviewUrl || '').trim();
+      if (url && (!/^https:\/\/\S+$/.test(url) || url.length > 500)) {
+        throw new BadRequestException('Lien Google invalide (doit commencer par https://)');
+      }
+      data.googleReviewUrl = url || null;
+    }
     const open = data.openHour ?? f.openHour;
     const close = data.closeHour ?? f.closeHour;
     if (close <= open) {
@@ -496,6 +555,17 @@ export class PerformanceService {
         }
       : null;
 
+    const breakEven = await this.breakEven(
+      year,
+      month,
+      revenue,
+      elapsedDays,
+      daysInMonth,
+      remainingDays,
+      current?.avgTicket ?? previous.avgTicket,
+      projected,
+    );
+
     const weekEnd = now;
     const weekStart = startOfDay(subDays(now, 6));
     const [week, prevWeek] = await Promise.all([
@@ -537,6 +607,7 @@ export class PerformanceService {
       deltas,
       projected,
       target: targetBlock,
+      breakEven,
       bestWeekday: ranked[0]?.weekday ?? null,
       worstWeekday: ranked.length > 1 ? ranked[ranked.length - 1].weekday : null,
       week: {
@@ -562,7 +633,7 @@ export class PerformanceService {
     await Promise.all([
       this.abonnementInsights(out, today, now),
       this.unpaidInsight(out, today),
-      this.conversionInsight(out, s, today),
+      this.conversionInsight(out),
       this.inactiveRegularsInsight(out, s, today),
       this.slotInsights(out, s, seats, today, now),
       this.monthInsights(out, s, seats, now),
@@ -614,7 +685,7 @@ export class PerformanceService {
         title: `${expiring.length} abonnement${expiring.length > 1 ? 's se terminent' : ' se termine'} d'ici 3 jours`,
         detail:
           'Proposez le renouvellement maintenant : un client relancé avant la fin renouvelle bien plus souvent.',
-        cta: { label: 'Voir les abonnements', href: '/abonnements?filter=expiring' },
+        cta: { label: 'Relancer', href: '/relances' },
         items: expiring.slice(0, 6).map((a) => {
           const d = differenceInCalendarDays(a.leaveDate!, today);
           return {
@@ -638,7 +709,7 @@ export class PerformanceService {
         title: `${ended.length} abonnement${ended.length > 1 ? 's terminés' : ' terminé'} sans renouvellement`,
         detail:
           'Terminés ces 14 derniers jours et pas encore renouvelés. Contactez-les avant qu\'ils prennent l\'habitude de ne plus venir.',
-        cta: { label: 'Voir les terminés', href: '/abonnements?filter=expired' },
+        cta: { label: 'Relancer', href: '/relances' },
         items: ended.slice(0, 6).map((a) => {
           const d = differenceInCalendarDays(today, a.leaveDate!);
           return {
@@ -699,73 +770,33 @@ export class PerformanceService {
     });
   }
 
-  private async conversionInsight(
-    out: Insight[],
-    s: PerformanceSettings,
-    today: Date,
-  ) {
-    const monthly = await this.prisma.price.findFirst({
-      where: {
-        type: 'abonnement',
-        isActive: true,
-        periodDays: { gte: 28, lte: 31 },
-        price: { gt: 0 },
-      },
-      orderBy: { price: 'asc' },
-      select: { name: true, price: true },
+  /** Abonnement suggestions for the given members (Journal desk hint). */
+  async offers(memberIds: string[]) {
+    const map = await computeOffers(this.prisma, memberIds.slice(0, 300));
+    return Object.fromEntries(map);
+  }
+
+  private async conversionInsight(out: Insight[]) {
+    const offers = [...(await computeOffers(this.prisma, null)).values()].sort(
+      (a, b) => b.projectedSpend - a.projectedSpend,
+    );
+    if (!offers.length) return;
+    const people = await this.prisma.member.findMany({
+      where: { id: { in: offers.map((o) => o.memberId) } },
+      select: { id: true, firstName: true, lastName: true },
     });
-    if (!monthly) return;
-    const since = subDays(today, 29);
-    const [visits, activeAbos] = await Promise.all([
-      this.prisma.journal.findMany({
-        where: {
-          registredTime: { gte: since },
-          isReservation: false,
-          memberID: { not: null },
-        },
-        select: {
-          memberID: true,
-          registredTime: true,
-          isPayed: true,
-          payedAmount: true,
-          members: { select: { firstName: true, lastName: true, phone: true } },
-        },
-      }),
-      this.prisma.abonnement.findMany({
-        where: { leaveDate: { gte: today } },
-        select: { memberID: true },
-      }),
-    ]);
-    const subscribed = new Set(activeAbos.map((a) => a.memberID));
-    const byMember = new Map<
-      string,
-      { name: string; phone?: string | null; spend: number; days: Set<string> }
-    >();
-    for (const v of visits) {
-      if (!v.memberID || subscribed.has(v.memberID)) continue;
-      let row = byMember.get(v.memberID);
-      if (!row) {
-        row = { name: memberLabel(v.members), phone: v.members?.phone, spend: 0, days: new Set() };
-        byMember.set(v.memberID, row);
-      }
-      row.spend += v.payedAmount || 0;
-      row.days.add(localDayKey(v.registredTime));
-    }
-    const minDays = Math.max(6, Math.round(s.regularVisitsPerWeek * 4 * 0.75));
-    const candidates = [...byMember.entries()]
-      .filter(([, r]) => r.spend >= monthly.price * 0.7 || r.days.size >= minDays)
-      .sort((a, b) => b[1].spend - a[1].spend);
-    if (!candidates.length) return;
+    const name = new Map(people.map((p) => [p.id, memberLabel(p)]));
     out.push({
       id: 'convert',
       severity: 'opportunity',
-      title: `${candidates.length} client${candidates.length > 1 ? 's paient' : ' paie'} presque un abonnement`,
-      detail: `Sur 30 jours ils ont beaucoup payé en passes ou sont venus souvent. « ${monthly.name} » coûte ${money(monthly.price)} : proposez-le, c'est un revenu garanti chaque mois.`,
-      cta: { label: 'Créer un abonnement', href: '/abonnements' },
-      items: candidates.slice(0, 6).map(([id, r]) => ({
-        label: r.name,
-        detail: `${money(r.spend)} payés · ${r.days.size} jours de visite${r.phone ? ` · ${r.phone}` : ''}`,
-        href: `/abonnements?memberId=${id}`,
+      title: `${offers.length} client${offers.length > 1 ? 's paient' : ' paie'} presque un abonnement`,
+      detail:
+        "À leur rythme actuel, un abonnement leur coûterait autant (ou moins) que les passes. Proposez-le : c'est un revenu garanti pour vous.",
+      cta: { label: 'Relancer', href: '/relances' },
+      items: offers.slice(0, 6).map((o) => ({
+        label: name.get(o.memberId) || 'Client',
+        detail: `${money(o.spend)} en ${o.visitDays} jours · ${o.headline}`,
+        href: `/abonnements?new=1&memberId=${o.memberId}&priceId=${o.plan.id}`,
       })),
     });
   }
@@ -814,6 +845,7 @@ export class PerformanceService {
       severity: 'warning',
       title: `${lost.length} habitué${lost.length > 1 ? 's ne sont plus venus' : " n'est plus venu"} depuis ${s.inactiveAlertDays} jours`,
       detail: `Ils venaient environ ${s.regularVisitsPerWeek} fois par semaine. Un message ou un appel suffit souvent à les faire revenir.`,
+      cta: { label: 'Relancer', href: '/relances' },
       items: lost.slice(0, 6).map(([id, r]) => {
         const d = differenceInCalendarDays(today, r.last);
         return {
@@ -912,8 +944,8 @@ export class PerformanceService {
         severity: 'info',
         title: `Créneaux creux : ${quiet.slice(0, 2).map(slotLabel).join(', ')}`,
         detail:
-          "Moins de 20 % des places occupées en journée. Idées : un pass « après-midi » moins cher, un événement ou un atelier, ou louer la salle à un groupe.",
-        cta: { label: 'Créer un tarif', href: '/tarifs' },
+          "Moins de 20 % des places occupées en journée. Créez un tarif « créneau » moins cher sur ces heures (Services → Créneau), organisez un atelier, ou louez la salle à un groupe.",
+        cta: { label: 'Créer un tarif créneau', href: '/tarifs' },
         items: quiet.slice(0, 5).map((sl) => ({ label: slotLabel(sl), detail: `${sl.pct} % occupé` })),
       });
     }
@@ -944,6 +976,18 @@ export class PerformanceService {
         title: `Les dépenses font ${Math.round((m.expenses / m.revenue) * 100)} % du CA`,
         detail: `${money(m.expenses)} dépensés pour ${money(m.revenue)} encaissés ce mois-ci. Au-dessus de 50 %, la marge devient fragile.`,
         cta: { label: 'Voir les dépenses', href: '/finance?tab=depenses' },
+      });
+    }
+
+    const charges = await this.expenses.monthOverview(now.getFullYear(), now.getMonth() + 1);
+    if (!charges.recurring.length) {
+      out.push({
+        id: 'charges-missing',
+        severity: 'info',
+        title: 'Ajoutez vos charges mensuelles',
+        detail:
+          'Loyer, internet, électricité, salaires… Avec elles, la page calcule votre seuil de rentabilité : combien encaisser chaque jour pour ne pas perdre d\'argent.',
+        cta: { label: 'Ajouter mes charges', href: '/finance?tab=depenses' },
       });
     }
 

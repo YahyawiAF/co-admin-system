@@ -110,9 +110,12 @@ export function JournalCaisseDrawer({
 
   const cards = useMemo((): PersonCard[] => {
     const byKey = new Map<string, PersonCard>();
+    const rowIdsByKey = new Map<string, Set<string>>();
     for (const row of rows) {
       if (row.isReservation) continue;
       const key = journalPersonKey(row);
+      if (!rowIdsByKey.has(key)) rowIdsByKey.set(key, new Set());
+      rowIdsByKey.get(key)!.add(row.id);
       let card = byKey.get(key);
       if (!card) {
         card = {
@@ -143,18 +146,18 @@ export function JournalCaisseDrawer({
       if (line) card.visits.push(line);
     }
     for (const card of byKey.values()) {
-      if (card.memberId) {
-        card.orders = dailyProducts.filter((dp) => {
-          const mid = dp.memberId || dp.externalRef;
-          if (mid !== card.memberId) return false;
-          if (dp.status === "CANCELLED" || dp.isPayed) return false;
-          return !dp.date || isSameDay(new Date(dp.date), date);
-        });
-        card.ordersTotal = card.orders.reduce(
-          (s, dp) => s + (dp.product?.sellingPrice || 0) * (dp.quantite || 0),
-          0
-        );
-      }
+      const visitIds = rowIdsByKey.get(card.key) ?? new Set<string>();
+      card.orders = dailyProducts.filter((dp) => {
+        if (dp.status === "CANCELLED" || dp.isPayed) return false;
+        if (dp.date && !isSameDay(new Date(dp.date), date)) return false;
+        const mid = dp.memberId || dp.externalRef;
+        if (card.memberId) return mid === card.memberId;
+        return !mid && !!dp.journalId && visitIds.has(dp.journalId);
+      });
+      card.ordersTotal = card.orders.reduce(
+        (s, dp) => s + (dp.product?.sellingPrice || 0) * (dp.quantite || 0),
+        0
+      );
       card.total = round1(
         card.visits.reduce((s, v) => s + v.amount, 0) + card.ordersTotal
       );
@@ -205,8 +208,15 @@ export function JournalCaisseDrawer({
         );
       }
     }
-    if (markPaid && card.memberId && card.orders.length) {
-      await mobileApi.payMemberDayOrders(card.memberId, true, dayKey);
+    if (markPaid && card.orders.length) {
+      if (card.memberId) {
+        await mobileApi.payMemberDayOrders(card.memberId, true, dayKey);
+      } else {
+        const visits = new Set(card.orders.map((o) => o.journalId).filter(Boolean));
+        for (const journalId of visits) {
+          await mobileApi.payMemberDayOrders(null, true, dayKey, journalId);
+        }
+      }
     }
   };
 

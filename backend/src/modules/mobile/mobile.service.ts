@@ -62,11 +62,18 @@ import {
 } from './points';
 import { creditPoints, debitPoints, earnPoints } from './points-ledger';
 import {
+  creneauLabel,
+  priceAvailableAt,
+  type CreneauPrice,
+} from '../price/price-availability';
+import {
   maybeAwardVisitPaidPoints as creditVisitPaidPoints,
   maybeAwardProductPaidPoints as creditProductPaidPoints,
   maybeRevokeVisitPaidPoints as revokeVisitPaidPoints,
   maybeRevokeProductPaidPoints as revokeProductPaidPoints,
 } from './visit-paid-points';
+import { claimReferral, referralSummary } from './referral';
+import { markReview, reviewPrompt } from './review-prompt';
 import {
   assertPriceCanOccupy,
   linkedSpaceIds,
@@ -1816,6 +1823,15 @@ export class MobileService {
     return { seat };
   }
 
+  /** Créneau tarifs (happy hour) are only sold inside their hours. */
+  private assertCreneau(price: CreneauPrice & { name: string }) {
+    if (!priceAvailableAt(price)) {
+      throw new BadRequestException(
+        `« ${price.name} » est disponible uniquement ${creneauLabel(price)}`,
+      );
+    }
+  }
+
   async startDaySession(dto: StartDaySessionDto) {
     const member = await this.prisma.member.findUnique({
       where: { id: dto.memberId },
@@ -1834,6 +1850,7 @@ export class MobileService {
         'Les abonnements ne démarrent pas comme visite journalière',
       );
     }
+    this.assertCreneau(price);
 
     const activeSub = await this.getActiveSubscription(dto.memberId);
     const subKind = activeSub?.price
@@ -3685,6 +3702,7 @@ export class MobileService {
     if (!price) throw new NotFoundException('Price not found');
 
     if (dto.type === VisitRequestType.DAY) {
+      this.assertCreneau(price);
       const activeSub = await this.getActiveSubscription(dto.memberId);
       const subKind = activeSub?.price
         ? this.subscriptionKind(activeSub.price)
@@ -4825,8 +4843,12 @@ export class MobileService {
   }
 
   /** Reception adds a product to a member's tab (served at the desk → already confirmed). */
+  /**
+   * Reception adds a café / product. Without a member it is anonymous: tied to
+   * an anonymous visit (journalId) or, with neither, a counter sale.
+   */
   async createAdminOrder(dto: {
-    memberId: string;
+    memberId?: string | null;
     productId: string;
     quantity?: number;
     isPayed?: boolean;
@@ -4834,7 +4856,9 @@ export class MobileService {
   }) {
     const qty = Math.max(1, Math.floor(Number(dto.quantity) || 1));
     const [member, product, journal] = await Promise.all([
-      this.prisma.member.findUnique({ where: { id: dto.memberId } }),
+      dto.memberId
+        ? this.prisma.member.findUnique({ where: { id: dto.memberId } })
+        : Promise.resolve(null),
       this.prisma.product.findUnique({ where: { id: dto.productId } }),
       dto.journalId
         ? this.prisma.journal.findUnique({
@@ -4843,15 +4867,18 @@ export class MobileService {
           })
         : Promise.resolve(null),
     ]);
-    if (!member) throw new NotFoundException('Membre introuvable');
+    if (dto.memberId && !member) throw new NotFoundException('Membre introuvable');
     if (!product) throw new NotFoundException('Produit introuvable');
+    if (dto.journalId && !journal) throw new NotFoundException('Pointage introuvable');
     if (product.stock < qty) {
       throw new BadRequestException(`Stock insuffisant (${product.stock})`);
     }
-    if (journal && journal.memberID !== dto.memberId) {
+    if (journal && (journal.memberID ?? null) !== (dto.memberId ?? null)) {
       throw new BadRequestException('Ce pointage appartient à un autre membre');
     }
-    const open = journal ? null : await this.getOpenSession(dto.memberId);
+    const memberId = member?.id ?? null;
+    const open =
+      journal || !memberId ? null : await this.getOpenSession(memberId);
     const now = new Date();
     // Past journal day: keep the order on that day so caisse/journal totals match
     const date =
@@ -4862,7 +4889,9 @@ export class MobileService {
     // Same product, same day, same payment state → one line with a bigger quantity
     const existing = await this.prisma.dailyProduct.findFirst({
       where: {
-        OR: [{ memberId: dto.memberId }, { externalRef: dto.memberId }],
+        ...(memberId
+          ? { OR: [{ memberId }, { externalRef: memberId }] }
+          : { memberId: null, externalRef: null, journalId: journal?.id ?? null }),
         productId: product.id,
         status: ProductOrderStatus.CONFIRMED,
         isPayed: !!dto.isPayed,
@@ -4883,8 +4912,8 @@ export class MobileService {
               productId: product.id,
               quantite: qty,
               date,
-              externalRef: dto.memberId,
-              memberId: dto.memberId,
+              externalRef: memberId,
+              memberId,
               journalId: journal?.id || open?.id || null,
               status: ProductOrderStatus.CONFIRMED,
               isPayed: !!dto.isPayed,
@@ -4896,7 +4925,7 @@ export class MobileService {
         data: { stock: { decrement: qty } },
       }),
     ]);
-    if (!existing && dto.isPayed) {
+    if (!existing && dto.isPayed && memberId) {
       const awarded = await creditProductPaidPoints(this.prisma, order.id);
       if (awarded) {
         await this.evaluateTrophies(awarded.memberId, PointEvent.PRODUCT_PAID);
@@ -4910,7 +4939,7 @@ export class MobileService {
     });
     this.eventsGateway.sendTableUpdates({
       type: 'product_order_admin',
-      memberId: dto.memberId,
+      memberId,
       productId: product.id,
       quantity: qty,
       label: product.name,
@@ -5173,13 +5202,21 @@ export class MobileService {
   }
 
   /** `date` is a local yyyy-MM-dd day (defaults to today). */
-  async payMemberDayOrders(memberId: string, isPayed: boolean, date?: string) {
+  /** Pay / unpay a day's orders: a member's, or anonymous ones (one visit, or the counter when journalId is null). */
+  async payMemberDayOrders(
+    memberId: string | null,
+    isPayed: boolean,
+    date?: string,
+    journalId?: string | null,
+  ) {
     const day =
       date && /^\d{4}-\d{2}-\d{2}$/.test(date)
         ? new Date(`${date}T12:00:00`)
         : new Date();
     const dayFilter = {
-      OR: [{ memberId }, { externalRef: memberId }],
+      ...(memberId
+        ? { OR: [{ memberId }, { externalRef: memberId }] }
+        : { memberId: null, externalRef: null, journalId: journalId ?? null }),
       date: { gte: startOfDay(day), lt: endOfDay(day) },
       status: { not: ProductOrderStatus.CANCELLED },
     };
@@ -5211,6 +5248,7 @@ export class MobileService {
       memberId,
       isPayed,
     });
+    if (!memberId) return [];
     return this.listTodayOrders(memberId);
   }
 
@@ -5775,6 +5813,81 @@ export class MobileService {
       phone: row.member?.phone ?? null,
       avatarUrl: row.member?.avatarUrl ?? null,
     };
+  }
+
+  reviewPrompt(memberId: string) {
+    return reviewPrompt(this.prisma, memberId);
+  }
+
+  markReview(memberId: string, action: 'click' | 'dismiss') {
+    return markReview(this.prisma, memberId, action);
+  }
+
+  referral(memberId: string) {
+    return referralSummary(this.prisma, memberId);
+  }
+
+  claimReferral(memberId: string, code: string) {
+    return claimReferral(this.prisma, memberId, code);
+  }
+
+  /**
+   * Booking from the public link (no account yet): find or create the client by
+   * phone, file the request, and sign them in so they can follow it.
+   */
+  async publicBookingRequest(dto: {
+    orgSlug?: string;
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    kind: 'ROOM' | 'SEAT';
+    spaceId?: string;
+    seatLabel?: string;
+    seatSpaceId?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    note?: string;
+  }) {
+    const org = await this.resolveOrganizationBySlug(dto.orgSlug);
+    const firstName = (dto.firstName || '').trim();
+    const lastName = (dto.lastName || '').trim();
+    if (!firstName) throw new BadRequestException('Indiquez votre prénom');
+    const phone = this.parseTunisiaPhone(dto.phone || '');
+    let member = await this.findMemberByPhone(phone, org.id);
+    if (!member) {
+      member = await this.prisma.member.create({
+        data: {
+          organizationId: org.id,
+          phone,
+          firstName,
+          lastName: lastName || null,
+          visitorNumber: await this.nextVisitorNumber(org.id),
+          credits: 0,
+          isActive: true,
+          plan: Subscription.Journal,
+          openToCollaboration: true,
+          showInDirectory: true,
+        },
+      });
+    } else if (member.pinHash || member.passwordHash) {
+      throw new BadRequestException(
+        'Ce numéro a déjà un compte : connectez-vous pour réserver',
+      );
+    }
+    const booking = await this.createBookingRequest({
+      memberId: member.id,
+      kind: dto.kind,
+      spaceId: dto.spaceId,
+      seatLabel: dto.seatLabel,
+      seatSpaceId: dto.seatSpaceId,
+      date: dto.date,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      note: [`${firstName} ${lastName}`.trim(), dto.note?.trim()].filter(Boolean).join(' · '),
+    });
+    const accessToken = await this.signMemberToken(member.id, member.phone);
+    return { booking, member: this.sanitizeMember(member as any), accessToken };
   }
 
   async createBookingRequest(dto: {

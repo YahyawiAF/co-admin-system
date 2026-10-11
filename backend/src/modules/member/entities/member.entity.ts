@@ -123,6 +123,21 @@ export class MemberEntity implements Member {
   })
   pwaInstalledAt: Date | null;
 
+  @ApiProperty({ required: false, nullable: true })
+  referralCode: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  referredById: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  referralRewardedAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  reviewPromptedAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  reviewClickedAt: Date | null;
+
   @ApiProperty({ description: 'Gamification points (credited in PWA only)' })
   points: number;
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { creneauLabel, DAY_SHORT, hasCreneau } from "@/lib/price-availability";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -118,6 +119,10 @@ const schema = z.object({
     z.number().nullable().optional()
   ),
   isActive: z.boolean().optional(),
+  creneau: z.boolean().optional(),
+  availableFromHour: z.coerce.number().int().min(0).max(23).optional(),
+  availableToHour: z.coerce.number().int().min(1).max(30).optional(),
+  availableDays: z.array(z.number()).optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -165,6 +170,10 @@ function PriceFormDialog({
       reserveSeatFromHour: null,
       reserveSeatToHour: null,
       isActive: true,
+      creneau: false,
+      availableFromHour: 8,
+      availableToHour: 12,
+      availableDays: [],
     },
   });
 
@@ -202,6 +211,10 @@ function PriceFormDialog({
       reserveSeatFromHour: price?.reserveSeatFromHour ?? null,
       reserveSeatToHour: price?.reserveSeatToHour ?? null,
       isActive: price?.isActive !== false,
+      creneau: hasCreneau(price || {}),
+      availableFromHour: price?.availableFromHour ?? 8,
+      availableToHour: price?.availableToHour ?? 12,
+      availableDays: price?.availableDays ?? [],
     });
   }, [open, price]);
 
@@ -214,6 +227,8 @@ function PriceFormDialog({
   const occupyWhole = form.watch("occupyWhole");
   const spaceIds = form.watch("spaceIds") || [];
   const isActive = form.watch("isActive");
+  const creneau = form.watch("creneau");
+  const creneauDays = form.watch("availableDays") || [];
 
   const matchingSpaces = useMemo(
     () =>
@@ -266,6 +281,12 @@ function PriceFormDialog({
             ? v.reserveSeatToHour
             : null,
         isActive: v.isActive !== false,
+        availableFromHour:
+          v.creneau && primary !== PriceCategory.ABONNEMENT ? v.availableFromHour ?? null : null,
+        availableToHour:
+          v.creneau && primary !== PriceCategory.ABONNEMENT ? v.availableToHour ?? null : null,
+        availableDays:
+          v.creneau && primary !== PriceCategory.ABONNEMENT ? v.availableDays ?? [] : [],
         type,
         timePeriod: { start: "0", end: String(v.durationHours || 0) },
       };
@@ -533,6 +554,63 @@ function PriceFormDialog({
                     toute la journée pendant l&apos;abonnement.
                   </p>
                 </div>
+              ) : null}
+            </div>
+          ) : null}
+          {!isAbo ? (
+            <div className="space-y-3 rounded-lg border px-3 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label>Créneau (happy hour)</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Vendu seulement à ces heures, pour remplir les heures creuses
+                    (ex. « Matin 4h » moins cher de 8h à 12h). Masqué en dehors.
+                  </p>
+                </div>
+                <Switch
+                  checked={!!creneau}
+                  onCheckedChange={(v) => form.setValue("creneau", v)}
+                />
+              </div>
+              {creneau ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-xs">De (heure)</Label>
+                      <Input type="number" min={0} max={23} {...form.register("availableFromHour")} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">À (heure, 25 = 1h du matin)</Label>
+                      <Input type="number" min={1} max={30} {...form.register("availableToHour")} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Jours (aucun = tous les jours)</Label>
+                    <div className="flex flex-wrap gap-1">
+                      {[1, 2, 3, 4, 5, 6, 0].map((d) => {
+                        const on = creneauDays.includes(d);
+                        return (
+                          <button
+                            key={d}
+                            type="button"
+                            className={cn(
+                              "rounded-full border px-2.5 py-1 text-xs capitalize",
+                              on ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
+                            )}
+                            onClick={() =>
+                              form.setValue(
+                                "availableDays",
+                                on ? creneauDays.filter((x) => x !== d) : [...creneauDays, d],
+                              )
+                            }
+                          >
+                            {DAY_SHORT[d]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
               ) : null}
             </div>
           ) : null}
@@ -847,6 +925,11 @@ export default function TarifsPage() {
               <Badge variant={p.isActive === false ? "secondary" : "default"}>
                 {p.isActive === false ? "Inactif" : "Actif"}
               </Badge>
+              {hasCreneau(p) ? (
+                <Badge className="bg-amber-500 hover:bg-amber-500">
+                  Créneau {creneauLabel(p)}
+                </Badge>
+              ) : null}
               {p.billingUnit ? (
                 <Badge variant="secondary">
                   {BILLING_UNIT_LABEL[p.billingUnit] || p.billingUnit}

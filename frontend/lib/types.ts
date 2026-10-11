@@ -197,6 +197,11 @@ export interface Price {
   reserveSeatFromHour?: number | null;
   reserveSeatToHour?: number | null;
   isActive?: boolean;
+  /** Créneau (happy hour): sold only from/to these hours; to > 24 = after midnight */
+  availableFromHour?: number | null;
+  availableToHour?: number | null;
+  /** 0 = dimanche … 6 = samedi; empty = every day */
+  availableDays?: number[];
 }
 
 export interface Journal {
@@ -637,6 +642,37 @@ export interface ServiceDemandRow {
   uniqueClients: number;
 }
 
+export interface ProductPerformanceRow {
+  productId: string;
+  name: string;
+  quantity: number;
+  revenue: number;
+  cost: number;
+  margin: number;
+  marginPct: number | null;
+  unitMargin: number;
+  stock: number | null;
+}
+
+export interface ProductsPerformance {
+  from: string;
+  to: string;
+  totals: {
+    revenue: number;
+    cost: number;
+    margin: number;
+    marginPct: number | null;
+    quantity: number;
+    attachRate: number | null;
+    avgBasket: number | null;
+    visits: number;
+  };
+  products: ProductPerformanceRow[];
+  dormant: Array<{ productId: string; name: string; stock: number }>;
+  revenueByHour: Array<{ hour: number; revenue: number }>;
+  tips: string[];
+}
+
 export interface SpaceUsageRow {
   spaceId: string | null;
   name: string;
@@ -745,6 +781,9 @@ export interface PerformanceSettings {
   alwaysOpen: boolean;
   regularVisitsPerWeek: number;
   inactiveAlertDays: number;
+  googleReviewUrl: string | null;
+  reviewAfterVisits: number;
+  referralPoints: number;
 }
 
 export interface PerformanceWeekday {
@@ -819,6 +858,7 @@ export interface PerformanceOverview {
     neededPerDay: number | null;
     projectedPct: number | null;
   } | null;
+  breakEven: BreakEven;
   bestWeekday: number | null;
   worstWeekday: number | null;
   week: {
@@ -829,6 +869,84 @@ export interface PerformanceOverview {
     visitsDelta: number | null;
     bestWeekday: number | null;
   };
+}
+
+export interface BreakEven {
+  hasCharges: boolean;
+  /** Monthly charges (paid + still to pay). */
+  fixed: number;
+  fixedRemaining: number;
+  /** Small daily expenses projected to month end. */
+  dailyProjected: number;
+  total: number;
+  covered: number;
+  coveredPct: number | null;
+  remaining: number;
+  reached: boolean;
+  neededPerDay: number | null;
+  visitsPerDay: number | null;
+  projectedProfit: number | null;
+}
+
+export interface AbonnementOffer {
+  memberId: string;
+  visitDays: number;
+  spend: number;
+  spanDays: number;
+  typicalHours: number;
+  plan: {
+    id: string;
+    name: string;
+    price: number;
+    periodDays: number;
+    durationHours: number | null;
+  };
+  projectedSpend: number;
+  savings: number;
+  strength: "save" | "close";
+  headline: string;
+}
+
+export type OutreachReason =
+  | "ABO_EXPIRING"
+  | "ABO_ENDED"
+  | "UNPAID"
+  | "INACTIVE"
+  | "CONVERT"
+  | "REVIEW";
+export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "SKIP";
+
+export interface OutreachItem {
+  memberId: string;
+  name: string;
+  firstName: string;
+  phone: string | null;
+  whatsapp: string | null;
+  hasPush: boolean;
+  reason: OutreachReason;
+  title: string;
+  detail: string;
+  value: number;
+  owed: number;
+  message: string;
+  offer?: AbonnementOffer;
+  lastContact: { at: string; channel: OutreachChannel; reason: OutreachReason } | null;
+  snoozed: boolean;
+}
+
+export interface OutreachResults {
+  contacted: number;
+  won: number;
+  revenue: number;
+  byReason: Partial<Record<OutreachReason, { contacted: number; won: number; revenue: number }>>;
+}
+
+export interface OutreachList {
+  generatedAt: string;
+  pushEnabled: boolean;
+  todo: OutreachItem[];
+  contacted: OutreachItem[];
+  results: OutreachResults;
 }
 
 export type InsightSeverity =

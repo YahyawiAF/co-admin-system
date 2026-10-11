@@ -82,6 +82,7 @@ import { ReservationPanel } from "@/components/admin/ReservationPanel";
 import { JournalAlertStrip } from "@/components/admin/JournalAlertCenter";
 import { JournalReceptionToggles } from "@/components/admin/JournalReceptionToggles";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
+import { AbonnementOfferBadge } from "@/components/admin/AbonnementOfferBadge";
 import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { JournalEditSheet } from "@/components/admin/JournalEditSheet";
 import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
@@ -94,6 +95,7 @@ import { QuickExpenseDialog } from "@/components/admin/finance/QuickExpenseDialo
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
   abonnementsApi,
+  analyticsApi,
   bookingApi,
   dailyProductsApi,
   facilityApi,
@@ -502,20 +504,28 @@ export default function JournalClient() {
     return [...new Set(names)].sort(compareNaturalLabel);
   }, [journalSpaces, spaceFilter]);
 
-  /** Coffee / shop orders for the journal day, by member */
-  const coffeeByMember = useMemo(() => {
-    const map = new Map<string, typeof dailyProducts>();
+  /**
+   * Coffee / shop orders for the journal day: by member, by anonymous visit
+   * (no member, journalId) and counter sales (no member, no visit).
+   */
+  const { coffeeByMember, coffeeByVisit, counterOrders } = useMemo(() => {
+    const byMember = new Map<string, typeof dailyProducts>();
+    const byVisit = new Map<string, typeof dailyProducts>();
+    const counter: typeof dailyProducts = [];
     for (const dp of dailyProducts) {
-      const mid = dp.memberId || dp.externalRef;
-      if (!mid) continue;
       if (dp.status === "CANCELLED") continue;
       const d = dp.date ? new Date(dp.date) : null;
       if (d && !isSameDay(d, selectedDate)) continue;
-      const list = map.get(mid) || [];
-      list.push(dp);
-      map.set(mid, list);
+      const mid = dp.memberId || dp.externalRef;
+      if (mid) {
+        byMember.set(mid, [...(byMember.get(mid) || []), dp]);
+      } else if (dp.journalId) {
+        byVisit.set(dp.journalId, [...(byVisit.get(dp.journalId) || []), dp]);
+      } else {
+        counter.push(dp);
+      }
     }
-    return map;
+    return { coffeeByMember: byMember, coffeeByVisit: byVisit, counterOrders: counter };
   }, [dailyProducts, selectedDate]);
   /** Most ordered products first in the quick-add picker */
   const productPopularity = useMemo(() => {
@@ -533,6 +543,20 @@ export default function JournalClient() {
     () => rows.filter(isActiveVisit).map((r) => r.memberID || ""),
     [rows]
   );
+
+  const offerMemberIds = useMemo(
+    () =>
+      [...new Set(rows.map((r) => r.memberID).filter((id): id is string => !!id))]
+        .filter((id) => !subByMember.has(id))
+        .sort(),
+    [rows, subByMember]
+  );
+  const { data: offers } = useQuery({
+    queryKey: ["abo-offers", offerMemberIds.join(",")],
+    queryFn: () => analyticsApi.offers(offerMemberIds),
+    enabled: offerMemberIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
 
   const tomorrowReservations = useMemo(
     () => (tomorrowPage?.data ?? []).filter(isPendingReservation),
@@ -1167,6 +1191,16 @@ export default function JournalClient() {
                 focusSpaceId={focusSpaceId}
               />
               <JournalCommandesRail date={selectedDate} />
+              <JournalCoffeeCell
+                trigger="button"
+                anonymous
+                memberId={null}
+                journalId={null}
+                memberName="Café comptoir (passant)"
+                dateKey={selectedDayKey}
+                orders={counterOrders}
+                popularity={productPopularity}
+              />
               <Button
                 variant="outline"
                 size="lg"
@@ -1693,6 +1727,12 @@ export default function JournalClient() {
                                 }
                               />
                               <UnpaidDebtBadge amount={row.openDebtAmount} />
+                              {row.memberID ? (
+                                <AbonnementOfferBadge
+                                  offer={offers?.[row.memberID]}
+                                  name={visitorLabel(row)}
+                                />
+                              ) : null}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {isAnonymousVisit(row)
@@ -1704,16 +1744,20 @@ export default function JournalClient() {
                       </TableCell>
                       <TableCell>
                         {(() => {
-                          const mid = isAnonymousVisit(row)
-                            ? null
-                            : row.memberID || m?.id || null;
+                          const anon = isAnonymousVisit(row);
+                          const mid = anon ? null : row.memberID || m?.id || null;
                           return (
                             <JournalCoffeeCell
                               memberId={mid}
                               memberName={visitorLabel(row)}
                               journalId={row.id}
+                              anonymous={anon && !row.memberID && !row.isReservation}
                               dateKey={format(selectedDate, "yyyy-MM-dd")}
-                              orders={(mid && coffeeByMember.get(mid)) || []}
+                              orders={
+                                (mid
+                                  ? coffeeByMember.get(mid)
+                                  : coffeeByVisit.get(row.id)) || []
+                              }
                               popularity={productPopularity}
                             />
                           );

@@ -75,7 +75,9 @@ function isGuestAllowed(rest: string) {
     rest.startsWith("/profile") ||
     rest.startsWith("/recover") ||
     rest.startsWith("/join") ||
-    rest.startsWith("/signup")
+    rest.startsWith("/signup") ||
+    rest === "/reserve" ||
+    rest.startsWith("/tarifs")
   );
 }
 

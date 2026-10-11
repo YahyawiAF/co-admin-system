@@ -25,6 +25,8 @@ import {
   PointsCard,
 } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
+import { ReviewPromptCard } from "@/components/visitor/ReviewPromptCard";
+import { EnergyBoostCard } from "@/components/visitor/EnergyBoostCard";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import {
@@ -309,6 +311,10 @@ export default function MobileHomePage() {
         />
       ) : null}
 
+      {session?.registredTime && memberId ? (
+        <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
+      ) : null}
+
       {/* Hero — compact greeting / post-pointage grace */}
       {session ? (
         <ActiveSessionPanel
@@ -454,6 +460,7 @@ export default function MobileHomePage() {
 
       {pending && !session ? <EventsPreview /> : null}
 
+      {memberId && !session ? <ReviewPromptCard memberId={memberId} /> : null}
       {memberId ? (
         <PointsCard memberId={memberId} hideLocked={showInstallPromo && !isApp} />
       ) : null}

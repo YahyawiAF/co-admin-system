@@ -1,12 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Put, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
+import { OutreachService } from './outreach.service';
 
 @Controller('analytics')
 export class AnalyticsController {
   constructor(
     private readonly analytics: AnalyticsService,
     private readonly performance: PerformanceService,
+    private readonly outreach: OutreachService,
   ) {}
 
   @Get('performance/settings')
@@ -65,6 +67,32 @@ export class AnalyticsController {
     return this.performance.insights(facilityId);
   }
 
+  @Get('performance/offers')
+  performanceOffers(@Query('memberIds') memberIds?: string) {
+    return this.performance.offers(
+      (memberIds || '').split(',').map((s) => s.trim()).filter(Boolean),
+    );
+  }
+
+  @Get('outreach')
+  outreachList(@Query('facilityId') facilityId?: string) {
+    return this.outreach.list(facilityId);
+  }
+
+  @Post('outreach/log')
+  outreachLog(
+    @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string },
+  ) {
+    return this.outreach.log(body);
+  }
+
+  @Post('outreach/push')
+  outreachPush(
+    @Body() body: { memberId?: string; reason?: string; message?: string; title?: string },
+  ) {
+    return this.outreach.sendPush(body);
+  }
+
   @Get('finance/monthly')
   financeMonthly(@Query('year') year?: string) {
     return this.analytics.financeMonthly(
@@ -82,6 +110,11 @@ export class AnalyticsController {
       Number(year) || now.getFullYear(),
       Number(month) || now.getMonth() + 1,
     );
+  }
+
+  @Get('products/performance')
+  productsPerformance(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.analytics.productsPerformance(from, to);
   }
 
   @Get('services/demand')

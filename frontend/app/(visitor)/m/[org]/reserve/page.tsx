@@ -24,7 +24,9 @@ import { spaceAllowsSeat, spaceAllowsWhole } from "@/lib/space-occupy";
 
 export default function ReservePage() {
   const { slug, href } = useOrg();
-  const { memberId } = useVisitorSession();
+  const { memberId, confirm } = useVisitorSession();
+  const [guest, setGuest] = useState({ firstName: "", lastName: "", phone: "" });
+  const [sent, setSent] = useState(false);
   const { data: status } = useMobileStatus();
   const queryClient = useQueryClient();
   const [kind, setKind] = useState<"ROOM" | "SEAT">("ROOM");
@@ -112,21 +114,35 @@ export default function ReservePage() {
   );
 
   const create = useMutation({
-    mutationFn: () =>
-      mobileApi.createBookingRequest({
-        memberId: memberId!,
+    mutationFn: async () => {
+      const booking = {
         kind,
-        spaceId: kind === "ROOM" ? spaceId || undefined : spaceId || undefined,
+        spaceId: spaceId || undefined,
         seatLabel: kind === "SEAT" ? seatLabel : undefined,
         seatSpaceId: kind === "SEAT" ? spaceId || undefined : undefined,
         date,
         startTime,
         endTime,
         note,
-      }),
-    onSuccess: () => {
+      };
+      if (memberId) {
+        await mobileApi.createBookingRequest({ memberId, ...booking });
+        return memberId;
+      }
+      const res = await mobileApi.publicBookingRequest({
+        orgSlug: slug,
+        firstName: guest.firstName.trim(),
+        lastName: guest.lastName.trim() || undefined,
+        phone: guest.phone.trim(),
+        ...booking,
+      });
+      confirm(res.member, res.accessToken);
+      return res.member.id;
+    },
+    onSuccess: (id) => {
       toast.success("Demande envoyée à l’accueil");
-      queryClient.invalidateQueries({ queryKey: ["my-bookings", memberId] });
+      setSent(true);
+      queryClient.invalidateQueries({ queryKey: ["my-bookings", id] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -147,23 +163,35 @@ export default function ReservePage() {
     if (seat.spaceId) setSpaceId(seat.spaceId);
   };
 
-  if (!memberId) {
-    return (
-      <p className="text-sm text-slate-500">Connectez-vous pour réserver.</p>
-    );
-  }
-
   return (
     <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-lg font-bold">Réserver pour un autre jour</h1>
-        <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
-          <Link href={href("/reservations")}>
-            <CalendarClock className="mr-1 h-4 w-4" />
-            Mes demandes
-          </Link>
-        </Button>
+        {memberId ? (
+          <Button variant="ghost" size="sm" className="h-8 text-primary" asChild>
+            <Link href={href("/reservations")}>
+              <CalendarClock className="mr-1 h-4 w-4" />
+              Mes demandes
+            </Link>
+          </Button>
+        ) : null}
       </div>
+
+      {sent ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          Demande envoyée. L&apos;accueil vous confirme rapidement
+          {memberId ? (
+            <>
+              {" "}
+              — suivez-la dans{" "}
+              <Link href={href("/reservations")} className="font-medium underline">
+                Mes demandes
+              </Link>
+            </>
+          ) : null}
+          .
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-2">
         {rooms.length ? (
@@ -343,10 +371,57 @@ export default function ReservePage() {
                     }
                   />
                 </div>
+                {!memberId ? (
+                  <div className="space-y-2 rounded-xl bg-slate-50 p-2.5">
+                    <p className="text-[11px] font-medium text-slate-500">
+                      Vos coordonnées (pour la confirmation)
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        className="h-11"
+                        placeholder="Prénom"
+                        autoComplete="given-name"
+                        value={guest.firstName}
+                        onChange={(e) =>
+                          setGuest((g) => ({ ...g, firstName: e.target.value }))
+                        }
+                      />
+                      <Input
+                        className="h-11"
+                        placeholder="Nom"
+                        autoComplete="family-name"
+                        value={guest.lastName}
+                        onChange={(e) =>
+                          setGuest((g) => ({ ...g, lastName: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <Input
+                      className="h-11"
+                      type="tel"
+                      inputMode="tel"
+                      placeholder="Téléphone (ex. 22 123 456)"
+                      autoComplete="tel"
+                      value={guest.phone}
+                      onChange={(e) =>
+                        setGuest((g) => ({ ...g, phone: e.target.value }))
+                      }
+                    />
+                    <p className="text-[11px] text-slate-500">
+                      Déjà client ?{" "}
+                      <Link href={href("/entry")} className="text-primary underline">
+                        Connectez-vous
+                      </Link>
+                    </p>
+                  </div>
+                ) : null}
                 <Button
                   className="h-11 w-full rounded-full"
                   disabled={
                     create.isPending ||
+                    (!memberId &&
+                      (!guest.firstName.trim() ||
+                        guest.phone.replace(/\D/g, "").length < 8)) ||
                     !spaceId ||
                     (kind === "SEAT" && !seatLabel) ||
                     !date ||

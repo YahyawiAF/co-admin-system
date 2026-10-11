@@ -1,8 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingUnit, PriceCategory, PriceType } from '@prisma/client';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
+  Max,
+  Min,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -125,4 +129,30 @@ export class CreatePriceDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Créneau: sold only from this hour (0–23); null = all day',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  availableFromHour?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Créneau end hour (1–30, above 24 = after midnight)',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  availableToHour?: number | null;
+
+  @ApiPropertyOptional({ type: [Number], description: '0 = dimanche … 6 = samedi; empty = every day' })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  availableDays?: number[];
 }

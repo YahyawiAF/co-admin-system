@@ -35,6 +35,7 @@ import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
 import { AttendanceCard } from "@/components/visitor/AttendanceCard";
 import { MemberHistory } from "@/components/visitor/MemberHistory";
+import { ReferralCard } from "@/components/visitor/ReferralCard";
 import {
   PointsCard,
   dispatchPointsAward,
@@ -240,7 +241,10 @@ function ProfileInner() {
         </div>
 
         {memberId ? (
-          <PointsCard memberId={memberId} compact={false} />
+          <>
+            <PointsCard memberId={memberId} compact={false} />
+            <ReferralCard memberId={memberId} />
+          </>
         ) : null}
 
         <AccountUpgradeCard
@@ -355,6 +359,7 @@ function ProfileInner() {
       {memberId ? (
         <>
           <PointsCard memberId={memberId} compact={false} />
+          <ReferralCard memberId={memberId} />
           <AttendanceCard memberId={memberId} />
           <MemberHistory memberId={memberId} />
         </>

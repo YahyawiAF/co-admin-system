@@ -32,6 +32,10 @@ export class PushService implements OnModuleInit {
     this.ready = true;
   }
 
+  isEnabled() {
+    return this.ready;
+  }
+
   getPublicKey(): string | null {
     return process.env.VAPID_PUBLIC_KEY || null;
   }

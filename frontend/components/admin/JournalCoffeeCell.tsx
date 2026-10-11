@@ -36,7 +36,12 @@ import { cn } from "@/lib/utils";
 type Props = {
   memberId: string | null;
   memberName: string;
-  journalId: string;
+  /** Visit the orders belong to; null with `anonymous` = counter sale (no visit). */
+  journalId: string | null;
+  /** Allow adding without a member (anonymous visit or counter sale). */
+  anonymous?: boolean;
+  /** "button" = toolbar trigger for counter sales instead of the table cell. */
+  trigger?: "cell" | "button";
   /** Local yyyy-MM-dd of the journal day (for "mark paid"). */
   dateKey: string;
   /** This member's non-cancelled orders for the journal day. */
@@ -61,6 +66,8 @@ export function JournalCoffeeCell({
   memberId,
   memberName,
   journalId,
+  anonymous = false,
+  trigger = "cell",
   dateKey,
   orders,
   popularity,
@@ -136,7 +143,7 @@ export function JournalCoffeeCell({
   const add = useMutation({
     mutationFn: (vars: { productId: string; quantity: number }) =>
       mobileApi.adminCreateOrder({
-        memberId: memberId!,
+        memberId: memberId ?? undefined,
         productId: vars.productId,
         quantity: vars.quantity,
         isPayed: paidNow,
@@ -189,7 +196,7 @@ export function JournalCoffeeCell({
 
   const payAll = useMutation({
     mutationFn: (isPayed: boolean) =>
-      mobileApi.payMemberDayOrders(memberId!, isPayed, dateKey),
+      mobileApi.payMemberDayOrders(memberId, isPayed, dateKey, journalId),
     onSuccess: (_res, isPayed) => {
       toast.success(isPayed ? "Tout est payé" : "Paiements annulés");
       refresh();
@@ -226,30 +233,56 @@ export function JournalCoffeeCell({
     <span className="text-muted-foreground">—</span>
   );
 
-  if (!memberId) return badge;
+  if (!memberId && !anonymous) return badge;
 
   const rowBusy = (id: string) => act.isPending && act.variables?.id === id;
 
   return (
     <div className="flex items-center gap-1">
-      <button
-        type="button"
-        className="rounded px-0.5 hover:bg-muted"
-        onClick={() => toggle(true)}
-        title="Voir les commandes"
-      >
-        {badge}
-      </button>
-      <Button
-        type="button"
-        size="icon"
-        variant="ghost"
-        className="h-6 w-6 text-muted-foreground hover:text-foreground"
-        title="Ajouter / gérer les commandes"
-        onClick={() => toggle(true)}
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </Button>
+      {trigger === "button" ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="lg"
+          title="Café / boutique pour un passant, sans fiche"
+          onClick={() => toggle(true)}
+        >
+          <Coffee className="mr-2 h-4 w-4" />
+          Café comptoir
+          {qtyTotal ? (
+            <Badge
+              variant="secondary"
+              className={cn(
+                "ml-2 h-5 px-1.5 text-[10px]",
+                allPaid ? "text-emerald-700" : "text-red-700"
+              )}
+            >
+              {qtyTotal}×
+            </Badge>
+          ) : null}
+        </Button>
+      ) : (
+        <>
+          <button
+            type="button"
+            className="rounded px-0.5 hover:bg-muted"
+            onClick={() => toggle(true)}
+            title="Voir les commandes"
+          >
+            {badge}
+          </button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            title="Ajouter / gérer les commandes"
+            onClick={() => toggle(true)}
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      )}
 
       <Dialog open={open} onOpenChange={toggle}>
         <DialogContent className="flex max-h-[88vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">

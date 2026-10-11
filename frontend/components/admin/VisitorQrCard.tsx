@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Copy, Check, QrCode } from "lucide-react";
+import { Download, Copy, Check, QrCode, CalendarPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,10 @@ function visitorAppOrigin() {
 
 export function visitorMobileUrl(orgSlug: string) {
   return `${visitorAppOrigin()}/m/${orgSlug}/entry`;
+}
+
+export function publicBookingUrl(orgSlug: string) {
+  return `${visitorAppOrigin()}/m/${orgSlug}/reserve`;
 }
 
 export function visitorQrImageUrl(orgSlug: string, size = 280) {
@@ -45,6 +49,15 @@ export function VisitorQrCard({
     () => visitorQrImageUrl(orgSlug, imgSize),
     [orgSlug, imgSize]
   );
+
+  const copyBookingUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(publicBookingUrl(orgSlug));
+      toast.success("Lien de réservation copié");
+    } catch {
+      toast.error("Impossible de copier");
+    }
+  };
 
   const copyUrl = async () => {
     try {
@@ -131,6 +144,22 @@ export function VisitorQrCard({
           )}
           Copier le lien
         </Button>
+      </div>
+      <div className="w-full border-t pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="text-primary"
+          onClick={copyBookingUrl}
+          disabled={!orgSlug}
+        >
+          <CalendarPlus className="mr-1.5 h-4 w-4" />
+          Lien de réservation public
+        </Button>
+        <p className="text-[11px] text-muted-foreground">
+          À mettre sur Instagram, Facebook ou Google Maps : réservation sans compte.
+        </p>
       </div>
     </div>
   );

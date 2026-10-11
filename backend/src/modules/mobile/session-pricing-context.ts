@@ -47,6 +47,7 @@ export async function loadPricingContext(
         billingUnit: BillingUnit.PACK,
         durationHours: { gt: 0 },
         type: 'journal',
+        availableFromHour: null,
         NOT: { category: PriceCategory.ABONNEMENT },
         ...(organizationId
           ? { OR: [{ organizationId }, { organizationId: null }] }

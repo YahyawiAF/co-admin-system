@@ -13,6 +13,7 @@ import {
   promoCategoriesOf,
 } from "@/lib/promo-price";
 import { useOrg } from "@/lib/org";
+import { creneauLabel, hasCreneau, priceAvailableAt } from "@/lib/price-availability";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 
@@ -106,6 +107,18 @@ export default function MobileTarifsPage() {
                           ) : null}
                           {p.billingUnit ? (
                             <Badge variant="outline">{p.billingUnit}</Badge>
+                          ) : null}
+                          {hasCreneau(p) ? (
+                            <Badge
+                              className={
+                                priceAvailableAt(p)
+                                  ? "bg-amber-500 hover:bg-amber-500"
+                                  : "bg-slate-200 text-slate-600 hover:bg-slate-200"
+                              }
+                            >
+                              {priceAvailableAt(p) ? "Maintenant · " : ""}
+                              {creneauLabel(p)}
+                            </Badge>
                           ) : null}
                         </div>
                       </CardContent>

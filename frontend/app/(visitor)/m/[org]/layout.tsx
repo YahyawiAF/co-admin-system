@@ -8,6 +8,7 @@ import { queryKeys } from "@/lib/query-client";
 import { OrgProvider } from "@/lib/org";
 import { VisitorSessionProvider } from "@/lib/visitor-session";
 import { MobileShell } from "@/components/visitor/MobileShell";
+import { ReferralCapture } from "@/components/visitor/ReferralCard";
 
 export default function OrgMobileLayout({
   children,
@@ -55,6 +56,7 @@ export default function OrgMobileLayout({
   return (
     <OrgProvider org={org}>
       <VisitorSessionProvider orgSlug={org.slug}>
+        <ReferralCapture />
         <MobileShell>{children}</MobileShell>
       </VisitorSessionProvider>
     </OrgProvider>

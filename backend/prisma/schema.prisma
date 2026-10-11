@@ -94,6 +94,16 @@ model Member {
   bookingRequests        BookingRequest[]
   pointEntries           MemberPointEntry[]
   trophies               MemberTrophy[]
+  outreach               MemberOutreach[]
+  /// Code shared to invite friends (lazy-generated)
+  referralCode           String?   @unique
+  referredById           String?
+  referredBy             Member?   @relation("MemberReferral", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals              Member[]  @relation("MemberReferral")
+  /// Set once both sides got the referral points (first paid visit of the referred member)
+  referralRewardedAt     DateTime?
+  reviewPromptedAt       DateTime?
+  reviewClickedAt        DateTime?
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
@@ -119,6 +129,7 @@ enum PointEvent {
   REDEEM_ORDER
   PROFILE_DETAILS
   PROFILE_AVATAR
+  REFERRAL
 }
 
 enum PointEntryStatus {
@@ -190,6 +201,23 @@ model PushSubscription {
   @@map("push_subscriptions")
 }
 
+/// Staff follow-up of a member (renewal, win-back, conversion, unpaid reminder).
+model MemberOutreach {
+  id        String   @id @default(uuid())
+  memberId  String
+  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  /// ABO_EXPIRING | ABO_ENDED | INACTIVE | CONVERT | UNPAID
+  reason    String
+  /// WHATSAPP | PUSH | CALL | SKIP
+  channel   String
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([memberId, createdAt])
+  @@index([createdAt])
+  @@map("member_outreach")
+}
+
 model MemberGroup {
   id                 String   @id @default(uuid())
   organizationId     String
@@ -231,6 +259,11 @@ model Price {
   /// Hour 0-23 when dedicated seat ends (null = all day)
   reserveSeatToHour   Int?
   isActive       Boolean        @default(true)
+  /// Créneau tarif (happy hour): only sold when check-in hour is in [from, to) (to may exceed 24 = after midnight)
+  availableFromHour Int?
+  availableToHour   Int?
+  /// Weekdays the créneau applies (0 = dimanche … 6 = samedi); empty = every day
+  availableDays     Int[]        @default([])
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   timePeriod     Json
@@ -598,6 +631,12 @@ model Facility {
   regularVisitsPerWeek Int     @default(4)
   /// Alert when a regular has not come for N days
   inactiveAlertDays    Int     @default(7)
+  /// Google Maps review link shown to happy regulars
+  googleReviewUrl      String?
+  /// Ask for a review after N paid visits
+  reviewAfterVisits    Int     @default(5)
+  /// Points for the sponsor and the friend after the friend's first paid visit
+  referralPoints       Int     @default(300)
   organizationId String?
   organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt      DateTime       @default(now())

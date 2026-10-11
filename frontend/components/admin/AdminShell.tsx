@@ -18,7 +18,10 @@ import {
   Menu,
   Globe2,
   Wallet,
+  Megaphone,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { outreachApi } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useAdminOrg } from "@/lib/admin-org-context";
@@ -38,6 +41,7 @@ import { useState, type ReactNode } from "react";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/journal", label: "Journal", icon: ClipboardList },
+  { href: "/relances", label: "Relances", icon: Megaphone },
   { href: "/impayes", label: "Impayés", icon: Wallet },
   { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },
@@ -56,6 +60,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const searchParams = useSearchParams();
   const { isSuperAdmin } = useAdminOrg();
   const groupsTab = searchParams.get("tab") === "groups";
+  const { data: outreach } = useQuery({
+    queryKey: ["outreach"],
+    queryFn: () => outreachApi.list(),
+    staleTime: 5 * 60_000,
+    refetchInterval: 15 * 60_000,
+  });
+  const badges: Record<string, number> = { "/relances": outreach?.todo.length ?? 0 };
   const items = [
     ...NAV,
     ...(isSuperAdmin
@@ -95,6 +106,16 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           >
             <Icon className="h-4 w-4" />
             {item.label}
+            {badges[item.href] ? (
+              <span
+                className={cn(
+                  "ml-auto rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+                  active ? "bg-primary-foreground/20" : "bg-amber-100 text-amber-800",
+                )}
+              >
+                {badges[item.href]}
+              </span>
+            ) : null}
           </Link>
         );
       })}

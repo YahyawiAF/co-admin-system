@@ -43,6 +43,7 @@ import { cn } from "@/lib/utils";
 import { analyticsApi, facilityApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { WEEKDAY_LABELS, WEEKDAYS_MON_FIRST } from "@/lib/traffic-utils";
+import { BreakEvenCard } from "./BreakEvenCard";
 import type {
   InsightSeverity,
   PerformanceInsight,
@@ -266,6 +267,9 @@ function SettingsDialog({
         alwaysOpen: s.alwaysOpen,
         regularVisitsPerWeek: s.regularVisitsPerWeek,
         inactiveAlertDays: s.inactiveAlertDays,
+        googleReviewUrl: s.googleReviewUrl?.trim() || null,
+        reviewAfterVisits: s.reviewAfterVisits,
+        referralPoints: s.referralPoints,
       }),
     onSuccess: () => {
       toast.success("Réglages enregistrés");
@@ -281,7 +285,7 @@ function SettingsDialog({
         <DialogHeader>
           <DialogTitle>Réglages de l'analyse</DialogTitle>
           <DialogDescription>
-            Servent à calculer le taux d'occupation et à repérer les habitués.
+            Servent à calculer le taux d'occupation, repérer les habitués, demander des avis et récompenser le parrainage.
           </DialogDescription>
         </DialogHeader>
         {form ? (
@@ -375,6 +379,50 @@ function SettingsDialog({
                     setForm({ ...form, inactiveAlertDays: Number(e.target.value) })
                   }
                 />
+              </div>
+            </div>
+            <div className="space-y-3 border-t pt-4">
+              <div className="space-y-1.5">
+                <Label>Lien avis Google</Label>
+                <Input
+                  type="url"
+                  placeholder="https://g.page/r/…/review"
+                  value={form.googleReviewUrl ?? ""}
+                  onChange={(e) => setForm({ ...form, googleReviewUrl: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Google Business Profile → « Demander des avis ». Vide = pas de demande d&apos;avis.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Demander l&apos;avis après (visites)</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={form.reviewAfterVisits}
+                    onChange={(e) =>
+                      setForm({ ...form, reviewAfterVisits: Number(e.target.value) })
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Parrainage (points chacun)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={10000}
+                    step={50}
+                    value={form.referralPoints}
+                    onChange={(e) =>
+                      setForm({ ...form, referralPoints: Number(e.target.value) })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {form.referralPoints / 100} DT · 0 = parrainage désactivé
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -784,7 +832,10 @@ export function FinanceOverview({
             </div>
           ) : null}
 
-          <TargetCard data={data} onEdit={() => setTargetOpen(true)} />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <TargetCard data={data} onEdit={() => setTargetOpen(true)} />
+            <BreakEvenCard data={data} />
+          </div>
 
           {c ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
