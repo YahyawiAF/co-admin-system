@@ -1469,6 +1469,45 @@ export class MobileService {
           include: { organization: { select: { slug: true } } },
         }),
       ]);
+    // Accueil: "terminé hier" / "commence demain" when no abonnement covers today
+    const statusNow = new Date();
+    const [lastEnded, upcoming] = subscription
+      ? [null, null]
+      : await Promise.all([
+          this.prisma.abonnement.findFirst({
+            where: {
+              memberID: memberId,
+              isReservation: false,
+              leaveDate: { lt: statusNow },
+            },
+            include: { price: { select: { name: true } } },
+            orderBy: { leaveDate: 'desc' },
+          }),
+          this.prisma.abonnement.findFirst({
+            where: {
+              memberID: memberId,
+              isReservation: false,
+              registredDate: { gt: statusNow },
+            },
+            include: { price: { select: { name: true } } },
+            orderBy: { registredDate: 'asc' },
+          }),
+        ]);
+    const subSummary = (
+      a: NonNullable<typeof lastEnded>,
+    ): {
+      id: string;
+      priceId: string;
+      name: string;
+      registredDate: Date;
+      leaveDate: Date | null;
+    } => ({
+      id: a.id,
+      priceId: a.priceId,
+      name: a.serviceName || a.price?.name || 'Abonnement',
+      registredDate: a.registredDate,
+      leaveDate: a.leaveDate,
+    });
     const daysRemaining = subscription?.leaveDate
       ? Math.max(
           0,
@@ -1539,6 +1578,8 @@ export class MobileService {
           }
         : null,
       hasActiveSubscription: !!subscription,
+      lastSubscription: lastEnded ? subSummary(lastEnded) : null,
+      upcomingSubscription: upcoming ? subSummary(upcoming) : null,
       canChooseForfait,
       mustScanToEnter:
         kind === 'HOURS_POOL' ||
@@ -4114,9 +4155,54 @@ export class MobileService {
         payedAmount: j.payedAmount,
         isPayed: j.isPayed,
         isOpen: !j.leaveTime,
-        priceName: j.prices?.name || null,
+        priceId: j.priceId || null,
+        priceName: j.serviceName || j.prices?.name || null,
+        price: j.prices
+          ? {
+              category: j.prices.category,
+              categories: j.prices.categories,
+              type: j.prices.type,
+              billingUnit: j.prices.billingUnit,
+              durationHours: j.prices.durationHours,
+              periodDays: j.prices.periodDays,
+            }
+          : null,
       };
     });
+  }
+
+  /** All abonnements of a member, newest first (profile history). */
+  async listMemberSubscriptions(memberId: string) {
+    const rows = await this.prisma.abonnement.findMany({
+      where: { memberID: memberId, isReservation: false },
+      include: { price: true },
+      orderBy: [{ registredDate: 'desc' }, { createdAt: 'desc' }],
+      take: 60,
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      priceId: a.priceId,
+      name: a.serviceName || a.price?.name || 'Abonnement',
+      kind: a.price ? this.subscriptionKind(a.price) : null,
+      registredDate: a.registredDate,
+      leaveDate: a.leaveDate,
+      isPayed: a.isPayed,
+      payedAmount: a.payedAmount,
+      amountDue: a.amountDue ?? a.payedAmount,
+      hoursQuota: a.hoursQuota ?? a.price?.durationHours ?? null,
+      hoursUsed: a.hoursUsed ?? 0,
+      reservedSeatLabel: a.reservedSeatLabel || null,
+      price: a.price
+        ? {
+            category: a.price.category,
+            categories: a.price.categories,
+            type: a.price.type,
+            billingUnit: a.price.billingUnit,
+            durationHours: a.price.durationHours,
+            periodDays: a.price.periodDays,
+          }
+        : null,
+    }));
   }
 
   async updateProfile(dto: {
@@ -4755,25 +4841,49 @@ export class MobileService {
         ? journal.registredTime
         : now;
 
+    // Same product, same day, same payment state → one line with a bigger quantity
+    const existing = await this.prisma.dailyProduct.findFirst({
+      where: {
+        OR: [{ memberId: dto.memberId }, { externalRef: dto.memberId }],
+        productId: product.id,
+        status: ProductOrderStatus.CONFIRMED,
+        isPayed: !!dto.isPayed,
+        date: { gte: startOfDay(date), lt: endOfDay(date) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
     const [order] = await this.prisma.$transaction([
-      this.prisma.dailyProduct.create({
-        data: {
-          productId: product.id,
-          quantite: qty,
-          date,
-          externalRef: dto.memberId,
-          memberId: dto.memberId,
-          journalId: journal?.id || open?.id || null,
-          status: ProductOrderStatus.CONFIRMED,
-          isPayed: !!dto.isPayed,
-        },
-        include: { product: true },
-      }),
+      existing
+        ? this.prisma.dailyProduct.update({
+            where: { id: existing.id },
+            data: { quantite: { increment: qty } },
+            include: { product: true },
+          })
+        : this.prisma.dailyProduct.create({
+            data: {
+              productId: product.id,
+              quantite: qty,
+              date,
+              externalRef: dto.memberId,
+              memberId: dto.memberId,
+              journalId: journal?.id || open?.id || null,
+              status: ProductOrderStatus.CONFIRMED,
+              isPayed: !!dto.isPayed,
+            },
+            include: { product: true },
+          }),
       this.prisma.product.update({
         where: { id: product.id },
         data: { stock: { decrement: qty } },
       }),
     ]);
+    if (!existing && dto.isPayed) {
+      const awarded = await creditProductPaidPoints(this.prisma, order.id);
+      if (awarded) {
+        await this.evaluateTrophies(awarded.memberId, PointEvent.PRODUCT_PAID);
+      }
+    }
     this.eventsGateway.sendProductUpdated({
       type: 'product_updated',
       productId: product.id,
@@ -4789,6 +4899,53 @@ export class MobileService {
       orderId: order.id,
     });
     return this.mapOrder(order);
+  }
+
+  /** Reception changes a line's quantity (any status); 0 cancels it and restocks. */
+  async setAdminOrderQuantity(id: string, quantity: number) {
+    const qty = Math.max(0, Math.floor(Number(quantity) || 0));
+    const order = await this.prisma.dailyProduct.findUnique({
+      where: { id },
+      include: { product: true },
+    });
+    if (!order) throw new NotFoundException('Commande introuvable');
+    if (order.status === ProductOrderStatus.CANCELLED) {
+      throw new BadRequestException('Commande annulée');
+    }
+    const memberId = order.memberId || order.externalRef || '';
+    if (qty === 0) {
+      return this.cancelOrder(id, memberId, { byAdmin: true });
+    }
+    const diff = qty - order.quantite;
+    if (diff === 0) return this.mapOrder(order);
+    if (diff > 0 && (order.product?.stock ?? 0) < diff) {
+      throw new BadRequestException(
+        `Stock insuffisant (${order.product?.stock ?? 0})`,
+      );
+    }
+    const [updated] = await this.prisma.$transaction([
+      this.prisma.dailyProduct.update({
+        where: { id },
+        data: { quantite: qty },
+        include: { product: true },
+      }),
+      this.prisma.product.update({
+        where: { id: order.productId },
+        data: { stock: { decrement: diff } },
+      }),
+    ]);
+    this.eventsGateway.sendProductOrder({
+      type: 'product_order_updated',
+      orderId: id,
+      memberId,
+      quantity: qty,
+    });
+    this.eventsGateway.sendTableUpdates({
+      type: 'product_order_updated',
+      orderId: id,
+      memberId,
+    });
+    return this.mapOrder(updated);
   }
 
   async listOrders(memberId: string) {
@@ -4868,7 +5025,10 @@ export class MobileService {
     const [updated] = await this.prisma.$transaction([
       this.prisma.dailyProduct.update({
         where: { id },
-        data: { status: ProductOrderStatus.CANCELLED },
+        data: {
+          status: ProductOrderStatus.CANCELLED,
+          ...(order.isPayed ? { isPayed: false } : {}),
+        },
         include: { product: true },
       }),
       this.prisma.product.update({
@@ -4876,6 +5036,9 @@ export class MobileService {
         data: { stock: { increment: order.quantite } },
       }),
     ]);
+    if (order.isPayed) {
+      await revokeProductPaidPoints(this.prisma, id);
+    }
     const productName = updated.product?.name || order.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_cancelled',

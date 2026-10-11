@@ -165,6 +165,11 @@ export class MobileController {
     return this.mobileService.getVisitHistory(memberId);
   }
 
+  @Get('subscriptions/:memberId')
+  subscriptions(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.listMemberSubscriptions(memberId);
+  }
+
   @Patch('profile')
   updateProfile(@Body() dto: UpdateMobileProfileDto) {
     return this.mobileService.updateProfile(dto);
@@ -255,6 +260,15 @@ export class MobileController {
   @Patch('admin/orders/:id/reject')
   rejectOrder(@Param('id', ParseUUIDPipe) id: string) {
     return this.mobileService.rejectOrderAdmin(id);
+  }
+
+  @Patch('admin/orders/:id/quantity')
+  @UseGuards(JwtAuthGuard)
+  setOrderQuantity(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { quantity: number },
+  ) {
+    return this.mobileService.setAdminOrderQuantity(id, body?.quantity);
   }
 
   @Patch('admin/orders/:id/pay')

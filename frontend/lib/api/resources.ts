@@ -98,6 +98,7 @@ export type DailyProduct = {
   isPayed?: boolean;
   memberId?: string | null;
   externalRef?: string | null;
+  createdAt?: string;
 };
 
 export type DailyExpense = {
@@ -707,10 +708,60 @@ export type PricingContextResponse = {
   allTiers: PricingTier[];
 };
 
+/** Light abonnement reference (ended / upcoming) on the status payload. */
+export type MobileSubscriptionRef = {
+  id: string;
+  priceId: string;
+  name: string;
+  registredDate: string;
+  leaveDate: string | null;
+};
+
+/** Tarif fields used by `TarifIcon` (history rows). */
+export type MobileTarifVisual = Pick<
+  Price,
+  "category" | "categories" | "type" | "billingUnit" | "durationHours" | "periodDays"
+>;
+
+export type MobileVisitHistoryItem = {
+  id: string;
+  date: string;
+  registredTime?: string;
+  leaveTime?: string | null;
+  durationMs?: number;
+  durationLabel: string;
+  payedAmount: number;
+  isPayed: boolean;
+  isOpen: boolean;
+  priceId?: string | null;
+  priceName: string | null;
+  price?: MobileTarifVisual | null;
+};
+
+export type MobileSubscriptionHistoryItem = {
+  id: string;
+  priceId: string;
+  name: string;
+  kind: "HOURS_POOL" | "SEMI_DAY" | "FULL_DAY" | string | null;
+  registredDate: string;
+  leaveDate: string | null;
+  isPayed: boolean;
+  payedAmount: number;
+  amountDue: number;
+  hoursQuota: number | null;
+  hoursUsed: number;
+  reservedSeatLabel: string | null;
+  price: MobileTarifVisual | null;
+};
+
 export type MobileStatusResponse = {
   session: MobileSession | null;
   subscription: Abonnement | null;
   hasActiveSubscription: boolean;
+  /** Most recent ended abonnement (only when none is active). */
+  lastSubscription?: MobileSubscriptionRef | null;
+  /** Next abonnement that has not started yet (only when none is active). */
+  upcomingSubscription?: MobileSubscriptionRef | null;
   canChooseForfait?: boolean;
   mustScanToEnter?: boolean;
   dailyCreditRemainingHours?: number | null;
@@ -957,17 +1008,15 @@ export const mobileApi = {
     });
   },
   history(memberId: string) {
-    return http.get<
-      Array<{
-        id: string;
-        date: string;
-        durationLabel: string;
-        payedAmount: number;
-        isPayed: boolean;
-        isOpen: boolean;
-        priceName: string | null;
-      }>
-    >(`/mobile/history/${memberId}`, { skipAuth: true });
+    return http.get<MobileVisitHistoryItem[]>(`/mobile/history/${memberId}`, {
+      skipAuth: true,
+    });
+  },
+  subscriptions(memberId: string) {
+    return http.get<MobileSubscriptionHistoryItem[]>(
+      `/mobile/subscriptions/${memberId}`,
+      { skipAuth: true },
+    );
   },
   updateProfile(data: {
     memberId: string;
@@ -1102,6 +1151,12 @@ export const mobileApi = {
   },
   rejectOrder(id: string) {
     return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/reject`, {});
+  },
+  /** 0 cancels the line and restocks. */
+  setOrderQuantity(id: string, quantity: number) {
+    return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/quantity`, {
+      quantity,
+    });
   },
   payOrder(id: string, isPayed: boolean) {
     return http.patch<ProductOrder>(`/mobile/admin/orders/${id}/pay`, {

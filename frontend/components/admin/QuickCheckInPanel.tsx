@@ -765,13 +765,13 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
 
           <aside className="flex w-[360px] shrink-0 flex-col border-l bg-muted/20">
             <div className="flex items-center justify-between gap-2 border-b px-4 py-3">
-              <p className="flex items-center gap-2 font-semibold">
+              <div className="flex items-center gap-2 font-semibold">
                 <ClipboardList className="h-4 w-4" />
                 Fiche
                 {lines.length ? (
                   <Badge variant="secondary">{lines.length}</Badge>
                 ) : null}
-              </p>
+              </div>
               {lines.length ? (
                 <label className="flex items-center gap-2 text-xs">
                   <Switch

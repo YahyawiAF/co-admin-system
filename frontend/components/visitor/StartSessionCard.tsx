@@ -81,7 +81,6 @@ export function StartSessionCard({
   tarifs,
   hasActiveSubscription,
   subscriptionName,
-  subscriptionDaysRemaining,
   subscriptionHoursRemaining,
   dailyRemainingHours,
   pending,
@@ -115,11 +114,7 @@ export function StartSessionCard({
       ? `${Number(dailyRemainingHours).toFixed(1)} h disponibles aujourd’hui`
       : subscriptionHoursRemaining != null
         ? `${Number(subscriptionHoursRemaining).toFixed(1)} h restantes`
-        : subscriptionDaysRemaining != null
-          ? `Valable encore ${subscriptionDaysRemaining} jour${
-              subscriptionDaysRemaining > 1 ? "s" : ""
-            }`
-          : "Abonnement actif"
+        : "Inclus dans votre abonnement"
     : creditUsed
       ? "Crédit du jour terminé — le prix suit le temps passé"
       : quickPicks.length

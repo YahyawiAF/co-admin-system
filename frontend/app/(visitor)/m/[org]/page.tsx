@@ -32,6 +32,7 @@ import {
   StartSessionCard,
 } from "@/components/visitor/StartSessionCard";
 import { EventsPreview } from "@/components/visitor/EventCard";
+import { SubscriptionStatusCard } from "@/components/visitor/SubscriptionStatusCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { spacesForPrice } from "@/lib/space-occupy";
 import {
@@ -257,8 +258,27 @@ export default function MobileHomePage() {
       )
     );
   };
+  const renewSubscription = (priceId?: string) => {
+    router.push(
+      href(
+        priceId
+          ? `/choose?mode=subscription&priceId=${encodeURIComponent(priceId)}`
+          : "/choose?mode=subscription"
+      )
+    );
+  };
   const idle = !session && !pending;
   const showQrWelcome = fromQr && idle;
+  const subscriptionCard = (alertsOnly: boolean) => (
+    <SubscriptionStatusCard
+      subscription={status?.subscription}
+      lastSubscription={status?.lastSubscription}
+      upcomingSubscription={status?.upcomingSubscription}
+      alertsOnly={alertsOnly}
+      onOpen={goSubscription}
+      onRenew={renewSubscription}
+    />
+  );
 
   return (
     <div className="space-y-3">
@@ -325,7 +345,12 @@ export default function MobileHomePage() {
               : null
           }
           onWifi={hasWifi ? openWifi : undefined}
-          belowSession={<EventsPreview />}
+          belowSession={
+            <>
+              {subscriptionCard(true)}
+              <EventsPreview />
+            </>
+          }
         />
       ) : showQrWelcome ? null : (
         <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
@@ -374,6 +399,8 @@ export default function MobileHomePage() {
 
       {/* Announcement slot */}
       <AnnouncementBanner />
+
+      {idle || (pending && !session) ? subscriptionCard(false) : null}
 
       {idle ? <EventsPreview /> : null}
 

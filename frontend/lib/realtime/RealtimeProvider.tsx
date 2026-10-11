@@ -219,6 +219,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       qc.invalidateQueries({ queryKey: ["mobile-status"] });
       debouncedInvalidate(qc, [
         ["journal"],
+        ["mobile-history"],
+        ["mobile-subscriptions"],
         queryKeys.abonnements,
         queryKeys.debtors,
         ["bookings"],
@@ -244,6 +246,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         qc.invalidateQueries({ queryKey: ["mobile-status"] });
         qc.invalidateQueries({ queryKey: queryKeys.members });
         qc.invalidateQueries({ queryKey: ["journal"] });
+        debouncedInvalidate(qc, [["mobile-history"], ["mobile-subscriptions"]]);
       }
       if (type.startsWith("product_order")) {
         debouncedInvalidate(qc, [

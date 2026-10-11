@@ -10,7 +10,6 @@ import {
   Camera,
   ChevronRight,
   CreditCard,
-  History,
   LogOut,
   Pencil,
   Tags,
@@ -35,6 +34,7 @@ import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
 import { AttendanceCard } from "@/components/visitor/AttendanceCard";
+import { MemberHistory } from "@/components/visitor/MemberHistory";
 import {
   PointsCard,
   dispatchPointsAward,
@@ -256,10 +256,12 @@ function ProfileInner() {
           }
         />
 
+        {memberId ? <MemberHistory memberId={memberId} /> : null}
+
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
           <Link
             href={href("/tarifs")}
-            className="flex items-center gap-3 border-b px-4 py-3.5"
+            className="flex items-center gap-3 px-4 py-3.5"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <Tags className="h-5 w-5" />
@@ -267,19 +269,6 @@ function ProfileInner() {
             <span className="min-w-0 flex-1">
               <span className="block font-medium">Tarifs</span>
               <span className="block text-xs text-slate-500">Pass du jour</span>
-            </span>
-            <ChevronRight className="h-4 w-4 text-slate-400" />
-          </Link>
-          <Link
-            href={href("/history")}
-            className="flex items-center gap-3 px-4 py-3.5"
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <History className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block font-medium">Historique</span>
-              <span className="block text-xs text-slate-500">Vos visites</span>
             </span>
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </Link>
@@ -367,6 +356,7 @@ function ProfileInner() {
         <>
           <PointsCard memberId={memberId} compact={false} />
           <AttendanceCard memberId={memberId} />
+          <MemberHistory memberId={memberId} />
         </>
       ) : null}
 
@@ -377,12 +367,6 @@ function ProfileInner() {
             label: "Tarifs",
             hint: "Pass et abonnements",
             icon: Tags,
-          },
-          {
-            href: href("/history"),
-            label: "Historique",
-            hint: "Vos visites",
-            icon: History,
           },
           {
             href: href("/subscription"),
