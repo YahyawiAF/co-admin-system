@@ -455,6 +455,8 @@ model Expense {
   description String?
   amount      Float          @map("prix")
   type        ExpenseType
+  /// Recurring monthly charge: usual day of the month it is due
+  dueDay      Int?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
   logs        DailyExpense[]
@@ -462,17 +464,29 @@ model Expense {
   @@map("expenses")
 }
 
+/// One spent amount. Quick expenses have no template (amount + label only);
+/// paid recurring charges link their template.
 model DailyExpense {
-  id            String    @id @default(uuid())
-  expenseId     String
+  id            String      @id @default(uuid())
+  expenseId     String?
   Summary       String?
-  expense       Expense   @relation(fields: [expenseId], references: [id])
+  expense       Expense?    @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   date          DateTime?
+  /// Amount spent (null on legacy rows = template amount)
+  amount        Float?
+  /// Description (null on legacy rows = template name)
+  label         String?
+  kind          ExpenseType @default(JOURNALIER)
+  /// Where the money came from: CAISSE (cash drawer) | COFFRE | AUTRE (bank, card…)
+  source        String      @default("CAISSE")
+  coffreEntry   CoffreEntry?
   externalOrgId String?
   externalRef   String?
   syncedAt      DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([date])
 }
 
 enum JournalPricingMode {
@@ -792,6 +806,8 @@ model CaisseSession {
   expectedClose Float?
   difference    Float?
   notes         String?
+  /// Cash left in the drawer at closing (opening float of the next day)
+  keptFloat     Float?
   externalOrgId String?
   externalRef   String?
   syncedAt      DateTime?
@@ -805,14 +821,20 @@ model CaisseSession {
 }
 
 model CoffreEntry {
-  id              String         @id @default(uuid())
-  date            DateTime       @db.Date
-  type            String // IN | OUT
-  amount          Float
-  label           String?
-  caisseSessionId String?
-  caisseSession   CaisseSession? @relation(fields: [caisseSessionId], references: [id], onDelete: SetNull)
-  createdAt       DateTime       @default(now())
+  id               String          @id @default(uuid())
+  date             DateTime        @db.Date
+  type             String // IN | OUT
+  amount           Float
+  label            String?
+  caisseSessionId  String?
+  caisseSession    CaisseSession?  @relation(fields: [caisseSessionId], references: [id], onDelete: SetNull)
+  /// Expense paid from the coffre
+  dailyExpenseId   String?         @unique
+  dailyExpense     DailyExpense?   @relation(fields: [dailyExpenseId], references: [id], onDelete: Cascade)
+  /// Cash moved between the drawer and the coffre
+  caisseMovementId String?         @unique
+  caisseMovement   CaisseMovement? @relation(fields: [caisseMovementId], references: [id], onDelete: Cascade)
+  createdAt        DateTime        @default(now())
 
   @@index([date])
   @@map("coffre_entries")
@@ -825,6 +847,7 @@ model CaisseMovement {
   type             String // IN | OUT
   amount           Float
   label            String?
+  coffreEntry      CoffreEntry?
   externalOrgId    String?
   externalRef      String?
   syncedAt         DateTime?

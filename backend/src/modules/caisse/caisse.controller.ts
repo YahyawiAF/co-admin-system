@@ -1,5 +1,21 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CaisseService } from './caisse.service';
+
+type MovementBody = {
+  type: 'IN' | 'OUT';
+  amount: number;
+  label?: string;
+  /** Transfer with the coffre (OUT = drawer → coffre, IN = coffre → drawer) */
+  coffre?: boolean;
+};
 
 @Controller('caisse')
 export class CaisseController {
@@ -42,6 +58,11 @@ export class CaisseController {
     return this.caisse.coffreAdd(body);
   }
 
+  @Delete('coffre/:id')
+  removeCoffre(@Param('id') id: string) {
+    return this.caisse.coffreRemove(id);
+  }
+
   @Post('open')
   open(@Body() body: { date?: string; openingFloat?: number }) {
     return this.caisse.open(
@@ -50,19 +71,51 @@ export class CaisseController {
     );
   }
 
+  @Post('opening-float')
+  openingFloat(@Body() body: { date?: string; openingFloat: number }) {
+    return this.caisse.setOpeningFloat(
+      body.date || new Date().toISOString(),
+      Number(body.openingFloat),
+    );
+  }
+
   @Post('close')
-  close(@Body() body: { date?: string; countedClose: number; notes?: string }) {
+  close(
+    @Body()
+    body: {
+      date?: string;
+      countedClose: number;
+      keptFloat?: number;
+      notes?: string;
+    },
+  ) {
     return this.caisse.close(body.date || new Date().toISOString(), {
       countedClose: body.countedClose,
+      keptFloat: body.keptFloat,
       notes: body.notes,
     });
   }
 
+  @Post('reopen')
+  reopen(@Body() body: { date: string }) {
+    return this.caisse.reopen(body.date);
+  }
+
+  @Post('movements')
+  addMovementForDate(@Body() body: MovementBody & { date?: string }) {
+    return this.caisse.addMovementForDate(
+      body.date || new Date().toISOString(),
+      body,
+    );
+  }
+
+  @Delete('movements/:id')
+  removeMovement(@Param('id') id: string) {
+    return this.caisse.removeMovement(id);
+  }
+
   @Post(':sessionId/movements')
-  addMovement(
-    @Param('sessionId') sessionId: string,
-    @Body() body: { type: 'IN' | 'OUT'; amount: number; label?: string },
-  ) {
+  addMovement(@Param('sessionId') sessionId: string, @Body() body: MovementBody) {
     return this.caisse.addMovement(sessionId, body);
   }
 
@@ -72,7 +125,7 @@ export class CaisseController {
       date || new Date().toISOString(),
     );
     return this.caisse.buildErpPayload({
-      date: (date || new Date().toISOString()).slice(0, 10),
+      date: summary.dateKey,
       revenueJournal: summary.revenueJournal,
       revenueAbonnements: summary.revenueAbonnements,
       revenueProducts: summary.revenueProducts,

@@ -73,12 +73,14 @@ export type Product = {
   organizationId?: string | null;
 };
 
+/** Recurring monthly charge template (loyer, internet…). */
 export type Expense = {
   id: string;
   name: string;
-  description?: string;
+  description?: string | null;
   amount: number;
   type: "MENSUEL" | "JOURNALIER";
+  dueDay?: number | null;
 };
 
 export type SeatBooking = {
@@ -105,12 +107,54 @@ export type DailyProduct = {
   createdAt?: string;
 };
 
+export type ExpenseSource = "CAISSE" | "COFFRE" | "AUTRE";
+
+/** One spent amount: quick expense (no template) or a paid charge. */
 export type DailyExpense = {
   id: string;
-  expenseId: string;
+  expenseId?: string | null;
   date?: string | null;
+  amount: number;
+  label: string;
+  kind: "MENSUEL" | "JOURNALIER";
+  source: ExpenseSource;
   Summary?: string | null;
-  expense?: Expense;
+  createdAt: string;
+  expense?: Expense | null;
+};
+
+export type ExpenseSuggestion = { label: string; lastAmount: number; count: number };
+
+export type ExpenseMonthOverview = {
+  year: number;
+  month: number;
+  recurring: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    amount: number;
+    dueDay?: number | null;
+    dueDate?: string | null;
+    status: "paid" | "late" | "soon" | "todo";
+    paid: number;
+    payments: DailyExpense[];
+  }>;
+  oneOff: DailyExpense[];
+  daily: {
+    total: number;
+    count: number;
+    byLabel: Array<{ label: string; total: number; count: number }>;
+    byDay: Array<{ date: string; total: number; count: number }>;
+    rows: DailyExpense[];
+  };
+  totals: {
+    spent: number;
+    daily: number;
+    chargesPaid: number;
+    chargesRemaining: number;
+    chargesPlanned: number;
+    bySource: Record<ExpenseSource, number>;
+  };
 };
 
 export const journalApi = {
@@ -574,19 +618,37 @@ export const caisseApi = {
     const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
     return http.post<CaisseSession>("/caisse/open", { date: d, openingFloat });
   },
-  close(date: Date | string, countedClose: number, notes?: string) {
+  close(
+    date: Date | string,
+    data: { countedClose: number; keptFloat?: number; notes?: string },
+  ) {
     const d = typeof date === "string" ? date : format(date, "yyyy-MM-dd");
-    return http.post<CaisseSession>("/caisse/close", {
-      date: d,
-      countedClose,
-      notes,
+    return http.post<CaisseSession>("/caisse/close", { date: d, ...data });
+  },
+  reopen(date: string) {
+    return http.post<DayFinanceSummary>("/caisse/reopen", { date });
+  },
+  setOpeningFloat(date: string, openingFloat: number) {
+    return http.post<DayFinanceSummary>("/caisse/opening-float", {
+      date,
+      openingFloat,
     });
   },
-  addMovement(
-    sessionId: string,
-    data: { type: "IN" | "OUT"; amount: number; label?: string },
-  ) {
-    return http.post(`/caisse/${sessionId}/movements`, data);
+  /** coffre: OUT = drawer → coffre, IN = coffre → drawer */
+  addMovement(data: {
+    date: string;
+    type: "IN" | "OUT";
+    amount: number;
+    label?: string;
+    coffre?: boolean;
+  }) {
+    return http.post<DayFinanceSummary>("/caisse/movements", data);
+  },
+  removeMovement(id: string) {
+    return http.delete(`/caisse/movements/${id}`);
+  },
+  removeCoffre(id: string) {
+    return http.delete<CoffreSummary>(`/caisse/coffre/${id}`);
   },
   month(year: number, month: number) {
     return http.get<MonthFinanceSummary>(
@@ -622,15 +684,37 @@ export const dailyProductsApi = {
   },
 };
 
+export type DailyExpenseInput = {
+  amount?: number;
+  label?: string;
+  date?: string;
+  source?: ExpenseSource;
+  kind?: "MENSUEL" | "JOURNALIER";
+  /** Paying a recurring charge */
+  expenseId?: string;
+  Summary?: string;
+};
+
 export const dailyExpensesApi = {
-  list() {
-    return http.get<DailyExpense[]>("/expenses/daily/all");
+  list(from: string, to = from) {
+    return http.get<DailyExpense[]>(`/expenses/daily?from=${from}&to=${to}`);
   },
-  create(data: { expenseId: string; Summary?: string; date?: string }) {
+  create(data: DailyExpenseInput) {
     return http.post<DailyExpense>("/expenses/daily", data);
+  },
+  update(id: string, data: DailyExpenseInput) {
+    return http.patch<DailyExpense>(`/expenses/daily/${id}`, data);
   },
   remove(id: string) {
     return http.delete(`/expenses/daily/${id}`);
+  },
+  suggestions() {
+    return http.get<ExpenseSuggestion[]>("/expenses/daily/suggestions");
+  },
+  month(year: number, month: number) {
+    return http.get<ExpenseMonthOverview>(
+      `/expenses/month?year=${year}&month=${month}`,
+    );
   },
 };
 

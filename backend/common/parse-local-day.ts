@@ -29,6 +29,17 @@ export function parseLocalDay(input?: string | Date | null): Date {
   return startOfDay(parsed);
 }
 
+/** Value for a `@db.Date` column: the local calendar day at UTC midnight (Prisma stores the UTC date). */
+export function dbDay(input?: string | Date | null): Date {
+  const d = parseLocalDay(input);
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+}
+
+/** A `@db.Date` value back to local midnight of the same calendar day. */
+export function fromDbDay(d: Date): Date {
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
 export function isLocalToday(date: string | Date): boolean {
   return isSameDay(parseLocalDay(date), startOfDay(new Date()));
 }

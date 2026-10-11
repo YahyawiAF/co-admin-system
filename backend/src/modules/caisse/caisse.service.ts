@@ -4,14 +4,30 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
-import { endOfDay, startOfDay } from 'date-fns';
+import { addDays, endOfDay, startOfDay } from 'date-fns';
 import { OpsEventsService } from '../ops-events/ops-events.service';
 import { ConfigService } from '@nestjs/config';
 import {
+  dbDay,
+  fromDbDay,
   isLocalToday,
+  localDayKey,
   parseLocalDay,
 } from '../../../common/parse-local-day';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
+import { expenseAmount, expenseLabel } from '../expense/expense-amount';
+
+/** Gap (DT) above which closing needs an explanation. */
+const GAP_NEEDS_NOTE = 0.5;
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+const sessionInclude = {
+  movements: {
+    orderBy: { createdAt: 'asc' as const },
+    include: { coffreEntry: { select: { id: true } } },
+  },
+};
 
 @Injectable()
 export class CaisseService {
@@ -21,34 +37,36 @@ export class CaisseService {
     private readonly config: ConfigService,
   ) {}
 
-  private dayKey(date: Date | string) {
-    return parseLocalDay(date);
+  /** Cash left in the drawer by the last closed day before `day`. */
+  private async carriedFloat(day: Date) {
+    const prev = await this.prisma.caisseSession.findFirst({
+      where: { date: { lt: dbDay(day) }, closedAt: { not: null } },
+      orderBy: { date: 'desc' },
+      select: { keptFloat: true },
+    });
+    return prev?.keptFloat ?? 0;
   }
 
-  /** Auto-open today's caisse with float 0 if no session yet. Close stays manual. */
+  /** Auto-open today's caisse with yesterday's kept cash. Close stays manual. */
   async ensureOpenToday(date: string) {
     if (!isLocalToday(date)) return this.getOrNull(date);
-    const day = this.dayKey(date);
-    const existing = await this.prisma.caisseSession.findUnique({
-      where: { date: day },
-      include: { movements: { orderBy: { createdAt: 'asc' } } },
-    });
+    const existing = await this.getOrNull(date);
     if (existing) return existing;
-    return this.open(date, 0);
+    return this.open(date, await this.carriedFloat(parseLocalDay(date)));
   }
 
   async getOrNull(date: string) {
-    const day = this.dayKey(date);
     return this.prisma.caisseSession.findUnique({
-      where: { date: day },
-      include: { movements: { orderBy: { createdAt: 'asc' } } },
+      where: { date: dbDay(date) },
+      include: sessionInclude,
     });
   }
 
   async open(date: string, openingFloat = 0) {
-    const day = this.dayKey(date);
+    const day = dbDay(date);
     const existing = await this.prisma.caisseSession.findUnique({
       where: { date: day },
+      include: sessionInclude,
     });
     if (existing && !existing.closedAt) return existing;
     if (existing?.closedAt) {
@@ -56,19 +74,30 @@ export class CaisseService {
     }
     const session = await this.prisma.caisseSession.create({
       data: { date: day, openingFloat },
-      include: { movements: true },
+      include: sessionInclude,
     });
     await this.opsEvents.record({
       type: 'caisse.opened',
       amount: openingFloat,
-      meta: { sessionId: session.id, date: day.toISOString() },
+      meta: { sessionId: session.id, date: localDayKey(fromDbDay(day)) },
     });
     return session;
   }
 
+  async setOpeningFloat(date: string, openingFloat: number) {
+    if (!(openingFloat >= 0)) throw new BadRequestException('Montant invalide');
+    const session = await this.open(date, openingFloat);
+    if (session.closedAt) throw new BadRequestException('Caisse clôturée');
+    await this.prisma.caisseSession.update({
+      where: { id: session.id },
+      data: { openingFloat },
+    });
+    return this.daySummary(date);
+  }
+
   async addMovement(
     sessionId: string,
-    data: { type: 'IN' | 'OUT'; amount: number; label?: string },
+    data: { type: 'IN' | 'OUT'; amount: number; label?: string; coffre?: boolean },
   ) {
     const session = await this.prisma.caisseSession.findUnique({
       where: { id: sessionId },
@@ -77,19 +106,60 @@ export class CaisseService {
     if (session.closedAt) {
       throw new BadRequestException('Caisse clôturée');
     }
-    return this.prisma.caisseMovement.create({
-      data: {
-        sessionId,
-        type: data.type,
-        amount: data.amount,
-        label: data.label,
-      },
+    const amount = round2(Number(data.amount));
+    if (!(amount > 0)) throw new BadRequestException('Montant invalide');
+    const type = data.type === 'IN' ? 'IN' : 'OUT';
+    const label =
+      data.label?.trim() ||
+      (data.coffre
+        ? type === 'OUT'
+          ? 'Versement au coffre'
+          : 'Monnaie prise du coffre'
+        : type === 'OUT'
+          ? 'Sortie de caisse'
+          : 'Entrée de caisse');
+    return this.prisma.$transaction(async (tx) => {
+      const m = await tx.caisseMovement.create({
+        data: { sessionId, type, amount, label },
+      });
+      if (data.coffre) {
+        await tx.coffreEntry.create({
+          data: {
+            date: session.date,
+            type: type === 'OUT' ? 'IN' : 'OUT',
+            amount,
+            label: type === 'OUT' ? `Depuis la caisse · ${label}` : `Vers la caisse · ${label}`,
+            caisseMovementId: m.id,
+          },
+        });
+      }
+      return m;
     });
+  }
+
+  async addMovementForDate(
+    date: string,
+    data: { type: 'IN' | 'OUT'; amount: number; label?: string; coffre?: boolean },
+  ) {
+    const session = await this.open(date, await this.carriedFloat(parseLocalDay(date)));
+    await this.addMovement(session.id, data);
+    return this.daySummary(date);
+  }
+
+  async removeMovement(id: string) {
+    const m = await this.prisma.caisseMovement.findUnique({
+      where: { id },
+      include: { session: true },
+    });
+    if (!m) throw new NotFoundException('Mouvement introuvable');
+    if (m.session.closedAt) throw new BadRequestException('Caisse clôturée');
+    await this.prisma.caisseMovement.delete({ where: { id } });
+    return { ok: true };
   }
 
   async daySummary(date: string) {
     await this.ensureOpenToday(date);
-    const day = this.dayKey(date);
+    const day = parseLocalDay(date);
     const start = startOfDay(day);
     const end = endOfDay(day);
 
@@ -101,6 +171,7 @@ export class CaisseService {
       session,
       seats,
       bookings,
+      unclosed,
     ] = await Promise.all([
       this.prisma.journal.findMany({
         where: { registredTime: { gte: start, lte: end } },
@@ -117,51 +188,59 @@ export class CaisseService {
       this.prisma.dailyExpense.findMany({
         where: { date: { gte: start, lte: end } },
         include: { expense: true },
+        orderBy: { createdAt: 'desc' },
       }),
       this.getOrNull(date),
       this.prisma.seat.findMany({ where: { isActive: true } }),
       this.prisma.seatBooking.findMany({
         where: { isBooked: true, eventKey: 'collabora-hub' },
       }),
+      this.prisma.caisseSession.findMany({
+        where: { closedAt: null, date: { lt: dbDay(day) } },
+        orderBy: { date: 'desc' },
+        take: 10,
+        select: { date: true },
+      }),
     ]);
 
-    const revenueJournal = journals
-      .filter((j) => j.isPayed)
-      .reduce((a, j) => a + (j.payedAmount || 0), 0);
+    const paidJournals = journals.filter((j) => j.isPayed);
+    const revenueJournal = paidJournals.reduce((a, j) => a + (j.payedAmount || 0), 0);
     const revenueAbonnements = abonnements.reduce((a, p) => a + p.amount, 0);
-    const revenueProducts = dailyProducts
-      .filter((dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED')
-      .reduce((a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite, 0);
-    const expenses = dailyExpenses.reduce(
-      (a, de) => a + (de.expense?.amount || 0),
+    const soldProducts = dailyProducts.filter(
+      (dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED',
+    );
+    const revenueProducts = soldProducts.reduce(
+      (a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite,
       0,
     );
-    const movementsIn =
-      session?.movements
-        ?.filter((m) => m.type === 'IN')
-        .reduce((a, m) => a + m.amount, 0) || 0;
-    const movementsOut =
-      session?.movements
-        ?.filter((m) => m.type === 'OUT')
-        .reduce((a, m) => a + m.amount, 0) || 0;
+    const expenseRows = dailyExpenses.map((de) => ({
+      ...de,
+      amount: expenseAmount(de),
+      label: expenseLabel(de),
+    }));
+    const expenses = expenseRows.reduce((a, de) => a + de.amount, 0);
+    const expensesCash = expenseRows
+      .filter((de) => de.source === 'CAISSE')
+      .reduce((a, de) => a + de.amount, 0);
+    const movements = session?.movements ?? [];
+    const movementsIn = movements
+      .filter((m) => m.type === 'IN')
+      .reduce((a, m) => a + m.amount, 0);
+    const movementsOut = movements
+      .filter((m) => m.type === 'OUT')
+      .reduce((a, m) => a + m.amount, 0);
 
     const openingFloat = session?.openingFloat || 0;
-    const expectedClose =
-      openingFloat +
-      revenueJournal +
-      revenueAbonnements +
-      revenueProducts +
-      movementsIn -
-      expenses -
-      movementsOut;
+    const revenue = revenueJournal + revenueAbonnements + revenueProducts;
+    const expectedClose = round2(
+      openingFloat + revenue + movementsIn - expensesCash - movementsOut,
+    );
     const closedExpected =
       session?.closedAt && session.expectedClose != null
         ? session.expectedClose
         : null;
     const driftSinceClose =
-      closedExpected != null
-        ? Math.round((expectedClose - closedExpected) * 100) / 100
-        : null;
+      closedExpected != null ? round2(expectedClose - closedExpected) : null;
 
     const normalSeats = seats.filter((s) => !s.isOverflow);
     const overflowSeats = seats.filter((s) => s.isOverflow);
@@ -175,18 +254,29 @@ export class CaisseService {
 
     return {
       date: day.toISOString(),
+      dateKey: localDayKey(day),
       session,
+      revenue: round2(revenue),
       revenueJournal,
       revenueAbonnements,
       revenueProducts,
-      expenses,
+      counts: {
+        paidVisits: paidJournals.length,
+        abonnementPayments: abonnements.length,
+        products: soldProducts.reduce((a, dp) => a + dp.quantite, 0),
+      },
+      expenses: round2(expenses),
+      expensesCash: round2(expensesCash),
+      expensesOther: round2(expenses - expensesCash),
       movementsIn,
       movementsOut,
       openingFloat,
       expectedClose,
       closedExpected,
       driftSinceClose,
-      net: revenueJournal + revenueAbonnements + revenueProducts - expenses,
+      suggestedFloat: session ? null : await this.carriedFloat(day),
+      unclosedDays: unclosed.map((s) => localDayKey(fromDbDay(s.date))),
+      net: round2(revenue - expenses),
       unpaidJournal: journals.filter((j) => !j.isPayed).length,
       occupancy: {
         normalCapacity: normalSeats.length,
@@ -196,19 +286,26 @@ export class CaisseService {
         isFull: normalSeats.length > 0 && normalOccupied >= normalSeats.length,
       },
       dailyProducts,
-      dailyExpenses,
+      dailyExpenses: expenseRows,
       journalsCount: journals.length,
     };
   }
 
-  async close(date: string, data: { countedClose: number; notes?: string }) {
-    const day = this.dayKey(date);
+  async close(
+    date: string,
+    data: { countedClose: number; keptFloat?: number; notes?: string },
+  ) {
+    const day = dbDay(date);
+    const counted = round2(Number(data.countedClose));
+    if (!Number.isFinite(counted) || counted < 0) {
+      throw new BadRequestException('Montant compté invalide');
+    }
     let session = await this.prisma.caisseSession.findUnique({
       where: { date: day },
     });
     if (!session) {
       session = await this.prisma.caisseSession.create({
-        data: { date: day, openingFloat: 0 },
+        data: { date: day, openingFloat: await this.carriedFloat(parseLocalDay(date)) },
       });
     }
     if (session.closedAt) {
@@ -217,58 +314,67 @@ export class CaisseService {
 
     const summary = await this.daySummary(date);
     const expectedClose = summary.expectedClose;
-    const difference = data.countedClose - expectedClose;
-
-    if (Math.abs(difference) > 0.05) {
+    const difference = round2(counted - expectedClose);
+    const notes = data.notes?.trim() || null;
+    if (Math.abs(difference) >= GAP_NEEDS_NOTE && !notes) {
       throw new BadRequestException(
-        `Écart caisse : attendu ${expectedClose.toFixed(
-          2,
-        )} DT, compté ${data.countedClose.toFixed(
-          2,
-        )} DT. Corrigez avant de clôturer.`,
+        `Écart de ${difference > 0 ? '+' : ''}${difference.toFixed(2)} DT : expliquez-le dans la note pour clôturer.`,
       );
     }
+    const kept = Math.min(counted, Math.max(0, round2(Number(data.keptFloat ?? 0))));
+    const toCoffre = round2(counted - kept);
 
-    const closed = await this.prisma.caisseSession.update({
-      where: { id: session.id },
-      data: {
-        closedAt: new Date(),
-        countedClose: data.countedClose,
-        expectedClose,
-        difference,
-        notes: data.notes,
-      },
-      include: { movements: true },
-    });
-
-    await this.prisma.coffreEntry.create({
-      data: {
-        date: day,
-        type: 'IN',
-        amount: data.countedClose,
-        label: `Clôture caisse ${day.toISOString().slice(0, 10)}`,
-        caisseSessionId: closed.id,
-      },
+    const closed = await this.prisma.$transaction(async (tx) => {
+      const s = await tx.caisseSession.update({
+        where: { id: session!.id },
+        data: {
+          closedAt: new Date(),
+          countedClose: counted,
+          expectedClose,
+          difference,
+          keptFloat: kept,
+          notes,
+        },
+        include: sessionInclude,
+      });
+      if (toCoffre > 0) {
+        await tx.coffreEntry.create({
+          data: {
+            date: day,
+            type: 'IN',
+            amount: toCoffre,
+            label: `Clôture caisse ${localDayKey(fromDbDay(day))}`,
+            caisseSessionId: s.id,
+          },
+        });
+      }
+      // Next day already auto-opened: start it with the cash left in the drawer
+      await tx.caisseSession.updateMany({
+        where: { date: dbDay(addDays(fromDbDay(day), 1)), closedAt: null },
+        data: { openingFloat: kept },
+      });
+      return s;
     });
 
     await this.opsEvents.record({
       type: 'caisse.closed',
-      amount: data.countedClose,
+      amount: counted,
       meta: {
         sessionId: closed.id,
         expectedClose,
         difference,
+        keptFloat: kept,
         occupancy: summary.occupancy,
       },
     });
 
     const syncResult = await this.tryErpSync({
-      date: day.toISOString().slice(0, 10),
+      date: localDayKey(fromDbDay(day)),
       revenueJournal: summary.revenueJournal,
       revenueAbonnements: summary.revenueAbonnements,
       revenueProducts: summary.revenueProducts,
       expenses: summary.expenses,
-      countedCash: data.countedClose,
+      countedCash: counted,
       expectedCash: expectedClose,
       difference,
       occupancy: summary.occupancy,
@@ -284,11 +390,37 @@ export class CaisseService {
           externalRef: syncResult.externalRef,
           syncedAt: new Date(),
         },
-        include: { movements: true },
+        include: sessionInclude,
       });
     }
 
     return closed;
+  }
+
+  /** Undo a closing: removes its coffre deposit so the day can be corrected. */
+  async reopen(date: string) {
+    const session = await this.prisma.caisseSession.findUnique({
+      where: { date: dbDay(date) },
+    });
+    if (!session?.closedAt) throw new BadRequestException("Cette caisse n'est pas clôturée");
+    await this.prisma.$transaction([
+      this.prisma.coffreEntry.deleteMany({ where: { caisseSessionId: session.id } }),
+      this.prisma.caisseSession.update({
+        where: { id: session.id },
+        data: {
+          closedAt: null,
+          countedClose: null,
+          expectedClose: null,
+          difference: null,
+          keptFloat: null,
+        },
+      }),
+    ]);
+    await this.opsEvents.record({
+      type: 'caisse.reopened',
+      meta: { sessionId: session.id },
+    });
+    return this.daySummary(date);
   }
 
   buildErpPayload(body: Record<string, unknown>) {
@@ -335,15 +467,28 @@ export class CaisseService {
   }
 
   async coffreList() {
-    const entries = await this.prisma.coffreEntry.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 200,
-    });
-    const balance = entries.reduce(
-      (a, e) => a + (e.type === 'OUT' ? -e.amount : e.amount),
-      0,
-    );
-    return { balance, entries };
+    const [totals, entries] = await Promise.all([
+      this.prisma.coffreEntry.groupBy({ by: ['type'], _sum: { amount: true } }),
+      this.prisma.coffreEntry.findMany({
+        orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+        take: 300,
+      }),
+    ]);
+    const sum = (t: string) => totals.find((x) => x.type === t)?._sum.amount ?? 0;
+    return {
+      balance: round2(sum('IN') - sum('OUT')),
+      entries: entries.map((e) => ({
+        ...e,
+        dateKey: localDayKey(fromDbDay(e.date)),
+        kind: e.caisseSessionId
+          ? ('CLOTURE' as const)
+          : e.dailyExpenseId
+            ? ('DEPENSE' as const)
+            : e.caisseMovementId
+              ? ('CAISSE' as const)
+              : ('MANUEL' as const),
+      })),
+    };
   }
 
   async coffreAdd(data: {
@@ -355,13 +500,12 @@ export class CaisseService {
     if (!data.amount || data.amount <= 0) {
       throw new BadRequestException('Montant invalide');
     }
-    const date = this.dayKey(data.date || new Date().toISOString());
     const entry = await this.prisma.coffreEntry.create({
       data: {
-        date,
-        type: data.type,
-        amount: data.amount,
-        label: data.label,
+        date: dbDay(data.date || null),
+        type: data.type === 'OUT' ? 'OUT' : 'IN',
+        amount: round2(data.amount),
+        label: data.label?.trim() || null,
       },
     });
     await this.opsEvents.record({
@@ -369,6 +513,19 @@ export class CaisseService {
       amount: data.amount,
       meta: { entryId: entry.id },
     });
+    return this.coffreList();
+  }
+
+  /** Only manual lines; closings, expenses and drawer transfers are undone at their source. */
+  async coffreRemove(id: string) {
+    const e = await this.prisma.coffreEntry.findUnique({ where: { id } });
+    if (!e) throw new NotFoundException('Mouvement introuvable');
+    if (e.caisseSessionId || e.dailyExpenseId || e.caisseMovementId) {
+      throw new BadRequestException(
+        'Ce mouvement vient de la caisse ou d’une dépense : corrigez-le à sa source.',
+      );
+    }
+    await this.prisma.coffreEntry.delete({ where: { id } });
     return this.coffreList();
   }
 
@@ -403,11 +560,12 @@ export class CaisseService {
         include: { expense: true },
       }),
       this.prisma.caisseSession.findMany({
-        where: { date: { gte: start, lte: end } },
+        where: { date: { gte: dbDay(start), lte: dbDay(end) } },
         include: { movements: true },
+        orderBy: { date: 'asc' },
       }),
       this.prisma.coffreEntry.findMany({
-        where: { date: { gte: start, lte: end } },
+        where: { date: { gte: dbDay(start), lte: dbDay(end) } },
       }),
     ]);
 
@@ -419,11 +577,11 @@ export class CaisseService {
       .filter((dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED')
       .reduce((a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite, 0);
     const expensesDaily = dailyExpenses
-      .filter((de) => de.expense?.type === 'JOURNALIER')
-      .reduce((a, de) => a + (de.expense?.amount || 0), 0);
+      .filter((de) => de.kind === 'JOURNALIER')
+      .reduce((a, de) => a + expenseAmount(de), 0);
     const expensesMonthly = dailyExpenses
-      .filter((de) => de.expense?.type === 'MENSUEL')
-      .reduce((a, de) => a + (de.expense?.amount || 0), 0);
+      .filter((de) => de.kind === 'MENSUEL')
+      .reduce((a, de) => a + expenseAmount(de), 0);
     const expenses = expensesDaily + expensesMonthly;
     const coffreIn = coffre
       .filter((c) => c.type === 'IN')
@@ -462,11 +620,14 @@ export class CaisseService {
       expectedTotal,
       sessions: sessions.map((s) => ({
         date: s.date,
+        dateKey: localDayKey(fromDbDay(s.date)),
         closedAt: s.closedAt,
         openingFloat: s.openingFloat,
         countedClose: s.countedClose,
         expectedClose: s.expectedClose,
         difference: s.difference,
+        keptFloat: s.keptFloat,
+        notes: s.notes,
       })),
     };
   }

@@ -1,13 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ExpenseType } from '@prisma/client';
-import { Type } from 'class-transformer';
 import {
-  IsDate,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
+  Min,
 } from 'class-validator';
 
 export class CreateExpenseDto {
@@ -38,4 +39,11 @@ export class CreateExpenseDto {
   @IsNotEmpty()
   @IsEnum(ExpenseType)
   type: ExpenseType;
+
+  @ApiProperty({ example: 5, required: false })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  dueDay?: number | null;
 }

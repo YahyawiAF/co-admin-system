@@ -90,7 +90,7 @@ import { JournalCoffeeCell } from "@/components/admin/JournalCoffeeCell";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
-import { DayExpensesPanel } from "@/components/admin/finance/DayExpensesPanel";
+import { QuickExpenseDialog } from "@/components/admin/finance/QuickExpenseDialog";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
   abonnementsApi,
@@ -102,6 +102,7 @@ import {
   mobileApi,
   opsEventsApi,
   pricesApi,
+  dailyExpensesApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import {
@@ -345,6 +346,13 @@ export default function JournalClient() {
     queryFn: () => opsEventsApi.seatHistory(selectedDate),
     refetchInterval: 30_000,
   });
+
+  const selectedDayKey = format(selectedDate, "yyyy-MM-dd");
+  const { data: dayExpenses = [] } = useQuery({
+    queryKey: ["expenses-day", selectedDayKey],
+    queryFn: () => dailyExpensesApi.list(selectedDayKey),
+  });
+  const dayExpensesTotal = dayExpenses.reduce((a, e) => a + e.amount, 0);
 
   const { data: dailyProducts = [] } = useQuery({
     queryKey: ["daily-products"],
@@ -1167,6 +1175,11 @@ export default function JournalClient() {
               >
                 <Receipt className="mr-2 h-4 w-4" />
                 Dépense
+                {dayExpensesTotal > 0 ? (
+                  <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-rose-700">
+                    −{Math.round(dayExpensesTotal * 10) / 10} DT
+                  </span>
+                ) : null}
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -2594,17 +2607,11 @@ export default function JournalClient() {
         onDone={clearSelection}
       />
 
-      <Dialog open={expensesOpen} onOpenChange={setExpensesOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Dépenses</DialogTitle>
-          </DialogHeader>
-          <DayExpensesPanel
-            date={format(selectedDate, "yyyy-MM-dd")}
-            className="border-0 shadow-none"
-          />
-        </DialogContent>
-      </Dialog>
+      <QuickExpenseDialog
+        open={expensesOpen}
+        onOpenChange={setExpensesOpen}
+        date={selectedDayKey}
+      />
     </div>
   );
 }

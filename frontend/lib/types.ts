@@ -467,6 +467,9 @@ export interface CaisseMovement {
   type: string;
   amount: number;
   label?: string | null;
+  createdAt?: string;
+  /** Set when the movement is a transfer with the coffre */
+  coffreEntry?: { id: string } | null;
 }
 
 export interface CaisseSession {
@@ -479,6 +482,7 @@ export interface CaisseSession {
   expectedClose?: number | null;
   difference?: number | null;
   notes?: string | null;
+  keptFloat?: number | null;
   externalOrgId?: string | null;
   externalRef?: string | null;
   syncedAt?: string | null;
@@ -487,11 +491,23 @@ export interface CaisseSession {
 
 export interface DayFinanceSummary {
   date: string;
+  dateKey: string;
   session: CaisseSession | null;
+  revenue: number;
   revenueJournal: number;
   revenueAbonnements: number;
   revenueProducts: number;
+  counts: { paidVisits: number; abonnementPayments: number; products: number };
+  /** All expenses of the day */
   expenses: number;
+  /** Paid with drawer cash (counted in the expected cash) */
+  expensesCash: number;
+  /** Paid from the coffre / bank */
+  expensesOther: number;
+  /** Opening float proposed when the day has no session yet */
+  suggestedFloat?: number | null;
+  /** Earlier days still not closed (yyyy-MM-dd, newest first) */
+  unclosedDays: string[];
   movementsIn: number;
   movementsOut: number;
   openingFloat: number;
@@ -506,15 +522,14 @@ export interface DayFinanceSummary {
   journalsCount: number;
   dailyExpenses?: Array<{
     id: string;
-    expenseId: string;
+    expenseId?: string | null;
     date?: string | null;
+    amount: number;
+    label: string;
+    kind: "MENSUEL" | "JOURNALIER";
+    source: "CAISSE" | "COFFRE" | "AUTRE";
     Summary?: string | null;
-    expense?: {
-      id: string;
-      name: string;
-      amount: number;
-      type: "MENSUEL" | "JOURNALIER" | string;
-    };
+    createdAt: string;
   }>;
   dailyProducts?: Array<{
     id: string;
@@ -533,6 +548,9 @@ export interface CoffreEntry {
   label?: string | null;
   caisseSessionId?: string | null;
   createdAt: string;
+  dateKey: string;
+  /** CLOTURE = caisse closing, DEPENSE = expense paid from the coffre, CAISSE = drawer transfer */
+  kind: "CLOTURE" | "DEPENSE" | "CAISSE" | "MANUEL";
 }
 
 export interface CoffreSummary {
@@ -559,11 +577,14 @@ export interface MonthFinanceSummary {
   expectedTotal: number;
   sessions: Array<{
     date: string;
+    dateKey: string;
     closedAt?: string | null;
     openingFloat: number;
     countedClose?: number | null;
     expectedClose?: number | null;
     difference?: number | null;
+    keptFloat?: number | null;
+    notes?: string | null;
   }>;
 }
 

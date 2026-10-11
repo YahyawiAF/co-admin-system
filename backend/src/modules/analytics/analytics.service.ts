@@ -19,6 +19,7 @@ import {
   visitEnd,
 } from './traffic';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
+import { expenseAmount } from '../expense/expense-amount';
 
 @Injectable()
 export class AnalyticsService {
@@ -90,7 +91,7 @@ export class AnalyticsService {
         0,
       );
       const expenses = dailyExpenses.reduce(
-        (a, de) => a + (de.expense?.amount || 0),
+        (a, de) => a + expenseAmount(de),
         0,
       );
 
@@ -178,7 +179,7 @@ export class AnalyticsService {
     }
     for (const de of dailyExpenses) {
       const row = ensure(de.date);
-      row.expenses += de.expense?.amount || 0;
+      row.expenses += expenseAmount(de);
     }
 
     const days = [...byDay.values()]

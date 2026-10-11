@@ -15,7 +15,8 @@ import {
 import { fr } from 'date-fns/locale';
 import { MemberService } from '../member/member.service';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
-import { localDayKey } from '../../../common/parse-local-day';
+import { expenseAmount } from '../expense/expense-amount';
+import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
 
 const HOUR_MS = 3_600_000;
@@ -263,7 +264,7 @@ export class PerformanceService {
         }),
         this.prisma.dailyExpense.findMany({
           where: { date: { gte: start, lte: end } },
-          select: { expense: { select: { amount: true } } },
+          select: { amount: true, expense: { select: { amount: true } } },
         }),
         this.prisma.journal.findMany({
           where: { registredTime: { gte: start, lte: end }, isReservation: false },
@@ -300,10 +301,7 @@ export class PerformanceService {
       products += v;
       addDay(dp.date, v);
     }
-    const expenses = dailyExpenses.reduce(
-      (a, de) => a + (de.expense?.amount || 0),
-      0,
-    );
+    const expenses = dailyExpenses.reduce((a, de) => a + expenseAmount(de), 0);
     const revenue = journalRevenue + abonnements + products;
 
     const observed = new Map<string, { first: number; last: number }>();
@@ -568,7 +566,7 @@ export class PerformanceService {
       this.inactiveRegularsInsight(out, s, today),
       this.slotInsights(out, s, seats, today, now),
       this.monthInsights(out, s, seats, now),
-      this.caisseInsights(out, s, today, now),
+      this.caisseInsights(out, today, now),
       this.stockInsight(out),
     ]);
 
@@ -990,49 +988,34 @@ export class PerformanceService {
     }
   }
 
-  private async caisseInsights(
-    out: Insight[],
-    s: PerformanceSettings,
-    today: Date,
-    now: Date,
-  ) {
-    const [unclosed, todaySession, gaps] = await Promise.all([
+  private async caisseInsights(out: Insight[], today: Date, now: Date) {
+    const [unclosed, gaps] = await Promise.all([
       this.prisma.caisseSession.findMany({
-        where: { closedAt: null, date: { lt: today } },
+        where: { closedAt: null, date: { lt: dbDay(today) } },
         orderBy: { date: 'desc' },
         take: 5,
         select: { date: true },
       }),
-      this.prisma.caisseSession.findFirst({
-        where: { date: today },
-        select: { id: true },
-      }),
       this.prisma.caisseSession.findMany({
-        where: { date: { gte: startOfMonth(now) }, difference: { not: null } },
+        where: { date: { gte: dbDay(startOfMonth(now)) }, difference: { not: null } },
         select: { date: true, difference: true },
       }),
     ]);
     if (unclosed.length) {
+      const first = fromDbDay(unclosed[0].date);
       out.push({
         id: 'caisse-unclosed',
         severity: 'warning',
         title:
           unclosed.length > 1
             ? `${unclosed.length} caisses non clôturées`
-            : `Caisse du ${format(unclosed[0].date, 'EEEE d MMM', { locale: fr })} non clôturée`,
+            : `Caisse du ${format(first, 'EEEE d MMM', { locale: fr })} non clôturée`,
         detail:
-          "Sans clôture, l'écart de caisse n'est pas calculé et le coffre n'est pas à jour.",
-        cta: { label: 'Ouvrir la caisse', href: '/finance?tab=caisse' },
-      });
-    }
-    const hour = now.getHours();
-    if (!todaySession && !s.alwaysOpen && hour >= s.openHour + 1 && hour < Math.min(24, s.closeHour)) {
-      out.push({
-        id: 'caisse-not-open',
-        severity: 'info',
-        title: "La caisse du jour n'est pas ouverte",
-        detail: 'Ouvrez-la avec le fond de caisse pour suivre les encaissements de la journée.',
-        cta: { label: 'Ouvrir la caisse', href: '/finance?tab=caisse' },
+          "Comptez les espèces et clôturez : vous saurez s'il manque de l'argent, et le reste part au coffre.",
+        cta: {
+          label: 'Clôturer',
+          href: `/finance?tab=caisse&date=${localDayKey(first)}`,
+        },
       });
     }
     const real = gaps.filter((g) => Math.abs(g.difference || 0) >= 1);
@@ -1046,7 +1029,7 @@ export class PerformanceService {
           'Un écart veut souvent dire une vente non saisie ou une erreur de monnaie. Vérifiez les jours concernés.',
         cta: { label: 'Voir la caisse', href: '/finance?tab=caisse' },
         items: real.slice(0, 5).map((g) => ({
-          label: format(g.date, 'EEEE d MMM', { locale: fr }),
+          label: format(fromDbDay(g.date), 'EEEE d MMM', { locale: fr }),
           detail: `${(g.difference || 0) > 0 ? '+' : ''}${round1(g.difference || 0)} DT`,
         })),
       });

@@ -21,6 +21,9 @@ export class ExpenseEntity {
   @ApiProperty({ enum: ExpenseType, enumName: 'ExpenseType' })
   type: ExpenseType;
 
+  @ApiProperty({ example: 5, required: false })
+  dueDay?: number | null;
+
   @ApiProperty({ example: '2024-01-01T00:00:00.000Z' })
   createdAt: Date | null;
 
