@@ -33,6 +33,7 @@
     "clear-mock-data": "node --experimental-modules MockDataGenerator.mjs clear"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@nestjs-modules/mailer": "^2.0.2",
     "@nestjs/axios": "^3.0.1",
     "@nestjs/common": "^10.0.0",

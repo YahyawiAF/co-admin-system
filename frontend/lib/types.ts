@@ -1288,3 +1288,109 @@ export interface BookingRequest {
   phone?: string | null;
   avatarUrl?: string | null;
 }
+
+// ---- Conseiller IA ----
+export type AdvisorCategory =
+  | "NEW_REVENUE"
+  | "PROMO"
+  | "PRICING"
+  | "CAFE"
+  | "RETENTION"
+  | "OPERATIONS";
+
+export interface AdvisorRecommendation {
+  category: AdvisorCategory;
+  priority: "high" | "medium" | "low";
+  effort: "low" | "medium" | "high";
+  title: string;
+  evidence: string;
+  actions: string[];
+  expectedImpact: string;
+  measure: string;
+}
+
+export interface AdvisorResult {
+  summary: string;
+  highlights: Array<{ trend: "up" | "down" | "flat"; title: string; detail: string }>;
+  recommendations: AdvisorRecommendation[];
+  initiativeReviews: Array<{
+    initiativeId: string;
+    verdict: "working" | "not_working" | "too_early";
+    detail: string;
+  }>;
+  questions: string[];
+}
+
+export type AdvisorReportStatus = "PENDING" | "DONE" | "FAILED";
+
+export interface AdvisorReportSummary {
+  id: string;
+  status: AdvisorReportStatus;
+  trigger: "MANUAL" | "WEEKLY" | "IMPORT";
+  periodFrom: string;
+  periodTo: string;
+  createdAt: string;
+  error: string | null;
+  headline?: string | null;
+}
+
+export interface AdvisorReport extends AdvisorReportSummary {
+  result: AdvisorResult | null;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+}
+
+export interface AdvisorPrompt {
+  model: string;
+  system: string;
+  user: string;
+  schema: unknown;
+  /** system + schema + data in one text, ready to paste into claude.ai */
+  chat: string;
+  snapshot: unknown;
+}
+
+export interface AdvisorSettings {
+  facilityId: string;
+  businessContext: string;
+  enabled: boolean;
+  model: string;
+}
+
+export interface InitiativeMetrics {
+  from: string;
+  to: string;
+  visitsPerDay: number;
+  revenuePerDay: number;
+  revenueVisits: number;
+  revenueSubscriptions: number;
+  revenueCafe: number;
+  cafeMargin: number;
+  cafeAttachRatePct: number | null;
+  avgStayHours: number | null;
+  avgOccupancyPct: number | null;
+  newMembers: number;
+}
+
+export interface BusinessInitiative {
+  id: string;
+  title: string;
+  description: string | null;
+  category: AdvisorCategory;
+  startDate: string;
+  endDate: string | null;
+  daysSinceStart: number;
+  impact: {
+    comparedDays: number;
+    before: InitiativeMetrics;
+    after: InitiativeMetrics;
+    changePct: {
+      visitsPerDay: number | null;
+      revenuePerDay: number | null;
+      revenueCafe: number | null;
+      avgStayHours: number | null;
+    };
+    extraRevenue: number;
+  } | null;
+}

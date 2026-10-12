@@ -8,20 +8,20 @@ datasource db {
 }
 
 model User {
-  id                 String    @id @default(uuid())
-  isActive           Boolean   @default(false)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt @db.Timestamp(6)
-  deletedAt          DateTime? @db.Timestamp(6)
-  email              String?   @unique @db.VarChar(256)
-  fullname           String?   @db.VarChar(256)
-  password           String?
-  refreshToken       String?
-  role               Role      @default(USER)
-  resetPasswordToken String?
-  accessToken        String?
-  phoneNumber        String?   @unique
-  Journals           Journal[]
+  id                      String                   @id @default(uuid())
+  isActive                Boolean                  @default(false)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt @db.Timestamp(6)
+  deletedAt               DateTime?                @db.Timestamp(6)
+  email                   String?                  @unique @db.VarChar(256)
+  fullname                String?                  @db.VarChar(256)
+  password                String?
+  refreshToken            String?
+  role                    Role                     @default(USER)
+  resetPasswordToken      String?
+  accessToken             String?
+  phoneNumber             String?                  @unique
+  Journals                Journal[]
   organizationMemberships OrganizationMembership[]
   facilityMemberships     FacilityMembership[]
 
@@ -29,81 +29,81 @@ model User {
 }
 
 model Member {
-  id            String        @id @default(uuid())
-  organizationId String
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  email         String?       @db.VarChar(256)
-  firstName     String?       @db.VarChar(56)
-  lastName      String?       @db.VarChar(56)
-  bio           String?
-  avatarUrl     String?
-  credits       Float         @default(0)
-  plan          Subscription? @default(Journal)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt @db.Timestamp(6)
-  deletedAt     DateTime?     @db.Timestamp(6)
-  isActive      Boolean       @default(false)
-  functionality String?
-  phone         String?       @db.VarChar(32)
-  passwordHash  String?
-  pinHash       String?
-  visitorNumber Int?
-  userId        Int?
-  groupId       String?
-  group         MemberGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
-  discountForfait     Float?
-  discountAbonnement  Float?
-  discountSalle       Float?
-  discountOpenSpace   Float?
+  id                       String              @id @default(uuid())
+  organizationId           String
+  organization             Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email                    String?             @db.VarChar(256)
+  firstName                String?             @db.VarChar(56)
+  lastName                 String?             @db.VarChar(56)
+  bio                      String?
+  avatarUrl                String?
+  credits                  Float               @default(0)
+  plan                     Subscription?       @default(Journal)
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt @db.Timestamp(6)
+  deletedAt                DateTime?           @db.Timestamp(6)
+  isActive                 Boolean             @default(false)
+  functionality            String?
+  phone                    String?             @db.VarChar(32)
+  passwordHash             String?
+  pinHash                  String?
+  visitorNumber            Int?
+  userId                   Int?
+  groupId                  String?
+  group                    MemberGroup?        @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  discountForfait          Float?
+  discountAbonnement       Float?
+  discountSalle            Float?
+  discountOpenSpace        Float?
   /// Last time the member used an app-install promo
   appInstallPromoClaimedAt DateTime?
   /// App-install promos already used: AppInstallPromo ids, or "global" (each is single-use)
-  appInstallPromosUsed String[] @default([])
+  appInstallPromosUsed     String[]            @default([])
   /// First time the member opened the app as an installed PWA
-  pwaInstalledAt DateTime?
+  pwaInstalledAt           DateTime?
   /// Gamification score — only credited when client is installed PWA
-  points        Int           @default(0)
-  abonnements   Abonnement[]
-  journals      Journal[]
-  reservations  Reservation[]
-  seatBookings  SeatBooking[]
-  visitRequests VisitRequest[]
-  productOrders    DailyProduct[]
-  sentMessages     CommunityMessage[] @relation("MessageFrom")
-  receivedMessages CommunityMessage[] @relation("MessageTo")
-  communityNotes   CommunityNote[]
-  staffMessages    StaffMessage[]
-  loginTokens      MemberLoginToken[]
-  skills                 String[]  @default([])
-  services               String[]  @default([])
-  linkedinUrl            String?
-  openToCollaboration    Boolean   @default(true)
-  showInDirectory        Boolean   @default(true)
+  points                   Int                 @default(0)
+  abonnements              Abonnement[]
+  journals                 Journal[]
+  reservations             Reservation[]
+  seatBookings             SeatBooking[]
+  visitRequests            VisitRequest[]
+  productOrders            DailyProduct[]
+  sentMessages             CommunityMessage[]  @relation("MessageFrom")
+  receivedMessages         CommunityMessage[]  @relation("MessageTo")
+  communityNotes           CommunityNote[]
+  staffMessages            StaffMessage[]
+  loginTokens              MemberLoginToken[]
+  skills                   String[]            @default([])
+  services                 String[]            @default([])
+  linkedinUrl              String?
+  openToCollaboration      Boolean             @default(true)
+  showInDirectory          Boolean             @default(true)
   /// Community status while on site (null = not set)
-  availability           MemberAvailability?
+  availability             MemberAvailability?
   /// "Recherche" tags: what the member is looking for
-  lookingFor             String[]  @default([])
+  lookingFor               String[]            @default([])
   /// "Focus du jour" — short status shown while on site (expires daily)
-  todayFocus             String?   @db.VarChar(120)
-  todayFocusAt           DateTime?
+  todayFocus               String?             @db.VarChar(120)
+  todayFocusAt             DateTime?
   /// Opt-in: show streak & level on the public profile
-  shareAttendance        Boolean   @default(false)
-  eventRegistrations     EventRegistration[]
-  pushSubscriptions      PushSubscription[]
-  ledgerEntries          MemberLedger[]
-  bookingRequests        BookingRequest[]
-  pointEntries           MemberPointEntry[]
-  trophies               MemberTrophy[]
-  outreach               MemberOutreach[]
+  shareAttendance          Boolean             @default(false)
+  eventRegistrations       EventRegistration[]
+  pushSubscriptions        PushSubscription[]
+  ledgerEntries            MemberLedger[]
+  bookingRequests          BookingRequest[]
+  pointEntries             MemberPointEntry[]
+  trophies                 MemberTrophy[]
+  outreach                 MemberOutreach[]
   /// Code shared to invite friends (lazy-generated)
-  referralCode           String?   @unique
-  referredById           String?
-  referredBy             Member?   @relation("MemberReferral", fields: [referredById], references: [id], onDelete: SetNull)
-  referrals              Member[]  @relation("MemberReferral")
+  referralCode             String?             @unique
+  referredById             String?
+  referredBy               Member?             @relation("MemberReferral", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals                Member[]            @relation("MemberReferral")
   /// Set once both sides got the referral points (first paid visit of the referred member)
-  referralRewardedAt     DateTime?
-  reviewPromptedAt       DateTime?
-  reviewClickedAt        DateTime?
+  referralRewardedAt       DateTime?
+  reviewPromptedAt         DateTime?
+  reviewClickedAt          DateTime?
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
@@ -219,17 +219,17 @@ model MemberOutreach {
 }
 
 model MemberGroup {
-  id                 String   @id @default(uuid())
+  id                 String       @id @default(uuid())
   organizationId     String
   organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name               String
-  maxMembers         Int      @default(15)
-  discountForfait     Float    @default(0)
-  discountAbonnement  Float    @default(0)
-  discountSalle       Float    @default(0)
-  discountOpenSpace   Float    @default(0)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  maxMembers         Int          @default(15)
+  discountForfait    Float        @default(0)
+  discountAbonnement Float        @default(0)
+  discountSalle      Float        @default(0)
+  discountOpenSpace  Float        @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   members            Member[]
 
   @@index([organizationId])
@@ -237,41 +237,41 @@ model MemberGroup {
 }
 
 model Price {
-  id             String         @id @default(uuid())
-  organizationId String?
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  price          Float
-  type           PriceType
-  category       PriceCategory?
-  categories     PriceCategory[] @default([])
-  durationHours  Float?
-  billingUnit    BillingUnit?
-  periodDays     Int?
-  spaceId        String?
-  space          Space?         @relation(fields: [spaceId], references: [id], onDelete: SetNull)
-  occupySeat     Boolean        @default(true)
-  occupyWhole    Boolean        @default(false)
-  offerSpaces    PriceSpace[]
-  reserveSeat    Boolean        @default(false)
+  id                  String            @id @default(uuid())
+  organizationId      String?
+  organization        Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  price               Float
+  type                PriceType
+  category            PriceCategory?
+  categories          PriceCategory[]   @default([])
+  durationHours       Float?
+  billingUnit         BillingUnit?
+  periodDays          Int?
+  spaceId             String?
+  space               Space?            @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  occupySeat          Boolean           @default(true)
+  occupyWhole         Boolean           @default(false)
+  offerSpaces         PriceSpace[]
+  reserveSeat         Boolean           @default(false)
   /// Hour 0-23 when dedicated seat starts (null = all day if reserveSeat)
   reserveSeatFromHour Int?
   /// Hour 0-23 when dedicated seat ends (null = all day)
   reserveSeatToHour   Int?
-  isActive       Boolean        @default(true)
+  isActive            Boolean           @default(true)
   /// Créneau tarif (happy hour): only sold when check-in hour is in [from, to) (to may exceed 24 = after midnight)
-  availableFromHour Int?
-  availableToHour   Int?
+  availableFromHour   Int?
+  availableToHour     Int?
   /// Weekdays the créneau applies (0 = dimanche … 6 = samedi); empty = every day
-  availableDays     Int[]        @default([])
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  timePeriod     Json
-  abonnements      Abonnement[]
-  journals         Journal[]
-  visitRequests    VisitRequest[]
-  appInstallPromos AppInstallPromo[]
-  history          PriceHistory[]
+  availableDays       Int[]             @default([])
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  timePeriod          Json
+  abonnements         Abonnement[]
+  journals            Journal[]
+  visitRequests       VisitRequest[]
+  appInstallPromos    AppInstallPromo[]
+  history             PriceHistory[]
 
   @@index([organizationId])
   @@index([spaceId])
@@ -281,23 +281,23 @@ model Price {
 
 /// Append-only catalog versions for BI / price-change analysis
 model PriceHistory {
-  id               String          @id @default(uuid())
-  priceId          String
-  priceRef         Price           @relation(fields: [priceId], references: [id], onDelete: Cascade)
-  organizationId   String?
-  organization     Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name             String
-  price            Float
-  type             PriceType
-  categories       PriceCategory[] @default([])
-  billingUnit      BillingUnit?
-  durationHours    Float?
-  periodDays       Int?
-  spaceId          String?
-  isActive         Boolean         @default(true)
-  changedAt        DateTime        @default(now())
-  changedByUserId  String?
-  reason           String?
+  id              String          @id @default(uuid())
+  priceId         String
+  priceRef        Price           @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  organizationId  String?
+  organization    Organization?   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  price           Float
+  type            PriceType
+  categories      PriceCategory[] @default([])
+  billingUnit     BillingUnit?
+  durationHours   Float?
+  periodDays      Int?
+  spaceId         String?
+  isActive        Boolean         @default(true)
+  changedAt       DateTime        @default(now())
+  changedByUserId String?
+  reason          String?
 
   @@index([priceId, changedAt])
   @@index([organizationId, changedAt])
@@ -317,30 +317,30 @@ model PriceSpace {
 }
 
 model Journal {
-  id              String    @id @default(uuid())
-  isPayed         Boolean
-  registredTime   DateTime
-  leaveTime       DateTime?
-  payedAmount     Float
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt @db.Timestamp(6)
-  memberID        String?
-  isReservation   Boolean   @default(false)
-  isAnonymous     Boolean   @default(false)
-  guestName       String?
-  priceId         String?
+  id                 String             @id @default(uuid())
+  isPayed            Boolean
+  registredTime      DateTime
+  leaveTime          DateTime?
+  payedAmount        Float
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt @db.Timestamp(6)
+  memberID           String?
+  isReservation      Boolean            @default(false)
+  isAnonymous        Boolean            @default(false)
+  guestName          String?
+  priceId            String?
   /// Catalog name at sale time (stable for analytics)
-  serviceName     String?
+  serviceName        String?
   /// Catalog list price at sale time
-  listPrice       Float?
+  listPrice          Float?
   /// Space used for this visit (snapshot)
-  spaceId         String?
-  spaceName       String?
-  createdbyUserID String?
-  createdBy       User?     @relation(fields: [createdbyUserID], references: [id])
-  members         Member?   @relation(fields: [memberID], references: [id])
-  prices          Price?    @relation(fields: [priceId], references: [id])
-  groupVisitId    String?
+  spaceId            String?
+  spaceName          String?
+  createdbyUserID    String?
+  createdBy          User?              @relation(fields: [createdbyUserID], references: [id])
+  members            Member?            @relation(fields: [memberID], references: [id])
+  prices             Price?             @relation(fields: [priceId], references: [id])
+  groupVisitId       String?
   /// AUTO = price follows pack tiers by elapsed time; FIXED = pack chosen (overtime rules apply)
   pricingMode        JournalPricingMode @default(FIXED)
   /// Original fixed tariff snapshot (kept even when overtime moves the price to the next tier)
@@ -351,7 +351,7 @@ model Journal {
   fixedAmount        Float?
   fixedAt            DateTime?
   /// Amount actually collected (payedAmount = amount owed)
-  paidAmount         Float     @default(0)
+  paidAmount         Float              @default(0)
   paidAt             DateTime?
   /// Amount owed when the visitor checked out unpaid; payedAmount is re-billed up to the late payment time
   amountAtCheckout   Float?
@@ -362,7 +362,7 @@ model Journal {
   promoDiscount      Float?
   promoLabel         String?
   /// Per check-in code (QR on the visitor session screen); not unique — lookups prefer today's open visit
-  checkInCode        String    @default(dbgenerated("gen_checkin_code()"))
+  checkInCode        String             @default(dbgenerated("gen_checkin_code()"))
 
   @@index([groupVisitId])
   @@index([priceId])
@@ -373,43 +373,43 @@ model Journal {
 }
 
 model Abonnement {
-  id            String    @id @default(uuid())
-  isPayed       Boolean
+  id                  String              @id @default(uuid())
+  isPayed             Boolean
   /// When the abonnement was fully paid — revenue is counted on this day (not the start date)
-  paidAt        DateTime?
-  registredDate DateTime
-  leaveDate     DateTime?
-  stayedPeriode String?
-  payedAmount   Float
-  createdAt     DateTime? @default(now())
-  updatedAt     DateTime? @updatedAt @db.Timestamp(6)
-  memberID      String
-  isReservation Boolean   @default(false)
-  priceId       String
+  paidAt              DateTime?
+  registredDate       DateTime
+  leaveDate           DateTime?
+  stayedPeriode       String?
+  payedAmount         Float
+  createdAt           DateTime?           @default(now())
+  updatedAt           DateTime?           @updatedAt @db.Timestamp(6)
+  memberID            String
+  isReservation       Boolean             @default(false)
+  priceId             String
   /// Catalog name at sale time (stable for analytics)
-  serviceName     String?
+  serviceName         String?
   /// Catalog list price at sale time
-  listPrice       Float?
+  listPrice           Float?
   /// Space reserved / used (snapshot; often same as reservedSeatSpaceId)
-  spaceId         String?
-  spaceName       String?
+  spaceId             String?
+  spaceName           String?
   /// Promo snapshot: amount before the promo, DT saved, label
-  priceBeforePromo Float?
-  promoDiscount    Float?
-  promoLabel       String?
+  priceBeforePromo    Float?
+  promoDiscount       Float?
+  promoLabel          String?
   /// Member / group abonnement discount applied at sale time (%)
-  discountPercent  Float?
+  discountPercent     Float?
   /// Price owed after discounts (payedAmount = collected so far)
-  amountDue        Float?
-  hoursQuota         Float?
-  hoursUsed          Float     @default(0)
-  reservedSeatLabel  String?
+  amountDue           Float?
+  hoursQuota          Float?
+  hoursUsed           Float               @default(0)
+  reservedSeatLabel   String?
   reservedSeatSpaceId String?
   /// When to ask the client for payment (unpaid abonnements)
-  paymentRemindAt    DateTime?
-  members            Member    @relation(fields: [memberID], references: [id])
-  price              Price     @relation(fields: [priceId], references: [id])
-  payments           AbonnementPayment[]
+  paymentRemindAt     DateTime?
+  members             Member              @relation(fields: [memberID], references: [id])
+  price               Price               @relation(fields: [priceId], references: [id])
+  payments            AbonnementPayment[]
 
   @@index([priceId])
   @@index([spaceId])
@@ -448,22 +448,23 @@ model Reservation {
 }
 
 model Product {
-  id            String   @id @default(uuid())
+  id             String         @id @default(uuid())
   organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name          String
-  description   String?
-  purchasePrice Float    @map("prix_achat")
-  sellingPrice  Float    @map("prix_vente")
-  stock         Int
-  img           String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  dailyProducts DailyProduct[]
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  purchasePrice  Float          @map("prix_achat")
+  sellingPrice   Float          @map("prix_vente")
+  stock          Int
+  img            String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  dailyProducts  DailyProduct[]
 
   @@index([organizationId])
   @@map("products")
 }
+
 model DailyProduct {
   id            String             @id @default(uuid())
   productId     String
@@ -500,24 +501,24 @@ model Expense {
 /// One spent amount. Quick expenses have no template (amount + label only);
 /// paid recurring charges link their template.
 model DailyExpense {
-  id            String      @id @default(uuid())
+  id            String       @id @default(uuid())
   expenseId     String?
   Summary       String?
-  expense       Expense?    @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  expense       Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   date          DateTime?
   /// Amount spent (null on legacy rows = template amount)
   amount        Float?
   /// Description (null on legacy rows = template name)
   label         String?
-  kind          ExpenseType @default(JOURNALIER)
+  kind          ExpenseType  @default(JOURNALIER)
   /// Where the money came from: CAISSE (cash drawer) | COFFRE | AUTRE (bank, card…)
-  source        String      @default("CAISSE")
+  source        String       @default("CAISSE")
   coffreEntry   CoffreEntry?
   externalOrgId String?
   externalRef   String?
   syncedAt      DateTime?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   @@index([date])
 }
@@ -541,36 +542,36 @@ enum SpaceReserveMode {
 }
 
 model Organization {
-  id            String     @id @default(uuid())
-  name          String
-  slug          String     @unique
-  logo          String?
-  facebookUrl   String?
-  instagramUrl  String?
-  isActive      Boolean    @default(true)
-  activatedAt   DateTime?  @default(now())
-  notes         String?
-  createdAt     DateTime   @default(now())
-  facilities    Facility[]
-  members       Member[]
-  memberGroups  MemberGroup[]
-  products      Product[]
-  prices        Price[]
+  id             String                   @id @default(uuid())
+  name           String
+  slug           String                   @unique
+  logo           String?
+  facebookUrl    String?
+  instagramUrl   String?
+  isActive       Boolean                  @default(true)
+  activatedAt    DateTime?                @default(now())
+  notes          String?
+  createdAt      DateTime                 @default(now())
+  facilities     Facility[]
+  members        Member[]
+  memberGroups   MemberGroup[]
+  products       Product[]
+  prices         Price[]
   priceHistories PriceHistory[]
-  memberships   OrganizationMembership[]
+  memberships    OrganizationMembership[]
 
   @@map("organizations")
 }
 
 model OrganizationMembership {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role           Role     @default(ORG_ADMIN)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  role           Role         @default(ORG_ADMIN)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([userId, organizationId])
   @@index([organizationId])
@@ -594,58 +595,62 @@ model FacilityMembership {
 }
 
 model Facility {
-  id             String         @id @default(uuid())
-  name           String
-  numtel         String
-  email          String
-  adresse        String
-  logo           String?
-  nbrPlaces      Int            @map("nbr_places")
-  socialNetworks Json           @map("social_networks")
-  places         Json           @map("places") // legacy JSON; prefer Space/Table/Seat
-  mobileSeatMode          MobileSeatMode @default(ADMIN_ASSIGN)
-  receptionAway           Boolean        @default(false)
-  receptionAwayStartedAt  DateTime?
+  id                          String               @id @default(uuid())
+  name                        String
+  numtel                      String
+  email                       String
+  adresse                     String
+  logo                        String?
+  nbrPlaces                   Int                  @map("nbr_places")
+  socialNetworks              Json                 @map("social_networks")
+  places                      Json                 @map("places") // legacy JSON; prefer Space/Table/Seat
+  mobileSeatMode              MobileSeatMode       @default(ADMIN_ASSIGN)
+  receptionAway               Boolean              @default(false)
+  receptionAwayStartedAt      DateTime?
   /// Global one-time promo for installing the app (DT or %)
-  appInstallGlobalPromoActive Boolean         @default(false)
+  appInstallGlobalPromoActive Boolean              @default(false)
   appInstallGlobalPromoKind   PromoValueKind?
   appInstallGlobalPromoValue  Float?
   /// Tarif categories the global promo applies to (empty = all tarifs)
-  appInstallGlobalPromoScopes PriceCategory[] @default([])
+  appInstallGlobalPromoScopes PriceCategory[]      @default([])
   /// Session pricing: warn N minutes before a pack / tier ends
-  sessionWarnBeforeMin Int   @default(5)
+  sessionWarnBeforeMin        Int                  @default(5)
   /// AUTO sessions stay on the current tier N minutes after it ends
-  autoTierGraceMin     Int   @default(15)
+  autoTierGraceMin            Int                  @default(15)
   /// FIXED sessions: overtime without extra charge for N minutes
-  fixedGraceMin        Int   @default(15)
+  fixedGraceMin               Int                  @default(15)
   /// FIXED sessions: extra (DT) once the grace is over
-  overtimeSurchargeDt  Float @default(0.75)
+  overtimeSurchargeDt         Float                @default(0.75)
   /// FIXED sessions: switch to next tier price after N minutes over
-  overtimeNextTierMin  Int   @default(30)
+  overtimeNextTierMin         Int                  @default(30)
   /// Opening hours used for occupancy; closeHour > 24 means after midnight (25 = 1h)
-  openHour             Int     @default(8)
-  closeHour            Int     @default(25)
+  openHour                    Int                  @default(8)
+  closeHour                   Int                  @default(25)
   /// Open 24h/24 (special periods)
-  alwaysOpen           Boolean @default(false)
+  alwaysOpen                  Boolean              @default(false)
   /// "Habitué" = at least N visit days per week
-  regularVisitsPerWeek Int     @default(4)
+  regularVisitsPerWeek        Int                  @default(4)
   /// Alert when a regular has not come for N days
-  inactiveAlertDays    Int     @default(7)
+  inactiveAlertDays           Int                  @default(7)
   /// Google Maps review link shown to happy regulars
-  googleReviewUrl      String?
+  googleReviewUrl             String?
   /// Ask for a review after N paid visits
-  reviewAfterVisits    Int     @default(5)
+  reviewAfterVisits           Int                  @default(5)
   /// Points for the sponsor and the friend after the friend's first paid visit
-  referralPoints       Int     @default(300)
-  organizationId String?
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  spaces         Space[]
-  events         Event[]
-  memberships    FacilityMembership[]
-  appInstallPromos AppInstallPromo[]
-  monthlyTargets MonthlyTarget[]
+  referralPoints              Int                  @default(300)
+  /// Free text for the AI advisor: neighbourhood, clientele, competitors, goals
+  businessContext             String?
+  organizationId              String?
+  organization                Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+  spaces                      Space[]
+  events                      Event[]
+  memberships                 FacilityMembership[]
+  appInstallPromos            AppInstallPromo[]
+  monthlyTargets              MonthlyTarget[]
+  advisorReports              AdvisorReport[]
+  initiatives                 BusinessInitiative[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -669,18 +674,18 @@ model MonthlyTarget {
 
 /// App-install promo linked to an abonnement tarif (max ~3 per facility)
 model AppInstallPromo {
-  id         String        @id @default(uuid())
+  id         String         @id @default(uuid())
   facilityId String
-  facility   Facility      @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility   Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   priceId    String
-  price      Price         @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  price      Price          @relation(fields: [priceId], references: [id], onDelete: Cascade)
   /// PERCENT (%) or FIXED_DT (dinars)
   valueKind  PromoValueKind
   value      Float
-  sortOrder  Int           @default(0)
-  isActive   Boolean       @default(true)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  sortOrder  Int            @default(0)
+  isActive   Boolean        @default(true)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   @@index([facilityId])
   @@index([priceId])
@@ -688,29 +693,29 @@ model AppInstallPromo {
 }
 
 model Space {
-  id                  String          @id @default(uuid())
-  facilityId          String
-  facility            Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  name                String
-  category            PriceCategory?
-  categories          PriceCategory[] @default([])
-  floorPlanUrl        String?
-  sortOrder           Int             @default(0)
-  capacityNormal      Int             @default(0)
-  wifiSsid            String?
-  wifiPassword        String?
-  openForReservation  Boolean         @default(false)
-  reserveMode         SpaceReserveMode @default(BOTH)
-  galleryUrls         String[]        @default([])
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  tables              Table[]
-  seats               Seat[]
-  walls               SpaceWall[]
-  fixtures            SpaceFixture[]
-  bookings            SeatBooking[]
-  prices              Price[]
-  priceOffers         PriceSpace[]
+  id                 String           @id @default(uuid())
+  facilityId         String
+  facility           Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  name               String
+  category           PriceCategory?
+  categories         PriceCategory[]  @default([])
+  floorPlanUrl       String?
+  sortOrder          Int              @default(0)
+  capacityNormal     Int              @default(0)
+  wifiSsid           String?
+  wifiPassword       String?
+  openForReservation Boolean          @default(false)
+  reserveMode        SpaceReserveMode @default(BOTH)
+  galleryUrls        String[]         @default([])
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  tables             Table[]
+  seats              Seat[]
+  walls              SpaceWall[]
+  fixtures           SpaceFixture[]
+  bookings           SeatBooking[]
+  prices             Price[]
+  priceOffers        PriceSpace[]
 
   @@map("spaces")
 }
@@ -763,36 +768,36 @@ model SpaceFixture {
 }
 
 model Table {
-  id        String   @id @default(uuid())
-  spaceId   String
-  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  name      String
-  imageUrl  String?
+  id          String   @id @default(uuid())
+  spaceId     String
+  space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  name        String
+  imageUrl    String?
   galleryUrls String[] @default([])
-  x         Float    @default(40)
-  y         Float    @default(40)
-  width     Float    @default(120)
-  height    Float    @default(80)
-  rotation  Float    @default(0)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  seats     Seat[]
+  x           Float    @default(40)
+  y           Float    @default(40)
+  width       Float    @default(120)
+  height      Float    @default(80)
+  rotation    Float    @default(0)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  seats       Seat[]
 
   @@map("tables")
 }
 
 model Seat {
-  id         String  @id @default(uuid())
+  id         String   @id @default(uuid())
   spaceId    String
-  space      Space   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  space      Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   tableId    String?
-  table      Table?  @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  table      Table?   @relation(fields: [tableId], references: [id], onDelete: SetNull)
   label      String // stable id for SeatBooking.seatId
-  offsetX    Float   @default(0)
-  offsetY    Float   @default(0)
-  isOverflow Boolean @default(false)
-  isActive   Boolean @default(true)
+  offsetX    Float    @default(0)
+  offsetY    Float    @default(0)
+  isOverflow Boolean  @default(false)
+  isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -801,18 +806,18 @@ model Seat {
 }
 
 model SeatBooking {
-  id        String    @id @default(uuid())
-  eventKey  String
-  seatId    String
-  spaceId   String
-  space     Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid())
+  eventKey    String
+  seatId      String
+  spaceId     String
+  space       Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   isBooked    Boolean   @default(false)
   isPermanent Boolean   @default(false)
   bookedAt    DateTime?
   memberId    String?
-  member    Member?   @relation(fields: [memberId], references: [id])
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  member      Member?   @relation(fields: [memberId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@unique([eventKey, spaceId, seatId])
   @@index([spaceId])
@@ -880,38 +885,38 @@ model CoffreEntry {
 }
 
 model CaisseMovement {
-  id               String        @id @default(uuid())
-  sessionId        String
-  session          CaisseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  type             String // IN | OUT
-  amount           Float
-  label            String?
-  coffreEntry      CoffreEntry?
-  externalOrgId    String?
-  externalRef      String?
-  syncedAt         DateTime?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id            String        @id @default(uuid())
+  sessionId     String
+  session       CaisseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type          String // IN | OUT
+  amount        Float
+  label         String?
+  coffreEntry   CoffreEntry?
+  externalOrgId String?
+  externalRef   String?
+  syncedAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@map("caisse_movements")
 }
 
 model VisitRequest {
-  id           String             @id @default(uuid())
-  memberId     String
-  priceId      String
-  type         VisitRequestType
-  status       VisitRequestStatus @default(PENDING)
-  seatLabel    String?
-  spaceId      String?
-  occupyWhole  Boolean            @default(false)
-  autoApproved Boolean            @default(false)
+  id               String             @id @default(uuid())
+  memberId         String
+  priceId          String
+  type             VisitRequestType
+  status           VisitRequestStatus @default(PENDING)
+  seatLabel        String?
+  spaceId          String?
+  occupyWhole      Boolean            @default(false)
+  autoApproved     Boolean            @default(false)
   /// When set, reception has acknowledged seeing this (auto-)arrival
   receptionAckedAt DateTime?
-  member       Member             @relation(fields: [memberId], references: [id])
-  price        Price              @relation(fields: [priceId], references: [id])
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  member           Member             @relation(fields: [memberId], references: [id])
+  price            Price              @relation(fields: [priceId], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   @@index([status, autoApproved, receptionAckedAt])
   @@map("visit_requests")
@@ -995,22 +1000,22 @@ enum BookingRequestKind {
 }
 
 model BookingRequest {
-  id             String             @id @default(uuid())
-  memberId       String
-  member         Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  kind           BookingRequestKind
-  spaceId        String?
-  spaceName      String?
-  seatLabel      String?
-  seatSpaceId    String?
-  date           DateTime
-  startAt        DateTime
-  endAt          DateTime
-  note           String?
-  status         VisitRequestStatus @default(PENDING)
-  journalId      String?
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id          String             @id @default(uuid())
+  memberId    String
+  member      Member             @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind        BookingRequestKind
+  spaceId     String?
+  spaceName   String?
+  seatLabel   String?
+  seatSpaceId String?
+  date        DateTime
+  startAt     DateTime
+  endAt       DateTime
+  note        String?
+  status      VisitRequestStatus @default(PENDING)
+  journalId   String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
 
   @@index([status, createdAt])
   @@index([memberId])
@@ -1090,20 +1095,20 @@ enum EventRegistrationStatus {
 }
 
 model Event {
-  id           String              @id @default(uuid())
-  facilityId   String
-  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  title        String
-  description  String?
-  kind         EventKind           @default(OTHER)
-  location     String?
-  startAt      DateTime
-  endAt        DateTime
-  capacity     Int?
-  status       EventStatus         @default(DRAFT)
-  coverImage   String?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
+  id            String              @id @default(uuid())
+  facilityId    String
+  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  kind          EventKind           @default(OTHER)
+  location      String?
+  startAt       DateTime
+  endAt         DateTime
+  capacity      Int?
+  status        EventStatus         @default(DRAFT)
+  coverImage    String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   registrations EventRegistration[]
 
   @@index([facilityId, startAt])
@@ -1112,18 +1117,18 @@ model Event {
 }
 
 model EventRegistration {
-  id               String                   @id @default(uuid())
-  eventId          String
-  event            Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  memberId         String
-  member           Member                   @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  status           EventRegistrationStatus  @default(REGISTERED)
-  attendanceCode   String                   @unique
-  checkedInAt      DateTime?
-  feedbackRating   Int?
-  feedbackComment  String?
-  feedbackAt       DateTime?
-  createdAt        DateTime                 @default(now())
+  id              String                  @id @default(uuid())
+  eventId         String
+  event           Event                   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  memberId        String
+  member          Member                  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  status          EventRegistrationStatus @default(REGISTERED)
+  attendanceCode  String                  @unique
+  checkedInAt     DateTime?
+  feedbackRating  Int?
+  feedbackComment String?
+  feedbackAt      DateTime?
+  createdAt       DateTime                @default(now())
 
   @@unique([eventId, memberId])
   @@index([eventId, status])
@@ -1133,4 +1138,52 @@ model EventRegistration {
 enum Subscription {
   Journal
   Membership
+}
+
+enum AdvisorReportStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+/// AI business report: the data sent to Claude and its recommendations
+model AdvisorReport {
+  id           String              @id @default(uuid())
+  facilityId   String
+  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  status       AdvisorReportStatus @default(PENDING)
+  /// MANUAL or WEEKLY
+  trigger      String              @default("MANUAL")
+  periodFrom   DateTime
+  periodTo     DateTime
+  snapshot     Json
+  result       Json?
+  error        String?
+  model        String
+  inputTokens  Int?
+  outputTokens Int?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([facilityId, createdAt])
+  @@map("advisor_reports")
+}
+
+/// A business change the owner started (e.g. "selling coffee"), tracked before/after
+model BusinessInitiative {
+  id             String    @id @default(uuid())
+  facilityId     String
+  facility       Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  /// NEW_REVENUE, PROMO, PRICING, CAFE, RETENTION, OPERATIONS
+  category       String    @default("NEW_REVENUE")
+  startDate      DateTime
+  endDate        DateTime?
+  sourceReportId String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([facilityId, startDate])
+  @@map("business_initiatives")
 }

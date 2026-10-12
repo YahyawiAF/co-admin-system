@@ -19,6 +19,7 @@ import {
   Globe2,
   Wallet,
   Megaphone,
+  Sparkles,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { outreachApi } from "@/lib/api/resources";
@@ -42,6 +43,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/journal", label: "Journal", icon: ClipboardList },
   { href: "/relances", label: "Relances", icon: Megaphone },
+  { href: "/conseiller", label: "Conseiller IA", icon: Sparkles },
   { href: "/impayes", label: "Impayés", icon: Wallet },
   { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },

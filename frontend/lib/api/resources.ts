@@ -2,6 +2,12 @@ import { http } from "./httpClient";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
+  AdvisorCategory,
+  AdvisorPrompt,
+  AdvisorReport,
+  AdvisorReportSummary,
+  AdvisorSettings,
+  BusinessInitiative,
   Journal,
   Member,
   PaginatedResponse,
@@ -1728,5 +1734,50 @@ export const eventsApi = {
     return http.post(`/mobile/events/${id}/feedback`, data, {
       skipAuth: true,
     });
+  },
+};
+
+export const advisorApi = {
+  settings() {
+    return http.get<AdvisorSettings>("/advisor/settings");
+  },
+  saveSettings(data: { businessContext: string }) {
+    return http.patch<AdvisorSettings>("/advisor/settings", data);
+  },
+  reports() {
+    return http.get<AdvisorReportSummary[]>("/advisor/reports");
+  },
+  report(id: string) {
+    return http.get<AdvisorReport>(`/advisor/reports/${id}`);
+  },
+  generate(days: number) {
+    return http.post<AdvisorReportSummary>("/advisor/reports", { days });
+  },
+  prompt(days: number) {
+    return http.get<AdvisorPrompt>(`/advisor/prompt?days=${days}`);
+  },
+  importReport(days: number, result: string) {
+    return http.post<AdvisorReportSummary>("/advisor/reports/import", { days, result });
+  },
+  initiatives() {
+    return http.get<BusinessInitiative[]>("/advisor/initiatives");
+  },
+  createInitiative(data: {
+    title: string;
+    description?: string;
+    category: AdvisorCategory;
+    startDate: string;
+    sourceReportId?: string;
+  }) {
+    return http.post<BusinessInitiative>("/advisor/initiatives", data);
+  },
+  updateInitiative(
+    id: string,
+    data: Partial<{ title: string; description: string | null; endDate: string | null }>,
+  ) {
+    return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
+  },
+  deleteInitiative(id: string) {
+    return http.delete(`/advisor/initiatives/${id}`);
   },
 };

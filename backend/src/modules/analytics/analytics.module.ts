@@ -12,6 +12,6 @@ import { OutreachService } from './outreach.service';
   imports: [MemberModule, ExpensesModule, PushModule],
   controllers: [AnalyticsController],
   providers: [AnalyticsService, PerformanceService, OutreachService, PrismaService],
-  exports: [AnalyticsService],
+  exports: [AnalyticsService, PerformanceService],
 })
 export class AnalyticsModule {}
