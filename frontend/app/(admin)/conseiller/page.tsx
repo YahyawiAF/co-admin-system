@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { advisorApi } from "@/lib/api/resources";
+import { AdvisorContextPanel } from "@/components/admin/advisor/AdvisorContextPanel";
 import type {
   AdvisorCategory,
   AdvisorRecommendation,
@@ -107,11 +108,12 @@ function ContextCard({ value }: { value: string }) {
     onSuccess: () => {
       toast.success("Contexte enregistré");
       qc.invalidateQueries({ queryKey: ["advisor", "settings"] });
+      qc.invalidateQueries({ queryKey: ["advisor", "missing"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
   return (
-    <Card className="shadow-none">
+    <Card className="shadow-none" id="advisor-context">
       <CardContent className="space-y-2 p-4">
         <div>
           <div className="font-medium">Votre contexte</div>
@@ -706,6 +708,13 @@ export default function ConseillerPage() {
   const latestFailed = list[0]?.status === "FAILED" ? list[0] : null;
   const shownId = selectedId ?? latestDone?.id ?? null;
 
+  // A finished report brings new AI questions into the checklist
+  useEffect(() => {
+    if (!latestDone?.id) return;
+    qc.invalidateQueries({ queryKey: ["advisor", "questions"] });
+    qc.invalidateQueries({ queryKey: ["advisor", "missing"] });
+  }, [latestDone?.id, qc]);
+
   const report = useQuery({
     queryKey: ["advisor", "report", shownId],
     queryFn: () => advisorApi.report(shownId!),
@@ -749,6 +758,8 @@ export default function ConseillerPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      <AdvisorContextPanel />
 
       <ContextCard value={settings.data?.businessContext ?? ""} />
 

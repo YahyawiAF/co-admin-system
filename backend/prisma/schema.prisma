@@ -640,6 +640,9 @@ model Facility {
   referralPoints              Int                  @default(300)
   /// Free text for the AI advisor: neighbourhood, clientele, competitors, goals
   businessContext             String?
+  /// Location for weather and neighbourhood lookups (AI advisor)
+  latitude                    Float?
+  longitude                   Float?
   organizationId              String?
   organization                Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt                   DateTime             @default(now())
@@ -651,6 +654,8 @@ model Facility {
   monthlyTargets              MonthlyTarget[]
   advisorReports              AdvisorReport[]
   initiatives                 BusinessInitiative[]
+  advisorFacts                AdvisorFact[]
+  advisorQuestions            AdvisorQuestion[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -1186,4 +1191,53 @@ model BusinessInitiative {
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
+}
+
+/// Context the AI cannot see in the figures: calendar, neighbourhood, clientele
+model AdvisorFact {
+  id            String    @id @default(uuid())
+  facilityId    String
+  facility      Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  /// HOLIDAY | PERIOD | LOCAL_EVENT | NEIGHBOR | AUDIENCE
+  kind          String
+  title         String
+  detail        String?
+  /// NEIGHBOR: restaurant, cafe, shop, dorm, university, school, competitor, office, other
+  /// PERIOD: ramadan, exams, vacation, other
+  tag           String?
+  startDate     DateTime?
+  endDate       DateTime?
+  distanceM     Int?
+  /// AUDIENCE: member group used to measure this clientele
+  memberGroupId String?
+  /// MANUAL | PRESET | OSM
+  source        String    @default("MANUAL")
+  /// false = estimated (e.g. Aïd dates), the owner is asked to confirm
+  confirmed     Boolean   @default(true)
+  /// Dedupe key for presets and OpenStreetMap places
+  externalId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([facilityId, externalId])
+  @@index([facilityId, kind])
+  @@map("advisor_facts")
+}
+
+/// Questions the AI asked in its reports, answered by the owner and fed back next time
+model AdvisorQuestion {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  key        String
+  question   String
+  answer     String?
+  /// OPEN | ANSWERED | DISMISSED
+  status     String   @default("OPEN")
+  reportId   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([facilityId, key])
+  @@map("advisor_questions")
 }

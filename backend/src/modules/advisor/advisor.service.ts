@@ -22,6 +22,7 @@ import {
   runAdvisor,
   userMessage,
 } from './advisor-claude';
+import { ContextService } from './context.service';
 import { SnapshotService } from './snapshot.service';
 
 /** A PENDING report older than this is considered lost (server restarted mid-run). */
@@ -45,6 +46,7 @@ export class AdvisorService {
     private readonly prisma: PrismaService,
     private readonly performance: PerformanceService,
     private readonly snapshots: SnapshotService,
+    private readonly context: ContextService,
   ) {}
 
   private get enabled() {
@@ -137,6 +139,7 @@ export class AdvisorService {
         model: 'claude.ai (copier-coller)',
       },
     });
+    await this.keepQuestions(report.id, result.questions);
     return this.summary(report);
   }
 
@@ -190,6 +193,7 @@ export class AdvisorService {
           outputTokens: out.outputTokens,
         },
       });
+      await this.keepQuestions(reportId, out.result.questions);
     } catch (err) {
       this.logger.error(`Advisor report ${reportId} failed`, err as Error);
       await this.prisma.advisorReport.update({
@@ -197,6 +201,18 @@ export class AdvisorService {
         data: { status: 'FAILED', error: this.errorMessage(err) },
       });
     }
+  }
+
+  /** Questions become checklist items the owner answers before the next analysis. */
+  private async keepQuestions(reportId: string, questions: string[]) {
+    const r = await this.prisma.advisorReport.findUnique({
+      where: { id: reportId },
+      select: { facilityId: true },
+    });
+    if (!r) return;
+    await this.context
+      .storeQuestions(r.facilityId, reportId, questions)
+      .catch((err) => this.logger.warn(`Could not store advisor questions: ${err}`));
   }
 
   private errorMessage(err: unknown) {

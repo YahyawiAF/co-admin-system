@@ -17,6 +17,7 @@ import { PerformanceService } from '../analytics/performance.service';
 import { hoursOnSite, round1, visitEnd } from '../analytics/traffic';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 import { expenseAmount } from '../expense/expense-amount';
+import { ContextService } from './context.service';
 
 const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 const HOUR_MS = 3_600_000;
@@ -44,6 +45,7 @@ export class SnapshotService {
     private readonly prisma: PrismaService,
     private readonly analytics: AnalyticsService,
     private readonly performance: PerformanceService,
+    private readonly context: ContextService,
   ) {}
 
   async build(facilityId: string, days: number) {
@@ -76,6 +78,7 @@ export class SnapshotService {
       alerts,
       initiatives,
       previousAdvice,
+      ownerContext,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -92,6 +95,7 @@ export class SnapshotService {
       this.performance.insights(facilityId).catch(() => ({ insights: [] })),
       this.initiativesWithImpact(facilityId, seats),
       this.previousAdvice(facilityId),
+      this.context.snapshotContext(facilityId, { prevStart, start, end }),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
@@ -168,6 +172,7 @@ export class SnapshotService {
       })),
       initiatives,
       previousAdvice,
+      ...ownerContext,
     };
   }
 

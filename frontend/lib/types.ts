@@ -1394,3 +1394,61 @@ export interface BusinessInitiative {
     extraRevenue: number;
   } | null;
 }
+
+export type AdvisorFactKind = "HOLIDAY" | "PERIOD" | "LOCAL_EVENT" | "NEIGHBOR" | "AUDIENCE";
+
+export interface AdvisorFact {
+  id: string;
+  kind: AdvisorFactKind;
+  title: string;
+  detail: string | null;
+  tag: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  distanceM: number | null;
+  memberGroupId: string | null;
+  source: "MANUAL" | "PRESET" | "OSM";
+  confirmed: boolean;
+  externalId: string | null;
+}
+
+export interface AdvisorMissingItem {
+  key: string;
+  section: "location" | "calendar" | "neighbors" | "audiences" | "charges" | "context" | "questions";
+  title: string;
+  detail: string;
+  action?:
+    | { type: "seed-holidays" }
+    | { type: "confirm"; factId: string; startDate: string; endDate: string | null }
+    | { type: "link"; href: string };
+}
+
+export interface AdvisorMissing {
+  items: AdvisorMissingItem[];
+  completed: number;
+  total: number;
+}
+
+export interface AdvisorLocation {
+  facilityId: string;
+  latitude: number | null;
+  longitude: number | null;
+  address: string;
+}
+
+export interface AdvisorNearbyPlace {
+  externalId: string;
+  name: string;
+  tag: string;
+  kind: string;
+  distanceM: number;
+  added: boolean;
+}
+
+export interface AdvisorQuestion {
+  id: string;
+  question: string;
+  answer: string | null;
+  status: "OPEN" | "ANSWERED" | "DISMISSED";
+  createdAt: string;
+}

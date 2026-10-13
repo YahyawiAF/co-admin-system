@@ -3,7 +3,12 @@ import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
   AdvisorCategory,
+  AdvisorFact,
+  AdvisorLocation,
+  AdvisorMissing,
+  AdvisorNearbyPlace,
   AdvisorPrompt,
+  AdvisorQuestion,
   AdvisorReport,
   AdvisorReportSummary,
   AdvisorSettings,
@@ -1779,5 +1784,38 @@ export const advisorApi = {
   },
   deleteInitiative(id: string) {
     return http.delete(`/advisor/initiatives/${id}`);
+  },
+  missing() {
+    return http.get<AdvisorMissing>("/advisor/missing");
+  },
+  location() {
+    return http.get<AdvisorLocation>("/advisor/location");
+  },
+  setLocation(data: { input?: string; latitude?: number | null; longitude?: number | null }) {
+    return http.patch<AdvisorLocation>("/advisor/location", data);
+  },
+  nearby(radius = 700) {
+    return http.get<AdvisorNearbyPlace[]>(`/advisor/nearby?radius=${radius}`);
+  },
+  facts() {
+    return http.get<AdvisorFact[]>("/advisor/facts");
+  },
+  createFact(data: Partial<Omit<AdvisorFact, "id">>) {
+    return http.post<AdvisorFact>("/advisor/facts", data);
+  },
+  updateFact(id: string, data: Partial<Omit<AdvisorFact, "id" | "kind">>) {
+    return http.patch<AdvisorFact>(`/advisor/facts/${id}`, data);
+  },
+  deleteFact(id: string) {
+    return http.delete(`/advisor/facts/${id}`);
+  },
+  seedHolidays() {
+    return http.post<{ added: number }>("/advisor/facts/holidays", {});
+  },
+  questions() {
+    return http.get<AdvisorQuestion[]>("/advisor/questions");
+  },
+  answerQuestion(id: string, data: { answer?: string | null; status?: "DISMISSED" }) {
+    return http.patch<AdvisorQuestion>(`/advisor/questions/${id}`, data);
   },
 };
