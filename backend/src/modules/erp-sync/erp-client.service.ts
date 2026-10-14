@@ -109,6 +109,13 @@ export class ErpClientService {
     return this.request<ErpCreated>('patch', `/customers/${id}`, payload);
   }
 
+  listCustomers() {
+    return this.request<Array<{ id: string; firstName: string; lastName: string }>>(
+      'get',
+      '/customers',
+    );
+  }
+
   createProduct(payload: ErpProductPayload) {
     return this.request<ErpCreated>('post', '/products', payload);
   }

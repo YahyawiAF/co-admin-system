@@ -22,6 +22,8 @@ export function journalToInvoice(
     total,
     amountPaid: 0,
     amountDue: total,
+    // Walk-in visits all share one customer in supply-chain-pro — keep who it was here.
+    notes: journal.guestName ? `Visiteur : ${journal.guestName}` : undefined,
     invoiceItems: [
       {
         productId: externalProductId ?? undefined,

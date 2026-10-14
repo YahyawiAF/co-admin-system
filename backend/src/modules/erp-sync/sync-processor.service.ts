@@ -19,6 +19,14 @@ const BATCH_SIZE = 25;
 // Separates tariffs/abonnements from café/goods in supply-chain-pro's own reporting.
 const TARIF_CATEGORY = { slug: 'coworking-tarifs', name: 'Tarifs & abonnements (coworking)' };
 const GOODS_CATEGORY = { slug: 'coworking-produits', name: 'Produits (café / boutique)' };
+// One shared supply-chain-pro customer for sales with no member (anonymous visits,
+// walk-in café orders) — its Invoice requires a customerId.
+const WALK_IN_CUSTOMER = {
+  firstName: 'Client de passage',
+  lastName: 'Coworking',
+  notes: 'Ventes sans membre (visites anonymes, café) synchronisées depuis co-admin.',
+  sendWelcomeEmail: false,
+};
 // Lower runs first: members/prices/products must exist in supply-chain-pro before an
 // invoice can reference their external ids.
 const ENTITY_PRIORITY: Record<string, number> = {
@@ -215,6 +223,30 @@ export class SyncProcessorService {
     return externalId;
   }
 
+  /** The shared walk-in customer, found by name or created once. Cached via SyncMapping. */
+  private async ensureWalkInCustomer(): Promise<string> {
+    const cached = await this.mapping.get('walkInCustomer', 'default');
+    if (cached) return cached.externalId;
+    const found = (await this.erp.listCustomers()).find(
+      (c) =>
+        c.firstName === WALK_IN_CUSTOMER.firstName &&
+        c.lastName === WALK_IN_CUSTOMER.lastName,
+    );
+    const externalId = found
+      ? found.id
+      : (await this.erp.createCustomer(WALK_IN_CUSTOMER)).id;
+    await this.mapping.set('walkInCustomer', 'default', externalId);
+    return externalId;
+  }
+
+  /** The member's synced customer, or the walk-in customer when there's no member. */
+  private async resolveCustomerId(memberId: string | null): Promise<string> {
+    if (!memberId) return this.ensureWalkInCustomer();
+    const customerMap = await this.mapping.get('member', memberId);
+    if (!customerMap) throw new Error('customer not yet synced — will retry');
+    return customerMap.externalId;
+  }
+
   private async syncPrice(id: string): Promise<void> {
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) return;
@@ -263,18 +295,13 @@ export class SyncProcessorService {
       include: { product: true },
     });
     if (!dailyProduct || dailyProduct.status === 'CANCELLED') return;
-    if (!dailyProduct.memberId) {
-      // Known gap, same as anonymous Journal visits: no "walk-in customer" concept yet.
-      return;
-    }
-    const customerMap = await this.mapping.get('member', dailyProduct.memberId);
-    if (!customerMap) throw new Error('customer not yet synced — will retry');
+    const customerId = await this.resolveCustomerId(dailyProduct.memberId);
     const productMap = await this.mapping.get('product', dailyProduct.productId);
 
     const invoiceMap = await this.mapping.get('dailyProduct', id);
     const payload = dailyProductToInvoice(
       dailyProduct,
-      customerMap.externalId,
+      customerId,
       productMap?.externalId ?? null,
     );
     const invoiceExternalId = await this.upsertInvoice(
@@ -287,7 +314,7 @@ export class SyncProcessorService {
       const already = await this.mapping.get('dailyProductPayment', id);
       if (!already) {
         const paid = await this.erp.createPayment({
-          customerId: customerMap.externalId,
+          customerId,
           invoiceId: invoiceExternalId,
           amount: payload.total,
           paymentMethod: 'cash',
@@ -305,14 +332,13 @@ export class SyncProcessorService {
       include: { payments: true },
     });
     if (!abonnement) return;
-    const customerMap = await this.mapping.get('member', abonnement.memberID);
-    if (!customerMap) throw new Error('customer not yet synced — will retry');
+    const customerId = await this.resolveCustomerId(abonnement.memberID);
     const productMap = await this.mapping.get('price', abonnement.priceId);
 
     const invoiceMap = await this.mapping.get('abonnement', id);
     const payload = abonnementToInvoice(
       abonnement,
-      customerMap.externalId,
+      customerId,
       productMap?.externalId ?? null,
     );
     const invoiceExternalId = await this.upsertInvoice(
@@ -325,7 +351,7 @@ export class SyncProcessorService {
       const already = await this.mapping.get('abonnementPayment', payment.id);
       if (already) continue;
       const paid = await this.erp.createPayment({
-        customerId: customerMap.externalId,
+        customerId: customerId,
         invoiceId: invoiceExternalId,
         amount: payment.amount,
         // Co-admin doesn't record how an abonnement payment was collected yet.
@@ -340,12 +366,9 @@ export class SyncProcessorService {
   private async syncJournal(id: string): Promise<void> {
     const journal = await this.prisma.journal.findUnique({ where: { id } });
     if (!journal) return;
-    if (journal.isAnonymous || !journal.memberID) {
-      // Known V1 gap: no "walk-in customer" concept yet — see plan notes.
-      return;
-    }
-    const customerMap = await this.mapping.get('member', journal.memberID);
-    if (!customerMap) throw new Error('customer not yet synced — will retry');
+    const customerId = await this.resolveCustomerId(
+      journal.isAnonymous ? null : journal.memberID,
+    );
     const productMap = journal.priceId
       ? await this.mapping.get('price', journal.priceId)
       : null;
@@ -353,7 +376,7 @@ export class SyncProcessorService {
     const invoiceMap = await this.mapping.get('journal', id);
     const payload = journalToInvoice(
       journal,
-      customerMap.externalId,
+      customerId,
       productMap?.externalId ?? null,
     );
     const invoiceExternalId = await this.upsertInvoice(
@@ -366,7 +389,7 @@ export class SyncProcessorService {
       const already = await this.mapping.get('journalPayment', id);
       if (!already) {
         const paid = await this.erp.createPayment({
-          customerId: customerMap.externalId,
+          customerId,
           invoiceId: invoiceExternalId,
           amount: journal.paidAmount!,
           paymentMethod: 'cash',
