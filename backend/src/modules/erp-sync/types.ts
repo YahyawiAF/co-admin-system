@@ -69,3 +69,33 @@ export interface ErpPaymentPayload {
 export interface ErpCreated {
   id: string;
 }
+
+export interface ErpOrderItemPayload {
+  productId: string;
+  name: string;
+  sku: string;
+  price: number;
+  quantity: number;
+  total: number;
+}
+
+export interface ErpOrderPayload {
+  customerId: string;
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'returned';
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  total: number;
+  shippingMethod: 'standard' | 'express' | 'overnight' | 'pickup';
+  shippingAddress: Record<string, never>;
+  paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'debit_card' | 'paypal' | 'other';
+  // Deliberately the plain `amountPaid` field, never the `payments` array — supply-chain-pro
+  // only invokes its (best-effort, non-blocking) caisse credit through this path, and never
+  // the stricter one invoices use. No fundSource trick needed here.
+  amountPaid?: number;
+  notes?: string;
+  // Needed once, at creation, so the goods/service "leaves the shelf" there — a 0-stock
+  // tariff product needs this or the (irrelevant for us) stock deduction would fail.
+  allowStockShortage?: boolean;
+  orderItems: ErpOrderItemPayload[];
+}

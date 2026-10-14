@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from 'database/prisma.service';
 import { SyncOutbox } from '@prisma/client';
 import { AxiosError } from 'axios';
-import { ErpInvoicePayload } from './types';
+import { ErpInvoicePayload, ErpOrderPayload } from './types';
 import { ErpClientService } from './erp-client.service';
 import { SyncMappingService } from './sync-mapping.service';
 import { SyncEntityType } from './sync-outbox.service';
@@ -13,6 +13,9 @@ import { abonnementToInvoice } from './mappers/abonnement-to-invoice.mapper';
 import { journalToInvoice } from './mappers/journal-to-invoice.mapper';
 import { productToErpProduct } from './mappers/product-to-product.mapper';
 import { dailyProductToInvoice } from './mappers/daily-product-to-invoice.mapper';
+import { journalToOrder } from './mappers/journal-to-order.mapper';
+import { abonnementToOrder } from './mappers/abonnement-to-order.mapper';
+import { dailyProductToOrder } from './mappers/daily-product-to-order.mapper';
 
 const MAX_ATTEMPTS = 10;
 const BATCH_SIZE = 25;
@@ -289,6 +292,24 @@ export class SyncProcessorService {
     return result.id;
   }
 
+  /**
+   * Create on first sync; on later syncs, only amend amounts/notes — never resend
+   * orderItems/status/shippingAddress, which would re-trigger delivery/stock side effects
+   * supply-chain-pro's own order.service.ts runs when those fields change.
+   */
+  private async upsertOrder(
+    existingExternalId: string | undefined,
+    payload: ErpOrderPayload,
+  ): Promise<string> {
+    if (existingExternalId) {
+      const { subtotal, tax, total, notes } = payload;
+      await this.erp.updateOrder(existingExternalId, { subtotal, tax, total, notes });
+      return existingExternalId;
+    }
+    const result = await this.erp.createOrder(payload);
+    return result.id;
+  }
+
   private async syncDailyProduct(id: string): Promise<void> {
     const dailyProduct = await this.prisma.dailyProduct.findUnique({
       where: { id },
@@ -323,6 +344,21 @@ export class SyncProcessorService {
         });
         await this.mapping.set('dailyProductPayment', id, paid.id);
       }
+    }
+
+    if (!productMap) throw new Error('product not yet synced — will retry');
+    const orderMap = await this.mapping.get('dailyProductOrder', id);
+    const orderPayload = dailyProductToOrder(
+      dailyProduct,
+      customerId,
+      productMap.externalId,
+    );
+    if (orderPayload) {
+      const orderExternalId = await this.upsertOrder(
+        orderMap?.externalId,
+        orderPayload,
+      );
+      await this.mapping.set('dailyProductOrder', id, orderExternalId);
     }
   }
 
@@ -361,6 +397,21 @@ export class SyncProcessorService {
       });
       await this.mapping.set('abonnementPayment', payment.id, paid.id);
     }
+
+    if (!productMap) throw new Error('product not yet synced — will retry');
+    const orderMap = await this.mapping.get('abonnementOrder', id);
+    const orderPayload = abonnementToOrder(
+      abonnement,
+      customerId,
+      productMap.externalId,
+    );
+    if (orderPayload) {
+      const orderExternalId = await this.upsertOrder(
+        orderMap?.externalId,
+        orderPayload,
+      );
+      await this.mapping.set('abonnementOrder', id, orderExternalId);
+    }
   }
 
   private async syncJournal(id: string): Promise<void> {
@@ -397,6 +448,23 @@ export class SyncProcessorService {
           paymentDate: (journal.paidAt ?? journal.registredTime).toISOString(),
         });
         await this.mapping.set('journalPayment', id, paid.id);
+      }
+    }
+
+    if (journal.priceId) {
+      if (!productMap) throw new Error('product not yet synced — will retry');
+      const orderMap = await this.mapping.get('journalOrder', id);
+      const orderPayload = journalToOrder(
+        journal,
+        customerId,
+        productMap.externalId,
+      );
+      if (orderPayload) {
+        const orderExternalId = await this.upsertOrder(
+          orderMap?.externalId,
+          orderPayload,
+        );
+        await this.mapping.set('journalOrder', id, orderExternalId);
       }
     }
   }

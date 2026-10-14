@@ -8,6 +8,7 @@ import {
   ErpCreated,
   ErpCustomerPayload,
   ErpInvoicePayload,
+  ErpOrderPayload,
   ErpPaymentPayload,
   ErpProductPayload,
 } from './types';
@@ -148,5 +149,13 @@ export class ErpClientService {
 
   createCategory(payload: ErpCategoryPayload) {
     return this.request<ErpCreated>('post', '/categories', payload);
+  }
+
+  createOrder(payload: ErpOrderPayload) {
+    return this.request<ErpCreated>('post', '/orders', payload);
+  }
+
+  updateOrder(id: string, payload: Partial<ErpOrderPayload>) {
+    return this.request<ErpCreated>('patch', `/orders/${id}`, payload);
   }
 }
