@@ -1,6 +1,12 @@
 import { DailyProduct, Product } from '@prisma/client';
 import { ErpInvoicePayload } from '../types';
 
+/**
+ * Builds the sale record only — amountPaid/amountDue start at the unpaid baseline.
+ * Actual money collected (if dailyProduct.isPayed) is recorded separately via a
+ * Payment (see SyncProcessorService), which is how supply-chain-pro itself updates
+ * amountPaid/amountDue/paymentStatus.
+ */
 export function dailyProductToInvoice(
   dailyProduct: DailyProduct & { product: Product },
   externalCustomerId: string,
@@ -8,7 +14,6 @@ export function dailyProductToInvoice(
 ): ErpInvoicePayload {
   const unitPrice = dailyProduct.unitPrice ?? dailyProduct.product.sellingPrice;
   const total = Math.round(unitPrice * dailyProduct.quantite * 100) / 100;
-  const amountPaid = dailyProduct.isPayed ? total : 0;
   const issueDate = (dailyProduct.date ?? dailyProduct.createdAt).toISOString();
   return {
     customerId: externalCustomerId,
@@ -17,9 +22,8 @@ export function dailyProductToInvoice(
     subtotal: total,
     tax: 0,
     total,
-    amountPaid,
-    amountDue: Math.max(0, Math.round((total - amountPaid) * 100) / 100),
-    paymentStatus: amountPaid >= total && total > 0 ? 'paid' : 'pending',
+    amountPaid: 0,
+    amountDue: total,
     invoiceItems: [
       {
         productId: externalProductId ?? undefined,

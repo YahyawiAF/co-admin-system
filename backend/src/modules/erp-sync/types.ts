@@ -33,9 +33,13 @@ export interface ErpInvoicePayload {
   subtotal: number;
   tax: number;
   total: number;
+  // Deliberately NOT 'paid'/amountPaid at create/update time: supply-chain-pro's own
+  // invoice.service.ts auto-credits its cash drawer whenever paymentStatus is 'paid',
+  // which requires an open caisse session there. The actual payment is recorded
+  // separately via ErpPaymentPayload (fundSource: 'UNDECLARED'), which updates the
+  // invoice's amountPaid/amountDue/paymentStatus on its own, without that side effect.
   amountPaid?: number;
   amountDue: number;
-  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded';
   notes?: string;
   invoiceItems: ErpInvoiceItemPayload[];
 }
@@ -45,6 +49,11 @@ export interface ErpPaymentPayload {
   invoiceId?: string;
   amount: number;
   paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'debit_card' | 'paypal' | 'other';
+  // 'UNDECLARED' tells supply-chain-pro this money isn't moving through its own cash
+  // drawer/vault/treasury — it was already handled in co-admin's own caisse. Without
+  // this, a 'cash' paymentMethod defaults to CAISSE_DRAWER and requires an open
+  // caisse session on the supply-chain-pro side, which has nothing to do with this sync.
+  fundSource?: 'CAISSE_DRAWER' | 'CAISSE_VAULT' | 'TREASURY_ACCOUNT' | 'UNDECLARED';
   paymentDate?: string;
   reference?: string;
   notes?: string;

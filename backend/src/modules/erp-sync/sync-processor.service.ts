@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from 'database/prisma.service';
 import { SyncOutbox } from '@prisma/client';
+import { ErpInvoicePayload } from './types';
 import { ErpClientService } from './erp-client.service';
 import { SyncMappingService } from './sync-mapping.service';
 import { SyncEntityType } from './sync-outbox.service';
@@ -190,6 +191,24 @@ export class SyncProcessorService {
     await this.mapping.set('product', id, existing?.externalId ?? result.id);
   }
 
+  /**
+   * Create on first sync; on later syncs, re-send everything except
+   * amountDue/amountPaid — those are owned by the Payment flow from here on,
+   * and resending the unpaid baseline would undo what a Payment already set.
+   */
+  private async upsertInvoice(
+    existingExternalId: string | undefined,
+    payload: ErpInvoicePayload,
+  ): Promise<string> {
+    if (existingExternalId) {
+      const { amountDue, amountPaid, ...updatePayload } = payload;
+      await this.erp.updateInvoice(existingExternalId, updatePayload);
+      return existingExternalId;
+    }
+    const result = await this.erp.createInvoice(payload);
+    return result.id;
+  }
+
   private async syncDailyProduct(id: string): Promise<void> {
     const dailyProduct = await this.prisma.dailyProduct.findUnique({
       where: { id },
@@ -210,10 +229,10 @@ export class SyncProcessorService {
       customerMap.externalId,
       productMap?.externalId ?? null,
     );
-    const result = invoiceMap
-      ? await this.erp.updateInvoice(invoiceMap.externalId, payload)
-      : await this.erp.createInvoice(payload);
-    const invoiceExternalId = invoiceMap?.externalId ?? result.id;
+    const invoiceExternalId = await this.upsertInvoice(
+      invoiceMap?.externalId,
+      payload,
+    );
     await this.mapping.set('dailyProduct', id, invoiceExternalId);
 
     if (dailyProduct.isPayed) {
@@ -224,6 +243,7 @@ export class SyncProcessorService {
           invoiceId: invoiceExternalId,
           amount: payload.total,
           paymentMethod: 'cash',
+          fundSource: 'UNDECLARED',
           paymentDate: (dailyProduct.date ?? dailyProduct.createdAt).toISOString(),
         });
         await this.mapping.set('dailyProductPayment', id, paid.id);
@@ -247,10 +267,10 @@ export class SyncProcessorService {
       customerMap.externalId,
       productMap?.externalId ?? null,
     );
-    const result = invoiceMap
-      ? await this.erp.updateInvoice(invoiceMap.externalId, payload)
-      : await this.erp.createInvoice(payload);
-    const invoiceExternalId = invoiceMap?.externalId ?? result.id;
+    const invoiceExternalId = await this.upsertInvoice(
+      invoiceMap?.externalId,
+      payload,
+    );
     await this.mapping.set('abonnement', id, invoiceExternalId);
 
     for (const payment of abonnement.payments) {
@@ -262,6 +282,7 @@ export class SyncProcessorService {
         amount: payment.amount,
         // Co-admin doesn't record how an abonnement payment was collected yet.
         paymentMethod: 'cash',
+        fundSource: 'UNDECLARED',
         paymentDate: payment.paidAt.toISOString(),
       });
       await this.mapping.set('abonnementPayment', payment.id, paid.id);
@@ -287,10 +308,10 @@ export class SyncProcessorService {
       customerMap.externalId,
       productMap?.externalId ?? null,
     );
-    const result = invoiceMap
-      ? await this.erp.updateInvoice(invoiceMap.externalId, payload)
-      : await this.erp.createInvoice(payload);
-    const invoiceExternalId = invoiceMap?.externalId ?? result.id;
+    const invoiceExternalId = await this.upsertInvoice(
+      invoiceMap?.externalId,
+      payload,
+    );
     await this.mapping.set('journal', id, invoiceExternalId);
 
     if ((journal.paidAmount ?? 0) > 0) {
@@ -301,6 +322,7 @@ export class SyncProcessorService {
           invoiceId: invoiceExternalId,
           amount: journal.paidAmount!,
           paymentMethod: 'cash',
+          fundSource: 'UNDECLARED',
           paymentDate: (journal.paidAt ?? journal.registredTime).toISOString(),
         });
         await this.mapping.set('journalPayment', id, paid.id);
