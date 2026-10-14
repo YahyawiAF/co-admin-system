@@ -15,6 +15,9 @@ import { dailyProductToInvoice } from './mappers/daily-product-to-invoice.mapper
 
 const MAX_ATTEMPTS = 10;
 const BATCH_SIZE = 25;
+// Separates tariffs/abonnements from café/goods in supply-chain-pro's own reporting.
+const TARIF_CATEGORY = { slug: 'coworking-tarifs', name: 'Tarifs & abonnements (coworking)' };
+const GOODS_CATEGORY = { slug: 'coworking-produits', name: 'Produits (café / boutique)' };
 // Lower runs first: members/prices/products must exist in supply-chain-pro before an
 // invoice can reference their external ids.
 const ENTITY_PRIORITY: Record<string, number> = {
@@ -169,11 +172,27 @@ export class SyncProcessorService {
     await this.mapping.set('member', id, existing?.externalId ?? result.id);
   }
 
+  /** Looks up a category by slug, creating it once if missing. Cached via SyncMapping. */
+  private async ensureCategory(category: {
+    slug: string;
+    name: string;
+  }): Promise<string> {
+    const cached = await this.mapping.get('category', category.slug);
+    if (cached) return cached.externalId;
+    const found = await this.erp.getCategoryBySlug(category.slug);
+    const externalId = found
+      ? found.id
+      : (await this.erp.createCategory(category)).id;
+    await this.mapping.set('category', category.slug, externalId);
+    return externalId;
+  }
+
   private async syncPrice(id: string): Promise<void> {
     const price = await this.prisma.price.findUnique({ where: { id } });
     if (!price) return;
     const existing = await this.mapping.get('price', id);
-    const payload = priceToProduct(price);
+    const categoryId = await this.ensureCategory(TARIF_CATEGORY);
+    const payload = { ...priceToProduct(price), categoryId };
     const result = existing
       ? await this.erp.updateProduct(existing.externalId, payload)
       : await this.erp.createProduct(payload);
@@ -184,7 +203,8 @@ export class SyncProcessorService {
     const product = await this.prisma.product.findUnique({ where: { id } });
     if (!product) return;
     const existing = await this.mapping.get('product', id);
-    const payload = productToErpProduct(product);
+    const categoryId = await this.ensureCategory(GOODS_CATEGORY);
+    const payload = { ...productToErpProduct(product), categoryId };
     const result = existing
       ? await this.erp.updateProduct(existing.externalId, payload)
       : await this.erp.createProduct(payload);

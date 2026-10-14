@@ -16,6 +16,13 @@ export interface ErpProductPayload {
   sellingPrice?: number;
   purchasePrice?: number;
   stock?: number;
+  categoryId?: string;
+}
+
+export interface ErpCategoryPayload {
+  name: string;
+  slug: string;
+  description?: string;
 }
 
 export interface ErpInvoiceItemPayload {

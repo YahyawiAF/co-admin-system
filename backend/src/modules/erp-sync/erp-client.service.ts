@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { AxiosError } from 'axios';
 import {
+  ErpCategoryPayload,
   ErpCreated,
   ErpCustomerPayload,
   ErpInvoicePayload,
@@ -126,5 +127,19 @@ export class ErpClientService {
 
   createPayment(payload: ErpPaymentPayload) {
     return this.request<ErpCreated>('post', '/sales/payments', payload);
+  }
+
+  async getCategoryBySlug(slug: string): Promise<ErpCreated | null> {
+    // Not /categories/slug/:slug — that endpoint 500s (not 404) on a miss there,
+    // which isn't distinguishable from a real error. Listing and filtering is safe.
+    const categories = await this.request<Array<{ id: string; slug: string }>>(
+      'get',
+      '/categories',
+    );
+    return categories.find((c) => c.slug === slug) ?? null;
+  }
+
+  createCategory(payload: ErpCategoryPayload) {
+    return this.request<ErpCreated>('post', '/categories', payload);
   }
 }
