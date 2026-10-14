@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { ConfigModule } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
+import { JwtAuthGuard } from 'common/guards/accessToken.guard';
 import { PrismaService } from 'database/prisma.service';
 import { ErpClientService } from './erp-client.service';
 import { SyncOutboxService } from './sync-outbox.service';
 import { SyncMappingService } from './sync-mapping.service';
 import { SyncProcessorService } from './sync-processor.service';
+import { SyncHealthService } from './sync-health.service';
+import { ErpSyncController } from './erp-sync.controller';
 
 /**
  * Bridge to supply-chain-pro: pushes members/tariffs/abonnements/journals there as
@@ -16,13 +20,17 @@ import { SyncProcessorService } from './sync-processor.service';
   imports: [
     HttpModule.register({ timeout: 15000, maxRedirects: 0 }),
     ConfigModule.forRoot(),
+    JwtModule.register({ secret: process.env.JWT_ACCESS_SECRET }),
   ],
+  controllers: [ErpSyncController],
   providers: [
     PrismaService,
     ErpClientService,
     SyncOutboxService,
     SyncMappingService,
     SyncProcessorService,
+    SyncHealthService,
+    JwtAuthGuard,
   ],
   exports: [SyncOutboxService],
 })

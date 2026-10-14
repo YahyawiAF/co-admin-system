@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from 'database/prisma.service';
 import { SyncOutbox } from '@prisma/client';
+import { AxiosError } from 'axios';
 import { ErpInvoicePayload } from './types';
 import { ErpClientService } from './erp-client.service';
 import { SyncMappingService } from './sync-mapping.service';
@@ -28,6 +29,23 @@ const ENTITY_PRIORITY: Record<string, number> = {
   journal: 1,
   dailyProduct: 1,
 };
+
+/** Axios only says "status code 400" — append supply-chain-pro's own explanation from the body. */
+function describeError(error: unknown): string {
+  const base = (error as Error)?.message || 'Unknown error';
+  const data = (error as AxiosError)?.response?.data as
+    | { message?: unknown }
+    | string
+    | undefined;
+  if (!data) return base;
+  const detail =
+    typeof data === 'string'
+      ? data
+      : typeof data.message === 'string' || Array.isArray(data.message)
+        ? [data.message].flat().join('; ')
+        : JSON.stringify(data);
+  return `${base} — ${detail}`;
+}
 
 /** Drains SyncOutbox into supply-chain-pro, and runs a daily reconciliation sweep. */
 @Injectable()
@@ -144,9 +162,19 @@ export class SyncProcessorService {
         where: { id: row.id },
         data: { status: 'SYNCED' },
       });
+      // Earlier failures for this entity are resolved now — keep FAILED meaning "still broken".
+      await this.prisma.syncOutbox.updateMany({
+        where: {
+          entityType: row.entityType,
+          entityId: row.entityId,
+          status: 'FAILED',
+          createdAt: { lt: row.createdAt },
+        },
+        data: { status: 'SUPERSEDED' },
+      });
     } catch (error) {
       const attempts = row.attempts + 1;
-      const message = (error as Error).message?.slice(0, 500) || 'Unknown error';
+      const message = describeError(error).slice(0, 500);
       this.logger.warn(
         `Sync failed for ${row.entityType}:${row.entityId} (attempt ${attempts}) — ${message}`,
       );

@@ -1342,7 +1342,7 @@ model SyncOutbox {
   entityId   String
   /// CREATE | UPDATE
   operation  String
-  /// PENDING | SYNCED | FAILED
+  /// PENDING | SYNCED | FAILED | SUPERSEDED (failed, but the entity synced later)
   status     String   @default("PENDING")
   attempts   Int      @default(0)
   lastError  String?
