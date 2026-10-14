@@ -9,7 +9,7 @@ import { SyncHealthService } from './sync-health.service';
 @Controller('erp-sync')
 @ApiTags('ERP sync')
 @ApiBearerAuth()
-@Roles([Role.ADMIN])
+@Roles([Role.ADMIN, Role.SUPER_ADMIN, Role.ORG_ADMIN])
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ErpSyncController {
   constructor(private readonly health: SyncHealthService) {}
