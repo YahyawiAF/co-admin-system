@@ -11,6 +11,18 @@ export const RECOMMENDATION_CATEGORIES = [
   'OPERATIONS',
 ] as const;
 
+export const OUTREACH_SEGMENTS = [
+  'NONE',
+  'ABO_EXPIRING',
+  'ABO_ENDED',
+  'INACTIVE',
+  'TOP_UP',
+  'CONVERT',
+  'UNPAID',
+  'RECENT_30',
+  'ALL',
+] as const;
+
 export type AdvisorRecommendation = {
   category: (typeof RECOMMENDATION_CATEGORIES)[number];
   priority: 'high' | 'medium' | 'low';
@@ -20,6 +32,8 @@ export type AdvisorRecommendation = {
   actions: string[];
   expectedImpact: string;
   measure: string;
+  /** Clients to contact for this idea and the ready-to-send message (segment NONE = no relance). */
+  outreach?: { segment: (typeof OUTREACH_SEGMENTS)[number]; message: string };
 };
 
 export type AdvisorResult = {
@@ -68,6 +82,7 @@ export const RESULT_SCHEMA = {
           'actions',
           'expectedImpact',
           'measure',
+          'outreach',
         ],
         properties: {
           category: { type: 'string', enum: [...RECOMMENDATION_CATEGORIES] },
@@ -78,6 +93,15 @@ export const RESULT_SCHEMA = {
           actions: { type: 'array', items: str },
           expectedImpact: str,
           measure: str,
+          outreach: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['segment', 'message'],
+            properties: {
+              segment: { type: 'string', enum: [...OUTREACH_SEGMENTS] },
+              message: str,
+            },
+          },
         },
       },
     },
@@ -124,6 +148,8 @@ Règles :
 - Adapte les offres et les prix au budget de chaque public décrit dans audiences ; si un public vient peu parce que c'est trop cher, propose une formule abordable sans casser les prix des autres clients, et dis comment la mesurer.
 - Utilise ownerAnswers comme des faits. Ne repose pas une question déjà répondue. Ne pose une nouvelle question que si la réponse changerait une recommandation.
 - Si une donnée de missingInfo t'empêche de conclure sur un point important, demande-la dans questions.
+- outreach : si l'idée passe par un message aux clients, choisis la liste à contacter (outreachLists donne leur taille : ABO_EXPIRING abonnement qui finit, ABO_ENDED pas renouvelé, INACTIVE habitué absent, TOP_UP a déjà payé la moitié d'un abonnement en passes, CONVERT passes au rythme d'un abonnement, UNPAID impayé, RECENT_30 venus ces 30 jours, ALL tous les membres) et écris le message WhatsApp prêt à envoyer : commence par « Bonjour {prenom}, », 2 à 4 phrases, l'offre exacte avec le prix en DT, tutoiement interdit. Sinon segment NONE et message vide. N'utilise pas une liste vide.
+- campaigns : relances déjà faites et leur résultat (contacted, won, revenue). Tiens-en compte pour ne pas relancer les mêmes personnes trop tôt et pour juger ce qui marche.
 - Appuie chaque recommandation sur des chiffres précis de l'instantané (champ evidence). N'invente aucun chiffre. Si une donnée manque, dis-le ou pose la question dans "questions".
 - Tiens compte du contexte écrit par le propriétaire (facility.ownerContext) quand il existe.
 - Donne des actions concrètes, faisables cette semaine, avec des prix en DT cohérents avec le catalogue.
@@ -168,6 +194,7 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
     value = JSON.parse(startAt >= 0 ? text.slice(startAt, endAt + 1) : text);
   }
   const r = value as Partial<AdvisorResult> | null;
+  const segments = OUTREACH_SEGMENTS as readonly string[];
   if (
     !r ||
     typeof r.summary !== 'string' ||
@@ -187,6 +214,10 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
     recommendations: r.recommendations.map((x) => ({
       ...x,
       actions: Array.isArray(x.actions) ? x.actions : [],
+      outreach:
+        x.outreach && segments.includes(x.outreach.segment) && typeof x.outreach.message === 'string'
+          ? x.outreach
+          : { segment: 'NONE' as const, message: '' },
     })),
     initiativeReviews: Array.isArray(r.initiativeReviews) ? r.initiativeReviews : [],
     questions: Array.isArray(r.questions) ? r.questions : [],

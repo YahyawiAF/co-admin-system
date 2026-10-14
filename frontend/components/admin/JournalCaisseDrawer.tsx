@@ -18,7 +18,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { mobileApi, type DailyProduct } from "@/lib/api/resources";
+import { mobileApi, orderUnitPrice, type DailyProduct } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Journal, LateBillingMode } from "@/lib/types";
 import {
@@ -155,7 +155,7 @@ export function JournalCaisseDrawer({
         return !mid && !!dp.journalId && visitIds.has(dp.journalId);
       });
       card.ordersTotal = card.orders.reduce(
-        (s, dp) => s + (dp.product?.sellingPrice || 0) * (dp.quantite || 0),
+        (s, dp) => s + orderUnitPrice(dp) * (dp.quantite || 0),
         0
       );
       card.total = round1(
@@ -353,7 +353,7 @@ export function JournalCaisseDrawer({
                         {dp.quantite}× {dp.product?.name || "Produit"}
                       </span>
                       <span className="tabular-nums">
-                        {money((dp.product?.sellingPrice || 0) * (dp.quantite || 0))}
+                        {money(orderUnitPrice(dp) * (dp.quantite || 0))}
                       </span>
                     </li>
                   ))}

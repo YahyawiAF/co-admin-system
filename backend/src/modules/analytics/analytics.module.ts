@@ -7,11 +7,12 @@ import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService } from './performance.service';
 import { OutreachService } from './outreach.service';
+import { CampaignService } from './campaign.service';
 
 @Module({
   imports: [MemberModule, ExpensesModule, PushModule],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, PerformanceService, OutreachService, PrismaService],
-  exports: [AnalyticsService, PerformanceService],
+  providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, PrismaService],
+  exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService],
 })
 export class AnalyticsModule {}

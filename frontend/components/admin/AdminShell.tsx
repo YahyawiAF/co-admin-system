@@ -20,6 +20,7 @@ import {
   Wallet,
   Megaphone,
   Sparkles,
+  BadgePercent,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { outreachApi } from "@/lib/api/resources";
@@ -44,6 +45,7 @@ const NAV = [
   { href: "/journal", label: "Journal", icon: ClipboardList },
   { href: "/relances", label: "Relances", icon: Megaphone },
   { href: "/conseiller", label: "Conseiller IA", icon: Sparkles },
+  { href: "/promotions", label: "Promotions", icon: BadgePercent },
   { href: "/impayes", label: "Impayés", icon: Wallet },
   { href: "/reservations", label: "Réservations", icon: Calendar },
   { href: "/abonnements", label: "Abonnements", icon: CreditCard },

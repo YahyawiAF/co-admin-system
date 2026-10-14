@@ -224,3 +224,11 @@
   animation: trophyRevealPointsPop 0.55s 0.15s cubic-bezier(0.22, 1, 0.36, 1)
     both;
 }
+
+/* Golden card promo: diagonal shine sweeping across */
+@keyframes promo-shine {
+  0% { transform: translateX(0) rotate(12deg); opacity: 0; }
+  15% { opacity: 1; }
+  60% { transform: translateX(420%) rotate(12deg); opacity: 0; }
+  100% { transform: translateX(420%) rotate(12deg); opacity: 0; }
+}

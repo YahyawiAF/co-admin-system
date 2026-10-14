@@ -202,3 +202,150 @@ export async function computeOffers(
   }
   return out;
 }
+
+export type TopUpOffer = {
+  memberId: string;
+  plan: {
+    id: string;
+    name: string;
+    price: number;
+    periodDays: number;
+    durationHours: number | null;
+  };
+  /** Passes paid inside the plan period (DT) — deducted from the abonnement. */
+  paid: number;
+  /** What the client still has to pay. */
+  remaining: number;
+  /** paid / price, in % */
+  paidPct: number;
+  visitDays: number;
+  /** First paid visit counted (yyyy-MM-dd): the backdated start option. */
+  firstVisit: string;
+  headline: string;
+};
+
+/** Share of the abonnement already paid in passes from which the top-up is proposed. */
+export const TOP_UP_MIN_RATIO = 0.5;
+
+/**
+ * Clients without an abonnement whose paid passes over the last plan period already
+ * cover a good share of it: "pay the rest and become a subscriber".
+ */
+export async function computeTopUps(
+  prisma: PrismaService,
+  now = new Date(),
+  minRatio = TOP_UP_MIN_RATIO,
+): Promise<Map<string, TopUpOffer>> {
+  const out = new Map<string, TopUpOffer>();
+  const today = startOfDay(now);
+  const [plans, activeAbos] = await Promise.all([
+    prisma.price.findMany({
+      where: {
+        type: 'abonnement',
+        isActive: true,
+        billingUnit: 'PERIOD',
+        periodDays: { gt: 0 },
+        price: { gt: 0 },
+      },
+      select: { id: true, name: true, price: true, periodDays: true, durationHours: true },
+    }),
+    prisma.abonnement.findMany({
+      where: { isReservation: false, leaveDate: { gte: now } },
+      select: { memberID: true },
+    }),
+  ]);
+  if (!plans.length) return out;
+  const longest = Math.max(...plans.map((p) => p.periodDays!));
+  const visits = await prisma.journal.findMany({
+    where: {
+      registredTime: { gte: subDays(today, longest - 1) },
+      isReservation: false,
+      isPayed: true,
+      memberID: { not: null },
+    },
+    select: {
+      memberID: true,
+      registredTime: true,
+      leaveTime: true,
+      payedAmount: true,
+      fixedDurationHours: true,
+      members: {
+        select: {
+          discountAbonnement: true,
+          group: { select: { discountAbonnement: true } },
+        },
+      },
+    },
+  });
+  const subscribed = new Set(activeAbos.map((a) => a.memberID));
+  const byMember = new Map<string, typeof visits>();
+  for (const v of visits) {
+    if (subscribed.has(v.memberID!) || !(v.payedAmount > 0)) continue;
+    const list = byMember.get(v.memberID!) || [];
+    list.push(v);
+    byMember.set(v.memberID!, list);
+  }
+
+  for (const [memberId, list] of byMember) {
+    const hoursByDay = new Map<string, number>();
+    for (const v of list) {
+      const hours = v.leaveTime
+        ? (visitEnd(v, now).getTime() - v.registredTime.getTime()) / HOUR_MS
+        : v.fixedDurationHours || (now.getTime() - v.registredTime.getTime()) / HOUR_MS;
+      const k = localDayKey(v.registredTime);
+      hoursByDay.set(k, (hoursByDay.get(k) || 0) + Math.max(0, Math.min(24, hours)));
+    }
+    const typicalHours = median([...hoursByDay.values()]);
+    const discount =
+      list[0].members?.discountAbonnement ?? list[0].members?.group?.discountAbonnement ?? 0;
+
+    let best: { plan: (typeof plans)[number]; price: number; paid: number; first: Date; days: number } | null = null;
+    for (const plan of plans) {
+      if (plan.durationHours != null && plan.durationHours < typicalHours * 0.9) continue;
+      const since = subDays(today, plan.periodDays! - 1);
+      const inWindow = list.filter((v) => v.registredTime >= since);
+      if (!inWindow.length) continue;
+      const paid = inWindow.reduce((a, v) => a + (v.payedAmount || 0), 0);
+      const price = round1(plan.price * (1 - discount / 100));
+      const ratio = paid / price;
+      if (ratio < minRatio) continue;
+      const bestRatio = best ? best.paid / best.price : 0;
+      if (
+        !best ||
+        ratio > bestRatio + 0.0001 ||
+        (Math.abs(ratio - bestRatio) < 0.0001 && plan.periodDays! > best.plan.periodDays!)
+      ) {
+        best = {
+          plan,
+          price,
+          paid,
+          first: inWindow.reduce((a, v) => (v.registredTime < a ? v.registredTime : a), inWindow[0].registredTime),
+          days: new Set(inWindow.map((v) => localDayKey(v.registredTime))).size,
+        };
+      }
+    }
+    if (!best) continue;
+    const remaining = round1(Math.max(0, best.price - best.paid));
+    const paidPct = Math.round((best.paid / best.price) * 100);
+    out.set(memberId, {
+      memberId,
+      plan: {
+        id: best.plan.id,
+        name: best.plan.name,
+        price: best.price,
+        periodDays: best.plan.periodDays!,
+        durationHours: best.plan.durationHours,
+      },
+      paid: round1(best.paid),
+      remaining,
+      paidPct,
+      visitDays: best.days,
+      firstVisit: localDayKey(best.first),
+      headline:
+        remaining <= 0
+          ? `A déjà payé ${dt(best.paid)} en passes, plus que « ${best.plan.name} » (${dt(best.price)})`
+          : `A déjà payé ${dt(best.paid)} sur ${dt(best.price)} (${paidPct} %) · reste ${dt(remaining)} pour « ${best.plan.name} »`,
+    });
+  }
+  return out;
+}

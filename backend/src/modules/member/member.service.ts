@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { orderUnitPrice } from '../product/order-price';
 import { PrismaService } from '../../../database/prisma.service';
 import { AddMemberDto } from './dtos/createMember.dto';
 import { UpdateMemberDto } from './dtos/updateMember.dto';
@@ -245,7 +246,7 @@ export class MemberService {
     }
 
     const spendCafe = orders.reduce(
-      (s, o) => s + (o.product?.sellingPrice || 0) * o.quantite,
+      (s, o) => s + orderUnitPrice(o) * o.quantite,
       0,
     );
     const spendSubs = abos.reduce((s, a) => s + (a.payedAmount || 0), 0);
@@ -311,7 +312,7 @@ export class MemberService {
       const spend =
         weekJ.reduce((s, j) => s + (j.payedAmount || 0), 0) +
         weekO.reduce(
-          (s, o) => s + (o.product?.sellingPrice || 0) * o.quantite,
+          (s, o) => s + orderUnitPrice(o) * o.quantite,
           0,
         );
       return {
@@ -428,7 +429,7 @@ export class MemberService {
         createdAt: o.createdAt,
         productName: o.product?.name || 'Produit',
         quantity: o.quantite,
-        amount: (o.product?.sellingPrice || 0) * o.quantite,
+        amount: orderUnitPrice(o) * o.quantite,
         isPayed: o.isPayed,
       })),
       subscriptions: abos.map((a) => ({

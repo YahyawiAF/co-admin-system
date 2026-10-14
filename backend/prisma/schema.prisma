@@ -211,6 +211,8 @@ model MemberOutreach {
   /// WHATSAPP | PUSH | CALL | SKIP
   channel   String
   message   String?
+  /// Set when the contact belongs to a relance campaign (e.g. from an AI suggestion)
+  campaignId String?
   createdAt DateTime @default(now())
 
   @@index([memberId, createdAt])
@@ -271,6 +273,7 @@ model Price {
   journals            Journal[]
   visitRequests       VisitRequest[]
   appInstallPromos    AppInstallPromo[]
+  promotions          Promotion[]
   history             PriceHistory[]
 
   @@index([organizationId])
@@ -460,6 +463,7 @@ model Product {
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   dailyProducts  DailyProduct[]
+  promotions     Promotion[]
 
   @@index([organizationId])
   @@map("products")
@@ -478,6 +482,9 @@ model DailyProduct {
   journalId     String?
   status        ProductOrderStatus @default(CONFIRMED)
   isPayed       Boolean            @default(false)
+  /// Price charged per unit (after promotion); null = product.sellingPrice
+  unitPrice     Float?
+  promotionId   String?
   syncedAt      DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
@@ -656,6 +663,8 @@ model Facility {
   initiatives                 BusinessInitiative[]
   advisorFacts                AdvisorFact[]
   advisorQuestions            AdvisorQuestion[]
+  promotions                  Promotion[]
+  outreachCampaigns           OutreachCampaign[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -1240,4 +1249,86 @@ model AdvisorQuestion {
 
   @@unique([facilityId, key])
   @@map("advisor_questions")
+}
+
+/// Flash offer shown to members as a "golden card" popup; the discount applies automatically
+model Promotion {
+  id               String         @id @default(uuid())
+  facilityId       String
+  facility         Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  /// PRODUCT (café…) | PRICE (pass / tarif) | OTHER (free offer, reception applies it)
+  target           String
+  productId        String?
+  product          Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  priceId          String?
+  price            Price?         @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  valueKind        PromoValueKind @default(PERCENT)
+  value            Float
+  startsAt         DateTime
+  endsAt           DateTime?
+  /// 0 = Sunday … 6 = Saturday; empty = every day
+  daysOfWeek       Int[]          @default([])
+  /// Happy hour, e.g. 14 → 17; null = all day
+  fromHour         Int?
+  toHour           Int?
+  /// ALL | IN_SESSION (only members currently on site)
+  audience         String         @default("ALL")
+  maxUsesPerMember Int?
+  maxUses          Int?
+  /// GOLD | VIOLET | GREEN
+  style            String         @default("GOLD")
+  isActive         Boolean        @default(true)
+  views            Int            @default(0)
+  clicks           Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  uses             PromotionUse[]
+
+  @@index([facilityId, isActive])
+  @@map("promotions")
+}
+
+model PromotionUse {
+  id             String    @id @default(uuid())
+  promotionId    String
+  promotion      Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  memberId       String?
+  dailyProductId String?
+  journalId      String?
+  /// Amount charged after the discount (DT)
+  amount         Float
+  /// Discount given (DT)
+  discount       Float
+  createdAt      DateTime  @default(now())
+
+  @@index([promotionId, memberId])
+  @@map("promotion_uses")
+}
+
+/// A saved relance: a frozen list of clients + a message, with progress tracking
+model OutreachCampaign {
+  id                  String    @id @default(uuid())
+  facilityId          String
+  facility            Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title               String
+  /// Template; {prenom} is replaced by each client's first name
+  message             String
+  /// ABO_EXPIRING | ABO_ENDED | INACTIVE | CONVERT | TOP_UP | UNPAID | RECENT_30 | ALL | GROUP
+  segment             String
+  memberGroupId       String?
+  memberIds           String[]  @default([])
+  /// VISIT | SUBSCRIPTION | ANY — what counts as a result
+  goal                String    @default("ANY")
+  /// ACTIVE | DONE
+  status              String    @default("ACTIVE")
+  sourceReportId      String?
+  recommendationTitle String?
+  initiativeId        String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([facilityId, createdAt])
+  @@map("outreach_campaigns")
 }

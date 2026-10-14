@@ -34,6 +34,7 @@ import {
   StartSessionCard,
 } from "@/components/visitor/StartSessionCard";
 import { EventsPreview } from "@/components/visitor/EventCard";
+import { OffersStrip } from "@/components/visitor/VisitorSpotlight";
 import { SubscriptionStatusCard } from "@/components/visitor/SubscriptionStatusCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { spacesForPrice } from "@/lib/space-occupy";
@@ -68,6 +69,11 @@ export default function MobileHomePage() {
     isPlaceholderData: statusIsPlaceholder,
   } = useMobileStatus();
   const qrAutoStartedRef = useRef(false);
+  /** QR flag read before anything clears it: a scan while a session runs means "leaving?" */
+  const qrAtLoadRef = useRef(
+    typeof window !== "undefined" && hasRecentQrEntry(slug)
+  );
+  const [leavePrompt, setLeavePrompt] = useState(false);
   const { data: layout } = useQuery({
     queryKey: ["mobile-floor-plan", slug, memberId],
     queryFn: async () => {
@@ -168,6 +174,18 @@ export default function MobileHomePage() {
     clearQrEntry(slug);
     startSession();
   });
+
+  /** Second scan during a session → offer the check-out (not for a double scan just after starting). */
+  useEffect(() => {
+    if (!qrAtLoadRef.current || qrAutoStartedRef.current) return;
+    if (!ready || !onboarded || !status || statusIsPlaceholder) return;
+    qrAtLoadRef.current = false;
+    const s = status.session;
+    if (!s?.registredTime || String(s.id || "").startsWith("optimistic")) return;
+    if (Date.now() - new Date(s.registredTime).getTime() > 3 * 60_000) {
+      setLeavePrompt(true);
+    }
+  }, [ready, onboarded, status, statusIsPlaceholder]);
 
   const pending = status?.pendingRequest;
   const session = status?.session;
@@ -302,17 +320,13 @@ export default function MobileHomePage() {
       ) : null}
 
       {/* App install promo — each promo once; hidden when all are used */}
-      {showInstallPromo && !showQrWelcome ? (
+      {showInstallPromo && !showQrWelcome && !session ? (
         <AppInstallPromo
           globalPromo={appPromos.globalPromo}
           promos={appPromos.promos}
-          emphasize={showCheckoutPromo && !session}
+          emphasize={showCheckoutPromo}
           unlocked={appPromos.active}
         />
-      ) : null}
-
-      {session?.registredTime && memberId ? (
-        <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
       ) : null}
 
       {/* Hero — compact greeting / post-pointage grace */}
@@ -337,10 +351,22 @@ export default function MobileHomePage() {
               : null
           }
           onWifi={hasWifi ? openWifi : undefined}
+          promptCheckout={leavePrompt}
           belowSession={
             <>
-              {subscriptionCard(true)}
+              <OffersStrip />
               <EventsPreview />
+              {session.registredTime && memberId ? (
+                <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
+              ) : null}
+              {subscriptionCard(true)}
+              {showInstallPromo ? (
+                <AppInstallPromo
+                  globalPromo={appPromos.globalPromo}
+                  promos={appPromos.promos}
+                  unlocked={appPromos.active}
+                />
+              ) : null}
             </>
           }
         />
@@ -391,6 +417,7 @@ export default function MobileHomePage() {
 
       {/* Announcement slot */}
       <AnnouncementBanner />
+      {idle ? <OffersStrip /> : null}
 
       {idle || (pending && !session) ? subscriptionCard(false) : null}
 

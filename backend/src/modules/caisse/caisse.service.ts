@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { orderUnitPrice } from '../product/order-price';
 import { PrismaService } from 'database/prisma.service';
 import { addDays, endOfDay, startOfDay } from 'date-fns';
 import { OpsEventsService } from '../ops-events/ops-events.service';
@@ -210,7 +211,7 @@ export class CaisseService {
       (dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED',
     );
     const revenueProducts = soldProducts.reduce(
-      (a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite,
+      (a, dp) => a + orderUnitPrice(dp) * dp.quantite,
       0,
     );
     const expenseRows = dailyExpenses.map((de) => ({
@@ -575,7 +576,7 @@ export class CaisseService {
     const revenueAbonnements = abonnements.reduce((a, p) => a + p.amount, 0);
     const revenueProducts = dailyProducts
       .filter((dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED')
-      .reduce((a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite, 0);
+      .reduce((a, dp) => a + orderUnitPrice(dp) * dp.quantite, 0);
     const expensesDaily = dailyExpenses
       .filter((de) => de.kind === 'JOURNALIER')
       .reduce((a, de) => a + expenseAmount(de), 0);

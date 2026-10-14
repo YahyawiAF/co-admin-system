@@ -22,6 +22,7 @@ import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 import { CommunityNotePopup } from "@/components/visitor/CommunityNotePopup";
+import { VisitorSpotlight, useUnseenEventCount } from "@/components/visitor/VisitorSpotlight";
 
 /** Light visitor (name+phone, no PIN): no community */
 const LIGHT_NAV = [
@@ -108,6 +109,12 @@ export function MobileShell({ children }: { children: ReactNode }) {
     rest.startsWith("/community") ||
     rest.startsWith("/chat/") ||
     rest.startsWith("/u/");
+  const unseenEvents = useUnseenEventCount();
+  /** Offer / new-event popup only on the calm screens (never mid sign-up or pass choice). */
+  const showSpotlight =
+    onboarded &&
+    !keyboardOpen &&
+    (rest === "" || rest === "/" || rest.startsWith("/session") || rest.startsWith("/cafe"));
   const showCommunityNudge =
     onboarded &&
     communityUnlocked &&
@@ -188,6 +195,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
           {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       )}
+      {showSpotlight ? <VisitorSpotlight /> : null}
       {showCommunityNudge ? <CommunityNotePopup /> : null}
       <nav
         aria-hidden={keyboardOpen}
@@ -215,11 +223,16 @@ export function MobileShell({ children }: { children: ReactNode }) {
               >
                 <span
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-full",
+                    "relative flex h-8 w-8 items-center justify-center rounded-full",
                     active && "bg-primary/10"
                   )}
                 >
                   <Icon className="h-5 w-5" />
+                  {item.path === "/events" && unseenEvents > 0 && !active ? (
+                    <span className="absolute -right-1 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-600 px-1 text-[9px] font-bold text-white ring-2 ring-white">
+                      {unseenEvents}
+                    </span>
+                  ) : null}
                 </span>
                 {item.label}
               </Link>

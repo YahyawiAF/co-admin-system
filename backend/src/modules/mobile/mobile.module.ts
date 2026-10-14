@@ -7,6 +7,7 @@ import { PrismaService } from 'database/prisma.service';
 import { PriceModule } from '../price/price.module';
 import { EventsModule } from '../webSocket/events.module';
 import { PushModule } from '../push/push.module';
+import { PromotionModule } from '../promotion/promotion.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PushModule } from '../push/push.module';
     PriceModule,
     EventsModule,
     PushModule,
+    PromotionModule,
   ],
   controllers: [MobileController],
   providers: [MobileService, PrismaService],

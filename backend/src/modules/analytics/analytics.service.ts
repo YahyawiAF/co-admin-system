@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { orderUnitPrice } from '../product/order-price';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
 import {
@@ -87,7 +88,7 @@ export class AnalyticsService {
         0,
       );
       const revenueProducts = dailyProducts.reduce(
-        (a, dp) => a + (dp.product?.sellingPrice || 0) * dp.quantite,
+        (a, dp) => a + orderUnitPrice(dp) * dp.quantite,
         0,
       );
       const expenses = dailyExpenses.reduce(
@@ -175,7 +176,7 @@ export class AnalyticsService {
     }
     for (const dp of dailyProducts) {
       const row = ensure(dp.date);
-      row.revenueProducts += (dp.product?.sellingPrice || 0) * dp.quantite;
+      row.revenueProducts += orderUnitPrice(dp) * dp.quantite;
     }
     for (const de of dailyExpenses) {
       const row = ensure(de.date);
@@ -212,6 +213,7 @@ export class AnalyticsService {
           externalRef: true,
           date: true,
           createdAt: true,
+          unitPrice: true,
           product: {
             select: { name: true, purchasePrice: true, sellingPrice: true },
           },
@@ -251,7 +253,7 @@ export class AnalyticsService {
     const revenueByHour = Array.from({ length: 24 }, () => 0);
     const buyerDays = new Set<string>();
     for (const o of orders) {
-      const sell = o.product?.sellingPrice || 0;
+      const sell = orderUnitPrice(o);
       const buy = o.product?.purchasePrice || 0;
       const qty = o.quantite || 0;
       const row =

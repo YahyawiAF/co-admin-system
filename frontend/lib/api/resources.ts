@@ -13,6 +13,12 @@ import type {
   AdvisorReportSummary,
   AdvisorSettings,
   BusinessInitiative,
+  CampaignInput,
+  CampaignSegment,
+  OutreachCampaign,
+  OutreachCampaignDetail,
+  Promotion,
+  PromotionInput,
   Journal,
   Member,
   PaginatedResponse,
@@ -122,7 +128,16 @@ export type DailyProduct = {
   externalRef?: string | null;
   journalId?: string | null;
   createdAt?: string;
+  /** Price charged per unit when a promotion applied (else product.sellingPrice) */
+  unitPrice?: number | null;
+  promotionId?: string | null;
 };
+
+/** Price charged per unit on a café order (promotion price when one applied). */
+export const orderUnitPrice = (o: {
+  unitPrice?: number | null;
+  product?: { sellingPrice?: number | null } | null;
+}) => o.unitPrice ?? o.product?.sellingPrice ?? 0;
 
 export type ExpenseSource = "CAISSE" | "COFFRE" | "AUTRE";
 
@@ -494,6 +509,29 @@ export const outreachApi = {
   },
   push(data: { memberId: string; reason: OutreachReason; message: string }) {
     return http.post("/analytics/outreach/push", data);
+  },
+  campaigns() {
+    return http.get<OutreachCampaign[]>("/analytics/outreach/campaigns");
+  },
+  campaign(id: string) {
+    return http.get<OutreachCampaignDetail>(`/analytics/outreach/campaigns/${id}`);
+  },
+  segments(groupId?: string | null) {
+    return http.get<Record<CampaignSegment, number>>(
+      `/analytics/outreach/segments${groupId ? `?groupId=${encodeURIComponent(groupId)}` : ""}`
+    );
+  },
+  createCampaign(data: CampaignInput) {
+    return http.post<OutreachCampaign>("/analytics/outreach/campaigns", data);
+  },
+  updateCampaign(id: string, data: { title?: string; message?: string; status?: "ACTIVE" | "DONE" }) {
+    return http.patch<OutreachCampaign>(`/analytics/outreach/campaigns/${id}`, data);
+  },
+  deleteCampaign(id: string) {
+    return http.delete(`/analytics/outreach/campaigns/${id}`);
+  },
+  logCampaign(id: string, data: { memberId: string; channel: OutreachChannel; message?: string }) {
+    return http.post(`/analytics/outreach/campaigns/${id}/log`, data);
   },
 };
 
@@ -1817,5 +1855,29 @@ export const advisorApi = {
   },
   answerQuestion(id: string, data: { answer?: string | null; status?: "DISMISSED" }) {
     return http.patch<AdvisorQuestion>(`/advisor/questions/${id}`, data);
+  },
+};
+
+export const promotionsApi = {
+  list() {
+    return http.get<Promotion[]>("/promotions");
+  },
+  create(data: PromotionInput) {
+    return http.post<Promotion>("/promotions", data);
+  },
+  update(id: string, data: PromotionInput) {
+    return http.patch<Promotion>(`/promotions/${id}`, data);
+  },
+  remove(id: string) {
+    return http.delete(`/promotions/${id}`);
+  },
+  /** Member app: live offers for this member */
+  forMember(orgSlug: string, memberId?: string | null) {
+    const q = new URLSearchParams({ orgSlug });
+    if (memberId) q.set("memberId", memberId);
+    return http.get<Promotion[]>(`/mobile/promotions?${q}`, { skipAuth: true });
+  },
+  track(id: string, kind: "view" | "click") {
+    return http.post(`/mobile/promotions/${id}/track`, { kind }, { skipAuth: true });
   },
 };

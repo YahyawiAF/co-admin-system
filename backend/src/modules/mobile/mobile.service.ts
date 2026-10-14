@@ -101,6 +101,8 @@ import {
   visitAmountAt,
 } from './visit-amount';
 import { appPromoUsage, GLOBAL_APP_PROMO_KEY } from './app-install-promo-usage';
+import { PromotionService } from '../promotion/promotion.service';
+import { orderUnitPrice } from '../product/order-price';
 
 export const roundsOfHashing = 10;
 
@@ -113,6 +115,7 @@ export class MobileService {
     private readonly jwtService: JwtService,
     private readonly eventsGateway: EventsGateway,
     private readonly pushService: PushService,
+    private readonly promotions: PromotionService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -530,13 +533,29 @@ export class MobileService {
       snapshot: { priceBeforePromo: null, promoDiscount: null, promoLabel: null },
     };
     const promo = await this.resolveAppInstallPromo(memberId, priceId);
-    if (!promo || !memberId) return none;
-    const next = this.applyPromoValue(
-      amountAfterGroupDiscount,
-      promo.valueKind,
-      promo.value,
-    );
-    if (next >= amountAfterGroupDiscount - 0.001) return none;
+    const next = promo
+      ? this.applyPromoValue(amountAfterGroupDiscount, promo.valueKind, promo.value)
+      : amountAfterGroupDiscount;
+    if (!promo || !memberId || next >= amountAfterGroupDiscount - 0.001) {
+      // No install promo: a live flash offer (golden card) on this tarif applies instead
+      const deal = await this.promotions.priceDeal(priceId, amountAfterGroupDiscount, memberId);
+      if (!deal) return none;
+      const off = Math.round((amountAfterGroupDiscount - deal.amount) * 1000) / 1000;
+      await this.promotions.recordUse({
+        promotionId: deal.promotionId,
+        memberId,
+        amount: deal.amount,
+        discount: off,
+      });
+      return {
+        amount: deal.amount,
+        snapshot: {
+          priceBeforePromo: amountAfterGroupDiscount,
+          promoDiscount: off,
+          promoLabel: deal.label,
+        },
+      };
+    }
     await this.prisma.member.update({
       where: { id: memberId },
       data: {
@@ -737,6 +756,7 @@ export class MobileService {
     status: ProductOrderStatus | string;
     isPayed: boolean;
     createdAt: Date;
+    unitPrice?: number | null;
     product?: {
       name?: string;
       sellingPrice?: number;
@@ -747,7 +767,7 @@ export class MobileService {
       id: r.id,
       productName: r.product?.name || 'Produit',
       quantity: r.quantite,
-      amount: (r.product?.sellingPrice || 0) * r.quantite,
+      amount: orderUnitPrice(r) * r.quantite,
       img: r.product?.img || null,
       status: r.status,
       isPayed: r.isPayed,
@@ -4787,6 +4807,7 @@ export class MobileService {
       throw new BadRequestException('Stock insuffisant');
     }
     const open = await this.getOpenSession(dto.memberId);
+    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, dto.memberId);
     const [order] = await this.prisma.$transaction([
       this.prisma.dailyProduct.create({
         data: {
@@ -4798,6 +4819,8 @@ export class MobileService {
           journalId: open?.id || null,
           status: ProductOrderStatus.PENDING,
           isPayed: false,
+          unitPrice: deal?.unitPrice ?? null,
+          promotionId: deal?.promotionId ?? null,
         },
         include: { product: true },
       }),
@@ -4806,6 +4829,7 @@ export class MobileService {
         data: { stock: { decrement: qty } },
       }),
     ]);
+    if (deal) await this.recordProductDeal(deal, order.id, dto.memberId, product.sellingPrice, qty);
     const mapped = this.mapOrder(order);
     const seat = await this.resolveSeatForMember(dto.memberId);
     const session = await this.getOpenSession(dto.memberId);
@@ -4886,8 +4910,11 @@ export class MobileService {
         ? journal.registredTime
         : now;
 
-    // Same product, same day, same payment state → one line with a bigger quantity
-    const existing = await this.prisma.dailyProduct.findFirst({
+    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, memberId);
+    // Same product, same day, same payment state, same price → one line with a bigger quantity
+    const existing = deal
+      ? null
+      : await this.prisma.dailyProduct.findFirst({
       where: {
         ...(memberId
           ? { OR: [{ memberId }, { externalRef: memberId }] }
@@ -4895,6 +4922,7 @@ export class MobileService {
         productId: product.id,
         status: ProductOrderStatus.CONFIRMED,
         isPayed: !!dto.isPayed,
+        unitPrice: null,
         date: { gte: startOfDay(date), lt: endOfDay(date) },
       },
       orderBy: { createdAt: 'desc' },
@@ -4917,6 +4945,8 @@ export class MobileService {
               journalId: journal?.id || open?.id || null,
               status: ProductOrderStatus.CONFIRMED,
               isPayed: !!dto.isPayed,
+              unitPrice: deal?.unitPrice ?? null,
+              promotionId: deal?.promotionId ?? null,
             },
             include: { product: true },
           }),
@@ -4925,6 +4955,7 @@ export class MobileService {
         data: { stock: { decrement: qty } },
       }),
     ]);
+    if (deal) await this.recordProductDeal(deal, order.id, memberId, product.sellingPrice, qty);
     if (!existing && dto.isPayed && memberId) {
       const awarded = await creditProductPaidPoints(this.prisma, order.id);
       if (awarded) {
@@ -4946,6 +4977,22 @@ export class MobileService {
       orderId: order.id,
     });
     return this.mapOrder(order);
+  }
+
+  private recordProductDeal(
+    deal: { promotionId: string; unitPrice: number },
+    orderId: string,
+    memberId: string | null,
+    listPrice: number,
+    qty: number,
+  ) {
+    return this.promotions.recordUse({
+      promotionId: deal.promotionId,
+      memberId,
+      dailyProductId: orderId,
+      amount: deal.unitPrice * qty,
+      discount: (listPrice - deal.unitPrice) * qty,
+    });
   }
 
   /** Reception changes a line's quantity (any status); 0 cancels it and restocks. */

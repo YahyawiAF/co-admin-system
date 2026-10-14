@@ -20,6 +20,9 @@ const PAYMENTS_INCLUDE = {
   orderBy: { paidAt: 'asc' },
 } satisfies Prisma.Abonnement$paymentsArgs;
 
+/** promoLabel prefix of a top-up abonnement (passes already paid deducted). */
+export const PASS_CREDIT_LABEL = 'Passes déduits';
+
 @Injectable()
 export class AbonnementService {
   constructor(
@@ -83,6 +86,22 @@ export class AbonnementService {
         name: spaceName,
       });
       const discount = await this.discountFor(memberID, existingPrice);
+      // Top-up: passes already paid are deducted, the client pays only the rest
+      const credit = Math.min(
+        Math.max(0, Number(createAbonnementDto.passCredit) || 0),
+        discount.amountDue,
+      );
+      const creditSnapshot =
+        credit > 0.009
+          ? {
+              priceBeforePromo: discount.amountDue,
+              promoDiscount: Math.round(credit * 100) / 100,
+              promoLabel: `${PASS_CREDIT_LABEL} (${Math.round(credit * 100) / 100} DT)`,
+            }
+          : {};
+      if (credit > 0.009) {
+        discount.amountDue = Math.round((discount.amountDue - credit) * 100) / 100;
+      }
       const payment = this.settlePayment(
         createAbonnementDto.isPayed,
         createAbonnementDto.payedAmount,
@@ -100,6 +119,7 @@ export class AbonnementService {
           payedAmount: payment.payedAmount,
           discountPercent: discount.discountPercent,
           amountDue: discount.amountDue,
+          ...creditSnapshot,
           stayedPeriode: createAbonnementDto.stayedPeriode, // fornt end calculate leave time
           priceId: priceId,
           hoursQuota,
@@ -287,6 +307,13 @@ export class AbonnementService {
           : current.price;
         if (price) {
           discount = await this.discountFor(memberID || current.memberID, price);
+          // Keep the passes credit of a top-up when the price or member changes
+          if (current.promoLabel?.startsWith(PASS_CREDIT_LABEL) && current.promoDiscount) {
+            discount.amountDue = Math.max(
+              0,
+              Math.round((discount.amountDue - current.promoDiscount) * 100) / 100,
+            );
+          }
         }
       }
       const amountDue = discount?.amountDue ?? current.amountDue;
@@ -308,7 +335,8 @@ export class AbonnementService {
             )
           : null;
 
-      const { reservedSeatLabel, reservedSeatSpaceId, ...rest } =
+      // passCredit only applies when the abonnement is created
+      const { reservedSeatLabel, reservedSeatSpaceId, passCredit: _credit, ...rest } =
         updateAbonnementDto;
       const updated = await this.prisma.abonnement.update({
         where: { id },

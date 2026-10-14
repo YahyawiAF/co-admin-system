@@ -427,6 +427,9 @@ function AbonnementsInner() {
     },
   });
 
+  /** Top-up from Relances: passes already paid, deducted from the abonnement price. */
+  const [passCredit, setPassCredit] = useState(0);
+
   const discountPctFor = (memberId: string) => {
     const m = members.find((x) => x.id === memberId);
     return m?.discountAbonnement ?? m?.group?.discountAbonnement ?? 0;
@@ -441,13 +444,15 @@ function AbonnementsInner() {
       : p.price;
   };
 
+  const amountDueFor = (priceId: string, memberId: string, credit = passCredit) => {
+    const remised = remisedPriceFor(priceId, memberId);
+    return remised == null ? null : Math.max(0, Math.round((remised - credit) * 100) / 100);
+  };
+
   const syncPaidAmount = () => {
-    const remised = remisedPriceFor(
-      form.getValues("priceId"),
-      form.getValues("memberID"),
-    );
-    if (remised == null) return;
-    form.setValue("payedAmount", form.getValues("isPayed") ? remised : 0);
+    const due = amountDueFor(form.getValues("priceId"), form.getValues("memberID"));
+    if (due == null) return;
+    form.setValue("payedAmount", form.getValues("isPayed") ? due : 0);
   };
 
   const fillFromPrice = (priceId: string, startStr: string) => {
@@ -460,6 +465,7 @@ function AbonnementsInner() {
   };
 
   const openRenew = (a: Abonnement) => {
+    setPassCredit(0);
     setEditing(null);
     setRenewFrom(a);
     setDetailMemberId(null);
@@ -489,6 +495,7 @@ function AbonnementsInner() {
   };
 
   const openCreate = () => {
+    setPassCredit(0);
     setEditing(null);
     setRenewFrom(null);
     form.reset({
@@ -507,6 +514,7 @@ function AbonnementsInner() {
   };
 
   const openEdit = (a: Abonnement) => {
+    setPassCredit(0);
     setEditing(a);
     setRenewFrom(null);
     form.reset({
@@ -528,6 +536,8 @@ function AbonnementsInner() {
 
   const createFor = searchParams.get("new") === "1" ? focusMember : null;
   const createPriceId = searchParams.get("priceId");
+  const createCredit = Math.max(0, Number(searchParams.get("credit")) || 0);
+  const createStart = searchParams.get("start");
   const [createdFromLink, setCreatedFromLink] = useState(false);
   useEffect(() => {
     if (createFor) return;
@@ -539,9 +549,17 @@ function AbonnementsInner() {
     if (!createFor || createdFromLink || !subPrices.length || !members.length) return;
     setCreatedFromLink(true);
     openCreate();
+    if (createStart && /^\d{4}-\d{2}-\d{2}$/.test(createStart)) {
+      form.setValue("registredDate", createStart);
+    }
     if (createPriceId && subPrices.some((p) => p.id === createPriceId)) {
       form.setValue("priceId", createPriceId);
       fillFromPrice(createPriceId, form.getValues("registredDate"));
+      if (createCredit > 0) {
+        setPassCredit(createCredit);
+        const due = amountDueFor(createPriceId, form.getValues("memberID"), createCredit);
+        form.setValue("payedAmount", form.getValues("isPayed") ? due ?? 0 : 0);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createFor, createPriceId, subPrices.length, members.length]);
@@ -563,7 +581,7 @@ function AbonnementsInner() {
           ? parseLocalDay(v.leaveDate)
           : leaveDateFromPeriodStart(start, price?.periodDays || 30),
       );
-      const catalog = remisedPriceFor(v.priceId, v.memberID) ?? 0;
+      const catalog = amountDueFor(v.priceId, v.memberID, editing ? 0 : passCredit) ?? 0;
       let payedAmount = Number(v.payedAmount || 0);
       let isPayed = v.isPayed;
       // payedAmount = already received. Remaining = catalog − payedAmount.
@@ -591,6 +609,7 @@ function AbonnementsInner() {
         hoursUsed: v.hoursUsed || 0,
         reservedSeatLabel: v.reservedSeatLabel?.trim() || null,
         reservedSeatSpaceId: v.reservedSeatSpaceId?.trim() || null,
+        ...(!editing && passCredit > 0 ? { passCredit } : {}),
       };
       return editing
         ? abonnementsApi.update(editing.id, payload)
@@ -889,12 +908,12 @@ function AbonnementsInner() {
                     checked={form.watch("isPayed")}
                     onCheckedChange={(v) => {
                       form.setValue("isPayed", v);
-                      const remised = remisedPriceFor(
+                      const due = amountDueFor(
                         form.getValues("priceId"),
                         form.getValues("memberID"),
                       );
-                      if (v && remised != null) {
-                        form.setValue("payedAmount", remised);
+                      if (v && due != null) {
+                        form.setValue("payedAmount", due);
                       }
                     }}
                   />
@@ -918,15 +937,22 @@ function AbonnementsInner() {
                       m?.group?.discountAbonnement ??
                       0;
                     const listPrice = p?.price || 0;
-                    const catalog =
+                    const remisedCatalog =
                       pct > 0
                         ? Math.round(listPrice * (1 - pct / 100) * 100) / 100
                         : listPrice;
+                    const credit = editing ? 0 : Math.min(passCredit, remisedCatalog);
+                    const catalog = Math.round((remisedCatalog - credit) * 100) / 100;
                     const received = Number(form.watch("payedAmount") || 0);
                     const remaining = Math.max(0, catalog - received);
                     if (!listPrice) return null;
                     return (
                       <p className="text-xs text-muted-foreground">
+                        {credit > 0 ? (
+                          <span className="mb-1 block rounded-md bg-violet-50 px-2 py-1 font-medium text-violet-800">
+                            Passes déjà payés déduits : −{credit} DT → le client paie {catalog} DT
+                          </span>
+                        ) : null}
                         {pct > 0 ? (
                           <>
                             Tarif{" "}

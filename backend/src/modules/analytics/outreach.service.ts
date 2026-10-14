@@ -11,9 +11,9 @@ import {
 import { fr } from 'date-fns/locale';
 import { MemberService } from '../member/member.service';
 import { PushService } from '../push/push.service';
-import { localDayKey } from '../../../common/parse-local-day';
+import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
 import { PerformanceService } from './performance.service';
-import { computeOffers, type AbonnementOffer } from './offers';
+import { computeOffers, computeTopUps, type AbonnementOffer, type TopUpOffer } from './offers';
 import { round1 } from './traffic';
 
 export const OUTREACH_REASONS = [
@@ -21,6 +21,7 @@ export const OUTREACH_REASONS = [
   'ABO_ENDED',
   'UNPAID',
   'INACTIVE',
+  'TOP_UP',
   'CONVERT',
   'REVIEW',
 ] as const;
@@ -34,6 +35,7 @@ const SNOOZE_DAYS: Record<OutreachReason, number> = {
   ABO_ENDED: 7,
   UNPAID: 5,
   INACTIVE: 10,
+  TOP_UP: 7,
   CONVERT: 14,
   REVIEW: 30,
 };
@@ -55,6 +57,7 @@ export type OutreachItem = {
   owed: number;
   message: string;
   offer?: AbonnementOffer;
+  topUp?: TopUpOffer;
   lastContact: { at: string; channel: string; reason: string } | null;
   snoozed: boolean;
 };
@@ -127,7 +130,7 @@ export class OutreachService {
     const reviewUrl = settings.googleReviewUrl;
 
     const quietSince = subDays(today, settings.inactiveAlertDays);
-    const [abos, owed, offers, regularVisits] = await Promise.all([
+    const [abos, owed, offers, regularVisits, topUps] = await Promise.all([
       this.prisma.abonnement.findMany({
         where: { isReservation: false, leaveDate: { gte: subDays(today, 14) } },
         select: {
@@ -150,6 +153,7 @@ export class OutreachService {
         },
         select: { memberID: true, registredTime: true, payedAmount: true },
       }),
+      computeTopUps(this.prisma, now),
     ]);
 
     const drafts = new Map<string, Omit<OutreachItem, 'name' | 'firstName' | 'phone' | 'whatsapp' | 'hasPush' | 'message' | 'lastContact' | 'snoozed'> & { ctx: Record<string, string> }>();
@@ -235,6 +239,19 @@ export class OutreachService {
       });
     }
 
+    for (const t of topUps.values()) {
+      add({
+        memberId: t.memberId,
+        reason: 'TOP_UP',
+        title: t.headline,
+        detail: `${t.visitDays} jour${t.visitDays > 1 ? 's' : ''} de visite depuis le ${format(parseLocalDay(t.firstVisit), 'd MMM', { locale: fr })}`,
+        value: t.plan.price,
+        owed: 0,
+        topUp: t,
+        ctx: {},
+      });
+    }
+
     for (const offer of offers.values()) {
       add({
         memberId: offer.memberId,
@@ -303,7 +320,7 @@ export class OutreachService {
         phone: p.phone,
         whatsapp: whatsappNumber(p.phone),
         hasPush: pushEnabled && withPush.has(d.memberId),
-        message: this.message(d.reason, { ...ctx, firstName, place, owed: owedNow }, d.offer),
+        message: this.message(d.reason, { ...ctx, firstName, place, owed: owedNow }, d.offer, d.topUp),
         lastContact: last
           ? { at: last.createdAt.toISOString(), channel: last.channel, reason: last.reason }
           : null,
@@ -329,6 +346,7 @@ export class OutreachService {
     reason: OutreachReason,
     c: { [k: string]: string | number; firstName: string; place: string; owed: number },
     offer?: AbonnementOffer,
+    topUp?: TopUpOffer,
   ) {
     const hi = c.firstName ? `Bonjour ${c.firstName}` : 'Bonjour';
     const debt =
@@ -344,6 +362,12 @@ export class OutreachService {
         return `${hi}, petit rappel de ${c.place} : il reste ${c.amount} à régler. Vous pouvez payer lors de votre prochain passage. Merci !`;
       case 'INACTIVE':
         return `${hi}, ça fait ${c.days} jours qu'on ne vous a pas vu chez ${c.place} ! Votre place vous attend, à bientôt.${debt}`;
+      case 'TOP_UP': {
+        if (!topUp) return `${hi}, merci pour vos visites chez ${c.place} !`;
+        return topUp.remaining <= 0
+          ? `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}, c'est autant que l'${topUp.plan.name} (${money(topUp.plan.price)}). On vous le passe en abonnement sans rien payer de plus ?${debt}`
+          : `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}. Pour seulement ${money(topUp.remaining)} de plus, vous passez à l'${topUp.plan.name} (${money(topUp.plan.price)}) : vos passes sont déduits. On vous le prépare ?${debt}`;
+      }
       case 'REVIEW':
         return `${hi}, merci pour vos ${c.visits} visites chez ${c.place} ! Si vous aimez l'espace, un petit avis Google nous aiderait énormément (30 secondes) : ${c.url}`;
       case 'CONVERT': {
@@ -403,7 +427,7 @@ export class OutreachService {
   private async results(today: Date) {
     const since = subDays(today, 30);
     const rows = await this.prisma.memberOutreach.findMany({
-      where: { createdAt: { gte: since }, channel: { not: 'SKIP' } },
+      where: { createdAt: { gte: since }, channel: { not: 'SKIP' }, campaignId: null },
       orderBy: { createdAt: 'asc' },
     });
     const first = new Map<string, (typeof rows)[number]>();
@@ -510,7 +534,7 @@ export class OutreachService {
         body.title ||
         (reason === 'UNPAID'
           ? 'Petit rappel'
-          : reason === 'CONVERT'
+          : reason === 'CONVERT' || reason === 'TOP_UP'
             ? 'Une offre pour vous'
             : reason === 'REVIEW'
               ? 'Votre avis compte'

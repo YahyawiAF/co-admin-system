@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import Link from "next/link";
+import { OffersStrip, useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 import {
   readLocalCache,
   writeLocalCache,
@@ -82,6 +83,27 @@ export default function CafePage() {
     staleTime: 20_000,
   });
 
+  const { data: promotions = [] } = useMemberPromotions();
+  /** productId → live offer (best price) */
+  const deals = useMemo(() => {
+    const m = new Map<string, (typeof promotions)[number]>();
+    for (const p of promotions) {
+      if (!p.liveNow || p.target !== "PRODUCT" || !p.productId || p.priceAfter == null) continue;
+      const cur = m.get(p.productId);
+      if (!cur || p.priceAfter < (cur.priceAfter ?? Infinity)) m.set(p.productId, p);
+    }
+    return m;
+  }, [promotions]);
+  const [focusPromo, setFocusPromo] = useState<string | null>(null);
+  useEffect(() => {
+    setFocusPromo(new URLSearchParams(window.location.search).get("promo"));
+  }, []);
+  const focusProductId = promotions.find((p) => p.id === focusPromo)?.productId ?? null;
+  useEffect(() => {
+    if (!focusProductId) return;
+    document.getElementById(`product-${focusProductId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusProductId]);
+
   const filtered = useMemo(() => {
     return products.filter((p) => {
       const coffee = isCoffee(p.name, p.description);
@@ -91,8 +113,8 @@ export default function CafePage() {
         return false;
       }
       return true;
-    });
-  }, [products, q, tab]);
+    }).sort((a, b) => Number(deals.has(b.id)) - Number(deals.has(a.id)));
+  }, [products, q, tab, deals]);
 
   const order = useMutation({
     mutationFn: (productId: string) =>
@@ -105,6 +127,7 @@ export default function CafePage() {
       toast.success(`Commande envoyée : ${res.productName} · ${res.amount} DT`);
       queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-promotions"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -141,6 +164,8 @@ export default function CafePage() {
         </Link>
       </div>
 
+      <OffersStrip only="PRODUCT" />
+
       <div className="flex gap-1 rounded-full bg-slate-200/70 p-1 text-sm">
         {(
           [
@@ -172,8 +197,18 @@ export default function CafePage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((p) => (
-            <article key={p.id} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+          {filtered.map((p) => {
+            const deal = deals.get(p.id);
+            return (
+            <article
+              key={p.id}
+              id={`product-${p.id}`}
+              className={cn(
+                "overflow-hidden rounded-3xl bg-white shadow-sm",
+                deal && "ring-2 ring-amber-400",
+                focusProductId === p.id && "ring-4"
+              )}
+            >
               <div className="relative aspect-[4/3] bg-slate-100">
                 {p.img ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -187,9 +222,16 @@ export default function CafePage() {
                     <ShoppingBag className="h-16 w-16" />
                   </div>
                 )}
-                <span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-3 py-1 text-sm font-semibold text-white">
-                  {p.sellingPrice.toFixed(2)} DT
-                </span>
+                {deal ? (
+                  <span className="absolute bottom-3 left-3 flex items-baseline gap-1.5 rounded-full bg-amber-400 px-3 py-1 text-sm font-bold text-amber-950 shadow">
+                    <span className="text-xs line-through opacity-60">{p.sellingPrice.toFixed(2)}</span>
+                    {deal.priceAfter!.toFixed(2)} DT · {deal.label}
+                  </span>
+                ) : (
+                  <span className="absolute bottom-3 left-3 rounded-full bg-black/70 px-3 py-1 text-sm font-semibold text-white">
+                    {p.sellingPrice.toFixed(2)} DT
+                  </span>
+                )}
                 {p.stock <= 0 ? (
                   <Badge className="absolute right-3 top-3 bg-rose-600">
                     Rupture
@@ -242,12 +284,13 @@ export default function CafePage() {
                       order.mutate(p.id);
                     }}
                   >
-                    Commander
+                    {deal ? "Commander avec la remise" : "Commander"}
                   </Button>
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

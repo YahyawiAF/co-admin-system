@@ -37,6 +37,7 @@ import {
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { TarifOptionCard } from "@/components/visitor/TarifOption";
 import { toast } from "sonner";
+import { useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 
 function ChooseInner() {
   const router = useRouter();
@@ -110,6 +111,21 @@ function ChooseInner() {
   const promoOpts = promoActive
     ? { promos: appPromos.promos, globalPromo: appPromos.globalPromo }
     : { promos: null, globalPromo: null };
+  const { data: flashPromos = [] } = useMemberPromotions();
+  /** Install promo or live golden-card offer, whichever is cheaper (the server applies the same rule). */
+  const priceFor = (o: Price) => {
+    const priced = pricedWithPromo(o.price, o.id, {
+      ...promoOpts,
+      categories: promoCategoriesOf(o),
+    });
+    if (priced.hasPromo) return priced;
+    const flash = flashPromos.find(
+      (p) => p.liveNow && p.target === "PRICE" && p.priceId === o.id && p.priceAfter != null
+    );
+    return flash && flash.priceAfter! < o.price - 0.001
+      ? { original: o.price, final: flash.priceAfter!, hasPromo: true }
+      : priced;
+  };
 
   const { data: pendingRequest } = useQuery({
     queryKey: ["visit-request", pendingId],
@@ -526,10 +542,7 @@ function ChooseInner() {
           <p className="text-xs text-slate-500">
             <span className="inline-flex align-middle">
               <PromoPrice
-                {...pricedWithPromo(pickedPrice.price, pickedPrice.id, {
-                  ...promoOpts,
-                  categories: promoCategoriesOf(pickedPrice),
-                })}
+                {...priceFor(pickedPrice)}
                 size="sm"
                 align="start"
               />
@@ -704,10 +717,7 @@ function ChooseInner() {
       {options.length ? (
         <div className="grid grid-cols-2 gap-2.5">
           {options.map((o) => {
-            const priced = pricedWithPromo(o.price, o.id, {
-              ...promoOpts,
-              categories: promoCategoriesOf(o),
-            });
+            const priced = priceFor(o);
             return (
               <TarifOptionCard
                 key={o.id}

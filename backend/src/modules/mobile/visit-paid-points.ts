@@ -1,4 +1,5 @@
 import { PointEntryStatus, PointEvent, ProductOrderStatus } from '@prisma/client';
+import { orderUnitPrice } from '../product/order-price';
 import { randomUUID } from 'crypto';
 import { PrismaService } from 'database/prisma.service';
 import { earnPoints } from './points-ledger';
@@ -155,7 +156,7 @@ export async function maybeAwardProductPaidPoints(
   if (order.status === ProductOrderStatus.CANCELLED) return null;
 
   const orderAmount =
-    (order.product?.sellingPrice || 0) * (order.quantite || 0);
+    orderUnitPrice(order) * (order.quantite || 0);
   const amount = dtToPoints(orderAmount);
   if (amount <= 0) return null;
 

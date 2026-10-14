@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { orderUnitPrice } from '../product/order-price';
 import {
   addDays,
   differenceInCalendarDays,
@@ -18,6 +19,8 @@ import { hoursOnSite, round1, visitEnd } from '../analytics/traffic';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 import { expenseAmount } from '../expense/expense-amount';
 import { ContextService } from './context.service';
+import { OutreachService } from '../analytics/outreach.service';
+import { CampaignService } from '../analytics/campaign.service';
 
 const WEEKDAYS = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 const HOUR_MS = 3_600_000;
@@ -46,6 +49,8 @@ export class SnapshotService {
     private readonly analytics: AnalyticsService,
     private readonly performance: PerformanceService,
     private readonly context: ContextService,
+    private readonly outreach: OutreachService,
+    private readonly campaigns: CampaignService,
   ) {}
 
   async build(facilityId: string, days: number) {
@@ -79,6 +84,8 @@ export class SnapshotService {
       initiatives,
       previousAdvice,
       ownerContext,
+      outreachLists,
+      campaigns,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -96,6 +103,8 @@ export class SnapshotService {
       this.initiativesWithImpact(facilityId, seats),
       this.previousAdvice(facilityId),
       this.context.snapshotContext(facilityId, { prevStart, start, end }),
+      this.outreachLists(facilityId),
+      this.campaigns.list(facilityId).catch(() => []),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
@@ -172,8 +181,31 @@ export class SnapshotService {
       })),
       initiatives,
       previousAdvice,
+      outreachLists,
+      campaigns: campaigns.slice(0, 10).map((c) => ({
+        title: c.title,
+        segment: c.segment,
+        createdAt: localDayKey(c.createdAt),
+        status: c.status,
+        ...c.progress,
+      })),
       ...ownerContext,
     };
+  }
+
+  /** Size of each relance list (who the AI can target). */
+  private async outreachLists(facilityId: string) {
+    const list = await this.outreach.list(facilityId).catch(() => null);
+    const counts: Record<string, number> = {};
+    for (const i of [...(list?.todo ?? []), ...(list?.contacted ?? [])]) {
+      counts[i.reason] = (counts[i.reason] ?? 0) + 1;
+    }
+    const recent = await this.prisma.journal.findMany({
+      where: { registredTime: { gte: subDays(new Date(), 30) }, isReservation: false, memberID: { not: null } },
+      select: { memberID: true },
+      distinct: ['memberID'],
+    });
+    return { ...counts, RECENT_30: recent.length };
   }
 
   private async seats(facilityId: string, fallback: number) {
@@ -223,6 +255,7 @@ export class SnapshotService {
           memberId: true,
           date: true,
           createdAt: true,
+          unitPrice: true,
           product: { select: { sellingPrice: true, purchasePrice: true } },
         },
       }),
@@ -247,7 +280,7 @@ export class SnapshotService {
     const buyerDays = new Set<string>();
     for (const p of products) {
       const qty = p.quantite || 0;
-      revenueCafe += (p.product?.sellingPrice || 0) * qty;
+      revenueCafe += orderUnitPrice(p) * qty;
       cafeCost += (p.product?.purchasePrice || 0) * qty;
       cafeItems += qty;
       if (p.journalId) visitIdsWithOrder.add(p.journalId);

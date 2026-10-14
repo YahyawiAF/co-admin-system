@@ -3,11 +3,12 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { formatDistanceToNow } from "date-fns";
+import { differenceInCalendarDays, format, formatDistanceToNow, parse, startOfDay } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   BellRing,
+  Calculator,
   CalendarClock,
   ChevronDown,
   Copy,
@@ -33,12 +34,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { outreachApi } from "@/lib/api/resources";
+import { outreachApi, pricesApi } from "@/lib/api/resources";
+import { leaveDateFromPeriodStart } from "@/lib/subscription-utils";
+import { CampaignsSection } from "@/components/admin/OutreachCampaigns";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import type {
   AbonnementOffer,
   OutreachChannel,
   OutreachItem,
   OutreachReason,
+  TopUpOffer,
 } from "@/lib/types";
 
 const REASON_UI: Record<
@@ -69,6 +75,12 @@ const REASON_UI: Record<
     tone: "bg-sky-100 text-sky-800",
     why: "Venait souvent, plus vu depuis un moment.",
   },
+  TOP_UP: {
+    label: "Compléter l'abonnement",
+    icon: Calculator,
+    tone: "bg-violet-100 text-violet-800",
+    why: "Il a déjà payé au moins la moitié d'un abonnement en passes : proposez-lui de payer seulement le reste, ses passes sont déduits.",
+  },
   CONVERT: {
     label: "À passer en abonnement",
     icon: Sparkles,
@@ -91,6 +103,179 @@ const CHANNEL_LABEL: Record<OutreachChannel, string> = {
 };
 
 const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
+const dayLabel = (d: Date) => format(d, "d MMM", { locale: fr });
+const localDay = (s: string) => parse(s, "yyyy-MM-dd", new Date());
+
+type StartChoice = "first" | "today";
+
+/** Start and end of the abonnement for a top-up, plus the sentence added to the message. */
+function topUpPeriod(t: { firstVisit: string; plan: { periodDays: number } }, choice: StartChoice) {
+  const today = startOfDay(new Date());
+  const start = choice === "first" ? localDay(t.firstVisit) : today;
+  const end = leaveDateFromPeriodStart(start, t.plan.periodDays);
+  const daysLeft = Math.max(0, differenceInCalendarDays(end, today) + 1);
+  const sentence =
+    choice === "first"
+      ? ` Il compterait depuis votre première visite du ${dayLabel(start)}, jusqu'au ${dayLabel(end)}.`
+      : ` Il commencerait aujourd'hui, valable jusqu'au ${dayLabel(end)}.`;
+  return { start, end, daysLeft, sentence };
+}
+
+function PaidBar({ paid, price }: { paid: number; price: number }) {
+  const pct = price > 0 ? Math.min(100, Math.round((paid / price) * 100)) : 0;
+  return (
+    <div className="space-y-1">
+      <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-full rounded-full bg-violet-600" style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex justify-between text-xs">
+        <span>
+          Déjà payé <b className="tabular-nums">{dt(paid)}</b> ({pct} %)
+        </span>
+        <span>
+          Reste <b className="tabular-nums text-violet-700">{dt(Math.max(0, price - paid))}</b>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Top-up row: what was paid, what's left, and when the abonnement would start (owner's choice). */
+function TopUpCalculator({
+  item,
+  topUp,
+  onMessage,
+}: {
+  item: OutreachItem;
+  topUp: TopUpOffer;
+  onMessage: (text: string) => void;
+}) {
+  const [choice, setChoice] = useState<StartChoice>("first");
+  const options = (["first", "today"] as const).map((c) => ({ c, ...topUpPeriod(topUp, c) }));
+  const current = options.find((o) => o.c === choice)!;
+  const href = `/abonnements?new=1&memberId=${item.memberId}&priceId=${topUp.plan.id}&credit=${topUp.paid}&start=${format(current.start, "yyyy-MM-dd")}`;
+  return (
+    <div className="my-2 max-w-xl space-y-2 rounded-lg border bg-violet-50/40 p-3">
+      <div className="text-xs text-muted-foreground">
+        {topUp.plan.name} · {dt(topUp.plan.price)} · passes payés sur les {topUp.plan.periodDays} derniers jours
+      </div>
+      <PaidBar paid={topUp.paid} price={topUp.plan.price} />
+      <div className="grid gap-1.5 sm:grid-cols-2">
+        {options.map((o) => (
+          <button
+            key={o.c}
+            type="button"
+            onClick={() => setChoice(o.c)}
+            className={cn(
+              "rounded-md border px-2.5 py-1.5 text-left text-xs transition",
+              choice === o.c ? "border-violet-600 bg-white ring-1 ring-violet-600" : "bg-white/60 hover:bg-white",
+            )}
+          >
+            <div className="font-semibold">
+              {o.c === "first" ? `Depuis sa 1re visite (${dayLabel(o.start)})` : "À partir d'aujourd'hui"}
+            </div>
+            <div className="text-muted-foreground">
+              Jusqu&apos;au {dayLabel(o.end)} · {o.daysLeft} jour{o.daysLeft > 1 ? "s" : ""} restants
+            </div>
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="outline">
+          <Link href={href}>Créer l&apos;abonnement ({dt(topUp.remaining)})</Link>
+        </Button>
+        <Button
+          size="sm"
+          className={item.whatsapp ? "bg-emerald-600 hover:bg-emerald-700" : undefined}
+          onClick={() => onMessage(item.message + current.sentence)}
+        >
+          <MessageCircle className="mr-1.5 h-4 w-4" />
+          Proposer
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Counter-side calculator: any client, any abonnement, any amount already paid. */
+function QuickCalculator() {
+  const [open, setOpen] = useState(false);
+  const { data: prices = [] } = useQuery({ queryKey: ["prices"], queryFn: pricesApi.list, enabled: open });
+  const plans = prices.filter(
+    (p) => p.isActive !== false && p.type === "abonnement" && (p.periodDays ?? 0) > 0,
+  );
+  const [planId, setPlanId] = useState("");
+  const [paid, setPaid] = useState("");
+  const [start, setStart] = useState(format(new Date(), "yyyy-MM-dd"));
+  const plan = plans.find((p) => p.id === planId) ?? plans[0];
+  const paidN = Math.max(0, Number(paid) || 0);
+  const end = plan ? leaveDateFromPeriodStart(localDay(start), plan.periodDays || 30) : null;
+  return (
+    <Card className="shadow-none">
+      <CardContent className="space-y-3 p-4">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left"
+          onClick={() => setOpen((v) => !v)}
+        >
+          <span className="flex items-center gap-2 font-medium">
+            <Calculator className="h-4 w-4" />
+            Calculateur : passes déjà payés → abonnement
+          </span>
+          <ChevronDown className={cn("h-4 w-4 transition-transform", open && "rotate-180")} />
+        </button>
+        {open ? (
+          plans.length ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label>Abonnement</Label>
+                  <select
+                    className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                    value={plan?.id ?? ""}
+                    onChange={(e) => setPlanId(e.target.value)}
+                  >
+                    {plans.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · {dt(p.price)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label>Déjà payé en passes (DT)</Label>
+                    <Input type="number" min={0} value={paid} onChange={(e) => setPaid(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Début</Label>
+                    <Input type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+                  </div>
+                </div>
+              </div>
+              {plan ? (
+                <div className="space-y-2 rounded-lg border bg-violet-50/40 p-3">
+                  <PaidBar paid={paidN} price={plan.price} />
+                  <p className="text-sm">
+                    Le client paie <b className="text-violet-700">{dt(Math.max(0, plan.price - paidN))}</b> et
+                    devient abonné jusqu&apos;au <b>{end ? dayLabel(end) : "—"}</b>.
+                  </p>
+                  {paidN >= plan.price * 0.5 ? (
+                    <p className="text-xs text-emerald-700">
+                      Plus de la moitié est déjà payée : c&apos;est le bon moment pour proposer.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucun abonnement actif dans les services.</p>
+          )
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 function perPeriodLabel(days: number) {
   if (days === 7) return "par semaine";
@@ -150,8 +335,8 @@ function MessageDialog({
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [forId, setForId] = useState<string | null>(null);
-  if (item && forId !== `${item.memberId}:${item.reason}`) {
-    setForId(`${item.memberId}:${item.reason}`);
+  if (item && forId !== `${item.memberId}:${item.reason}:${item.message}`) {
+    setForId(`${item.memberId}:${item.reason}:${item.message}`);
     setText(item.message);
   }
   const done = () => {
@@ -252,7 +437,8 @@ function OutreachRow({
   onMessage,
 }: {
   item: OutreachItem;
-  onMessage: () => void;
+  /** Optional custom text (e.g. top-up with the chosen start date) */
+  onMessage: (text?: string) => void;
 }) {
   const queryClient = useQueryClient();
   const ui = REASON_UI[item.reason];
@@ -283,6 +469,9 @@ function OutreachRow({
         </div>
         <div className="text-sm">{item.title}</div>
         {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
+        {item.reason === "TOP_UP" && item.topUp ? (
+          <TopUpCalculator item={item} topUp={item.topUp} onMessage={onMessage} />
+        ) : null}
         <div className="text-xs text-muted-foreground">
           {[
             item.reason === "CONVERT" && item.offer ? null : item.detail,
@@ -303,7 +492,7 @@ function OutreachRow({
         <Button
           size="sm"
           className={item.whatsapp ? "bg-emerald-600 hover:bg-emerald-700" : undefined}
-          onClick={onMessage}
+          onClick={() => onMessage()}
         >
           <MessageCircle className="mr-1.5 h-4 w-4" />
           Contacter
@@ -386,6 +575,10 @@ export default function RelancesPage() {
             </Card>
           </div>
 
+          <CampaignsSection />
+
+          <QuickCalculator />
+
           <div className="flex flex-wrap gap-2">
             <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
               Tous · {data.todo.length}
@@ -410,7 +603,7 @@ export default function RelancesPage() {
                     <OutreachRow
                       key={`${item.memberId}:${item.reason}`}
                       item={item}
-                      onMessage={() => setMessaging(item)}
+                      onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
                     />
                   ))}
                 </ul>
@@ -440,7 +633,7 @@ export default function RelancesPage() {
                         <OutreachRow
                           key={`${item.memberId}:${item.reason}`}
                           item={item}
-                          onMessage={() => setMessaging(item)}
+                          onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
                         />
                       ))}
                     </ul>

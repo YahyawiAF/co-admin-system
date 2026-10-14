@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarDays } from "lucide-react";
 import { eventsApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
 import { cn } from "@/lib/utils";
 import { EventListCard } from "@/components/visitor/EventCard";
+import { markEventSeen } from "@/components/visitor/VisitorSpotlight";
 
 export default function EventsListPage() {
   const { slug, href } = useOrg();
@@ -15,6 +16,10 @@ export default function EventsListPage() {
     queryKey: ["mobile-events", slug, when],
     queryFn: () => eventsApi.list(slug, when),
   });
+  // Opening the list clears the "new events" badge on the bottom nav
+  useEffect(() => {
+    if (when === "upcoming") for (const e of data) markEventSeen(e.id);
+  }, [data, when]);
 
   return (
     <div className="space-y-3">

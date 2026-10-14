@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,6 +15,7 @@ import { eventsApi } from "@/lib/api/resources";
 import { DirectoryCard } from "@/components/visitor/DirectoryCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { markEventSeen } from "@/components/visitor/VisitorSpotlight";
 import type { EventKind, Member } from "@/lib/types";
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -31,6 +32,9 @@ export default function EventDetailPage() {
   const queryClient = useQueryClient();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
+  useEffect(() => {
+    if (params.id) markEventSeen(params.id);
+  }, [params.id]);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ["mobile-event", params.id, memberId],

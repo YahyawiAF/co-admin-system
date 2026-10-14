@@ -909,11 +909,31 @@ export interface AbonnementOffer {
   headline: string;
 }
 
+/** Client who already paid part of an abonnement in passes: pay the rest. */
+export interface TopUpOffer {
+  memberId: string;
+  plan: {
+    id: string;
+    name: string;
+    price: number;
+    periodDays: number;
+    durationHours: number | null;
+  };
+  paid: number;
+  remaining: number;
+  paidPct: number;
+  visitDays: number;
+  /** yyyy-MM-dd */
+  firstVisit: string;
+  headline: string;
+}
+
 export type OutreachReason =
   | "ABO_EXPIRING"
   | "ABO_ENDED"
   | "UNPAID"
   | "INACTIVE"
+  | "TOP_UP"
   | "CONVERT"
   | "REVIEW";
 export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "SKIP";
@@ -932,6 +952,7 @@ export interface OutreachItem {
   owed: number;
   message: string;
   offer?: AbonnementOffer;
+  topUp?: TopUpOffer;
   lastContact: { at: string; channel: OutreachChannel; reason: OutreachReason } | null;
   snoozed: boolean;
 }
@@ -1307,6 +1328,8 @@ export interface AdvisorRecommendation {
   actions: string[];
   expectedImpact: string;
   measure: string;
+  /** Clients to contact and the ready-to-send message (segment NONE = no relance) */
+  outreach?: { segment: CampaignSegment | "NONE"; message: string };
 }
 
 export interface AdvisorResult {
@@ -1451,4 +1474,125 @@ export interface AdvisorQuestion {
   answer: string | null;
   status: "OPEN" | "ANSWERED" | "DISMISSED";
   createdAt: string;
+}
+
+// ---- Promotions (golden card) ----
+export type PromotionTarget = "PRODUCT" | "PRICE" | "OTHER";
+
+export interface Promotion {
+  id: string;
+  title: string;
+  description: string | null;
+  target: PromotionTarget;
+  productId: string | null;
+  priceId: string | null;
+  itemName: string | null;
+  itemImg: string | null;
+  valueKind: "PERCENT" | "FIXED_DT";
+  value: number;
+  label: string;
+  priceBefore: number | null;
+  priceAfter: number | null;
+  startsAt: string;
+  endsAt: string | null;
+  daysOfWeek: number[];
+  fromHour: number | null;
+  toHour: number | null;
+  audience: "ALL" | "IN_SESSION";
+  maxUsesPerMember: number | null;
+  maxUses: number | null;
+  style: "GOLD" | "VIOLET" | "GREEN";
+  isActive: boolean;
+  liveNow: boolean;
+  liveUntil: string | null;
+  stats?: {
+    views: number;
+    clicks: number;
+    uses: number;
+    members: number;
+    revenue: number;
+    discount: number;
+  };
+}
+
+export type PromotionInput = Partial<
+  Pick<
+    Promotion,
+    | "title"
+    | "description"
+    | "target"
+    | "productId"
+    | "priceId"
+    | "valueKind"
+    | "value"
+    | "startsAt"
+    | "endsAt"
+    | "daysOfWeek"
+    | "fromHour"
+    | "toHour"
+    | "audience"
+    | "maxUsesPerMember"
+    | "maxUses"
+    | "style"
+    | "isActive"
+  >
+>;
+
+// ---- Relance campaigns ----
+export type CampaignSegment =
+  | "ABO_EXPIRING"
+  | "ABO_ENDED"
+  | "INACTIVE"
+  | "TOP_UP"
+  | "CONVERT"
+  | "UNPAID"
+  | "RECENT_30"
+  | "ALL"
+  | "GROUP";
+export type CampaignGoal = "VISIT" | "SUBSCRIPTION" | "ANY";
+
+export interface OutreachCampaign {
+  id: string;
+  title: string;
+  message: string;
+  segment: CampaignSegment;
+  memberGroupId: string | null;
+  memberIds: string[];
+  goal: CampaignGoal;
+  status: "ACTIVE" | "DONE";
+  sourceReportId: string | null;
+  recommendationTitle: string | null;
+  initiativeId: string | null;
+  createdAt: string;
+  progress: { total: number; contacted: number; skipped: number; won: number; revenue: number };
+}
+
+export interface CampaignTarget {
+  memberId: string;
+  name: string;
+  phone: string | null;
+  whatsapp: string | null;
+  hasPush: boolean;
+  message: string;
+  contactedAt: string | null;
+  channel: OutreachChannel | null;
+  won: boolean;
+  revenue: number;
+}
+
+export interface OutreachCampaignDetail extends OutreachCampaign {
+  pushEnabled: boolean;
+  targets: CampaignTarget[];
+}
+
+export interface CampaignInput {
+  title: string;
+  message: string;
+  segment: CampaignSegment;
+  memberGroupId?: string | null;
+  goal: CampaignGoal;
+  sourceReportId?: string | null;
+  recommendationTitle?: string | null;
+  trackAsInitiative?: boolean;
+  category?: AdvisorCategory;
 }

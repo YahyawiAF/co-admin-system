@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { orderUnitPrice } from '../product/order-price';
 import { PrismaService } from 'database/prisma.service';
 import {
   addDays,
@@ -318,6 +319,7 @@ export class PerformanceService {
           select: {
             date: true,
             quantite: true,
+            unitPrice: true,
             product: { select: { sellingPrice: true } },
           },
         }),
@@ -356,7 +358,7 @@ export class PerformanceService {
     }
     let products = 0;
     for (const dp of dailyProducts) {
-      const v = (dp.product?.sellingPrice || 0) * dp.quantite;
+      const v = orderUnitPrice(dp) * dp.quantite;
       products += v;
       addDay(dp.date, v);
     }

@@ -32,6 +32,8 @@ import {
   Banknote,
   Receipt,
   ScanLine,
+  MoreHorizontal,
+  CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -60,6 +62,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -218,6 +221,7 @@ export default function JournalClient() {
     router.push(`/journal?date=${format(d, "yyyy-MM-dd")}`);
   };
 
+  const [endDayOpen, setEndDayOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -1141,152 +1145,151 @@ export default function JournalClient() {
 
   return (
     <div className="space-y-6 pb-24">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      {/* Header: day data on the left, actions on the right (both top-aligned, never overlapping) */}
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex min-w-0 shrink-0 flex-col gap-2">
           <h1 className="text-2xl font-bold tracking-tight">Journal</h1>
-        </div>
-        <div className="flex min-w-0 flex-col items-end gap-2">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="flex items-center gap-1 rounded-lg border bg-card px-1 py-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setDate(addDays(selectedDate, -1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="min-w-[150px] px-1 text-center text-sm font-medium">
-                {format(selectedDate, "EEEE d MMM yyyy", { locale: fr })}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setDate(addDays(selectedDate, 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8"
-                onClick={() => setDate(new Date())}
-              >
-                Aujourd&apos;hui
-              </Button>
-            </div>
-            <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto">
-              <SeatOccupancyBoard
-                date={selectedDate}
-                open={occupancyOpen}
-                onOpenChange={(o) => {
-                  setOccupancyOpen(o);
-                  if (!o) {
-                    setFocusSeatLabel(null);
-                    setFocusSpaceId(null);
-                  }
-                }}
-                focusSeatLabel={focusSeatLabel}
-                focusSpaceId={focusSpaceId}
-              />
-              <JournalCommandesRail date={selectedDate} />
-              <JournalCoffeeCell
-                trigger="button"
-                anonymous
-                memberId={null}
-                journalId={null}
-                memberName="Café comptoir (passant)"
-                dateKey={selectedDayKey}
-                orders={counterOrders}
-                popularity={productPopularity}
-              />
-              <Button
-                variant="outline"
-                size="lg"
-                onClick={() => setExpensesOpen(true)}
-                title="Ajouter une dépense pour ce jour"
-              >
-                <Receipt className="mr-2 h-4 w-4" />
-                Dépense
-                {dayExpensesTotal > 0 ? (
-                  <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-rose-700">
-                    −{Math.round(dayExpensesTotal * 10) / 10} DT
-                  </span>
-                ) : null}
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="lg">
-                    <Printer className="mr-2 h-4 w-4" />
-                    Exporter
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={exportPrint}>
-                    <Printer className="mr-2 h-4 w-4" />
-                    Imprimer / PDF
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={exportWhatsApp}>
-                    <Share2 className="mr-2 h-4 w-4" />
-                    WhatsApp (copie + ouvrir)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="lg"
-                    disabled={!present || endOfDay.isPending}
-                  >
-                    <Moon className="mr-2 h-4 w-4" />
-                    Fin de journée
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Check-out de {present} présent{present !== 1 ? "s" : ""} ?
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Toutes les sessions en cours seront clôturées et leurs places
-                      libérées sur le plan.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => endOfDay.mutate()}>
-                      Check-out tous
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-
-              <ReservationPanel
-                journalDate={selectedDate}
-                onDone={() => refetch()}
-              />
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => setScanOpen(true)}
-                title="Scanner le QR de session d’un visiteur"
-              >
-                <ScanLine className="mr-2 h-4 w-4" />
-                Scanner
-              </Button>
-              <Button size="lg" variant="outline" asChild>
-                <Link href="/abonnements">Abonnements</Link>
-              </Button>
-              <QuickCheckInPanel
-                presentMemberIds={presentMemberIds}
-                onDone={() => refetch()}
-              />
-            </div>
+          <div className="flex w-fit items-center gap-1 rounded-lg border bg-card px-1 py-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setDate(addDays(selectedDate, -1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="min-w-[150px] px-1 text-center text-sm font-medium">
+              {format(selectedDate, "EEEE d MMM yyyy", { locale: fr })}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setDate(addDays(selectedDate, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8"
+              onClick={() => setDate(new Date())}
+            >
+              Aujourd&apos;hui
+            </Button>
           </div>
-          <JournalReceptionToggles />
+          <div className="[&>div]:justify-start">
+            <JournalReceptionToggles />
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-2 xl:justify-end">
+          <QuickCheckInPanel
+            presentMemberIds={presentMemberIds}
+            onDone={() => refetch()}
+          />
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => setScanOpen(true)}
+            title="Scanner le QR de session d’un visiteur"
+          >
+            <ScanLine className="mr-2 h-4 w-4" />
+            Scanner
+          </Button>
+          <ReservationPanel
+            journalDate={selectedDate}
+            onDone={() => refetch()}
+          />
+          <SeatOccupancyBoard
+            date={selectedDate}
+            open={occupancyOpen}
+            onOpenChange={(o) => {
+              setOccupancyOpen(o);
+              if (!o) {
+                setFocusSeatLabel(null);
+                setFocusSpaceId(null);
+              }
+            }}
+            focusSeatLabel={focusSeatLabel}
+            focusSpaceId={focusSpaceId}
+          />
+          <JournalCommandesRail date={selectedDate} />
+          <JournalCoffeeCell
+            trigger="button"
+            anonymous
+            memberId={null}
+            journalId={null}
+            memberName="Café comptoir (passant)"
+            dateKey={selectedDayKey}
+            orders={counterOrders}
+            popularity={productPopularity}
+          />
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={() => setExpensesOpen(true)}
+            title="Ajouter une dépense pour ce jour"
+          >
+            <Receipt className="mr-2 h-4 w-4" />
+            Dépense
+            {dayExpensesTotal > 0 ? (
+              <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold tabular-nums text-rose-700">
+                −{Math.round(dayExpensesTotal * 10) / 10} DT
+              </span>
+            ) : null}
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="lg" title="Plus d’actions">
+                <MoreHorizontal className="mr-2 h-4 w-4" />
+                Plus
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild>
+                <Link href="/abonnements">
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  Abonnements
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportPrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimer / PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={exportWhatsApp}>
+                <Share2 className="mr-2 h-4 w-4" />
+                Exporter sur WhatsApp
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!present || endOfDay.isPending}
+                onClick={() => setEndDayOpen(true)}
+              >
+                <Moon className="mr-2 h-4 w-4" />
+                Fin de journée
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <AlertDialog open={endDayOpen} onOpenChange={setEndDayOpen}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Check-out de {present} présent{present !== 1 ? "s" : ""} ?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Toutes les sessions en cours seront clôturées et leurs places
+                  libérées sur le plan.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={() => endOfDay.mutate()}>
+                  Check-out tous
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 

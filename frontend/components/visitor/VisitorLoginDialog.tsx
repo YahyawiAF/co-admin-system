@@ -28,6 +28,8 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** Prefill phone (e.g. from Welcome). */
   initialPhone?: string;
+  /** Phone already checked (account with PIN): open straight on the PIN step. */
+  startAtPin?: boolean;
 };
 
 type Step = "phone" | "pin" | "code";
@@ -42,6 +44,7 @@ export function VisitorLoginDialog({
   open,
   onOpenChange,
   initialPhone,
+  startAtPin,
 }: Props) {
   const router = useRouter();
   const { slug, href } = useOrg();
@@ -58,9 +61,9 @@ export function VisitorLoginDialog({
     setPhone(initialPhone);
     setLoginPin("");
     setShortCode("");
-    setStep("phone");
+    setStep(startAtPin && initialPhone ? "pin" : "phone");
     setGreeting(null);
-  }, [open, initialPhone]);
+  }, [open, initialPhone, startAtPin]);
 
   const finish = (member: Member, accessToken?: string) => {
     confirm(member, accessToken);

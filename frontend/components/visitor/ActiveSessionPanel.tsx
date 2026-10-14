@@ -25,7 +25,7 @@ import {
   stageLabel,
 } from "@/lib/session-pricing";
 import { cn } from "@/lib/utils";
-import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
+import { ChooseTimeCard, TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
 import { SeatPickerSheet } from "@/components/visitor/SeatPickerSheet";
 import { BottomSheet } from "@/components/visitor/BottomSheet";
@@ -66,6 +66,8 @@ type Props = {
   onWifi?: () => void;
   /** Rendered after the session blocks (e.g. events strip). */
   belowSession?: ReactNode;
+  /** QR scanned again during the session: ask "leaving?" right away. */
+  promptCheckout?: boolean;
 };
 
 function StatTile({
@@ -116,6 +118,7 @@ export function ActiveSessionPanel({
   pendingSubscriptionName,
   onWifi,
   belowSession,
+  promptCheckout,
 }: Props) {
   const queryClient = useQueryClient();
   const [now, setNow] = useState(Date.now());
@@ -125,6 +128,13 @@ export function ActiveSessionPanel({
   const [passOpen, setPassOpen] = useState(false);
   const [seatOpen, setSeatOpen] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (!promptCheckout) return;
+    setLeaving(true);
+    setCheckoutOpen(true);
+  }, [promptCheckout]);
 
   const { data: pricingCtx } = usePricingContext({
     orgSlug: slug,
@@ -614,6 +624,19 @@ export function ActiveSessionPanel({
         ) : null}
       </section>
 
+      {canChangeTariff && live?.mode === "AUTO" ? (
+        <ChooseTimeCard
+          live={live}
+          tiers={tiers}
+          sessionStart={sessionStart}
+          now={now}
+          pending={fixTariff.isPending}
+          error={passOpen ? null : fixError}
+          onConfirm={(id) => fixTariff.mutate({ priceId: id })}
+          onOpenAll={openPassSheet}
+        />
+      ) : null}
+
       {canChangeTariff && live?.mode === "FIXED" ? (
         <TierLevelUp
           live={live}
@@ -628,15 +651,6 @@ export function ActiveSessionPanel({
       ) : null}
 
       <SessionSteps steps={steps} hint={stepsHint} />
-
-      {checkInCode ? (
-        <SessionCodeCard
-          code={checkInCode}
-          needsSeat={receptionAssignsSeat}
-          open={codeOpen}
-          onOpenChange={setCodeOpen}
-        />
-      ) : null}
 
       <div className="space-y-2">
         {checkout.isError && !checkoutOpen ? (
@@ -687,6 +701,15 @@ export function ActiveSessionPanel({
         ) : null}
       </div>
 
+      {checkInCode ? (
+        <SessionCodeCard
+          code={checkInCode}
+          needsSeat={receptionAssignsSeat}
+          open={codeOpen}
+          onOpenChange={setCodeOpen}
+        />
+      ) : null}
+
       {belowSession}
 
       {live && canChangeTariff ? (
@@ -718,10 +741,17 @@ export function ActiveSessionPanel({
 
       <BottomSheet
         open={checkoutOpen}
-        onOpenChange={setCheckoutOpen}
+        onOpenChange={(o) => {
+          setCheckoutOpen(o);
+          if (!o) setLeaving(false);
+        }}
         dismissible={!checkout.isPending}
-        title="Terminer votre session ?"
-        description="Le compteur s’arrête et la session ne pourra pas être reprise."
+        title={leaving ? "Vous partez ?" : "Terminer votre session ?"}
+        description={
+          leaving
+            ? "Vous avez scanné le QR pendant votre session. Terminez-la pour arrêter le compteur."
+            : "Le compteur s’arrête et la session ne pourra pas être reprise."
+        }
         footer={
           <div className="grid grid-cols-2 gap-2">
             <Button
@@ -731,7 +761,7 @@ export function ActiveSessionPanel({
               disabled={checkout.isPending}
               onClick={() => setCheckoutOpen(false)}
             >
-              Continuer
+              Je reste
             </Button>
             <Button
               type="button"

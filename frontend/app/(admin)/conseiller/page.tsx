@@ -17,6 +17,7 @@ import {
   Megaphone,
   Plus,
   Rocket,
+  Send,
   Settings2,
   Sparkles,
   Tags,
@@ -41,6 +42,8 @@ import {
 import { cn } from "@/lib/utils";
 import { advisorApi } from "@/lib/api/resources";
 import { AdvisorContextPanel } from "@/components/admin/advisor/AdvisorContextPanel";
+import { CampaignDialog, SEGMENT_LABEL, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
+import { useRouter } from "next/navigation";
 import type {
   AdvisorCategory,
   AdvisorRecommendation,
@@ -147,10 +150,13 @@ function ContextCard({ value }: { value: string }) {
 function RecommendationCard({
   rec,
   onStart,
+  onRelance,
 }: {
   rec: AdvisorRecommendation;
   onStart: () => void;
+  onRelance: () => void;
 }) {
+  const relance = rec.outreach && rec.outreach.segment !== "NONE" ? rec.outreach : null;
   const ui = CATEGORY_UI[rec.category] ?? CATEGORY_UI.OPERATIONS;
   const Icon = ui.icon;
   return (
@@ -188,8 +194,20 @@ function RecommendationCard({
           {rec.measure}
         </div>
       </div>
-      <div className="flex justify-end">
-        <Button size="sm" onClick={onStart}>
+      {relance ? (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm">
+          <div className="text-xs font-medium uppercase tracking-wide text-emerald-800">
+            Relance proposée · {SEGMENT_LABEL[relance.segment as keyof typeof SEGMENT_LABEL]}
+          </div>
+          <p className="mt-0.5 text-emerald-950">{relance.message}</p>
+        </div>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant={relance ? "default" : "outline"} onClick={onRelance}>
+          <Send className="mr-1.5 h-4 w-4" />
+          {relance ? "Relancer les clients" : "Créer une relance"}
+        </Button>
+        <Button size="sm" variant={relance ? "outline" : "default"} onClick={onStart}>
           <Rocket className="mr-1.5 h-4 w-4" />
           Je le lance
         </Button>
@@ -588,10 +606,12 @@ function ReportView({
   result,
   reportId,
   onStart,
+  onRelance,
 }: {
   result: AdvisorResult;
   reportId: string;
   onStart: (d: Draft) => void;
+  onRelance: (d: CampaignDraft) => void;
 }) {
   const [filter, setFilter] = useState<AdvisorCategory | "ALL">("ALL");
   const counts: Partial<Record<AdvisorCategory, number>> = {};
@@ -658,6 +678,18 @@ function ReportView({
                 sourceReportId: reportId,
               })
             }
+            onRelance={() =>
+              onRelance({
+                title: r.title,
+                message: r.outreach?.message ?? "",
+                segment:
+                  r.outreach && r.outreach.segment !== "NONE" ? r.outreach.segment : undefined,
+                sourceReportId: reportId,
+                recommendationTitle: r.title,
+                category: r.category,
+                trackAsInitiative: true,
+              })
+            }
           />
         ))}
       </ul>
@@ -689,6 +721,8 @@ export default function ConseillerPage() {
   const [days, setDays] = useState(30);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
+  const [relanceDraft, setRelanceDraft] = useState<CampaignDraft | null>(null);
+  const router = useRouter();
 
   const settings = useQuery({ queryKey: ["advisor", "settings"], queryFn: advisorApi.settings });
   const reports = useQuery({
@@ -846,6 +880,7 @@ export default function ConseillerPage() {
               result={report.data.result}
               reportId={report.data.id}
               onStart={setDraft}
+              onRelance={setRelanceDraft}
             />
           </>
         ) : (
@@ -897,6 +932,11 @@ export default function ConseillerPage() {
       </section>
 
       <InitiativeDialog draft={draft} onClose={() => setDraft(null)} />
+      <CampaignDialog
+        draft={relanceDraft}
+        onClose={() => setRelanceDraft(null)}
+        onCreated={() => router.push("/relances")}
+      />
     </div>
   );
 }

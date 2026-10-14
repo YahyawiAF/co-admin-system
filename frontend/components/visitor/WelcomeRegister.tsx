@@ -20,6 +20,7 @@ import {
   markInstallNudgePending,
 } from "@/lib/visitorCache";
 import type { Member } from "@/lib/types";
+import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
 
 function splitFullName(full: string): { firstName: string; lastName: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -32,17 +33,19 @@ function splitFullName(full: string): { firstName: string; lastName: string } {
 }
 
 /**
- * First visit: name + phone.
- * Returning light member (no PIN): phone alone resumes session.
- * Returning with PIN: use Connexion (top right).
+ * Two short steps instead of one mixed form:
+ * 1. phone → known light member resumes, PIN account opens the PIN login;
+ * 2. only for a new number: the name, then the session starts.
  */
 export function WelcomeRegister() {
   const router = useRouter();
   const { slug, href } = useOrg();
   const { confirm } = useVisitorSession();
+  const [step, setStep] = useState<"phone" | "name">("phone");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState<string | undefined>();
   const [lookingUp, setLookingUp] = useState(false);
+  const [pinLogin, setPinLogin] = useState(false);
 
   const finish = (member: Member, accessToken?: string, isNew = false) => {
     confirm(member, accessToken);
@@ -89,34 +92,22 @@ export function WelcomeRegister() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const submit = async () => {
+  const submitPhone = async () => {
     if (!isTunisiaPhone(phone)) return;
     setLookingUp(true);
     try {
       const found = await mobileApi.lookupPhone(phone || "", slug);
       if (found.exists && found.hasPin) {
-        toast.message(
-          found.firstName
-            ? `Bonjour ${found.firstName} — Connexion (PIN) en haut à droite`
-            : "Compte avec PIN — utilisez Connexion en haut à droite"
-        );
+        setPinLogin(true);
         return;
       }
-      if (found.exists && !found.hasPin) {
+      if (found.exists) {
         resume.mutate();
         return;
       }
-      if (fullName.trim().length < 2) {
-        toast.message("Indiquez votre nom complet pour créer le profil");
-        return;
-      }
-      register.mutate();
+      setStep("name");
     } catch {
-      if (fullName.trim().length < 2) {
-        toast.message("Indiquez votre nom complet pour créer le profil");
-        return;
-      }
-      register.mutate();
+      setStep("name");
     } finally {
       setLookingUp(false);
     }
@@ -126,36 +117,66 @@ export function WelcomeRegister() {
 
   return (
     <div className="rounded-3xl bg-white p-5 shadow-sm">
-      <div className="space-y-3">
-        <p className="text-sm text-slate-500">
-          Déjà venu ? Le téléphone suffit. Nouveau ? Ajoutez aussi votre nom.
-        </p>
-        <div>
-          <Label>Téléphone</Label>
-          <TunisiaPhoneField
-            className="mt-1"
-            value={phone}
-            onChange={setPhone}
-          />
+      {step === "phone" ? (
+        <div className="space-y-4">
+          <div>
+            <p className="text-lg font-bold text-slate-900">Bienvenue 👋</p>
+            <p className="text-sm text-slate-500">
+              Votre numéro suffit pour entrer. Déjà venu ? On vous reconnaît.
+            </p>
+          </div>
+          <div>
+            <Label>Téléphone</Label>
+            <TunisiaPhoneField className="mt-1" value={phone} onChange={setPhone} />
+          </div>
+          <Button
+            className="h-12 w-full rounded-full"
+            disabled={!isTunisiaPhone(phone) || busy}
+            onClick={() => void submitPhone()}
+          >
+            {busy ? "…" : "Continuer"}
+          </Button>
         </div>
-        <div>
-          <Label>Nom complet</Label>
-          <Input
-            className="mt-1 h-11"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Prénom Nom (si nouveau)"
-            autoComplete="name"
-          />
-        </div>
-        <Button
-          className="h-12 w-full rounded-full"
-          disabled={!isTunisiaPhone(phone) || busy}
-          onClick={() => void submit()}
+      ) : (
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (fullName.trim().length >= 2 && !busy) register.mutate();
+          }}
         >
-          {busy ? "…" : "Continuer"}
-        </Button>
-      </div>
+          <div>
+            <p className="text-lg font-bold text-slate-900">Première visite !</p>
+            <p className="text-sm text-slate-500">Comment vous appelez-vous ?</p>
+          </div>
+          <div>
+            <Label>Prénom et nom</Label>
+            <Input
+              className="mt-1 h-11"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Ex. : Sarra Ben Ali"
+              autoComplete="name"
+              autoFocus
+            />
+          </div>
+          <Button
+            type="submit"
+            className="h-12 w-full rounded-full"
+            disabled={fullName.trim().length < 2 || busy}
+          >
+            {busy ? "…" : "Entrer"}
+          </Button>
+          <button
+            type="button"
+            className="w-full text-center text-xs font-medium text-slate-500"
+            onClick={() => setStep("phone")}
+          >
+            Changer de numéro
+          </button>
+        </form>
+      )}
+      <VisitorLoginDialog open={pinLogin} onOpenChange={setPinLogin} initialPhone={phone} startAtPin />
     </div>
   );
 }

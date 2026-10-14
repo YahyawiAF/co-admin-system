@@ -77,4 +77,10 @@ export class AddAbonnementDto {
   @Type(() => Date)
   @ApiProperty({ required: false, nullable: true })
   public paymentRemindAt?: Date | null;
+
+  /** Passes already paid that are deducted from the abonnement price (top-up offer, DT). */
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false })
+  public passCredit?: number;
 }

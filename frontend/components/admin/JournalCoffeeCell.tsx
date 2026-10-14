@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   mobileApi,
+  orderUnitPrice,
   productsApi,
   type DailyProduct,
 } from "@/lib/api/resources";
@@ -58,8 +59,7 @@ function initialsOf(name: string) {
   return (parts[0][0] + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-const lineAmount = (o: DailyProduct) =>
-  (o.product?.sellingPrice || 0) * (o.quantite || 0);
+const lineAmount = (o: DailyProduct) => orderUnitPrice(o) * (o.quantite || 0);
 
 /** Café column: today's count + a dialog to add / pay / refuse / cancel the member's orders. */
 export function JournalCoffeeCell({

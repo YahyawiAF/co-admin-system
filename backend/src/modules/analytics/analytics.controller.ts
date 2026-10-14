@@ -1,7 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
+import { CampaignService } from './campaign.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -9,6 +10,7 @@ export class AnalyticsController {
     private readonly analytics: AnalyticsService,
     private readonly performance: PerformanceService,
     private readonly outreach: OutreachService,
+    private readonly campaigns: CampaignService,
   ) {}
 
   @Get('performance/settings')
@@ -84,6 +86,51 @@ export class AnalyticsController {
     @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string },
   ) {
     return this.outreach.log(body);
+  }
+
+  /** Saved relances (e.g. from an AI suggestion) with their progress. */
+  @Get('outreach/campaigns')
+  campaignList(@Query('facilityId') facilityId?: string) {
+    return this.campaigns.list(facilityId);
+  }
+
+  @Get('outreach/segments')
+  campaignSegments(@Query('facilityId') facilityId?: string, @Query('groupId') groupId?: string) {
+    return this.campaigns.segmentCounts(facilityId, groupId || null);
+  }
+
+  @Post('outreach/campaigns')
+  campaignCreate(
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: Parameters<CampaignService['create']>[1],
+  ) {
+    return this.campaigns.create(facilityId, body);
+  }
+
+  @Get('outreach/campaigns/:id')
+  campaignDetail(@Param('id') id: string) {
+    return this.campaigns.detail(id);
+  }
+
+  @Patch('outreach/campaigns/:id')
+  campaignUpdate(
+    @Param('id') id: string,
+    @Body() body: { title?: string; message?: string; status?: string },
+  ) {
+    return this.campaigns.update(id, body);
+  }
+
+  @Delete('outreach/campaigns/:id')
+  campaignDelete(@Param('id') id: string) {
+    return this.campaigns.remove(id);
+  }
+
+  @Post('outreach/campaigns/:id/log')
+  campaignLog(
+    @Param('id') id: string,
+    @Body() body: { memberId?: string; channel?: string; message?: string },
+  ) {
+    return this.campaigns.log(id, body);
   }
 
   @Post('outreach/push')
