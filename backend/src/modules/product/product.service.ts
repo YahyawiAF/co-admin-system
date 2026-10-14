@@ -4,12 +4,14 @@ import { CreateProductDto } from './dtos/createProduct.dto';
 import { ProductEntity } from './entities/product.entitie';
 import { UpdateProductDto } from './dtos/updateProduct';
 import { EventsGateway } from '../webSocket/events.gateway';
+import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
+    private readonly syncOutbox: SyncOutboxService,
   ) {}
 
   private emitStock(product: { id: string; name: string; stock: number }) {
@@ -35,6 +37,7 @@ export class ProductsService {
       data: { ...createProductDto, organizationId },
     });
     this.emitStock(created);
+    await this.syncOutbox.enqueue('product', created.id, 'CREATE');
     return new ProductEntity(created);
   }
 
@@ -62,6 +65,7 @@ export class ProductsService {
       data: updateProductDto,
     });
     this.emitStock(updated);
+    await this.syncOutbox.enqueue('product', updated.id, 'UPDATE');
     return new ProductEntity(updated);
   }
 
@@ -78,13 +82,15 @@ export class ProductsService {
     quantite: number;
     date?: string;
   }) {
-    return this.prisma.dailyProduct.create({
+    const created = await this.prisma.dailyProduct.create({
       data: {
         productId: data.productId,
         quantite: data.quantite,
         date: data.date ? new Date(data.date) : new Date(),
       },
     });
+    await this.syncOutbox.enqueue('dailyProduct', created.id, 'CREATE');
+    return created;
   }
   async updateDailyProduct(
     id: string,
@@ -94,7 +100,7 @@ export class ProductsService {
       date?: string;
     },
   ) {
-    return this.prisma.dailyProduct.update({
+    const updated = await this.prisma.dailyProduct.update({
       where: { id },
       data: {
         ...(data.productId && { productId: data.productId }),
@@ -102,6 +108,8 @@ export class ProductsService {
         ...(data.date && { date: new Date(data.date) }),
       },
     });
+    await this.syncOutbox.enqueue('dailyProduct', updated.id, 'UPDATE');
+    return updated;
   }
 
   async removeDailyProduct(id: string) {

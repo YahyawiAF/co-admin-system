@@ -14,6 +14,7 @@ export interface ErpProductPayload {
   description?: string;
   price?: number;
   sellingPrice?: number;
+  purchasePrice?: number;
   stock?: number;
 }
 

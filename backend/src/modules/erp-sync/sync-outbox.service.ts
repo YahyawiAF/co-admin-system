@@ -1,7 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 
-export type SyncEntityType = 'member' | 'price' | 'abonnement' | 'journal';
+export type SyncEntityType =
+  | 'member'
+  | 'price'
+  | 'abonnement'
+  | 'journal'
+  | 'product'
+  | 'dailyProduct';
 export type SyncOperation = 'CREATE' | 'UPDATE';
 
 /**

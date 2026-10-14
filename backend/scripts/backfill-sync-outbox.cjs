@@ -1,6 +1,6 @@
 /**
- * One-shot: enqueue every existing Member/Price/Abonnement/Journal that has no
- * SyncMapping yet, so the ERP bridge (src/modules/erp-sync) does a full historical
+ * One-shot: enqueue every existing Member/Price/Abonnement/Journal/Product/DailyProduct
+ * that has no SyncMapping yet, so the ERP bridge (src/modules/erp-sync) does a full historical
  * sync to supply-chain-pro instead of only covering changes from now on.
  * Safe to re-run — skips anything already mapped or already queued.
  * Usage: node scripts/backfill-sync-outbox.cjs
@@ -44,6 +44,18 @@ const ENTITIES = [
   {
     entityType: 'journal',
     load: () => prisma.journal.findMany({ select: { id: true } }),
+  },
+  {
+    entityType: 'product',
+    load: () => prisma.product.findMany({ select: { id: true } }),
+  },
+  {
+    entityType: 'dailyProduct',
+    load: () =>
+      prisma.dailyProduct.findMany({
+        where: { status: { not: 'CANCELLED' } },
+        select: { id: true },
+      }),
   },
 ];
 
