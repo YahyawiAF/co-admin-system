@@ -23,6 +23,7 @@ import {
   LatePaymentRow,
   latePaymentInfo,
 } from '../mobile/visit-amount';
+import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 export const roundsOfHashing = 10;
 
@@ -36,6 +37,7 @@ export class JournalService {
   constructor(
     private prisma: PrismaService,
     private readonly eventsGateway: EventsGateway,
+    private readonly syncOutbox: SyncOutboxService,
   ) {}
   async create(createJournalDto: AddJournalDto) {
     try {
@@ -88,7 +90,7 @@ export class JournalService {
       }
 
       const snap = saleSnapshotFromPrice(existingPrice);
-      return await this.prisma.journal.create({
+      const journal = await this.prisma.journal.create({
         data: {
           memberID: memberID || null,
           registredTime: createJournalDto.registredTime,
@@ -122,6 +124,8 @@ export class JournalService {
           spaceName: snap.spaceName,
         },
       });
+      await this.syncOutbox.enqueue('journal', journal.id, 'CREATE');
+      return journal;
     } catch (error) {
       throw new GeneralException(
         HttpStatus.BAD_REQUEST,
@@ -412,6 +416,7 @@ export class JournalService {
       } else {
         await maybeAwardVisitPaidPoints(this.prisma, updated.id);
       }
+      await this.syncOutbox.enqueue('journal', updated.id, 'UPDATE');
       return updated;
     } catch (error) {
       throw new GeneralException(

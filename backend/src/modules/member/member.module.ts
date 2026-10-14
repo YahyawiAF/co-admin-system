@@ -4,9 +4,10 @@ import { MemberService } from './member.service';
 import { PrismaService } from '../../../database/prisma.service';
 import { EventsModule } from '../webSocket/events.module';
 import { TypedEventEmitterModule } from '../event-emitter/typed-event-emitter.module';
+import { ErpSyncModule } from '../erp-sync/erp-sync.module';
 
 @Module({
-  imports: [EventsModule, TypedEventEmitterModule],
+  imports: [EventsModule, TypedEventEmitterModule, ErpSyncModule],
   controllers: [MemberController],
   providers: [MemberService, PrismaService],
   exports: [MemberService],

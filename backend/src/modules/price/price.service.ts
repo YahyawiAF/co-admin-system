@@ -6,6 +6,7 @@ import { CreatePriceDto } from './dtos/create-price.dto';
 import { UpdatePriceDto } from './dtos/update-price.dto';
 import { defaultOccupy } from '../mobile/space-occupy';
 import { invalidatePricingContext } from '../mobile/session-pricing-context';
+import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 const COLLABORA_HUB_TARIFS: Array<{
   name: string;
@@ -169,7 +170,10 @@ const COLLABORA_HUB_TARIFS: Array<{
 
 @Injectable()
 export class PriceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncOutbox: SyncOutboxService,
+  ) {}
 
   private readonly priceInclude = {
     space: { select: { id: true, name: true } },
@@ -395,6 +399,7 @@ export class PriceService {
       include: this.priceInclude,
     });
     await this.recordHistory(withOffers || priceEntity, 'create');
+    await this.syncOutbox.enqueue('price', priceEntity.id, 'CREATE');
     return this.toEntity(withOffers || priceEntity);
   }
 
@@ -533,6 +538,7 @@ export class PriceService {
     if (catalogChanged) {
       await this.recordHistory(next, 'update');
     }
+    await this.syncOutbox.enqueue('price', id, 'UPDATE');
 
     return this.toEntity(next);
   }

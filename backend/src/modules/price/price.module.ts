@@ -7,6 +7,7 @@ import { TypedEventEmitterModule } from '../event-emitter/typed-event-emitter.mo
 import { ConfigModule } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
+import { ErpSyncModule } from '../erp-sync/erp-sync.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { JwtAuthGuard } from 'common/guards/accessToken.guard';
       secret: process.env.JWT_ACCESS_SECRET,
       signOptions: { expiresIn: '20m' },
     }),
+    ErpSyncModule,
   ],
   controllers: [PriceController],
   providers: [JwtAuthGuard, PriceService, PrismaService],

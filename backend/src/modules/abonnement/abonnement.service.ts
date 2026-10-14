@@ -14,6 +14,7 @@ import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
 import { syncAbonnementPayments } from './abonnement-revenue';
 import { endOfDay } from 'date-fns';
+import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 const PAYMENTS_INCLUDE = {
   select: { id: true, amount: true, paidAt: true },
@@ -28,6 +29,7 @@ export class AbonnementService {
   constructor(
     private prisma: PrismaService,
     private readonly eventsGateway: EventsGateway,
+    private readonly syncOutbox: SyncOutboxService,
   ) {}
 
   async create(createAbonnementDto: AddAbonnementDto) {
@@ -139,6 +141,7 @@ export class AbonnementService {
         },
       });
       await syncAbonnementPayments(this.prisma, created.id, 0, created.payedAmount);
+      await this.syncOutbox.enqueue('abonnement', created.id, 'CREATE');
       await this.syncReservedSeat(
         created.memberID,
         created.reservedSeatLabel,
@@ -390,6 +393,7 @@ export class AbonnementService {
         memberId: updated.memberID,
         abonnementId: updated.id,
       });
+      await this.syncOutbox.enqueue('abonnement', updated.id, 'UPDATE');
       return updated;
     } catch (error) {
       throw new GeneralException(

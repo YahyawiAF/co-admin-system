@@ -8,6 +8,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from 'common/guards/accessToken.guard';
 import { AbonnementController } from './abonnement.controller';
 import { AbonnementService } from './abonnement.service';
+import { ErpSyncModule } from '../erp-sync/erp-sync.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { AbonnementService } from './abonnement.service';
       secret: process.env.JWT_ACCESS_SECRET,
       signOptions: { expiresIn: '20m' },
     }),
+    ErpSyncModule,
   ],
   controllers: [AbonnementController],
   providers: [JwtAuthGuard, AbonnementService, PrismaService],

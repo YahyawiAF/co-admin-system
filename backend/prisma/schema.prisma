@@ -1332,3 +1332,35 @@ model OutreachCampaign {
   @@index([facilityId, createdAt])
   @@map("outreach_campaigns")
 }
+
+/// Durable queue of entities that still need to be pushed to the ERP (supply-chain-pro).
+/// Written synchronously by the owning service right after its own write; drained by SyncProcessorService.
+model SyncOutbox {
+  id         String   @id @default(uuid())
+  /// member | price | abonnement | journal
+  entityType String
+  entityId   String
+  /// CREATE | UPDATE
+  operation  String
+  /// PENDING | SYNCED | FAILED
+  status     String   @default("PENDING")
+  attempts   Int      @default(0)
+  lastError  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status, entityType, createdAt])
+  @@map("sync_outbox")
+}
+
+/// Co-admin entity id ↔ supply-chain-pro entity id, one row per synced record.
+model SyncMapping {
+  id         String   @id @default(uuid())
+  entityType String
+  entityId   String
+  externalId String
+  syncedAt   DateTime @default(now())
+
+  @@unique([entityType, entityId])
+  @@map("sync_mappings")
+}

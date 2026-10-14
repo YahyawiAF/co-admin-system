@@ -20,10 +20,14 @@ import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { MemberEntity } from './entities/member.entity';
 import { startOfWeek, addWeeks, format, getHours, getDay, isSameDay } from 'date-fns';
+import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 @Injectable()
 export class MemberService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly syncOutbox: SyncOutboxService,
+  ) {}
 
   private async nextVisitorNumber(organizationId: string): Promise<number> {
     const last = await this.prisma.member.findFirst({
@@ -89,6 +93,7 @@ export class MemberService {
         },
         include: { group: true },
       });
+      await this.syncOutbox.enqueue('member', member.id, 'CREATE');
       return new MemberEntity(member);
     } catch (error) {
       throw new GeneralException(
@@ -473,6 +478,7 @@ export class MemberService {
         data: updateMemberDto,
         include: { group: true },
       });
+      await this.syncOutbox.enqueue('member', member.id, 'UPDATE');
       return new MemberEntity(member);
     } catch (error) {
       throw new GeneralException(
