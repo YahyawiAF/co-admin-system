@@ -20,14 +20,21 @@ import { dailyProductToOrder } from './mappers/daily-product-to-order.mapper';
 const MAX_ATTEMPTS = 10;
 const BATCH_SIZE = 25;
 // Separates tariffs/abonnements from café/goods in supply-chain-pro's own reporting.
-const TARIF_CATEGORY = { slug: 'coworking-tarifs', name: 'Tarifs & abonnements (coworking)' };
-const GOODS_CATEGORY = { slug: 'coworking-produits', name: 'Produits (café / boutique)' };
+const TARIF_CATEGORY = {
+  slug: 'coworking-tarifs',
+  name: 'Tarifs & abonnements (coworking)',
+};
+const GOODS_CATEGORY = {
+  slug: 'coworking-produits',
+  name: 'Produits (café / boutique)',
+};
 // One shared supply-chain-pro customer for sales with no member (anonymous visits,
 // walk-in café orders) — its Invoice requires a customerId.
 const WALK_IN_CUSTOMER = {
   firstName: 'Client de passage',
   lastName: 'Coworking',
-  notes: 'Ventes sans membre (visites anonymes, café) synchronisées depuis co-admin.',
+  notes:
+    'Ventes sans membre (visites anonymes, café) synchronisées depuis co-admin.',
   sendWelcomeEmail: false,
 };
 // Lower runs first: members/prices/products must exist in supply-chain-pro before an
@@ -53,8 +60,8 @@ function describeError(error: unknown): string {
     typeof data === 'string'
       ? data
       : typeof data.message === 'string' || Array.isArray(data.message)
-        ? [data.message].flat().join('; ')
-        : JSON.stringify(data);
+      ? [data.message].flat().join('; ')
+      : JSON.stringify(data);
   return `${base} — ${detail}`;
 }
 
@@ -107,7 +114,9 @@ export class SyncProcessorService {
       this.prisma.price.findMany({ select: { id: true, updatedAt: true } }),
     );
     await this.enqueueStale('abonnement', () =>
-      this.prisma.abonnement.findMany({ select: { id: true, updatedAt: true } }),
+      this.prisma.abonnement.findMany({
+        select: { id: true, updatedAt: true },
+      }),
     );
     await this.enqueueStale('journal', () =>
       this.prisma.journal.findMany({ select: { id: true, updatedAt: true } }),
@@ -275,39 +284,49 @@ export class SyncProcessorService {
   }
 
   /**
-   * Create on first sync; on later syncs, re-send everything except
-   * amountDue/amountPaid — those are owned by the Payment flow from here on,
-   * and resending the unpaid baseline would undo what a Payment already set.
+   * One sale = one Order + one Invoice made from that order + its Payments.
+   * The order goes first with nothing paid, then the invoice from it (linked by orderId);
+   * money is then recorded as Payments on that invoice, which supply-chain-pro copies onto
+   * the order. Sending a separate invoice and order made every sale show twice in its
+   * Créances. No order (free visit, no tariff) → a plain invoice on its own.
+   *
+   * Later syncs re-send everything except amountDue/amountPaid — those are owned by the
+   * Payment flow — and never resend orderItems/status/shippingAddress, which would re-run
+   * supply-chain-pro's delivery/stock side effects.
    */
-  private async upsertInvoice(
-    existingExternalId: string | undefined,
-    payload: ErpInvoicePayload,
+  private async upsertSale(
+    kind: 'journal' | 'abonnement' | 'dailyProduct',
+    id: string,
+    invoicePayload: ErpInvoicePayload,
+    orderPayload: ErpOrderPayload | null,
   ): Promise<string> {
-    if (existingExternalId) {
-      const { amountDue, amountPaid, ...updatePayload } = payload;
-      await this.erp.updateInvoice(existingExternalId, updatePayload);
-      return existingExternalId;
+    const orderKey = `${kind}Order`;
+    const orderMap = await this.mapping.get(orderKey, id);
+    let orderId = orderMap?.externalId;
+    if (orderPayload) {
+      if (orderId) {
+        const { subtotal, tax, total, notes } = orderPayload;
+        await this.erp.updateOrder(orderId, { subtotal, tax, total, notes });
+      } else {
+        orderId = (
+          await this.erp.createOrder({ ...orderPayload, amountPaid: 0 })
+        ).id;
+        await this.mapping.set(orderKey, id, orderId);
+      }
     }
-    const result = await this.erp.createInvoice(payload);
-    return result.id;
-  }
 
-  /**
-   * Create on first sync; on later syncs, only amend amounts/notes — never resend
-   * orderItems/status/shippingAddress, which would re-trigger delivery/stock side effects
-   * supply-chain-pro's own order.service.ts runs when those fields change.
-   */
-  private async upsertOrder(
-    existingExternalId: string | undefined,
-    payload: ErpOrderPayload,
-  ): Promise<string> {
-    if (existingExternalId) {
-      const { subtotal, tax, total, notes } = payload;
-      await this.erp.updateOrder(existingExternalId, { subtotal, tax, total, notes });
-      return existingExternalId;
+    const invoiceMap = await this.mapping.get(kind, id);
+    if (invoiceMap) {
+      const { amountDue, amountPaid, ...updatePayload } = invoicePayload;
+      await this.erp.updateInvoice(invoiceMap.externalId, updatePayload);
+      return invoiceMap.externalId;
     }
-    const result = await this.erp.createOrder(payload);
-    return result.id;
+    const { issueDate, dueDate } = invoicePayload;
+    const created = orderId
+      ? await this.erp.createInvoiceFromOrder(orderId, { issueDate, dueDate })
+      : await this.erp.createInvoice(invoicePayload);
+    await this.mapping.set(kind, id, created.id);
+    return created.id;
   }
 
   private async syncDailyProduct(id: string): Promise<void> {
@@ -317,19 +336,23 @@ export class SyncProcessorService {
     });
     if (!dailyProduct || dailyProduct.status === 'CANCELLED') return;
     const customerId = await this.resolveCustomerId(dailyProduct.memberId);
-    const productMap = await this.mapping.get('product', dailyProduct.productId);
+    const productMap = await this.mapping.get(
+      'product',
+      dailyProduct.productId,
+    );
+    if (!productMap) throw new Error('product not yet synced — will retry');
 
-    const invoiceMap = await this.mapping.get('dailyProduct', id);
     const payload = dailyProductToInvoice(
       dailyProduct,
       customerId,
-      productMap?.externalId ?? null,
+      productMap.externalId,
     );
-    const invoiceExternalId = await this.upsertInvoice(
-      invoiceMap?.externalId,
+    const invoiceExternalId = await this.upsertSale(
+      'dailyProduct',
+      id,
       payload,
+      dailyProductToOrder(dailyProduct, customerId, productMap.externalId),
     );
-    await this.mapping.set('dailyProduct', id, invoiceExternalId);
 
     if (dailyProduct.isPayed) {
       const already = await this.mapping.get('dailyProductPayment', id);
@@ -340,25 +363,12 @@ export class SyncProcessorService {
           amount: payload.total,
           paymentMethod: 'cash',
           fundSource: 'UNDECLARED',
-          paymentDate: (dailyProduct.date ?? dailyProduct.createdAt).toISOString(),
+          paymentDate: (
+            dailyProduct.date ?? dailyProduct.createdAt
+          ).toISOString(),
         });
         await this.mapping.set('dailyProductPayment', id, paid.id);
       }
-    }
-
-    if (!productMap) throw new Error('product not yet synced — will retry');
-    const orderMap = await this.mapping.get('dailyProductOrder', id);
-    const orderPayload = dailyProductToOrder(
-      dailyProduct,
-      customerId,
-      productMap.externalId,
-    );
-    if (orderPayload) {
-      const orderExternalId = await this.upsertOrder(
-        orderMap?.externalId,
-        orderPayload,
-      );
-      await this.mapping.set('dailyProductOrder', id, orderExternalId);
     }
   }
 
@@ -370,18 +380,14 @@ export class SyncProcessorService {
     if (!abonnement) return;
     const customerId = await this.resolveCustomerId(abonnement.memberID);
     const productMap = await this.mapping.get('price', abonnement.priceId);
+    if (!productMap) throw new Error('product not yet synced — will retry');
 
-    const invoiceMap = await this.mapping.get('abonnement', id);
-    const payload = abonnementToInvoice(
-      abonnement,
-      customerId,
-      productMap?.externalId ?? null,
+    const invoiceExternalId = await this.upsertSale(
+      'abonnement',
+      id,
+      abonnementToInvoice(abonnement, customerId, productMap.externalId),
+      abonnementToOrder(abonnement, customerId, productMap.externalId),
     );
-    const invoiceExternalId = await this.upsertInvoice(
-      invoiceMap?.externalId,
-      payload,
-    );
-    await this.mapping.set('abonnement', id, invoiceExternalId);
 
     for (const payment of abonnement.payments) {
       const already = await this.mapping.get('abonnementPayment', payment.id);
@@ -397,21 +403,6 @@ export class SyncProcessorService {
       });
       await this.mapping.set('abonnementPayment', payment.id, paid.id);
     }
-
-    if (!productMap) throw new Error('product not yet synced — will retry');
-    const orderMap = await this.mapping.get('abonnementOrder', id);
-    const orderPayload = abonnementToOrder(
-      abonnement,
-      customerId,
-      productMap.externalId,
-    );
-    if (orderPayload) {
-      const orderExternalId = await this.upsertOrder(
-        orderMap?.externalId,
-        orderPayload,
-      );
-      await this.mapping.set('abonnementOrder', id, orderExternalId);
-    }
   }
 
   private async syncJournal(id: string): Promise<void> {
@@ -423,18 +414,18 @@ export class SyncProcessorService {
     const productMap = journal.priceId
       ? await this.mapping.get('price', journal.priceId)
       : null;
+    if (journal.priceId && !productMap) {
+      throw new Error('product not yet synced — will retry');
+    }
 
-    const invoiceMap = await this.mapping.get('journal', id);
-    const payload = journalToInvoice(
-      journal,
-      customerId,
-      productMap?.externalId ?? null,
+    const invoiceExternalId = await this.upsertSale(
+      'journal',
+      id,
+      journalToInvoice(journal, customerId, productMap?.externalId ?? null),
+      productMap
+        ? journalToOrder(journal, customerId, productMap.externalId)
+        : null,
     );
-    const invoiceExternalId = await this.upsertInvoice(
-      invoiceMap?.externalId,
-      payload,
-    );
-    await this.mapping.set('journal', id, invoiceExternalId);
 
     if ((journal.paidAmount ?? 0) > 0) {
       const already = await this.mapping.get('journalPayment', id);
@@ -448,23 +439,6 @@ export class SyncProcessorService {
           paymentDate: (journal.paidAt ?? journal.registredTime).toISOString(),
         });
         await this.mapping.set('journalPayment', id, paid.id);
-      }
-    }
-
-    if (journal.priceId) {
-      if (!productMap) throw new Error('product not yet synced — will retry');
-      const orderMap = await this.mapping.get('journalOrder', id);
-      const orderPayload = journalToOrder(
-        journal,
-        customerId,
-        productMap.externalId,
-      );
-      if (orderPayload) {
-        const orderExternalId = await this.upsertOrder(
-          orderMap?.externalId,
-          orderPayload,
-        );
-        await this.mapping.set('journalOrder', id, orderExternalId);
       }
     }
   }

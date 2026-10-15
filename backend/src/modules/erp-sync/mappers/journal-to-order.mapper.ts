@@ -26,7 +26,6 @@ export function journalToOrder(
     shippingMethod: 'pickup',
     shippingAddress: {},
     paymentMethod: 'cash',
-    amountPaid: journal.paidAmount ?? 0,
     allowStockShortage: true,
     notes: journal.guestName ? `Visiteur : ${journal.guestName}` : undefined,
     orderItems: [

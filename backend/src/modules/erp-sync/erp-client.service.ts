@@ -111,10 +111,9 @@ export class ErpClientService {
   }
 
   listCustomers() {
-    return this.request<Array<{ id: string; firstName: string; lastName: string }>>(
-      'get',
-      '/customers',
-    );
+    return this.request<
+      Array<{ id: string; firstName: string; lastName: string }>
+    >('get', '/customers');
   }
 
   createProduct(payload: ErpProductPayload) {
@@ -127,6 +126,18 @@ export class ErpClientService {
 
   createInvoice(payload: ErpInvoicePayload) {
     return this.request<ErpCreated>('post', '/invoices', payload);
+  }
+
+  /** The sale's one invoice, linked to its order — supply-chain-pro then counts the créance once. */
+  createInvoiceFromOrder(
+    orderId: string,
+    dates: { issueDate: string; dueDate: string },
+  ) {
+    return this.request<ErpCreated>(
+      'post',
+      `/invoices/from-order/${orderId}`,
+      dates,
+    );
   }
 
   updateInvoice(id: string, payload: Partial<ErpInvoicePayload>) {

@@ -89,9 +89,8 @@ export interface ErpOrderPayload {
   shippingMethod: 'standard' | 'express' | 'overnight' | 'pickup';
   shippingAddress: Record<string, never>;
   paymentMethod: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'debit_card' | 'paypal' | 'other';
-  // Deliberately the plain `amountPaid` field, never the `payments` array — supply-chain-pro
-  // only invokes its (best-effort, non-blocking) caisse credit through this path, and never
-  // the stricter one invoices use. No fundSource trick needed here.
+  // Always 0 at creation: money arrives as Payments on the invoice made from this order,
+  // which supply-chain-pro copies onto the order (see SyncProcessorService.upsertSale).
   amountPaid?: number;
   notes?: string;
   // Needed once, at creation, so the goods/service "leaves the shelf" there — a 0-stock

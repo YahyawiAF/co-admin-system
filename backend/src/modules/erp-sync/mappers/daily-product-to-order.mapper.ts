@@ -26,7 +26,6 @@ export function dailyProductToOrder(
     shippingMethod: 'pickup',
     shippingAddress: {},
     paymentMethod: 'cash',
-    amountPaid: dailyProduct.isPayed ? total : 0,
     allowStockShortage: true,
     orderItems: [
       {

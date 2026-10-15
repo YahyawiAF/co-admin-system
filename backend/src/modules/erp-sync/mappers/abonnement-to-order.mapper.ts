@@ -26,7 +26,6 @@ export function abonnementToOrder(
     shippingMethod: 'pickup',
     shippingAddress: {},
     paymentMethod: 'cash',
-    amountPaid: abonnement.payedAmount,
     allowStockShortage: true,
     notes: abonnement.promoLabel || undefined,
     orderItems: [
