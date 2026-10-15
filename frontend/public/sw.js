@@ -1,5 +1,7 @@
 /* Collabora Hub visitor SW — push + light offline shell cache */
-const SHELL_CACHE = "collabora-shell-v3";
+const SHELL_CACHE = "collabora-shell-v4";
+/** Weak / captive Wi-Fi: stop waiting on the network and serve the cached shell. */
+const NAV_TIMEOUT_MS = 8000;
 const SHELL_URLS = ["/", "/m", "/collabora-icon.svg", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
@@ -38,16 +40,27 @@ self.addEventListener("fetch", (event) => {
   }
   // Network-first for navigations / HTML; cache fallback when offline
   if (req.mode === "navigate" || req.destination === "document") {
+    const network = fetch(req).then((res) => {
+      if (res.ok) {
+        const copy = res.clone();
+        caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
+      }
+      return res;
+    });
+    const fallback = () =>
+      caches.match(req).then((cached) => cached || caches.match("/m"));
+    const timeout = new Promise((resolve) => {
+      setTimeout(() => {
+        // Only bail out to the cache when we actually have something cached
+        caches.match(req).then((cached) => {
+          if (cached) resolve(cached);
+        });
+      }, NAV_TIMEOUT_MS);
+    });
     event.respondWith(
-      fetch(req)
-        .then((res) => {
-          const copy = res.clone();
-          caches.open(SHELL_CACHE).then((c) => c.put(req, copy));
-          return res;
-        })
-        .catch(() =>
-          caches.match(req).then((cached) => cached || caches.match("/m"))
-        )
+      Promise.race([network, timeout]).catch(() =>
+        fallback().then((cached) => cached || Response.error())
+      )
     );
     return;
   }

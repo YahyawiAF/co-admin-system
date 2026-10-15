@@ -39,11 +39,17 @@ export function VisitorSessionProvider({
   const [memberId, setMemberId] = useState<string | null>(null);
 
   const refresh = () => {
-    setActiveOrg(orgSlug);
-    ensureAnonId(orgSlug);
-    const cache = loadVisitorCache(orgSlug);
-    setOnboarded(!!cache?.memberId);
-    setMemberId(cache?.memberId || null);
+    // A storage/crypto failure must never leave the visitor on "Chargement…"
+    try {
+      setActiveOrg(orgSlug);
+      ensureAnonId(orgSlug);
+      const cache = loadVisitorCache(orgSlug);
+      setOnboarded(!!cache?.memberId);
+      setMemberId(cache?.memberId || null);
+    } catch {
+      setOnboarded(false);
+      setMemberId(null);
+    }
     setReady(true);
   };
 

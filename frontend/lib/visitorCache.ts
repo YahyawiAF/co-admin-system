@@ -49,17 +49,42 @@ export function getActiveOrg(): string | null {
 
 export function setActiveOrg(slug: string) {
   if (typeof window === "undefined") return;
-  sessionStorage.setItem(ORG_KEY, slug);
+  try {
+    sessionStorage.setItem(ORG_KEY, slug);
+  } catch {
+    /* storage blocked (private mode / in-app browser) */
+  }
+}
+
+/** crypto.randomUUID is missing on older iOS/Android and in-app QR-scanner browsers. */
+function randomId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 export function ensureAnonId(org: string): string {
   if (typeof window === "undefined") return "";
   const key = anonKey(org);
-  const existing = localStorage.getItem(key);
-  if (existing) return existing;
-  const id = crypto.randomUUID();
-  localStorage.setItem(key, id);
-  return id;
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+    const id = randomId();
+    localStorage.setItem(key, id);
+    return id;
+  } catch {
+    return randomId();
+  }
 }
 
 export function loadVisitorCache(org?: string): VisitorCache | null {

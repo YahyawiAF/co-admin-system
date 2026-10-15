@@ -113,6 +113,8 @@ export default function MobileHomePage() {
 
   const scanIn = useMutation({
     mutationFn: () => mobileApi.scanIn(memberId!),
+    // Never park the start while the phone flips 4G → Wi‑Fi ("Démarrage…" forever)
+    networkMode: "always",
     onSuccess: (res) => {
       if (res?.alreadyOpen) {
         toast.message("Votre session est déjà en cours");
@@ -128,6 +130,8 @@ export default function MobileHomePage() {
   /** No subscription (or day credit used): the counter starts now, price follows tiers. */
   const startAuto = useMutation({
     mutationFn: () => mobileApi.startAutoSession(memberId!),
+    // Never park the start while the phone flips 4G → Wi‑Fi ("Démarrage…" forever)
+    networkMode: "always",
     onSuccess: (res) => {
       if (res?.alreadyOpen) {
         toast.message("Votre session est déjà en cours");
