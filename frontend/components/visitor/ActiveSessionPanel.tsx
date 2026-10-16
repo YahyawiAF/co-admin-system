@@ -27,6 +27,9 @@ import {
 import { cn } from "@/lib/utils";
 import { ChooseTimeCard, TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
+import { WelcomeTarifSheet } from "@/components/visitor/WelcomeTarifSheet";
+import { DrinkOfferSheet } from "@/components/visitor/DrinkOfferSheet";
+import { clearTarifPrompt, hasTarifPrompt } from "@/lib/visitorCache";
 import { SeatPickerSheet } from "@/components/visitor/SeatPickerSheet";
 import { BottomSheet } from "@/components/visitor/BottomSheet";
 import { SessionCodeCard } from "@/components/visitor/SessionCodeCard";
@@ -126,6 +129,7 @@ export function ActiveSessionPanel({
   const { slug } = useOrg();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [passOpen, setPassOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [seatOpen, setSeatOpen] = useState(false);
   const [codeOpen, setCodeOpen] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -310,6 +314,7 @@ export function ActiveSessionPanel({
         toast.success(`Pass ${name ?? ""} choisi ✓`);
       }
       setPassOpen(false);
+      onWelcomeOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
@@ -319,6 +324,17 @@ export function ActiveSessionPanel({
   const openPassSheet = () => {
     fixTariff.reset();
     setPassOpen(true);
+  };
+
+  /** Just started from the QR: ask the tarif once (closing keeps "au temps passé"). */
+  const askTarif = canChangeTariff && live?.mode === "AUTO";
+  // Flag kept until answered: the home copy of this panel unmounts on the way to /session
+  useEffect(() => {
+    if (askTarif && hasTarifPrompt(slug)) setWelcomeOpen(true);
+  }, [askTarif, slug]);
+  const onWelcomeOpenChange = (open: boolean) => {
+    setWelcomeOpen(open);
+    if (!open) clearTarifPrompt(slug);
   };
 
   const showSubLink =
@@ -631,7 +647,7 @@ export function ActiveSessionPanel({
           sessionStart={sessionStart}
           now={now}
           pending={fixTariff.isPending}
-          error={passOpen ? null : fixError}
+          error={passOpen || welcomeOpen ? null : fixError}
           onConfirm={(id) => fixTariff.mutate({ priceId: id })}
           onOpenAll={openPassSheet}
         />
@@ -644,7 +660,7 @@ export function ActiveSessionPanel({
           sessionStart={sessionStart}
           now={now}
           pending={fixTariff.isPending}
-          error={passOpen ? null : fixError}
+          error={passOpen || welcomeOpen ? null : fixError}
           onUpgrade={(id) => fixTariff.mutate({ priceId: id, upgrade: true })}
           onOpenAll={openPassSheet}
         />
@@ -724,6 +740,36 @@ export function ActiveSessionPanel({
           pending={fixTariff.isPending}
           error={fixError}
           onConfirm={(id) => fixTariff.mutate({ priceId: id })}
+        />
+      ) : null}
+
+      {live && askTarif ? (
+        <WelcomeTarifSheet
+          open={welcomeOpen}
+          onOpenChange={onWelcomeOpenChange}
+          live={live}
+          tiers={tiers}
+          sessionStart={sessionStart}
+          now={now}
+          pending={fixTariff.isPending}
+          error={welcomeOpen ? fixError : null}
+          onConfirm={(id) => fixTariff.mutate({ priceId: id })}
+        />
+      ) : null}
+
+      {!isOptimistic && session.id ? (
+        <DrinkOfferSheet
+          memberId={memberId}
+          sessionId={String(session.id)}
+          sessionStart={sessionStart}
+          blocked={
+            welcomeOpen ||
+            (askTarif && hasTarifPrompt(slug)) ||
+            passOpen ||
+            checkoutOpen ||
+            seatOpen ||
+            codeOpen
+          }
         />
       ) : null}
 

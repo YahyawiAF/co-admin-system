@@ -13,10 +13,9 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { mobileApi } from "@/lib/api/resources";
+import { mobileApi, type MobileSession } from "@/lib/api/resources";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { WelcomeRegister } from "@/components/visitor/WelcomeRegister";
-import { AnnouncementBanner } from "@/components/visitor/AnnouncementBanner";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
@@ -43,7 +42,11 @@ import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
-import { clearQrEntry, hasRecentQrEntry } from "@/lib/visitorCache";
+import {
+  clearQrEntry,
+  hasRecentQrEntry,
+  markTarifPrompt,
+} from "@/lib/visitorCache";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 
 export default function MobileHomePage() {
@@ -91,11 +94,12 @@ export default function MobileHomePage() {
   });
 
   useEffect(() => {
-    if (!status?.session) return;
+    // Cached status may still hold yesterday's session: never drop the QR intent on it
+    if (!status?.session || statusIsPlaceholder) return;
     setShowCheckoutPromo(false);
     clearQrEntry(slug);
     setFromQr(false);
-  }, [status?.session, slug]);
+  }, [status?.session, statusIsPlaceholder, slug]);
 
   const cancel = useMutation({
     mutationFn: () => {
@@ -111,60 +115,37 @@ export default function MobileHomePage() {
     },
   });
 
-  const scanIn = useMutation({
-    mutationFn: () => mobileApi.scanIn(memberId!),
-    // Never park the start while the phone flips 4G → Wi‑Fi ("Démarrage…" forever)
-    networkMode: "always",
-    onSuccess: (res) => {
-      if (res?.alreadyOpen) {
-        toast.message("Votre session est déjà en cours");
-      } else {
-        toast.success("Présence enregistrée ✓");
-      }
-      refetch();
-      router.push(href("/session"));
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+  const onStarted = (res: MobileSession) => {
+    if (res?.resumed) {
+      toast.success("Session reprise ✓");
+    } else if (res?.alreadyOpen) {
+      toast.message("Votre session est déjà en cours");
+    } else {
+      toast.success("Présence enregistrée ✓");
+      // Session runs already; the session screen then asks the tarif once
+      if (res?.pricingMode === "AUTO") markTarifPrompt(slug);
+    }
+    refetch();
+    router.push(href("/session"));
+  };
 
-  /** No subscription (or day credit used): the counter starts now, price follows tiers. */
+  /** Abonnement session when it covers today, otherwise the AUTO counter (tiers). */
   const startAuto = useMutation({
     mutationFn: () => mobileApi.startAutoSession(memberId!),
     // Never park the start while the phone flips 4G → Wi‑Fi ("Démarrage…" forever)
     networkMode: "always",
-    onSuccess: (res) => {
-      if (res?.alreadyOpen) {
-        toast.message("Votre session est déjà en cours");
-      } else {
-        toast.success("Présence enregistrée ✓");
-      }
-      refetch();
-      router.push(href("/session"));
-    },
+    onSuccess: onStarted,
     onError: (e: Error) => toast.error(e.message),
   });
 
-  /** One tap: abonnement → presence; otherwise the AUTO counter (tiers) starts now. */
+  /** One tap / QR scan: the server covers it with the abonnement when one applies, else AUTO. */
   const startSession = () => {
-    if (!memberId || scanIn.isPending || startAuto.isPending) return;
+    if (!memberId || startAuto.isPending) return;
     if (status?.session || status?.pendingRequest) {
       toast.message("Votre session est déjà en cours");
       if (status.session) router.push(href("/session"));
       return;
     }
-    if (status?.hasActiveSubscription) {
-      const rem =
-        status.dailyCreditRemainingHours ??
-        (status.subscription as { dailyCreditRemainingHours?: number } | null)
-          ?.dailyCreditRemainingHours;
-      if (rem != null && rem <= 0) {
-        startAuto.mutate();
-        return;
-      }
-      scanIn.mutate();
-      return;
-    }
-    // Server falls back to the subscription session when one is active
     startAuto.mutate();
   };
 
@@ -240,11 +221,9 @@ export default function MobileHomePage() {
   }, [seat, layout?.spaces]);
 
   const hasWifi = !!(wifiFallback?.wifiSsid || wifiFallback?.wifiPassword);
-  const scanError = scanIn.isError
-    ? (scanIn.error as Error).message
-    : startAuto.isError
-      ? (startAuto.error as Error).message
-      : null;
+  const scanError = startAuto.isError
+    ? (startAuto.error as Error).message
+    : null;
   const appPromos = memberAppPromos(layout?.facility, status?.member);
   const showInstallPromo =
     appPromos.eligible ||
@@ -419,8 +398,6 @@ export default function MobileHomePage() {
         </div>
       )}
 
-      {/* Announcement slot */}
-      <AnnouncementBanner />
       {idle ? <OffersStrip /> : null}
 
       {idle || (pending && !session) ? subscriptionCard(false) : null}
@@ -435,7 +412,7 @@ export default function MobileHomePage() {
           subscriptionDaysRemaining={status?.subscription?.daysRemaining}
           subscriptionHoursRemaining={status?.subscription?.hoursRemaining}
           dailyRemainingHours={periodSub ? dailyRem : null}
-          pending={scanIn.isPending || startAuto.isPending}
+          pending={startAuto.isPending}
           error={scanError}
           canChooseForfait={canChooseForfait}
           onStart={startSession}

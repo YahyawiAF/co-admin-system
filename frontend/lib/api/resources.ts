@@ -911,6 +911,8 @@ export type MobileSession = Journal & {
   expectedLeaveTime?: string | null;
   /** Scan while a session is already running: the existing one is returned. */
   alreadyOpen?: boolean;
+  /** Checked out < 59 min ago: the same visit was reopened. */
+  resumed?: boolean;
 };
 
 export type PricingContextResponse = {

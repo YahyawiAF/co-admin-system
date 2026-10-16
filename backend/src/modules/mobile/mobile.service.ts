@@ -105,6 +105,8 @@ import { PromotionService } from '../promotion/promotion.service';
 import { orderUnitPrice } from '../product/order-price';
 
 export const roundsOfHashing = 10;
+/** Re-check-in this soon after a checkout resumes the same visit. */
+const REOPEN_WINDOW_MS = 59 * 60_000;
 
 @Injectable()
 export class MobileService {
@@ -2302,8 +2304,12 @@ export class MobileService {
     const subKind = activeSub?.price
       ? this.subscriptionKind(activeSub.price)
       : null;
-    if (subKind === 'HOURS_POOL') {
-      return this.startSubscriptionSession(memberId);
+    if (subKind === 'HOURS_POOL' && activeSub?.price) {
+      const left =
+        (activeSub.hoursQuota || activeSub.price.durationHours || 0) -
+        (activeSub.hoursUsed || 0);
+      // Hours used up → the AUTO counter below instead of an error
+      if (left > 0) return this.startSubscriptionSession(memberId);
     }
     if (this.isPeriodKind(subKind) && activeSub?.price) {
       const quota = this.periodDailyQuotaHours(
@@ -3542,12 +3548,92 @@ export class MobileService {
     return this.startSubscriptionSession(memberId);
   }
 
-  /** Scanning again never restarts or closes a session: return the running one. */
+  /**
+   * Scanning again never restarts or closes a session: return the running one.
+   * Checked out < 59 min ago → the same visit is reopened (first arrival time kept).
+   */
   private async openSessionForRescan(memberId: string) {
-    const open = await this.getOpenSession(memberId);
+    const running = await this.getOpenSession(memberId);
+    const open = running ?? (await this.reopenRecentCheckout(memberId));
     if (!open) return null;
     const session = await this.enrichSessionWithSeat(open as any);
-    return session ? { ...session, alreadyOpen: true } : null;
+    return session ? { ...session, alreadyOpen: true, resumed: !running } : null;
+  }
+
+  /**
+   * Check-out then check-in again within 59 min = one visit, not two rows.
+   * Only unpaid visits (or subscription ones, nothing to cash) are reopened.
+   */
+  private async reopenRecentCheckout(memberId: string) {
+    const now = new Date();
+    const last = await this.prisma.journal.findFirst({
+      where: {
+        memberID: memberId,
+        isReservation: false,
+        leaveTime: { gte: new Date(now.getTime() - REOPEN_WINDOW_MS) },
+        registredTime: { gte: startOfDay(now) },
+      },
+      orderBy: { leaveTime: 'desc' },
+    });
+    if (!last?.leaveTime) return null;
+    const cashed = (last.paidAmount ?? 0) > 0 || (last.isPayed && last.payedAmount > 0);
+    if (cashed) return null;
+
+    // Hours-pool abonnement: checkout charged the hours, the next checkout charges the whole stay
+    const sub = await this.getActiveSubscription(memberId);
+    if (
+      sub?.price &&
+      sub.priceId === last.priceId &&
+      this.subscriptionKind(sub.price) === 'HOURS_POOL'
+    ) {
+      const charged = Math.max(
+        0.25,
+        Math.ceil(
+          ((last.leaveTime.getTime() - last.registredTime.getTime()) / 3600_000) * 4,
+        ) / 4,
+      );
+      await this.prisma.abonnement.update({
+        where: { id: sub.id },
+        data: { hoursUsed: Math.max(0, (sub.hoursUsed || 0) - charged) },
+      });
+    }
+
+    const reopened = await this.prisma.journal.update({
+      where: { id: last.id },
+      data: { leaveTime: null, amountAtCheckout: null },
+      include: { prices: true, members: { include: { group: true } } },
+    });
+
+    // Give back the seat(s) released at checkout when still free
+    const released = await this.prisma.opsEvent.findMany({
+      where: {
+        journalId: last.id,
+        type: 'seat.released',
+        occurredAt: { gte: new Date(last.leaveTime.getTime() - 60_000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const seen = new Set<string>();
+    for (const ev of released) {
+      if (!ev.seatId || seen.has(ev.seatId)) continue;
+      seen.add(ev.seatId);
+      const spaceId = (ev.meta as { spaceId?: string } | null)?.spaceId;
+      try {
+        await this.bookSeatForMember(memberId, ev.seatId, {
+          spaceId: spaceId || undefined,
+          keepExisting: true,
+        });
+      } catch {
+        /* taken meanwhile — reception assigns one */
+      }
+    }
+
+    this.eventsGateway.sendTableUpdates({
+      type: 'session_resumed',
+      journalId: reopened.id,
+      memberId,
+    });
+    return reopened;
   }
 
   enrichSession(

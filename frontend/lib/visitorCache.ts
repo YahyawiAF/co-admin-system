@@ -247,3 +247,61 @@ export function clearQrEntry(org: string) {
     /* ignore */
   }
 }
+
+/** Right after a QR auto-start: show the tarif chooser once on the session screen. */
+const tarifPromptKey = (org: string) => `visitor-tarif-prompt:${org}`;
+const TARIF_PROMPT_TTL_MS = 30 * 60_000;
+
+export function markTarifPrompt(org: string) {
+  try {
+    localStorage.setItem(tarifPromptKey(org), String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+export function hasTarifPrompt(org: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const at = Number(localStorage.getItem(tarifPromptKey(org)));
+    return !!at && Date.now() - at < TARIF_PROMPT_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+export function clearTarifPrompt(org: string) {
+  try {
+    localStorage.removeItem(tarifPromptKey(org));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Drink suggestion: once per session, and never again once the visitor opts out. */
+const drinkOfferKey = (org: string) => `visitor-drink-offer:${org}`;
+const drinkOfferOffKey = (org: string) => `visitor-drink-offer-off:${org}`;
+
+export function drinkOfferSeen(org: string, sessionId: string): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return (
+      localStorage.getItem(drinkOfferOffKey(org)) === "1" ||
+      localStorage.getItem(drinkOfferKey(org)) === sessionId
+    );
+  } catch {
+    return true;
+  }
+}
+export function markDrinkOfferSeen(org: string, sessionId: string) {
+  try {
+    localStorage.setItem(drinkOfferKey(org), sessionId);
+  } catch {
+    /* ignore */
+  }
+}
+export function disableDrinkOffer(org: string) {
+  try {
+    localStorage.setItem(drinkOfferOffKey(org), "1");
+  } catch {
+    /* ignore */
+  }
+}
