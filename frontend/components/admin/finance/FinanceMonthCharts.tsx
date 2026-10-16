@@ -110,19 +110,16 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
     <div className="grid gap-4 lg:grid-cols-2">
       <Card className="lg:col-span-2">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">
-            Année {year} — revenus, dépenses et net
-          </CardTitle>
+          <CardTitle className="text-base">Année {year} — bénéfice net</CardTitle>
         </CardHeader>
-        <CardContent className="h-72 pt-2">
+        <CardContent className="h-64 pt-2">
           {yearChart.length ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={yearChart}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="label" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} width={48} />
+                <YAxis tick={{ fontSize: 12 }} width={48} tickFormatter={(v) => fmtDt(v)} />
                 <Tooltip formatter={(v: number) => fmtDt(v)} />
-                <Legend />
                 <Area
                   type="monotone"
                   dataKey="Net"
@@ -130,12 +127,35 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
                   fill="hsl(var(--primary) / 0.2)"
                   strokeWidth={2}
                 />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-muted-foreground">Aucune donnée annuelle</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Année {year} — dépenses</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Échelle propre aux dépenses — un mois très rentable n&apos;écrase plus la courbe.
+          </p>
+        </CardHeader>
+        <CardContent className="h-48 pt-2">
+          {yearChart.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={yearChart}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} width={48} tickFormatter={(v) => fmtDt(v)} />
+                <Tooltip formatter={(v: number) => fmtDt(v)} />
                 <Area
                   type="monotone"
                   dataKey="Dépenses"
                   stroke="hsl(var(--destructive))"
-                  fill="hsl(var(--destructive) / 0.12)"
-                  strokeWidth={1.5}
+                  fill="hsl(var(--destructive) / 0.15)"
+                  strokeWidth={2}
                 />
               </AreaChart>
             </ResponsiveContainer>

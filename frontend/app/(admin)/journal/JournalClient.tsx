@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -279,7 +279,7 @@ export default function JournalClient() {
   // Rows tick live against the same ladder as the server
   setJournalPricingLadder(pricingCtx?.allTiers);
 
-  // Clear selection when date or filters change
+  // Clear selection when date or filters change (not on search: pick people across searches)
   useEffect(() => {
     setSelectedIds(new Set());
   }, [
@@ -292,7 +292,6 @@ export default function JournalClient() {
     spaceFilter,
     tableFilter,
     quickFilter,
-    search,
   ]);
 
   useEffect(() => {
@@ -741,13 +740,15 @@ export default function JournalClient() {
   const occupancyPct =
     capacity > 0 ? Math.min(100, Math.round((occupied / capacity) * 100)) : 0;
 
+  // From all rows: people picked before a new search stay in the bulk actions
+  const allGroupedRows = useMemo(() => groupJournalByPerson(rows), [rows]);
   const selectedRows = useMemo(
     () =>
-      displayRows.filter((r) => {
+      allGroupedRows.filter((r) => {
         const ids = r.passages?.length ? r.passages.map((p) => p.id) : [r.id];
         return ids.some((id) => selectedIds.has(id));
       }),
-    [displayRows, selectedIds]
+    [allGroupedRows, selectedIds]
   );
   const selectedPresent = selectedRows.filter(isActiveVisit);
   const selectedJournalRows = useMemo(
@@ -775,15 +776,36 @@ export default function JournalClient() {
   };
 
   const toggleSelectAll = () => {
-    if (allFilteredSelected) {
-      setSelectedIds(new Set());
-    } else {
-      const ids = displayRows.flatMap((r) =>
-        r.passages?.length ? r.passages.map((p) => p.id) : [r.id]
-      );
-      setSelectedIds(new Set(ids));
-    }
+    const ids = displayRows.flatMap((r) =>
+      r.passages?.length ? r.passages.map((p) => p.id) : [r.id]
+    );
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (allFilteredSelected) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
   };
+
+  // Ctrl+S or "/" → search box (the check-in dialog has its own when open)
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"]')) return;
+      const t = e.target as HTMLElement | null;
+      const typing =
+        !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+      const ctrlS = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
+      if (!ctrlS && !(e.key === "/" && !typing)) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+      searchRef.current?.select();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const clearSelection = () => setSelectedIds(new Set());
 
@@ -1187,6 +1209,7 @@ export default function JournalClient() {
           <QuickCheckInPanel
             presentMemberIds={presentMemberIds}
             onDone={() => refetch()}
+            hotkey
           />
           <Button
             variant="outline"
@@ -1461,10 +1484,14 @@ export default function JournalClient() {
 
         <div className="flex flex-wrap gap-2">
           <Input
+            ref={searchRef}
             className="max-w-xs"
-            placeholder="Nom (approx.) / téléphone / #"
+            placeholder="Nom (approx.) / téléphone / #   (Ctrl+S)"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSearch("");
+            }}
           />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px]">
@@ -1683,7 +1710,14 @@ export default function JournalClient() {
                           />
                           <div>
                             <div className="flex flex-wrap items-center gap-1.5 font-medium">
-                              {visitorLabel(row)}
+                              <button
+                                type="button"
+                                className="text-left hover:underline"
+                                title="Cliquer pour sélectionner"
+                                onClick={() => toggleSelect(row.id, passageIds)}
+                              >
+                                {visitorLabel(row)}
+                              </button>
                               {row.checkoutCount > 1 ? (
                                 <Badge variant="secondary" className="h-5 text-[10px]">
                                   {row.checkoutCount} check-out

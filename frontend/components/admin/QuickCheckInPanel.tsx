@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import Fuse from "fuse.js";
@@ -22,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   facilityApi,
+  journalApi,
   membersApi,
   mobileApi,
   pricesApi,
@@ -56,6 +57,8 @@ import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 type Props = {
   presentMemberIds: string[];
   onDone?: () => void;
+  /** Ctrl+I opens this dialog (only one instance per page). */
+  hotkey?: boolean;
 };
 
 type Mode = "existing" | "new" | "anonymous";
@@ -70,10 +73,24 @@ type RecentCheckIn = {
 type LineOpts = { priceId?: string; hours?: number; paid?: boolean };
 
 const SINGLE_KEY = "__single__";
+const ARRIVAL_SHIFTS = [0, 15, 30, 60] as const;
+
+function hhmm(d: Date) {
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** "HH:mm" today; empty = now. */
+function arrivalDate(value: string, now: Date) {
+  const [h, m] = value.split(":").map(Number);
+  if (!value || Number.isNaN(h) || Number.isNaN(m)) return now;
+  const d = new Date(now);
+  d.setHours(h, m, 0, 0);
+  return d;
+}
 
 type CheckInResult = { id?: string; journals?: { id: string }[] };
 
-export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
+export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState("visitor");
@@ -98,6 +115,10 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   const [seatLabels, setSeatLabels] = useState<string[]>([]);
   const [blockers, setBlockers] = useState<SeatOccupant[]>([]);
   const [now, setNow] = useState(() => new Date());
+  /** "HH:mm" when the visitor actually arrived earlier; "" = now. */
+  const [arrival, setArrival] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -161,6 +182,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     return fuse.search(search).map((r) => r.item).slice(0, 12);
   }, [members, search]);
 
+  useEffect(() => setCursor(0), [search]);
+
   const journeePacks = useMemo(() => {
     const spaces = layout?.spaces || [];
     const hasSeats = spaces.some(
@@ -188,9 +211,12 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
 
   const singleLabel =
     mode === "anonymous"
-      ? guestName.trim() || "Visiteur anonyme"
+      ? guestName.trim() || "Anonyme (n° auto)"
       : [newName.trim(), newLastName.trim()].filter(Boolean).join(" ") ||
         newPhone.trim();
+
+  const arrivedAt = useMemo(() => arrivalDate(arrival, now), [arrival, now]);
+  const arrivalInFuture = arrivedAt.getTime() > Date.now() + 60_000;
 
   /** One fiche line per person to check in. */
   const lines = useMemo((): Array<FicheLine & { member: Member | null }> => {
@@ -249,10 +275,10 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
         discountPercent,
         listAmount: Math.round(listAmount * 100) / 100,
         amount,
-        arrival: now,
+        arrival: arrivedAt,
         leaveAt:
           !usesSub && lineHours > 0
-            ? new Date(now.getTime() + lineHours * 3_600_000)
+            ? new Date(arrivedAt.getTime() + lineHours * 3_600_000)
             : null,
         paid: usesSub ? false : opts.paid ?? paidAll,
         usesSub,
@@ -271,6 +297,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     paidAll,
     singleLabel,
     newPhone,
+    arrivedAt,
   ]);
 
   const total = lines.reduce((s, l) => s + (l.usesSub ? 0 : l.amount), 0);
@@ -287,6 +314,18 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
         : [...prev, m]
     );
     setSearch("");
+    searchRef.current?.focus();
+  };
+
+  const chooseTarif = (id: string) => {
+    setPriceId(id);
+    setLineOpts((prev) => {
+      const next: Record<string, LineOpts> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        next[k] = { ...v, priceId: undefined, hours: undefined };
+      }
+      return next;
+    });
   };
 
   const removeLine = (key: string) => {
@@ -308,6 +347,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
     setNewName("");
     setNewLastName("");
     setGuestName("");
+    setArrival("");
     setPriceId("");
     setMode("existing");
     setStep("visitor");
@@ -360,6 +400,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   const checkIn = useMutation({
     mutationFn: async () => {
       if (!lines.length) throw new Error("Ajoutez au moins une personne");
+      if (arrivalInFuture) throw new Error("L'heure d'arrivée est dans le futur");
       const missing = lines.find((l) => !l.usesSub && !l.pack);
       if (missing) throw new Error(`Choisissez un tarif pour ${missing.name}`);
       if (!isMulti && occupyMode === "group" && seatLabels.length < 2) {
@@ -392,12 +433,18 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                   lastName: mode === "new" ? newLastName || undefined : undefined,
                 }))) as CheckInResult;
           }
+          const ids = res.journals?.length
+            ? res.journals.map((j) => j.id)
+            : res.id
+              ? [res.id]
+              : [];
+          // Arrived earlier: the counter starts at the real arrival time
+          if (arrival && Date.now() - arrivedAt.getTime() > 60_000) {
+            for (const id of ids) {
+              await journalApi.update(id, { registredTime: arrivedAt.toISOString() });
+            }
+          }
           if (line.paid && !line.usesSub) {
-            const ids = res.journals?.length
-              ? res.journals.map((j) => j.id)
-              : res.id
-                ? [res.id]
-                : [];
             for (const id of ids) await mobileApi.setPayment(id, true);
           }
           done.push(line.key);
@@ -453,7 +500,63 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
   };
 
   const canSubmit =
-    lines.length > 0 && lines.every((l) => l.usesSub || !!l.pack);
+    lines.length > 0 &&
+    !arrivalInFuture &&
+    lines.every((l) => l.usesSub || !!l.pack);
+
+  const submit = (close: boolean) => {
+    if (!canSubmit || checkIn.isPending) return;
+    setCloseAfterCheckIn(close);
+    checkIn.mutate();
+  };
+
+  /** Quick tarifs shown on the visitor step: Alt+1…9 picks them. */
+  const quickTarifs = journeePacks.slice(0, 9);
+  const showSubChip = lines.some((l) => l.subKind === "period");
+
+  // Ctrl+I opens the dialog
+  useEffect(() => {
+    if (!hotkey) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "i") {
+        e.preventDefault();
+        setOpen(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hotkey]);
+
+  // In the dialog: Ctrl+S search · Alt+1…9 tarif · Ctrl+Enter add (& next)
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        setMode("existing");
+        setStep("visitor");
+        setTimeout(() => {
+          searchRef.current?.focus();
+          searchRef.current?.select();
+        }, 0);
+        return;
+      }
+      if (mod && e.key === "Enter") {
+        e.preventDefault();
+        submit(e.shiftKey);
+        return;
+      }
+      if (e.altKey && /^Digit[1-9]$/.test(e.code)) {
+        const pack = quickTarifs[Number(e.code.slice(5)) - 1];
+        if (!pack) return;
+        e.preventDefault();
+        chooseTarif(pack.id);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   const addLabel = checkIn.isPending
     ? "Check-in…"
@@ -477,15 +580,17 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
       }}
     >
       <DialogTrigger asChild>
-        <Button size="lg">+ Check-in</Button>
+        <Button size="lg" title={hotkey ? "Ctrl+I" : undefined}>
+          + Check-in
+        </Button>
       </DialogTrigger>
       <DialogContent className="flex h-[90vh] max-h-[90vh] w-[96vw] max-w-7xl flex-col gap-0 overflow-hidden p-0 sm:max-w-7xl">
         <div className="border-b bg-muted/40 px-6 py-4 pr-12">
           <DialogHeader>
             <DialogTitle className="text-xl">Check-in</DialogTitle>
             <DialogDescription>
-              Sélectionnez une ou plusieurs personnes, le tarif et la place.
-              La fiche à droite récapitule tout avant d&apos;ajouter.
+              Ctrl+S rechercher · Entrée ajouter la personne · Alt+1…9 tarif ·
+              Ctrl+Entrée valider. La fiche à droite récapitule tout.
             </DialogDescription>
           </DialogHeader>
           {recentCheckIns.length > 0 ? (
@@ -573,13 +678,29 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                       </div>
                     ) : null}
                     <Input
-                      placeholder="Nom, téléphone ou #visiteur"
+                      ref={searchRef}
+                      placeholder="Nom, téléphone ou #visiteur — Entrée pour ajouter, ↑↓ pour choisir"
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setCursor((c) => Math.min(c + 1, filteredMembers.length - 1));
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setCursor((c) => Math.max(c - 1, 0));
+                        } else if (e.key === "Enter" && !e.ctrlKey && !e.metaKey) {
+                          e.preventDefault();
+                          const m = filteredMembers[cursor];
+                          if (m) togglePick(m);
+                        } else if (e.key === "Backspace" && !search && picked.length) {
+                          removeLine(picked[picked.length - 1].id);
+                        }
+                      }}
                       autoFocus
                     />
                     <div className="max-h-80 space-y-1 overflow-y-auto rounded-lg border bg-muted/30 p-1">
-                      {filteredMembers.map((m) => {
+                      {filteredMembers.map((m, i) => {
                         const activeAbo = subOf(m);
                         const selected = pickedIds.has(m.id);
                         return (
@@ -591,7 +712,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                               "flex w-full items-start gap-2.5 rounded-md px-3 py-2.5 text-left text-sm transition-colors",
                               selected
                                 ? "bg-primary/10 ring-1 ring-primary/40"
-                                : "hover:bg-background"
+                                : "hover:bg-background",
+                              i === cursor && search.length >= 2 && "outline outline-2 outline-primary/60"
                             )}
                           >
                             <span
@@ -669,7 +791,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                     <Input
                       value={guestName}
                       onChange={(e) => setGuestName(e.target.value)}
-                      placeholder="Visiteur anonyme"
+                      placeholder="Vide = numéroté automatiquement (Anonyme 1, 2, 3…)"
                       autoFocus
                     />
                     <p className="text-xs text-muted-foreground">
@@ -680,13 +802,82 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                 ) : null}
 
                 {lines.length > 0 && !allHoursPool ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setStep("tarif")}
-                  >
-                    Continuer → Tarif
-                  </Button>
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label>Tarif rapide</Label>
+                        <span className="text-[11px] text-muted-foreground">
+                          Alt+1…9
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {showSubChip ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={priceId === "" ? "default" : "outline"}
+                            onClick={() => chooseTarif("")}
+                          >
+                            Abonnement
+                          </Button>
+                        ) : null}
+                        {quickTarifs.map((p, i) => (
+                          <Button
+                            key={p.id}
+                            type="button"
+                            size="sm"
+                            variant={priceId === p.id ? "default" : "outline"}
+                            onClick={() => chooseTarif(p.id)}
+                          >
+                            <span className="mr-1 text-[10px] opacity-60">{i + 1}</span>
+                            {p.name} · {p.price} DT
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Heure d&apos;arrivée</Label>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {ARRIVAL_SHIFTS.map((min) => {
+                          const value = min ? hhmm(new Date(Date.now() - min * 60_000)) : "";
+                          const active = min ? arrival === value : !arrival;
+                          return (
+                            <Button
+                              key={min}
+                              type="button"
+                              size="sm"
+                              variant={active ? "default" : "outline"}
+                              onClick={() => setArrival(value)}
+                            >
+                              {min ? `−${min >= 60 ? "1h" : `${min} min`}` : "Maintenant"}
+                            </Button>
+                          );
+                        })}
+                        <Input
+                          type="time"
+                          className="h-8 w-28"
+                          value={arrival || hhmm(now)}
+                          onChange={(e) => setArrival(e.target.value)}
+                        />
+                        {arrivalInFuture ? (
+                          <span className="text-xs text-rose-600">Dans le futur</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[11px] text-muted-foreground">
+                        Ctrl+Entrée : ajouter & suivant · Ctrl+Maj+Entrée : ajouter & fermer
+                      </span>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setStep("tarif")}
+                      >
+                        Plus d&apos;options → Tarif
+                      </Button>
+                    </div>
+                  </div>
                 ) : null}
               </TabsContent>
 
@@ -701,16 +892,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
                   prices={prices}
                   spaces={layout?.spaces || []}
                   priceId={priceId}
-                  onPriceId={(id) => {
-                    setPriceId(id);
-                    setLineOpts((prev) => {
-                      const next: Record<string, LineOpts> = {};
-                      for (const [k, v] of Object.entries(prev)) {
-                        next[k] = { ...v, priceId: undefined, hours: undefined };
-                      }
-                      return next;
-                    });
-                  }}
+                  onPriceId={chooseTarif}
                   reserveKind={reserveKind}
                   spaceId={spaceId}
                   tableId={tableId}
@@ -847,19 +1029,13 @@ export function QuickCheckInPanel({ presentMemberIds, onDone }: Props) {
             <Button
               variant="outline"
               disabled={!canSubmit || checkIn.isPending}
-              onClick={() => {
-                setCloseAfterCheckIn(true);
-                checkIn.mutate();
-              }}
+              onClick={() => submit(true)}
             >
               Ajouter & fermer
             </Button>
             <Button
               disabled={!canSubmit || checkIn.isPending}
-              onClick={() => {
-                setCloseAfterCheckIn(false);
-                checkIn.mutate();
-              }}
+              onClick={() => submit(false)}
             >
               {checkIn.isPending ? addLabel : `${addLabel} & suivant`}
             </Button>

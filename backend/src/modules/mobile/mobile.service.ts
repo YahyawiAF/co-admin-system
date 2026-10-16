@@ -2831,6 +2831,17 @@ export class MobileService {
     };
   }
 
+  /** Unnamed walk-ins of the day: "Anonyme 1", "Anonyme 2"… */
+  private async nextAnonymousLabel(at: Date) {
+    const today = await this.prisma.journal.count({
+      where: {
+        isAnonymous: true,
+        registredTime: { gte: startOfDay(at), lte: endOfDay(at) },
+      },
+    });
+    return `Anonyme ${today + 1}`;
+  }
+
   async groupVisitCheckIn(dto: QuickCheckInDto) {
     const labels = [...new Set((dto.seatLabels || []).map((s) => s.trim()))];
     if (labels.length < 2) {
@@ -2855,8 +2866,9 @@ export class MobileService {
       : await this.quickCheckIn({ ...hostDto, anonymous: false });
     const baseName =
       (dto.guestName || dto.firstName || '').trim() ||
-      (host as { members?: { firstName?: string | null } }).members
+      (host as { members?: { firstName?: string | null } | null }).members
         ?.firstName ||
+      (host as { guestName?: string | null }).guestName ||
       'Groupe';
     const extras = [];
     for (let i = 1; i < labels.length; i++) {
@@ -2918,7 +2930,8 @@ export class MobileService {
       );
 
     const guestName =
-      (dto.guestName || dto.firstName || '').trim() || 'Visiteur anonyme';
+      (dto.guestName || dto.firstName || '').trim() ||
+      (await this.nextAnonymousLabel(now));
 
     const snap = saleSnapshotFromPrice(price, {
       id: dto.spaceId || price.spaceId,

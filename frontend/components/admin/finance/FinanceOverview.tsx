@@ -81,12 +81,12 @@ function DeltaChip({
   }
   const up = value > 0;
   const flat = Math.abs(value) < (unit === "pts" ? 0.5 : 1);
+  // Past 300% the comparison period was near zero: the ratio is technically
+  // correct but meaningless ("×1483.8"). Say "nouveau" instead of a number.
+  const isNew = unit === "%" && value > 300;
   const good = flat ? null : inverse ? !up : up;
   const Icon = up ? ArrowUpRight : ArrowDownRight;
-  const text =
-    unit === "%" && value > 300
-      ? `×${Math.round((1 + value / 100) * 10) / 10}`
-      : `${up ? "+" : ""}${Math.round(value * 10) / 10}${unit === "pts" ? " pts" : " %"}`;
+  const text = `${up ? "+" : ""}${Math.round(value * 10) / 10}${unit === "pts" ? " pts" : " %"}`;
   return (
     <span
       className={cn(
@@ -96,8 +96,8 @@ function DeltaChip({
         good === false && "bg-rose-100 text-rose-700",
       )}
     >
-      {!flat ? <Icon className="h-3 w-3" /> : null}
-      {flat ? "stable" : text}
+      {!flat && !isNew ? <Icon className="h-3 w-3" /> : null}
+      {flat ? "stable" : isNew ? "nouveau" : text}
     </span>
   );
 }
