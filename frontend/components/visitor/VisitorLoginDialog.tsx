@@ -21,8 +21,10 @@ import {
 import { mobileApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
-import { hasRecentQrEntry } from "@/lib/visitorCache";
-import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
+import {
+  startFromQrEntry,
+  wantsQrCheckin,
+} from "@/lib/visitor-qr-checkin";
 import type { Member } from "@/lib/types";
 
 type Props = {
@@ -73,17 +75,18 @@ export function VisitorLoginDialog({
     setLoginPin("");
     setShortCode("");
     setStep("phone");
-    if (hasRecentQrEntry(slug)) {
+    if (wantsQrCheckin(slug)) {
       try {
         const session = await startFromQrEntry({
           org: slug,
           memberId: member.id,
+          force: true,
         });
         if (session?.resumed) toast.success("Session reprise ✓");
         else if (session?.alreadyOpen) {
           toast.message("Votre session est déjà en cours");
         } else toast.success("Présence enregistrée ✓");
-        router.replace(href("/session"));
+        window.location.replace(href("/session"));
         return;
       } catch (e) {
         toast.error(

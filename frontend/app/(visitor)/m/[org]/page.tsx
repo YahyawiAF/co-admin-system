@@ -42,12 +42,11 @@ import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
+import { clearQrEntry, markTarifPrompt } from "@/lib/visitorCache";
 import {
-  clearQrEntry,
-  hasRecentQrEntry,
-  markTarifPrompt,
-} from "@/lib/visitorCache";
-import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
+  startFromQrEntry,
+  wantsQrCheckin,
+} from "@/lib/visitor-qr-checkin";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 
 export default function MobileHomePage() {
@@ -57,9 +56,9 @@ export default function MobileHomePage() {
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
-  /** Sync read so signup → Accueil still sees the QR intent on first paint. */
+  /** localStorage and/or ?checkin=1 (iPhone Camera → Safari). */
   const [fromQr, setFromQr] = useState(() =>
-    typeof window !== "undefined" ? hasRecentQrEntry(slug) : false,
+    typeof window !== "undefined" ? wantsQrCheckin(slug) : false,
   );
 
   useEffect(() => {
@@ -67,7 +66,7 @@ export default function MobileHomePage() {
   }, []);
 
   useEffect(() => {
-    setFromQr(hasRecentQrEntry(slug));
+    setFromQr(wantsQrCheckin(slug));
   }, [slug, onboarded, memberId]);
 
   const {
@@ -78,7 +77,7 @@ export default function MobileHomePage() {
   const qrAutoStartedRef = useRef(false);
   /** QR flag read before anything clears it: a scan while a session runs means "leaving?" */
   const qrAtLoadRef = useRef(
-    typeof window !== "undefined" && hasRecentQrEntry(slug)
+    typeof window !== "undefined" && wantsQrCheckin(slug)
   );
   const [leavePrompt, setLeavePrompt] = useState(false);
   const { data: layout } = useQuery({
@@ -128,9 +127,9 @@ export default function MobileHomePage() {
       clearQrEntry(slug);
       setFromQr(false);
       void refetch();
-      router.push(href("/session"));
+      window.location.replace(href("/session"));
     },
-    [slug, refetch, router, href],
+    [slug, refetch, href],
   );
 
   /** Abonnement session when it covers today, otherwise the AUTO counter (tiers). */
@@ -161,7 +160,7 @@ export default function MobileHomePage() {
    * - already in session → open /session (and leave prompt if scan was late)
    */
   useEffect(() => {
-    const qr = fromQr || hasRecentQrEntry(slug);
+    const qr = fromQr || wantsQrCheckin(slug);
     if (!qr || qrAutoStartedRef.current) return;
     if (!ready || !onboarded || !memberId) return;
     if (startAuto.isPending) return;
@@ -182,7 +181,7 @@ export default function MobileHomePage() {
       if (startedAt && Date.now() - startedAt > 3 * 60_000) {
         setLeavePrompt(true);
       }
-      router.push(href("/session"));
+      window.location.replace(href("/session"));
       return;
     }
 
@@ -197,7 +196,7 @@ export default function MobileHomePage() {
 
     qrAutoStartedRef.current = true;
     setFromQr(false);
-    void startFromQrEntry({ org: slug, memberId })
+    void startFromQrEntry({ org: slug, memberId, force: true })
       .then((session) => {
         if (!session) {
           startAuto.mutate();
@@ -207,10 +206,9 @@ export default function MobileHomePage() {
       })
       .catch((e: Error) => {
         qrAutoStartedRef.current = false;
-        setFromQr(hasRecentQrEntry(slug));
+        setFromQr(wantsQrCheckin(slug));
         toast.error(e.message);
       });
-    // startAuto.mutate is stable enough; omit whole mutation object to avoid re-fires
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startAuto.isPending only
   }, [
     fromQr,
@@ -223,7 +221,6 @@ export default function MobileHomePage() {
     startAuto.isPending,
     goSession,
     href,
-    router,
   ]);
 
   const pending = status?.pendingRequest;

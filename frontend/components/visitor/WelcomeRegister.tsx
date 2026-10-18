@@ -16,11 +16,13 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import {
   clearPendingRegister,
-  hasRecentQrEntry,
   loadPendingRegister,
   markInstallNudgePending,
 } from "@/lib/visitorCache";
-import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
+import {
+  startFromQrEntry,
+  wantsQrCheckin,
+} from "@/lib/visitor-qr-checkin";
 import type { Member } from "@/lib/types";
 import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
 
@@ -57,17 +59,18 @@ export function WelcomeRegister() {
     confirm(member, accessToken);
     if (isNew) markInstallNudgePending(slug, member.id);
     // QR scan = pointage: start AUTO session right after first login / signup
-    if (hasRecentQrEntry(slug)) {
+    if (wantsQrCheckin(slug)) {
       try {
         const session = await startFromQrEntry({
           org: slug,
           memberId: member.id,
+          force: true,
         });
         if (session?.resumed) toast.success("Session reprise ✓");
         else if (session?.alreadyOpen) {
           toast.message("Votre session est déjà en cours");
         } else toast.success("Présence enregistrée ✓");
-        router.replace(href("/session"));
+        window.location.replace(href("/session"));
         return;
       } catch (e) {
         toast.error(
