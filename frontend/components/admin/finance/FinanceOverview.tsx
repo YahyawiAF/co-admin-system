@@ -112,7 +112,7 @@ function KpiCard({
 }: {
   label: string;
   value: string;
-  delta: ReactNode;
+  delta?: ReactNode;
   tone?: Tone;
   sub?: ReactNode;
   help: string;
@@ -840,19 +840,25 @@ export function FinanceOverview({
           {c ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <KpiCard
-                label="Chiffre d'affaires"
+                label="Revenu brut (CA)"
                 value={dt(c.revenue)}
                 delta={<DeltaChip value={d?.revenue} />}
                 sub={`Passes ${dt(c.revenueJournal)} · Abonnements ${dt(c.revenueAbonnements)} · Produits ${dt(c.revenueProducts)}`}
-                help="Tout l'argent encaissé sur la période."
+                help="Tout l'argent encaissé sur la période, avant les dépenses."
+              />
+              <KpiCard
+                label="Dépenses"
+                value={dt(c.expenses)}
+                sub="Charges saisies sur la période"
+                help="Ce que vous avez dépensé (caisse, coffre ou autre). Voir l'onglet Dépenses pour le détail."
               />
               <KpiCard
                 label="Bénéfice net"
                 value={dt(c.net)}
                 delta={<DeltaChip value={d?.net} />}
                 tone={c.net < 0 ? "bad" : c.marginPct != null && c.marginPct < 30 ? "warn" : "neutral"}
-                sub={`Dépenses ${dt(c.expenses)}${c.marginPct != null ? ` · marge ${Math.round(c.marginPct)} %` : ""}`}
-                help="CA moins les dépenses saisies. Une marge sous 30 % est fragile."
+                sub={`Brut − dépenses${c.marginPct != null ? ` · marge ${Math.round(c.marginPct)} %` : ""}`}
+                help="Revenu brut moins les dépenses. Une marge sous 30 % est fragile."
               />
               <KpiCard
                 label="Taux d'occupation"

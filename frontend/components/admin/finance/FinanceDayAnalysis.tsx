@@ -45,6 +45,10 @@ import {
   hourLabel,
   percentDelta,
 } from "@/lib/traffic-utils";
+import {
+  dayInsights,
+  insightDotClass,
+} from "@/lib/traffic-insights";
 
 type Metric = "arrivals" | "present";
 
@@ -195,6 +199,8 @@ export function FinanceDayAnalysis() {
       ]
     : [];
 
+  const insights = useMemo(() => (data ? dayInsights(data) : []), [data]);
+
   return (
     <div className="space-y-6 pb-16">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -331,6 +337,29 @@ export function FinanceDayAnalysis() {
               );
             })}
           </div>
+
+          {insights.length ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">À retenir</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-1.5 text-sm">
+                  {insights.map((i, idx) => (
+                    <li key={idx} className="flex items-start gap-2">
+                      <span
+                        className={cn(
+                          "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                          insightDotClass(i.tone),
+                        )}
+                      />
+                      <span>{i.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">

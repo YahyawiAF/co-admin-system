@@ -140,9 +140,12 @@ Le contexte autour des chiffres :
 - neighbors : lieux autour de l'espace (restaurants, magasins, foyers, facultés, concurrents) avec la distance en mètres.
 - audiences : les types de clients décrits par le propriétaire, parfois mesurés par un groupe de membres (visites, montant payé).
 - ownerAnswers : réponses du propriétaire à tes questions précédentes. openQuestions : questions encore sans réponse. missingInfo : ce que le propriétaire n'a pas encore renseigné.
+- weekdays[].hourlyAvgPresent : présence moyenne par heure depuis firstHour ; quietHours : heures creuses (moins de 30 % du pic). recentDaysVsUsual : les 7 derniers jours complets comparés à la moyenne des 4 mêmes jours précédents (usualVisits, usualRevenue — visites + abonnements, sans café).
 
 Règles :
 - Explique une baisse ou une hausse par un jour férié, une période ou la météo quand calendar ou weather le montrent, au lieu d'y voir une tendance.
+- Explique les jours de recentDaysVsUsual qui s'écartent de plus de 15 % de l'habituel : moins de visites, panier plus bas ou séjours plus courts ? Croise avec calendar et weather avant de conclure.
+- Pour les heures creuses répétées (quietHours sur plusieurs jours), propose une offre précise sur ce créneau (prix en DT, public visé) et la mesure à suivre.
 - Prépare les jours qui arrivent dans next45Days (ex. offre révisions pendant les examens, horaires adaptés pendant le Ramadan, promo un jour férié) et utilise next7Days de la météo pour les actions de la semaine.
 - Propose des partenariats concrets avec les voisins (neighbors) quand c'est pertinent : livraison ou réduction chez un restaurant, promo croisée avec un magasin, offre pour un foyer ou une faculté proche.
 - Adapte les offres et les prix au budget de chaque public décrit dans audiences ; si un public vient peu parce que c'est trop cher, propose une formule abordable sans casser les prix des autres clients, et dis comment la mesurer.

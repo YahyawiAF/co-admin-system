@@ -516,6 +516,31 @@ export function FinanceCaisseTab({ initialDate }: { initialDate?: string | null 
                   <div className="text-4xl font-bold tabular-nums tracking-tight">
                     {dt(isClosed ? session!.countedClose ?? 0 : s.expectedClose, 2)}
                   </div>
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                    <span>
+                      <span className="text-muted-foreground">Brut </span>
+                      <span className="font-semibold tabular-nums text-emerald-700">
+                        {dt(s.revenue, 2)}
+                      </span>
+                    </span>
+                    <span>
+                      <span className="text-muted-foreground">Dépenses </span>
+                      <span className="font-semibold tabular-nums">
+                        {dt(s.expenses, 2)}
+                      </span>
+                    </span>
+                    <span>
+                      <span className="text-muted-foreground">Net </span>
+                      <span
+                        className={cn(
+                          "font-semibold tabular-nums",
+                          s.net < 0 ? "text-rose-600" : "text-foreground",
+                        )}
+                      >
+                        {dt(s.net, 2)}
+                      </span>
+                    </span>
+                  </div>
                 </div>
                 {!isClosed ? (
                   <Button size="lg" onClick={() => setCloseOpen(true)}>

@@ -131,13 +131,29 @@ function FinanceInner() {
           </div>
 
           {monthData ? (
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-5">
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
               {[
+                {
+                  label: "Brut (CA)",
+                  value:
+                    monthData.revenueJournal +
+                    monthData.revenueAbonnements +
+                    monthData.revenueProducts,
+                  hint: "Tout l'encaissé du mois",
+                },
                 { label: "Journal", value: monthData.revenueJournal },
                 { label: "Abonnements", value: monthData.revenueAbonnements },
                 { label: "Produits", value: monthData.revenueProducts },
-                { label: "Dépenses", value: monthData.expenses },
-                { label: "Net mois", value: monthData.net },
+                {
+                  label: "Dépenses",
+                  value: monthData.expenses,
+                  hint: "Ce que vous avez dépensé",
+                },
+                {
+                  label: "Net",
+                  value: monthData.net,
+                  hint: "Brut − dépenses",
+                },
               ].map((k) => (
                 <Card key={k.label} className="shadow-none">
                   <CardHeader className="p-3 pb-1">
@@ -146,9 +162,22 @@ function FinanceInner() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-3 pt-0">
-                    <div className="text-lg font-semibold">
+                    <div
+                      className={cn(
+                        "text-lg font-semibold",
+                        k.label === "Net" &&
+                          Number(k.value) < 0 &&
+                          "text-rose-600",
+                        k.label === "Brut (CA)" && "text-emerald-700",
+                      )}
+                    >
                       {Number(k.value).toFixed(1)} DT
                     </div>
+                    {"hint" in k && k.hint ? (
+                      <p className="mt-0.5 text-[11px] text-muted-foreground">
+                        {k.hint}
+                      </p>
+                    ) : null}
                   </CardContent>
                 </Card>
               ))}

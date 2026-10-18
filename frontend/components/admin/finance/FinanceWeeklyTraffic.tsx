@@ -25,6 +25,10 @@ import {
   WEEKDAYS_MON_FIRST,
   hourLabel,
 } from "@/lib/traffic-utils";
+import {
+  insightDotClass,
+  weeklyInsights,
+} from "@/lib/traffic-insights";
 
 type Metric = "arrivals" | "present";
 const WEEK_OPTIONS = [4, 8, 12] as const;
@@ -46,6 +50,10 @@ export function FinanceWeeklyTraffic() {
   });
 
   const days = useMemo(() => data?.days ?? [], [data?.days]);
+  const insights = useMemo(
+    () => (days.length ? weeklyInsights(days, weeks) : []),
+    [days, weeks],
+  );
 
   /** Opening window: hours with any presence across the week (fallback 8h-20h). */
   const [firstHour, lastHour] = useMemo(() => {
@@ -118,7 +126,7 @@ export function FinanceWeeklyTraffic() {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
         {isLoading ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -126,6 +134,27 @@ export function FinanceWeeklyTraffic() {
             ))}
           </div>
         ) : (
+          <>
+          {insights.length ? (
+            <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                À retenir
+              </p>
+              <ul className="space-y-1.5 text-sm">
+                {insights.map((i, idx) => (
+                  <li key={idx} className="flex items-start gap-2">
+                    <span
+                      className={cn(
+                        "mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                        insightDotClass(i.tone),
+                      )}
+                    />
+                    <span>{i.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {WEEKDAYS_MON_FIRST.map((wd) => {
               const day = days.find((d) => d.weekday === wd);
@@ -195,6 +224,7 @@ export function FinanceWeeklyTraffic() {
               );
             })}
           </div>
+          </>
         )}
       </CardContent>
     </Card>

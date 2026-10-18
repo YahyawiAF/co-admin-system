@@ -754,6 +754,15 @@ export default function JournalClient() {
   for (const orders of coffeeByMember.values()) revenueCafe += orderMoney(orders);
   for (const orders of coffeeByVisit.values()) revenueCafe += orderMoney(orders);
   const revenue = revenueVisits + revenueAbo + revenueCafe;
+  /** If every visit settles at tarif (checkout amount) + café + abo déjà encaissés. */
+  const ifAllPayVisits = rows
+    .filter((r) => !r.isReservation)
+    .reduce((a, r) => {
+      const late = amountIfPaidNow(r, now);
+      const due = late ? late.amountAtCheckout : visitAmountDue(r, now);
+      return a + due;
+    }, 0);
+  const ifAllPay = ifAllPayVisits + revenueCafe + revenueAbo;
   const unpaid = rows.filter((r) => !r.isPayed).length;
   const capacity = occupancy?.normalCapacity || facilities[0]?.nbrPlaces || 0;
   const free = Math.max(
@@ -1343,7 +1352,7 @@ export default function JournalClient() {
 
       <JournalAlertStrip />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -1370,9 +1379,17 @@ export default function JournalClient() {
         {[
           { label: "Réservations", value: String(reservations) },
           {
-            label: "Revenu du jour",
+            label: "Encaissé",
             value: `${revenue.toFixed(1)} DT`,
             hint: `Visites ${revenueVisits.toFixed(1)} · Abonnements ${revenueAbo.toFixed(1)} · Café ${revenueCafe.toFixed(1)} DT`,
+          },
+          {
+            label: "Si tout paie",
+            value: `${ifAllPay.toFixed(1)} DT`,
+            hint:
+              ifAllPay > revenue + 0.05
+                ? `Reste ${(ifAllPay - revenue).toFixed(1)} DT à encaisser (tarifs + café)`
+                : "Tout le monde a réglé (ou rien à facturer)",
           },
           { label: "Impayés", value: String(unpaid), href: "/impayes" },
         ].map((k) => (

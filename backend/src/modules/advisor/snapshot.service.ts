@@ -29,6 +29,19 @@ const REGULAR_MIN_DAYS = 8;
 /** Days compared before / after an initiative starts. */
 const IMPACT_WINDOW_DAYS = 28;
 
+/** Opening hours for the hourly traffic slice (closeHour > 24 = after midnight). */
+function openHoursWindow(facility: {
+  openHour?: number | null;
+  closeHour?: number | null;
+  alwaysOpen?: boolean | null;
+}) {
+  if (facility.alwaysOpen) return { firstHour: 8, lastHour: 22 };
+  const firstHour = Math.max(0, Math.min(23, facility.openHour ?? 8));
+  const rawClose = facility.closeHour ?? 20;
+  const lastHour = Math.max(firstHour + 1, Math.min(24, rawClose > 24 ? 24 : rawClose));
+  return { firstHour, lastHour };
+}
+
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 100) : null;
 const change = (cur: number | null, prev: number | null) =>
@@ -86,6 +99,7 @@ export class SnapshotService {
       ownerContext,
       outreachLists,
       campaigns,
+      recentDaysVsUsual,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -105,10 +119,13 @@ export class SnapshotService {
       this.context.snapshotContext(facilityId, { prevStart, start, end }),
       this.outreachLists(facilityId),
       this.campaigns.list(facilityId).catch(() => []),
+      this.recentDays(now),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
       change(current[key] as number | null, previous[key] as number | null);
+
+    const { firstHour, lastHour } = openHoursWindow(facility);
 
     return {
       generatedAt: now.toISOString(),
@@ -135,14 +152,29 @@ export class SnapshotService {
         cafeAttachRatePct: trend('cafeAttachRatePct'),
         avgOccupancyPct: trend('avgOccupancyPct'),
       },
-      weekdays: weekly.days.map((d) => ({
-        day: WEEKDAYS[d.weekday],
-        avgVisits: d.avgVisits,
-        peakArrivalHour: d.peakHour,
-        peakPresentHour: d.peakPresentHour,
-        peakPresent: d.peakPresent,
-        avgOccupancyPctAtPeak: seats > 0 ? Math.round((d.peakPresent / seats) * 100) : null,
-      })),
+      weekdays: weekly.days.map((d) => {
+        const openHours = d.hours.filter(
+          (h) => h.hour >= firstHour && h.hour < lastHour,
+        );
+        return {
+          day: WEEKDAYS[d.weekday],
+          avgVisits: d.avgVisits,
+          peakArrivalHour: d.peakHour,
+          peakPresentHour: d.peakPresentHour,
+          peakPresent: d.peakPresent,
+          avgOccupancyPctAtPeak:
+            seats > 0 ? Math.round((d.peakPresent / seats) * 100) : null,
+          firstHour,
+          hourlyAvgPresent: openHours.map((h) => h.avgPresent),
+          quietHours: openHours
+            .filter(
+              (h) =>
+                d.peakPresent > 0 && h.avgPresent < d.peakPresent * 0.3,
+            )
+            .map((h) => h.hour),
+        };
+      }),
+      recentDaysVsUsual,
       offersSold: services.services.slice(0, 15).map((s) => ({
         name: s.name,
         sold: s.count,
@@ -191,6 +223,38 @@ export class SnapshotService {
       })),
       ...ownerContext,
     };
+  }
+
+  /**
+   * Last 7 full days vs the average of the 4 previous same weekdays.
+   * Today is skipped (unfinished day would always look like a drop).
+   * Revenue here = visits + abonnements (not café).
+   */
+  private async recentDays(now: Date) {
+    const days = Array.from({ length: 7 }, (_, i) =>
+      localDayKey(subDays(now, i + 1)),
+    );
+    const rows = await Promise.all(
+      days.map((date) =>
+        this.analytics
+          .trafficDay({ date, compare: 'weekday', count: 4 })
+          .catch(() => null),
+      ),
+    );
+    return rows
+      .filter((r): r is NonNullable<typeof r> => !!r)
+      .map((r) => ({
+        date: r.date,
+        day: WEEKDAYS[r.target.weekday],
+        visits: r.target.totals.visits,
+        usualVisits: r.average.totals.visits,
+        revenue: round1(r.target.totals.revenue),
+        usualRevenue: round1(r.average.totals.revenue),
+        avgStayMin: r.target.totals.avgDurationMin,
+        usualStayMin: r.average.totals.avgDurationMin,
+        peakPresent: r.target.totals.peakPresent,
+        leftUnpaid: r.target.totals.leftUnpaid,
+      }));
   }
 
   /** Size of each relance list (who the AI can target). */
