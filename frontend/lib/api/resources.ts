@@ -237,6 +237,38 @@ export const membersApi = {
   list() {
     return http.get<Member[]>(withOrgQuery("/members/all"));
   },
+  listPage(params: {
+    page?: number;
+    perPage?: number;
+    search?: string;
+    groupId?: string;
+    status?: string;
+    memberIds?: string[];
+  } = {}) {
+    const q = new URLSearchParams();
+    q.set("page", String(params.page ?? 1));
+    q.set("perPage", String(params.perPage ?? 20));
+    if (params.search?.trim()) q.set("search", params.search.trim());
+    if (params.groupId && params.groupId !== "all") {
+      q.set("groupId", params.groupId);
+    }
+    if (params.status && params.status !== "all") {
+      q.set("status", params.status);
+    }
+    if (params.memberIds?.length) {
+      q.set("memberIds", params.memberIds.join(","));
+    }
+    return http.get<PaginatedResponse<Member>>(
+      withOrgQuery(`/members?${q.toString()}`),
+    );
+  },
+  stats() {
+    return http.get<{
+      total: number;
+      activeAbonnements: number;
+      presentNow: number;
+    }>(withOrgQuery("/members/stats"));
+  },
   create(data: Partial<Member> & { password?: string }) {
     return http.post<Member>("/members", {
       ...data,

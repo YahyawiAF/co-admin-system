@@ -48,14 +48,28 @@ export class MemberController {
   @ApiBearerAuth()
   @ApiOkResponse({ type: MemberEntity, isArray: true })
   async findMany(
-    @Query('page') page: number,
-    @Query('perPage') perPage: number,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
     @Query('organizationId') organizationId?: string,
+    @Query('search') search?: string,
+    @Query('groupId') groupId?: string,
+    @Query('status') status?: string,
+    @Query('memberIds') memberIds?: string,
   ): Promise<PaginatedResult<MemberEntity>> {
+    const ids = memberIds
+      ? memberIds
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
     return await this.memberService.findMany({
-      page,
-      perPage,
-      where: organizationId ? { organizationId } : undefined,
+      page: Number(page) || 1,
+      perPage: Number(perPage) || 20,
+      organizationId,
+      search,
+      groupId,
+      status,
+      memberIds: ids,
     });
   }
 
@@ -68,6 +82,12 @@ export class MemberController {
     @Query('organizationId') organizationId?: string,
   ): Promise<MemberEntity[]> {
     return await this.memberService.findAll(organizationId);
+  }
+
+  @Get('stats')
+  @ApiBearerAuth()
+  stats(@Query('organizationId') organizationId?: string) {
+    return this.memberService.stats(organizationId);
   }
 
   @Get('debtors')

@@ -19,7 +19,16 @@ import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { MemberEntity } from './entities/member.entity';
-import { startOfWeek, addWeeks, format, getHours, getDay, isSameDay } from 'date-fns';
+import {
+  startOfWeek,
+  startOfDay,
+  endOfDay,
+  addWeeks,
+  format,
+  getHours,
+  getDay,
+  isSameDay,
+} from 'date-fns';
 import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 @Injectable()
@@ -120,6 +129,73 @@ export class MemberService {
     return members.map((member) => new MemberEntity(member));
   }
 
+  /** Distinct member IDs with a currently active (non-exhausted) abonnement. */
+  private async activeAbonnementMemberIds(
+    organizationId?: string,
+  ): Promise<Set<string>> {
+    const now = new Date();
+    const abos = await this.prisma.abonnement.findMany({
+      where: {
+        isReservation: false,
+        registredDate: { lte: now },
+        OR: [{ leaveDate: null }, { leaveDate: { gt: now } }],
+        ...(organizationId ? { members: { organizationId } } : {}),
+      },
+      select: {
+        memberID: true,
+        hoursQuota: true,
+        hoursUsed: true,
+        price: { select: { billingUnit: true, durationHours: true } },
+      },
+    });
+    const ids = new Set<string>();
+    for (const a of abos) {
+      if (a.price?.billingUnit === 'HOURLY') {
+        const quota = a.hoursQuota || a.price.durationHours || 0;
+        if (quota > 0 && (a.hoursUsed || 0) >= quota) continue;
+      }
+      ids.add(a.memberID);
+    }
+    return ids;
+  }
+
+  /** Member IDs currently checked in (open journal visit today). */
+  private async presentMemberIds(organizationId?: string): Promise<Set<string>> {
+    const now = new Date();
+    const rows = await this.prisma.journal.findMany({
+      where: {
+        isReservation: false,
+        leaveTime: null,
+        memberID: { not: null },
+        registredTime: { gte: startOfDay(now), lte: endOfDay(now) },
+        ...(organizationId
+          ? { members: { organizationId, deletedAt: null } }
+          : {}),
+      },
+      select: { memberID: true },
+      distinct: ['memberID'],
+    });
+    return new Set(
+      rows.map((r) => r.memberID).filter((id): id is string => !!id),
+    );
+  }
+
+  async stats(organizationId?: string) {
+    const orgWhere = organizationId ? { organizationId } : {};
+    const [total, activeIds, presentIds] = await Promise.all([
+      this.prisma.member.count({
+        where: { deletedAt: null, ...orgWhere },
+      }),
+      this.activeAbonnementMemberIds(organizationId),
+      this.presentMemberIds(organizationId),
+    ]);
+    return {
+      total,
+      activeAbonnements: activeIds.size,
+      presentNow: presentIds.size,
+    };
+  }
+
   /**
    * Paginated fetch of members.
    * @param where - Filter criteria.
@@ -130,24 +206,126 @@ export class MemberService {
    */
   async findMany({
     where,
-    orderBy = { id: 'desc' },
+    orderBy = { createdAt: 'desc' },
     page = 1,
     perPage = 20,
+    search,
+    groupId,
+    status,
+    memberIds,
+    organizationId,
   }: {
     where?: Prisma.MemberWhereInput;
     orderBy?: Prisma.MemberOrderByWithRelationInput;
     page?: number;
     perPage?: number;
+    search?: string;
+    groupId?: string;
+    status?: string;
+    memberIds?: string[];
+    organizationId?: string;
   }): Promise<PaginatedResult<MemberEntity>> {
-    const paginate = createPaginator({ perPage });
+    const pageNum = Math.max(1, Number(page) || 1);
+    const perPageNum = Math.min(100, Math.max(1, Number(perPage) || 20));
+
+    const base: Prisma.MemberWhereInput = {
+      deletedAt: null,
+      ...(organizationId ? { organizationId } : {}),
+      ...where,
+    };
+
+    if (groupId === 'none') base.groupId = null;
+    else if (groupId && groupId !== 'all') base.groupId = groupId;
+
+    const q = search?.trim();
+    if (q) {
+      const asNum = Number(q);
+      const or: Prisma.MemberWhereInput[] = [
+        { firstName: { contains: q, mode: 'insensitive' } },
+        { lastName: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q } },
+        { email: { contains: q, mode: 'insensitive' } },
+      ];
+      if (Number.isFinite(asNum) && String(asNum) === q) {
+        or.push({ visitorNumber: asNum });
+      }
+      base.OR = or;
+    }
+
+    const intersectIds = (ids: string[]) => {
+      if (!ids.length) {
+        base.id = { in: ['__none__'] };
+        return;
+      }
+      if (memberIds?.length) {
+        const set = new Set(ids);
+        const next = memberIds.filter((id) => set.has(id));
+        base.id = { in: next.length ? next : ['__none__'] };
+      } else {
+        base.id = { in: ids };
+      }
+    };
+
+    if (memberIds?.length && (!status || status === 'all')) {
+      base.id = { in: memberIds };
+    }
+
+    if (status && status !== 'all') {
+      if (status === 'present') {
+        const present = await this.presentMemberIds(organizationId);
+        intersectIds([...present]);
+      } else if (status === 'absent') {
+        const present = await this.presentMemberIds(organizationId);
+        if (memberIds?.length) {
+          base.id = {
+            in: memberIds.filter((id) => !present.has(id)),
+          };
+        } else if (present.size) {
+          base.NOT = { id: { in: [...present] } };
+        }
+      } else if (status === 'abonne') {
+        const active = await this.activeAbonnementMemberIds(organizationId);
+        intersectIds([...active]);
+      } else if (status === 'expired') {
+        const [active, anyAbo] = await Promise.all([
+          this.activeAbonnementMemberIds(organizationId),
+          this.prisma.abonnement.findMany({
+            where: {
+              isReservation: false,
+              ...(organizationId ? { members: { organizationId } } : {}),
+            },
+            select: { memberID: true },
+            distinct: ['memberID'],
+          }),
+        ]);
+        const expiredIds = anyAbo
+          .map((a) => a.memberID)
+          .filter((id) => !active.has(id));
+        intersectIds(expiredIds);
+      } else if (status === 'visiteur') {
+        const active = await this.activeAbonnementMemberIds(organizationId);
+        if (memberIds?.length) {
+          base.id = {
+            in: memberIds.filter((id) => !active.has(id)),
+          };
+        } else {
+          base.plan = { not: Subscription.Membership };
+          if (active.size) {
+            base.NOT = { id: { in: [...active] } };
+          }
+        }
+      }
+    }
+
+    const paginate = createPaginator({ perPage: perPageNum });
     const paginatedResult = await paginate(
       this.prisma.member,
       {
-        where: { ...where, deletedAt: null },
+        where: base,
         orderBy,
         include: { group: true },
       },
-      { page },
+      { page: pageNum },
     );
     return {
       data: paginatedResult.data.map((member) => new MemberEntity(member)),

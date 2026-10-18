@@ -1,17 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
-import Fuse from "fuse.js";
 import { formatDistanceToNow, format, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Pencil, Trash2, UserRound, MapPin } from "lucide-react";
+import {
+  Pencil,
+  Trash2,
+  UserRound,
+  MapPin,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  Ticket,
+  UserCheck,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -37,7 +46,6 @@ import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import {
   membersApi,
   groupsApi,
-  journalApi,
   abonnementsApi,
   bookingApi,
   analyticsApi,
@@ -47,7 +55,6 @@ import {
 import { queryKeys } from "@/lib/query-client";
 import type { Member, MemberGroup, Abonnement } from "@/lib/types";
 import { Label } from "@/components/ui/label";
-import { isActiveVisit } from "@/lib/journal-utils";
 
 export default function MembersPage() {
   const queryClient = useQueryClient();
@@ -57,6 +64,9 @@ export default function MembersPage() {
   const topServiceId = searchParams.get("topServiceId") || "";
   const topSpaceId = searchParams.get("topSpaceId") || "";
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
   const [edit, setEdit] = useState<Member | null>(null);
   const [detail, setDetail] = useState<Member | null>(null);
   const [groupFilter, setGroupFilter] = useState("all");
@@ -64,6 +74,15 @@ export default function MembersPage() {
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
   const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedSearch, groupFilter, statusFilter, perPage, topServiceId, topSpaceId]);
 
   const analyticsRange = useMemo(() => {
     const to = new Date();
@@ -90,18 +109,9 @@ export default function MembersPage() {
     router.replace(qs ? `/members?${qs}` : "/members");
   };
 
-  const { data: membersRaw = [], isLoading } = useQuery({
-    queryKey: queryKeys.members,
-    queryFn: () => membersApi.list(),
-  });
   const { data: groups = [] } = useQuery({
     queryKey: queryKeys.groups,
     queryFn: () => groupsApi.list(),
-  });
-  const day = useMemo(() => new Date(), []);
-  const { data: journalPage } = useQuery({
-    queryKey: queryKeys.journal(day),
-    queryFn: () => journalApi.list({ journalDate: day, perPage: 200 }),
   });
   const { data: abosRaw } = useQuery({
     queryKey: queryKeys.abonnements,
@@ -138,24 +148,72 @@ export default function MembersPage() {
       }),
     enabled: !!topServiceId || !!topSpaceId,
   });
-  const demandMemberIds = useMemo(
-    () => new Set(demandMembers?.memberIds || []),
-    [demandMembers],
+  const demandMemberIds = demandMembers?.memberIds;
+  const demandActive = !!(topServiceId || topSpaceId);
+
+  const listParams = useMemo(
+    () => ({
+      page,
+      perPage,
+      search: debouncedSearch.length >= 2 ? debouncedSearch : undefined,
+      groupId: groupFilter,
+      status: statusFilter,
+      memberIds: demandActive ? demandMemberIds : undefined,
+    }),
+    [
+      page,
+      perPage,
+      debouncedSearch,
+      groupFilter,
+      statusFilter,
+      demandActive,
+      demandMemberIds,
+    ],
   );
 
-  const members = Array.isArray(membersRaw) ? membersRaw : [];
+  const emptyDemand =
+    demandActive &&
+    demandMemberIds !== undefined &&
+    demandMemberIds.length === 0;
+
+  const { data: membersPage, isLoading } = useQuery({
+    queryKey: queryKeys.membersList(listParams),
+    queryFn: () => membersApi.listPage(listParams),
+    enabled:
+      !emptyDemand && (!demandActive || demandMemberIds !== undefined),
+  });
+
+  const membersPageResolved = emptyDemand
+    ? {
+        data: [] as Member[],
+        meta: {
+          total: 0,
+          lastPage: 0,
+          currentPage: 1,
+          perPage,
+          prev: null as number | null,
+          next: null as number | null,
+        },
+      }
+    : membersPage;
+
+  const { data: memberStats } = useQuery({
+    queryKey: queryKeys.membersStats,
+    queryFn: () => membersApi.stats(),
+  });
+
+  const { data: allMembers = [] } = useQuery({
+    queryKey: queryKeys.members,
+    queryFn: () => membersApi.list(),
+    enabled: tab === "groups",
+  });
+
+  const members = membersPageResolved?.data ?? [];
+  const meta = membersPageResolved?.meta;
   const abos = useMemo(() => {
     if (!abosRaw) return [] as Abonnement[];
     return Array.isArray(abosRaw) ? abosRaw : abosRaw.data || [];
   }, [abosRaw]);
-
-  const presentIds = useMemo(() => {
-    const set = new Set<string>();
-    for (const j of journalPage?.data || []) {
-      if (isActiveVisit(j) && j.memberID) set.add(j.memberID);
-    }
-    return set;
-  }, [journalPage?.data]);
 
   const aboState = useMemo(() => {
     const now = new Date();
@@ -197,50 +255,6 @@ export default function MembersPage() {
     return map;
   }, [bookings]);
 
-  const filtered = useMemo(() => {
-    let list = members;
-    if (groupFilter === "none") {
-      list = list.filter((m) => !m.groupId);
-    } else if (groupFilter !== "all") {
-      list = list.filter((m) => m.groupId === groupFilter);
-    }
-    if (statusFilter === "present") {
-      list = list.filter((m) => presentIds.has(m.id));
-    } else if (statusFilter === "absent") {
-      list = list.filter((m) => !presentIds.has(m.id));
-    } else if (statusFilter === "abonne") {
-      list = list.filter((m) => aboState.get(m.id) === "active");
-    } else if (statusFilter === "expired") {
-      list = list.filter((m) => aboState.get(m.id) === "expired");
-    } else if (statusFilter === "visiteur") {
-      list = list.filter(
-        (m) => m.plan !== "Membership" && aboState.get(m.id) !== "active"
-      );
-    }
-    if ((topServiceId || topSpaceId) && demandMembers) {
-      list = list.filter((m) => demandMemberIds.has(m.id));
-    }
-    if (search.trim().length >= 2) {
-      const fuse = new Fuse(list, {
-        keys: ["firstName", "lastName", "phone", "email", "visitorNumber", "group.name"],
-        threshold: 0.3,
-      });
-      return fuse.search(search).map((r) => r.item);
-    }
-    return list;
-  }, [
-    members,
-    search,
-    groupFilter,
-    statusFilter,
-    presentIds,
-    aboState,
-    topServiceId,
-    topSpaceId,
-    demandMembers,
-    demandMemberIds,
-  ]);
-
   const [toDelete, setToDelete] = useState<Member | null>(null);
   const remove = useMutation({
     mutationFn: (id: string) => membersApi.remove(id),
@@ -248,6 +262,8 @@ export default function MembersPage() {
       toast.success("Membre supprimé");
       setToDelete(null);
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.membersStats });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -264,7 +280,8 @@ export default function MembersPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Members</h1>
           <p className="text-muted-foreground">
-            {members.length} membre{members.length !== 1 ? "s" : ""}
+            {memberStats?.total ?? meta?.total ?? "—"} membre
+            {(memberStats?.total ?? meta?.total ?? 0) !== 1 ? "s" : ""}
           </p>
         </div>
         <SeatOccupancyBoard
@@ -279,6 +296,49 @@ export default function MembersPage() {
           focusSeatLabel={focusSeatLabel}
           focusSpaceId={focusSpaceId}
         />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Membres</CardTitle>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{memberStats?.total ?? "—"}</div>
+            <p className="text-xs text-muted-foreground">Total inscrits</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Abonnements actifs
+            </CardTitle>
+            <Ticket className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {memberStats?.activeAbonnements ?? "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Membres avec abo en cours
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Présents</CardTitle>
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {memberStats?.presentNow ?? "—"}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              En session journal maintenant
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs
@@ -359,6 +419,20 @@ export default function MembersPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select
+              value={String(perPage)}
+              onValueChange={(v) => setPerPage(Number(v))}
+            >
+              <SelectTrigger className="w-[130px]">
+                <SelectValue placeholder="Par page" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10 / page</SelectItem>
+                <SelectItem value="20">20 / page</SelectItem>
+                <SelectItem value="50">50 / page</SelectItem>
+                <SelectItem value="100">100 / page</SelectItem>
+              </SelectContent>
+            </Select>
             </div>
             <MemberFormModal
               trigger={<Button size="lg">+ Nouveau membre</Button>}
@@ -369,6 +443,8 @@ export default function MembersPage() {
         <CardContent className="p-0">
           {isLoading ? (
             <p className="p-6 text-muted-foreground">Chargement…</p>
+          ) : members.length === 0 ? (
+            <p className="p-6 text-muted-foreground">Aucun membre trouvé.</p>
           ) : (
             <Table>
               <TableHeader>
@@ -385,7 +461,7 @@ export default function MembersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((m) => (
+                {members.map((m) => (
                   <TableRow key={m.id}>
                     <TableCell>
                       {m.visitorNumber ? `#${m.visitorNumber}` : "—"}
@@ -508,11 +584,39 @@ export default function MembersPage() {
               </TableBody>
             </Table>
           )}
+          {meta && meta.lastPage > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+              <p className="text-sm text-muted-foreground">
+                Page {meta.currentPage} / {meta.lastPage} · {meta.total} résultat
+                {meta.total !== 1 ? "s" : ""}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!meta.prev}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Précédent
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!meta.next}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Suivant
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
         </TabsContent>
         <TabsContent value="groups" className="mt-4">
-          <GroupsPanel members={members} />
+          <GroupsPanel members={allMembers} />
         </TabsContent>
       </Tabs>
 
@@ -576,6 +680,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
       toast.success(edit ? "Groupe mis à jour" : "Groupe créé");
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
       setName("");
       setMaxMembers("15");
       setDiscountForfait("0");
@@ -593,6 +698,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
       toast.success("Groupe supprimé");
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -603,6 +709,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
       toast.success("Membre ajouté");
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
       setPickMember("");
     },
     onError: (e: Error) => toast.error(e.message),
@@ -614,6 +721,7 @@ function GroupsPanel({ members }: { members: Member[] }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

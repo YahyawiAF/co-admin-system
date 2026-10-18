@@ -43,6 +43,9 @@ export const queryKeys = {
       typeof date === "string" ? date : format(date, "yyyy-MM-dd"),
     ] as const,
   members: ["members"] as const,
+  membersList: (params: Record<string, unknown>) =>
+    ["members", "list", params] as const,
+  membersStats: ["members", "stats"] as const,
   prices: ["prices"] as const,
   facility: ["facility"] as const,
   abonnements: ["abonnements"] as const,

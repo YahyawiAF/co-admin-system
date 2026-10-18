@@ -237,6 +237,8 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
       setMergeSourceId("");
       setMergeSearch("");
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.membersStats });
       queryClient.invalidateQueries({ queryKey: ["member-insights", member!.id] });
       queryClient.invalidateQueries({ queryKey: ["journal"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.abonnements });
@@ -251,6 +253,8 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
     onSuccess: (res) => {
       toast.success(res.message);
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.membersStats });
       queryClient.invalidateQueries({
         queryKey: ["member-insights", member!.id],
       });

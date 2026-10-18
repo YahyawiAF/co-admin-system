@@ -124,6 +124,8 @@ export function MemberFormModal({
     onSuccess: (res) => {
       toast.success(isEdit ? "Membre mis à jour" : "Membre créé");
       queryClient.invalidateQueries({ queryKey: queryKeys.members });
+      queryClient.invalidateQueries({ queryKey: ["members", "list"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.membersStats });
       queryClient.invalidateQueries({ queryKey: queryKeys.groups });
       setOpen(false);
       onSaved?.(res);
