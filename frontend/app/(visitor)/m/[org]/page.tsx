@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -47,6 +47,7 @@ import {
   hasRecentQrEntry,
   markTarifPrompt,
 } from "@/lib/visitorCache";
+import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 
 export default function MobileHomePage() {
@@ -56,7 +57,10 @@ export default function MobileHomePage() {
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
-  const [fromQr, setFromQr] = useState(false);
+  /** Sync read so signup → Accueil still sees the QR intent on first paint. */
+  const [fromQr, setFromQr] = useState(() =>
+    typeof window !== "undefined" ? hasRecentQrEntry(slug) : false,
+  );
 
   useEffect(() => {
     setIsApp(isStandalonePwa());
@@ -64,7 +68,7 @@ export default function MobileHomePage() {
 
   useEffect(() => {
     setFromQr(hasRecentQrEntry(slug));
-  }, [slug]);
+  }, [slug, onboarded, memberId]);
 
   const {
     data: status,
@@ -94,12 +98,9 @@ export default function MobileHomePage() {
   });
 
   useEffect(() => {
-    // Cached status may still hold yesterday's session: never drop the QR intent on it
     if (!status?.session || statusIsPlaceholder) return;
     setShowCheckoutPromo(false);
-    clearQrEntry(slug);
-    setFromQr(false);
-  }, [status?.session, statusIsPlaceholder, slug]);
+  }, [status?.session, statusIsPlaceholder]);
 
   const cancel = useMutation({
     mutationFn: () => {
@@ -115,30 +116,35 @@ export default function MobileHomePage() {
     },
   });
 
-  const onStarted = (res: MobileSession) => {
-    if (res?.resumed) {
-      toast.success("Session reprise ✓");
-    } else if (res?.alreadyOpen) {
-      toast.message("Votre session est déjà en cours");
-    } else {
-      toast.success("Présence enregistrée ✓");
-      // Session runs already; the session screen then asks the tarif once
-      if (res?.pricingMode === "AUTO") markTarifPrompt(slug);
-    }
-    refetch();
-    router.push(href("/session"));
-  };
+  const goSession = useCallback(
+    (res?: MobileSession | null) => {
+      if (res?.resumed) toast.success("Session reprise ✓");
+      else if (res?.alreadyOpen) {
+        toast.message("Votre session est déjà en cours");
+      } else if (res) {
+        toast.success("Présence enregistrée ✓");
+        if (res.pricingMode === "AUTO") markTarifPrompt(slug);
+      }
+      clearQrEntry(slug);
+      setFromQr(false);
+      void refetch();
+      router.push(href("/session"));
+    },
+    [slug, refetch, router, href],
+  );
 
   /** Abonnement session when it covers today, otherwise the AUTO counter (tiers). */
   const startAuto = useMutation({
     mutationFn: () => mobileApi.startAutoSession(memberId!),
-    // Never park the start while the phone flips 4G → Wi‑Fi ("Démarrage…" forever)
     networkMode: "always",
-    onSuccess: onStarted,
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: (res) => goSession(res),
+    onError: (e: Error) => {
+      qrAutoStartedRef.current = false;
+      toast.error(e.message);
+    },
   });
 
-  /** One tap / QR scan: the server covers it with the abonnement when one applies, else AUTO. */
+  /** One tap: the server covers it with the abonnement when one applies, else AUTO. */
   const startSession = () => {
     if (!memberId || startAuto.isPending) return;
     if (status?.session || status?.pendingRequest) {
@@ -149,28 +155,76 @@ export default function MobileHomePage() {
     startAuto.mutate();
   };
 
-  /** First QR scan → the session starts immediately (no extra tap). */
+  /**
+   * QR scan = pointage:
+   * - idle → start AUTO (even right after signup; don't wait forever on placeholder)
+   * - already in session → open /session (and leave prompt if scan was late)
+   */
   useEffect(() => {
-    if (!fromQr || qrAutoStartedRef.current) return;
+    const qr = fromQr || hasRecentQrEntry(slug);
+    if (!qr || qrAutoStartedRef.current) return;
     if (!ready || !onboarded || !memberId) return;
-    if (!status || statusIsPlaceholder) return;
-    if (status.session || status.pendingRequest) return;
-    qrAutoStartedRef.current = true;
-    clearQrEntry(slug);
-    startSession();
-  });
+    if (startAuto.isPending) return;
 
-  /** Second scan during a session → offer the check-out (not for a double scan just after starting). */
-  useEffect(() => {
-    if (!qrAtLoadRef.current || qrAutoStartedRef.current) return;
-    if (!ready || !onboarded || !status || statusIsPlaceholder) return;
-    qrAtLoadRef.current = false;
-    const s = status.session;
-    if (!s?.registredTime || String(s.id || "").startsWith("optimistic")) return;
-    if (Date.now() - new Date(s.registredTime).getTime() > 3 * 60_000) {
-      setLeavePrompt(true);
+    const liveSession =
+      status?.session &&
+      !statusIsPlaceholder &&
+      !String(status.session.id || "").startsWith("optimistic");
+    const pending = !!status?.pendingRequest && !statusIsPlaceholder;
+
+    if (liveSession) {
+      qrAutoStartedRef.current = true;
+      clearQrEntry(slug);
+      setFromQr(false);
+      const startedAt = status!.session!.registredTime
+        ? new Date(status!.session!.registredTime).getTime()
+        : 0;
+      if (startedAt && Date.now() - startedAt > 3 * 60_000) {
+        setLeavePrompt(true);
+      }
+      router.push(href("/session"));
+      return;
     }
-  }, [ready, onboarded, status, statusIsPlaceholder]);
+
+    if (pending) return;
+
+    // Fresh idle status, or new member with no session on placeholder
+    const canStart =
+      (status && !statusIsPlaceholder && !status.session) ||
+      (!status?.session && !status?.pendingRequest && !!memberId);
+
+    if (!canStart) return;
+
+    qrAutoStartedRef.current = true;
+    setFromQr(false);
+    void startFromQrEntry({ org: slug, memberId })
+      .then((session) => {
+        if (!session) {
+          startAuto.mutate();
+          return;
+        }
+        goSession(session);
+      })
+      .catch((e: Error) => {
+        qrAutoStartedRef.current = false;
+        setFromQr(hasRecentQrEntry(slug));
+        toast.error(e.message);
+      });
+    // startAuto.mutate is stable enough; omit whole mutation object to avoid re-fires
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- startAuto.isPending only
+  }, [
+    fromQr,
+    ready,
+    onboarded,
+    memberId,
+    status,
+    statusIsPlaceholder,
+    slug,
+    startAuto.isPending,
+    goSession,
+    href,
+    router,
+  ]);
 
   const pending = status?.pendingRequest;
   const session = status?.session;

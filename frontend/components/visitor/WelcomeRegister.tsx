@@ -16,9 +16,11 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import {
   clearPendingRegister,
+  hasRecentQrEntry,
   loadPendingRegister,
   markInstallNudgePending,
 } from "@/lib/visitorCache";
+import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
 import type { Member } from "@/lib/types";
 import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
 
@@ -47,10 +49,32 @@ export function WelcomeRegister() {
   const [lookingUp, setLookingUp] = useState(false);
   const [pinLogin, setPinLogin] = useState(false);
 
-  const finish = (member: Member, accessToken?: string, isNew = false) => {
+  const finish = async (
+    member: Member,
+    accessToken?: string,
+    isNew = false,
+  ) => {
     confirm(member, accessToken);
     if (isNew) markInstallNudgePending(slug, member.id);
-    // Accueil starts the AUTO session when the visitor came from the entry QR
+    // QR scan = pointage: start AUTO session right after first login / signup
+    if (hasRecentQrEntry(slug)) {
+      try {
+        const session = await startFromQrEntry({
+          org: slug,
+          memberId: member.id,
+        });
+        if (session?.resumed) toast.success("Session reprise ✓");
+        else if (session?.alreadyOpen) {
+          toast.message("Votre session est déjà en cours");
+        } else toast.success("Présence enregistrée ✓");
+        router.replace(href("/session"));
+        return;
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Pointage impossible — réessayez",
+        );
+      }
+    }
     router.replace(href());
   };
 
@@ -58,7 +82,7 @@ export function WelcomeRegister() {
     const pending = loadPendingRegister(slug);
     if (!pending) return;
     clearPendingRegister(slug);
-    finish(pending.member as Member, pending.accessToken, true);
+    void finish(pending.member as Member, pending.accessToken, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
@@ -73,7 +97,7 @@ export function WelcomeRegister() {
       });
     },
     onSuccess: (res) => {
-      finish(res.member, res.accessToken, true);
+      void finish(res.member, res.accessToken, true);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -87,7 +111,7 @@ export function WelcomeRegister() {
           ? `Bonjour ${res.member.firstName}`
           : "Bon retour"
       );
-      finish(res.member, res.accessToken, false);
+      void finish(res.member, res.accessToken, false);
     },
     onError: (e: Error) => toast.error(e.message),
   });

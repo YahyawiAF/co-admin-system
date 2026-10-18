@@ -21,6 +21,8 @@ import {
 import { mobileApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
+import { hasRecentQrEntry } from "@/lib/visitorCache";
+import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
 import type { Member } from "@/lib/types";
 
 type Props = {
@@ -65,12 +67,30 @@ export function VisitorLoginDialog({
     setGreeting(null);
   }, [open, initialPhone, startAtPin]);
 
-  const finish = (member: Member, accessToken?: string) => {
+  const finish = async (member: Member, accessToken?: string) => {
     confirm(member, accessToken);
     onOpenChange(false);
     setLoginPin("");
     setShortCode("");
     setStep("phone");
+    if (hasRecentQrEntry(slug)) {
+      try {
+        const session = await startFromQrEntry({
+          org: slug,
+          memberId: member.id,
+        });
+        if (session?.resumed) toast.success("Session reprise ✓");
+        else if (session?.alreadyOpen) {
+          toast.message("Votre session est déjà en cours");
+        } else toast.success("Présence enregistrée ✓");
+        router.replace(href("/session"));
+        return;
+      } catch (e) {
+        toast.error(
+          e instanceof Error ? e.message : "Pointage impossible — réessayez",
+        );
+      }
+    }
     router.replace(href());
   };
 
@@ -83,7 +103,7 @@ export function VisitorLoginDialog({
           ? `Bonjour ${res.member.firstName}`
           : "Connexion réussie"
       );
-      finish(res.member, res.accessToken);
+      void finish(res.member, res.accessToken);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -97,7 +117,7 @@ export function VisitorLoginDialog({
           ? `Bonjour ${res.member.firstName}`
           : "Connexion réussie"
       );
-      finish(res.member, res.accessToken);
+      void finish(res.member, res.accessToken);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -111,7 +131,7 @@ export function VisitorLoginDialog({
       }),
     onSuccess: (res) => {
       toast.success("Profil récupéré");
-      finish(res.member, res.accessToken);
+      void finish(res.member, res.accessToken);
     },
     onError: (e: Error) => toast.error(e.message),
   });
