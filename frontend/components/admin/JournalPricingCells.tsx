@@ -387,14 +387,18 @@ export function PromoPriceTag({
 export function JournalPricingAmountCell({
   row,
   now,
+  addon = 0,
 }: {
   row: Journal;
   now: number;
+  /** Café / products for this person, added to the displayed total. */
+  addon?: number;
 }) {
   const pricing = rowPricing(row, now);
   if (!pricing) return null;
   const active = isActiveVisit(row);
   const total = active ? pricing.amountDue : row.payedAmount || 0;
+  const shown = Math.round((total + addon) * 10) / 10;
   const base = pricing.baseAmount;
   const extra = Math.max(0, Math.round((total - base) * 1000) / 1000);
   const paid = visitPaidAmount(row);
@@ -406,11 +410,16 @@ export function JournalPricingAmountCell({
 
   return (
     <div className="flex flex-col items-start gap-0.5">
-      {promoIsTotal ? (
+      {promoIsTotal && addon <= 0.001 ? (
         <PromoPriceTag row={row} amount={total} />
       ) : (
-        <span className="font-medium tabular-nums">{formatDt(total)}</span>
+        <span className="font-medium tabular-nums">{formatDt(shown)}</span>
       )}
+      {addon > 0.001 ? (
+        <span className="text-[11px] tabular-nums text-amber-800">
+          dont café {formatDt(addon)}
+        </span>
+      ) : null}
       {promoPrice != null && !promoIsTotal ? (
         <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
           Forfait <PromoPriceTag row={row} compact />

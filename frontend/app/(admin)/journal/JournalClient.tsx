@@ -102,6 +102,7 @@ import {
   bookingApi,
   dailyProductsApi,
   facilityApi,
+  orderUnitPrice,
   journalApi,
   membersApi,
   mobileApi,
@@ -540,6 +541,27 @@ export default function JournalClient() {
     return map;
   }, [dailyProducts]);
 
+  const orderMoney = (orders: { unitPrice?: number | null; quantite: number; product?: { sellingPrice?: number | null } | null }[]) =>
+    orders.reduce((sum, order) => sum + orderUnitPrice(order) * (order.quantite || 0), 0);
+
+  /** Café / products for this person today (once, not once per passage). */
+  const cafeAmount = (row: JournalListRow) => {
+    const anon = isAnonymousVisit(row);
+    const mid = anon ? null : row.memberID || memberOf(row)?.id || null;
+    if (mid) return orderMoney(coffeeByMember.get(mid) || []);
+    const ids = row.passages?.length ? row.passages.map((p) => p.id) : [row.id];
+    const seen = new Set<string>();
+    let total = 0;
+    for (const id of ids) {
+      for (const order of coffeeByVisit.get(id) || []) {
+        if (seen.has(order.id)) continue;
+        seen.add(order.id);
+        total += orderUnitPrice(order) * (order.quantite || 0);
+      }
+    }
+    return total;
+  };
+
   const rows = useMemo(() => data?.data ?? [], [data?.data]);
 
   const presentMemberIds = useMemo(
@@ -728,7 +750,10 @@ export default function JournalClient() {
     .filter((r) => r.isPayed)
     .reduce((a, r) => a + (r.payedAmount || 0), 0);
   const revenueAbo = paidSubscriptionRevenueOnDay(abonnements, selectedDate);
-  const revenue = revenueVisits + revenueAbo;
+  let revenueCafe = orderMoney(counterOrders);
+  for (const orders of coffeeByMember.values()) revenueCafe += orderMoney(orders);
+  for (const orders of coffeeByVisit.values()) revenueCafe += orderMoney(orders);
+  const revenue = revenueVisits + revenueAbo + revenueCafe;
   const unpaid = rows.filter((r) => !r.isPayed).length;
   const capacity = occupancy?.normalCapacity || facilities[0]?.nbrPlaces || 0;
   const free = Math.max(
@@ -1347,7 +1372,7 @@ export default function JournalClient() {
           {
             label: "Revenu du jour",
             value: `${revenue.toFixed(1)} DT`,
-            hint: `Visites ${revenueVisits.toFixed(1)} · Abonnements ${revenueAbo.toFixed(1)} DT`,
+            hint: `Visites ${revenueVisits.toFixed(1)} · Abonnements ${revenueAbo.toFixed(1)} · Café ${revenueCafe.toFixed(1)} DT`,
           },
           { label: "Impayés", value: String(unpaid), href: "/impayes" },
         ].map((k) => (
@@ -1650,6 +1675,7 @@ export default function JournalClient() {
                   const over = isOverstay(row, now);
                   const soon = isLeavingSoon(row, now);
                   const status = visitStatus(row);
+                  const cafe = cafeAmount(row);
                   const rem = remainingLabel(row);
                   const passageIds = row.passages?.length
                     ? row.passages.map((p) => p.id)
@@ -1927,13 +1953,14 @@ export default function JournalClient() {
                                 })
                               }
                             >
-                              {row.passages
-                                .reduce(
+                              {(
+                                row.passages.reduce(
                                   (sum, p) => sum + visitAmountDue(p, now),
                                   0
-                                )
-                                .toFixed(1)}{" "}
+                                ) + cafe
+                              ).toFixed(1)}{" "}
                               DT · {row.visitCount} passages
+                              {cafe > 0.001 ? ` · café ${cafe.toFixed(1)}` : ""}
                               {expandedPassages.has(row.id) ? " ▾" : " ▸"}
                             </button>
                             {expandedPassages.has(row.id)
@@ -2051,19 +2078,25 @@ export default function JournalClient() {
                         ) : amountIfPaidNow(row, now) ? (
                           <LeftUnpaidAmount
                             info={amountIfPaidNow(row, now)!}
+                            cafe={cafe}
                           />
                         ) : rowPricing(row, now) ? (
-                          <JournalPricingAmountCell row={row} now={now} />
+                          <JournalPricingAmountCell row={row} now={now} addon={cafe} />
                         ) : (
                           <>
-                            {promoPriceOf(row) != null ? (
+                            {promoPriceOf(row) != null && cafe <= 0.001 ? (
                               <PromoPriceTag
                                 row={row}
                                 amount={visitAmountDue(row, now)}
                               />
                             ) : (
-                              <>{visitAmountDue(row, now).toFixed(1)} DT</>
+                              <>{(visitAmountDue(row, now) + cafe).toFixed(1)} DT</>
                             )}
+                            {cafe > 0.001 ? (
+                              <div className="text-[11px] tabular-nums text-amber-800">
+                                dont café {cafe.toFixed(1)} DT
+                              </div>
+                            ) : null}
                             {status === "present" &&
                             p?.billingUnit === "HOURLY" &&
                             p.category !== "ABONNEMENT" &&
@@ -2699,22 +2732,30 @@ export default function JournalClient() {
 
 function LeftUnpaidAmount({
   info,
+  cafe = 0,
 }: {
   info: { amountAtCheckout: number; amountIfPaidNow: number; extra: number };
+  cafe?: number;
 }) {
+  const nowAmount = info.amountIfPaidNow + cafe;
   return (
     <div className="space-y-0.5 leading-tight">
       <div className="text-xs text-muted-foreground">
         Dû au départ {info.amountAtCheckout.toFixed(1)} DT
       </div>
       <div className="font-semibold text-orange-700 dark:text-orange-400">
-        Si paie maintenant {info.amountIfPaidNow.toFixed(1)} DT
+        Si paie maintenant {nowAmount.toFixed(1)} DT
         {info.extra > 0.001 ? (
           <span className="ml-1 text-xs font-bold">
             (+{info.extra.toFixed(1)})
           </span>
         ) : null}
       </div>
+      {cafe > 0.001 ? (
+        <div className="text-[11px] tabular-nums text-amber-800">
+          dont café {cafe.toFixed(1)} DT
+        </div>
+      ) : null}
     </div>
   );
 }

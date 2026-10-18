@@ -227,6 +227,13 @@ function CloseDialog({
               onChange={(e) => setCounted(e.target.value.replace(/[^\d.,]/g, ""))}
               className="h-14 text-3xl font-semibold tabular-nums"
             />
+            <button
+              type="button"
+              className="rounded-md border bg-emerald-50 px-3 py-1.5 text-sm font-semibold tabular-nums text-emerald-800 hover:bg-emerald-100"
+              onClick={() => setCounted(summary.expectedClose.toFixed(2))}
+            >
+              {dt(summary.expectedClose, 2)}
+            </button>
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Attendu {dt(summary.expectedClose, 2)}</span>
               {hasCount ? (
