@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { caisseApi } from "@/lib/api/resources";
+import { analyticsApi, caisseApi } from "@/lib/api/resources";
 import { dt } from "@/lib/finance-queries";
 import { FinanceMonthCharts } from "@/components/admin/finance/FinanceMonthCharts";
 import { FinanceServicesInsight } from "@/components/admin/finance/FinanceServicesInsight";
@@ -72,6 +72,11 @@ function FinanceInner() {
   const { data: monthData } = useQuery({
     queryKey: ["caisse-month", year, month],
     queryFn: () => caisseApi.month(year, month),
+    enabled: tab === "mois",
+  });
+  const { data: monthPerf } = useQuery({
+    queryKey: ["performance", "overview", year, month],
+    queryFn: () => analyticsApi.performanceOverview(year, month),
     enabled: tab === "mois",
   });
 
@@ -131,28 +136,50 @@ function FinanceInner() {
           </div>
 
           {monthData ? (
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
               {[
                 {
                   label: "Brut (CA)",
-                  value:
+                  display: `${(
                     monthData.revenueJournal +
                     monthData.revenueAbonnements +
-                    monthData.revenueProducts,
+                    monthData.revenueProducts
+                  ).toFixed(1)} DT`,
                   hint: "Tout l'encaissé du mois",
+                  tone: "emerald" as const,
                 },
-                { label: "Journal", value: monthData.revenueJournal },
-                { label: "Abonnements", value: monthData.revenueAbonnements },
-                { label: "Produits", value: monthData.revenueProducts },
+                {
+                  label: "Visites",
+                  display: monthPerf?.current
+                    ? String(monthPerf.current.visits)
+                    : "…",
+                  hint: monthPerf?.current
+                    ? `${monthPerf.current.avgVisitsPerDay}/jour · ${monthPerf.current.uniqueVisitors} personnes`
+                    : "Passages du mois",
+                  tone: "violet" as const,
+                },
+                {
+                  label: "Journal",
+                  display: `${Number(monthData.revenueJournal).toFixed(1)} DT`,
+                },
+                {
+                  label: "Abonnements",
+                  display: `${Number(monthData.revenueAbonnements).toFixed(1)} DT`,
+                },
+                {
+                  label: "Produits",
+                  display: `${Number(monthData.revenueProducts).toFixed(1)} DT`,
+                },
                 {
                   label: "Dépenses",
-                  value: monthData.expenses,
+                  display: `${Number(monthData.expenses).toFixed(1)} DT`,
                   hint: "Ce que vous avez dépensé",
                 },
                 {
                   label: "Net",
-                  value: monthData.net,
+                  display: `${Number(monthData.net).toFixed(1)} DT`,
                   hint: "Brut − dépenses",
+                  tone: monthData.net < 0 ? ("rose" as const) : undefined,
                 },
               ].map((k) => (
                 <Card key={k.label} className="shadow-none">
@@ -165,13 +192,12 @@ function FinanceInner() {
                     <div
                       className={cn(
                         "text-lg font-semibold",
-                        k.label === "Net" &&
-                          Number(k.value) < 0 &&
-                          "text-rose-600",
-                        k.label === "Brut (CA)" && "text-emerald-700",
+                        k.tone === "rose" && "text-rose-600",
+                        k.tone === "emerald" && "text-emerald-700",
+                        k.tone === "violet" && "text-violet-700",
                       )}
                     >
-                      {Number(k.value).toFixed(1)} DT
+                      {k.display}
                     </div>
                     {"hint" in k && k.hint ? (
                       <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -257,7 +283,16 @@ function FinanceInner() {
         </TabsContent>
 
         <TabsContent value="frequentation" className="mt-4 space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">
+                Fréquentation
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Où l&apos;espace est plein ou vide, et quoi faire pour gagner des
+                visites et du CA.
+              </p>
+            </div>
             <Button variant="outline" size="sm" onClick={() => setTab("jour")}>
               Analyser un jour en détail
             </Button>

@@ -119,8 +119,11 @@ export class AnalyticsService {
     const [journals, abonnements, dailyProducts, dailyExpenses] =
       await Promise.all([
         this.prisma.journal.findMany({
-          where: { registredTime: { gte: start, lte: end }, isPayed: true },
-          select: { registredTime: true, payedAmount: true },
+          where: {
+            registredTime: { gte: start, lte: end },
+            isReservation: false,
+          },
+          select: { registredTime: true, payedAmount: true, isPayed: true },
         }),
         this.prisma.abonnementPayment.findMany({
           where: abonnementPaymentsInRange(start, end),
@@ -143,6 +146,7 @@ export class AnalyticsService {
       string,
       {
         date: string;
+        visits: number;
         revenueJournal: number;
         revenueAbonnements: number;
         revenueProducts: number;
@@ -156,6 +160,7 @@ export class AnalyticsService {
       if (!byDay.has(key)) {
         byDay.set(key, {
           date: key,
+          visits: 0,
           revenueJournal: 0,
           revenueAbonnements: 0,
           revenueProducts: 0,
@@ -168,7 +173,8 @@ export class AnalyticsService {
 
     for (const j of journals) {
       const row = ensure(j.registredTime);
-      row.revenueJournal += j.payedAmount || 0;
+      row.visits += 1;
+      if (j.isPayed) row.revenueJournal += j.payedAmount || 0;
     }
     for (const p of abonnements) {
       const row = ensure(p.paidAt);

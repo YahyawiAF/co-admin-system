@@ -623,6 +623,8 @@ export interface FinanceYearMonthRow {
 
 export interface FinanceMonthDayRow {
   date: string;
+  /** Non-reservation journal entries that day */
+  visits: number;
   revenueJournal: number;
   revenueAbonnements: number;
   revenueProducts: number;

@@ -77,6 +77,7 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
         Produits: Math.round(d.revenueProducts * 10) / 10,
         Dépenses: Math.round(d.expenses * 10) / 10,
         Total: Math.round(d.net * 10) / 10,
+        Visites: d.visits ?? 0,
       })),
     [daysData],
   );
@@ -90,8 +91,9 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
         Produits: acc.Produits + (d.revenueProducts || 0),
         Dépenses: acc.Dépenses + (d.expenses || 0),
         Total: acc.Total + (d.net || 0),
+        Visites: acc.Visites + (d.visits || 0),
       }),
-      { Journal: 0, Abonnements: 0, Produits: 0, Dépenses: 0, Total: 0 },
+      { Journal: 0, Abonnements: 0, Produits: 0, Dépenses: 0, Total: 0, Visites: 0 },
     );
   }, [daysData]);
 
@@ -165,46 +167,92 @@ export function FinanceMonthCharts({ year, month, monthData }: Props) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="lg:col-span-2">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">
-            Jours du mois — mix revenus, dépenses et total
+            Jours du mois — mix revenus, dépenses et visites
           </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Barres = CA / dépenses · courbe violette = nombre de visites du jour
+          </p>
         </CardHeader>
         <CardContent className="pt-2">
           {dayChart.length ? (
             <>
-              <div className="h-64">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={dayChart}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} width={40} />
-                    <Tooltip formatter={(v: number) => fmtDt(v)} />
+                    <YAxis
+                      yAxisId="money"
+                      tick={{ fontSize: 11 }}
+                      width={44}
+                      tickFormatter={(v) => `${v}`}
+                    />
+                    <YAxis
+                      yAxisId="visits"
+                      orientation="right"
+                      tick={{ fontSize: 11 }}
+                      width={36}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      formatter={(v: number, name: string) =>
+                        name === "Visites" ? [v, name] : [fmtDt(v), name]
+                      }
+                    />
                     <Legend />
-                    <Bar dataKey="Journal" stackId="a" fill="hsl(210 70% 50%)" />
                     <Bar
+                      yAxisId="money"
+                      dataKey="Journal"
+                      stackId="a"
+                      fill="hsl(210 70% 50%)"
+                    />
+                    <Bar
+                      yAxisId="money"
                       dataKey="Abonnements"
                       stackId="a"
                       fill="hsl(160 50% 40%)"
                     />
-                    <Bar dataKey="Produits" stackId="a" fill="hsl(35 80% 50%)" />
                     <Bar
+                      yAxisId="money"
+                      dataKey="Produits"
+                      stackId="a"
+                      fill="hsl(35 80% 50%)"
+                    />
+                    <Bar
+                      yAxisId="money"
                       dataKey="Dépenses"
                       fill="hsl(var(--destructive))"
                       radius={[2, 2, 0, 0]}
                     />
                     <Line
+                      yAxisId="money"
                       type="monotone"
                       dataKey="Total"
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       dot={false}
                     />
+                    <Line
+                      yAxisId="visits"
+                      type="monotone"
+                      dataKey="Visites"
+                      stroke="hsl(270 60% 45%)"
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs text-muted-foreground">
+                <span className="font-medium text-violet-700">
+                  Visites {dayTotals.Visites}
+                  {dayChart.length
+                    ? ` · ≈ ${(dayTotals.Visites / dayChart.length).toFixed(1)} / jour`
+                    : ""}
+                </span>
                 <span>Journal {fmtDt(dayTotals.Journal)}</span>
                 <span>Abo {fmtDt(dayTotals.Abonnements)}</span>
                 <span>Produits {fmtDt(dayTotals.Produits)}</span>

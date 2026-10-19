@@ -42,6 +42,7 @@ import { queryKeys } from "@/lib/query-client";
 import type { DayTrafficCompare, DayTrafficSeries } from "@/lib/types";
 import {
   WEEKDAY_LABELS,
+  formatPeopleCount,
   hourLabel,
   percentDelta,
 } from "@/lib/traffic-utils";
@@ -150,13 +151,21 @@ export function FinanceDayAnalysis() {
           label: "Visites",
           value: data.target.totals.visits,
           avg: data.average.totals.visits,
-          fmt: (v: number) => String(v),
+          fmt: (v: number) => String(Math.round(v)),
+          detail: `${data.target.totals.uniqueVisitors} personnes uniques · moy. ${formatPeopleCount(data.average.totals.visits)} / jour comparable`,
         },
         {
-          label: "Personnes uniques",
-          value: data.target.totals.uniqueVisitors,
-          avg: data.average.totals.uniqueVisitors,
-          fmt: (v: number) => String(v),
+          label: "CA / visite",
+          value:
+            data.target.totals.visits > 0
+              ? data.target.totals.revenueVisits / data.target.totals.visits
+              : 0,
+          avg:
+            data.average.totals.visits > 0
+              ? data.average.totals.revenueVisits / data.average.totals.visits
+              : 0,
+          fmt: (v: number) => `${v.toFixed(1)} DT`,
+          detail: "Ce que rapporte un passage en moyenne (hors abo)",
         },
         {
           label: "Revenu du jour",
@@ -170,13 +179,15 @@ export function FinanceDayAnalysis() {
           value: data.target.totals.avgDurationMin,
           avg: data.average.totals.avgDurationMin,
           fmt: (v: number) =>
-            v >= 60 ? `${Math.floor(v / 60)} h ${String(Math.round(v % 60)).padStart(2, "0")}` : `${Math.round(v)} min`,
+            v >= 60
+              ? `${Math.floor(v / 60)} h ${String(Math.round(v % 60)).padStart(2, "0")}`
+              : `${Math.round(v)} min`,
         },
         {
           label: "Pic de présence",
           value: data.target.totals.peakPresent,
           avg: data.average.totals.peakPresent,
-          fmt: (v: number) => String(v),
+          fmt: (v: number) => String(Math.round(v)),
           sub:
             data.target.totals.peakPresent > 0
               ? `à ${hourLabel(data.target.totals.peakHour)}`
@@ -186,7 +197,7 @@ export function FinanceDayAnalysis() {
           label: "Partis sans payer",
           value: data.target.totals.leftUnpaid,
           avg: data.average.totals.leftUnpaid,
-          fmt: (v: number) => String(v),
+          fmt: (v: number) => String(Math.round(v)),
           inverse: true,
         },
       ]
@@ -341,7 +352,13 @@ export function FinanceDayAnalysis() {
           {insights.length ? (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">À retenir</CardTitle>
+                <CardTitle className="text-base">
+                  Ce que vous pouvez faire
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Lectures actionnables pour remplir l&apos;espace et augmenter le CA
+                  ce jour-là.
+                </p>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-1.5 text-sm">
@@ -363,7 +380,13 @@ export function FinanceDayAnalysis() {
 
           <Card>
             <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-base">Heure par heure</CardTitle>
+              <div>
+                <CardTitle className="text-base">Heure par heure</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Courbe du jour vs moyenne des jours comparés — repérez les creux à
+                  remplir.
+                </p>
+              </div>
               <div className="inline-flex rounded-full border p-0.5 text-xs">
                 {(
                   [
@@ -394,7 +417,12 @@ export function FinanceDayAnalysis() {
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="hour" tick={{ fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip
+                      formatter={(v: number, name: string) => [
+                        Number.isInteger(v) ? v : Math.round(v),
+                        name,
+                      ]}
+                    />
                     <Legend wrapperStyle={{ fontSize: 12 }} />
                     {data.comparisons.map((c, i) => (
                       <Line
