@@ -147,6 +147,30 @@ function ContextCard({ value }: { value: string }) {
   );
 }
 
+function recommendationBlock(rec: AdvisorRecommendation) {
+  const ui = CATEGORY_UI[rec.category] ?? CATEGORY_UI.OPERATIONS;
+  const lines = [
+    ui.label,
+    `Priorité ${LEVEL[rec.priority]} · Effort ${LEVEL[rec.effort]}`,
+    "",
+    rec.title,
+    "",
+    `Pourquoi : ${rec.evidence}`,
+  ];
+  if (rec.actions.length) {
+    lines.push("");
+    rec.actions.forEach((a, i) => lines.push(`${i + 1}. ${a}`));
+  }
+  lines.push("", `Gain estimé : ${rec.expectedImpact}`, `À surveiller : ${rec.measure}`);
+  const relance = rec.outreach && rec.outreach.segment !== "NONE" ? rec.outreach : null;
+  if (relance) {
+    const segment =
+      SEGMENT_LABEL[relance.segment as keyof typeof SEGMENT_LABEL] ?? relance.segment;
+    lines.push("", `Relance proposée · ${segment}`, relance.message);
+  }
+  return lines.join("\n");
+}
+
 function RecommendationCard({
   rec,
   onStart,
@@ -203,6 +227,10 @@ function RecommendationCard({
         </div>
       ) : null}
       <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={() => copyText(recommendationBlock(rec))}>
+          <Copy className="mr-1.5 h-4 w-4" />
+          Copier
+        </Button>
         <Button size="sm" variant={relance ? "default" : "outline"} onClick={onRelance}>
           <Send className="mr-1.5 h-4 w-4" />
           {relance ? "Relancer les clients" : "Créer une relance"}

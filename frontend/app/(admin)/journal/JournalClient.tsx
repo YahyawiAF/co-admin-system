@@ -17,6 +17,7 @@ import {
   AlarmClock,
   ChevronLeft,
   ChevronRight,
+  FilterX,
   LogIn,
   LogOut,
   MapPin,
@@ -823,23 +824,72 @@ export default function JournalClient() {
     });
   };
 
-  // Ctrl+S or "/" → search box (the check-in dialog has its own when open)
+  // Ctrl+S, "/" or typing a character → search box (dialogs keep their own focus)
   const searchRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
+    const focusSearch = (opts?: { select?: boolean; cursorAt?: number }) => {
+      const el = searchRef.current;
+      if (!el) return;
+      el.focus();
+      if (opts?.select) el.select();
+      else if (opts?.cursorAt != null) el.setSelectionRange(opts.cursorAt, opts.cursorAt);
+    };
     const onKey = (e: KeyboardEvent) => {
-      if (document.querySelector('[role="dialog"]')) return;
+      // Don't steal keys from dialogs, select menus, or dropdowns
+      if (
+        document.querySelector('[role="dialog"]') ||
+        document.querySelector('[role="listbox"]') ||
+        document.querySelector('[role="menu"]')
+      ) {
+        return;
+      }
       const t = e.target as HTMLElement | null;
-      const typing =
+      const inField =
         !!t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
       const ctrlS = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s";
-      if (!ctrlS && !(e.key === "/" && !typing)) return;
+      if (ctrlS || (e.key === "/" && !inField)) {
+        e.preventDefault();
+        focusSearch({ select: true });
+        return;
+      }
+      // Start typing anywhere on the page → jump into search
+      if (inField) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key.length !== 1) return;
       e.preventDefault();
-      searchRef.current?.focus();
-      searchRef.current?.select();
+      setSearch((prev) => {
+        const next = prev + e.key;
+        requestAnimationFrame(() => focusSearch({ cursorAt: next.length }));
+        return next;
+      });
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    statusFilter !== "all" ||
+    typeFilter !== "all" ||
+    personFilter !== "all" ||
+    payFilter !== "all" ||
+    tarifFilter !== "all" ||
+    spaceFilter !== "all" ||
+    tableFilter !== "all" ||
+    quickFilter !== "all";
+
+  const clearAllFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setTypeFilter("all");
+    setPersonFilter("all");
+    setPayFilter("all");
+    setTarifFilter("all");
+    setSpaceFilter("all");
+    setTableFilter("all");
+    setQuickFilter("all");
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
 
   const clearSelection = () => setSelectedIds(new Set());
 
@@ -1490,14 +1540,14 @@ export default function JournalClient() {
               </button>
             );
           })}
-          {quickFilter !== "all" ? (
+          {hasActiveFilters ? (
             <button
               type="button"
-              onClick={() => setQuickFilter("all")}
+              onClick={clearAllFilters}
               className="inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground"
             >
-              <X className="h-3.5 w-3.5" />
-              Effacer filtre
+              <FilterX className="h-3.5 w-3.5" />
+              Tout effacer
             </button>
           ) : null}
           <div className="ml-auto inline-flex items-center rounded-full border bg-card p-0.5 text-xs">
@@ -1524,17 +1574,36 @@ export default function JournalClient() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Input
-            ref={searchRef}
-            className="max-w-xs"
-            placeholder="Nom (approx.) / téléphone / #   (Ctrl+S)"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setSearch("");
-            }}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full max-w-xs">
+            <Input
+              ref={searchRef}
+              className="pr-9"
+              placeholder="Nom / téléphone / #  — tapez pour chercher"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setSearch("");
+                }
+              }}
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  searchRef.current?.focus();
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Effacer la recherche"
+                title="Effacer la recherche (Échap)"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Statut" />
@@ -1623,6 +1692,18 @@ export default function JournalClient() {
               </SelectContent>
             </Select>
           ) : null}
+          {hasActiveFilters ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={clearAllFilters}
+              className="gap-1.5"
+            >
+              <FilterX className="h-4 w-4" />
+              Effacer filtres
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -1646,19 +1727,20 @@ export default function JournalClient() {
           ) : !displayRows.length ? (
             <div className="flex flex-col items-center gap-3 p-10 text-center">
               <p className="text-muted-foreground">
-                {quickFilter !== "all"
-                  ? "Aucun résultat pour ce filtre"
+                {hasActiveFilters
+                  ? "Aucun résultat pour cette recherche / ces filtres"
                   : "Aucune entrée pour cette date"}
               </p>
-              {quickFilter === "all" ? (
+              {hasActiveFilters ? (
+                <Button variant="outline" onClick={clearAllFilters}>
+                  <FilterX className="mr-1.5 h-4 w-4" />
+                  Effacer filtres
+                </Button>
+              ) : (
                 <div className="flex flex-wrap justify-center gap-2">
                   <ReservationPanel journalDate={selectedDate} />
                   <QuickCheckInPanel presentMemberIds={presentMemberIds} />
                 </div>
-              ) : (
-                <Button variant="outline" onClick={() => setQuickFilter("all")}>
-                  Voir tout le journal
-                </Button>
               )}
             </div>
           ) : (
