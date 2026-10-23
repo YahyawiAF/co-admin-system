@@ -83,6 +83,7 @@ import {
   type PaginatedResponse,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useStaffAccess } from "@/lib/staff-access";
 import { AbonnementSeatMap } from "@/components/admin/AbonnementSeatMap";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { SubscriptionMemberPanel } from "@/components/admin/SubscriptionMemberPanel";
@@ -168,6 +169,8 @@ export default function AbonnementsPage() {
 }
 
 function AbonnementsInner() {
+  const { can } = useStaffAccess();
+  const mayDelete = can("abonnements", "delete");
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const focusMember = searchParams.get("memberId");
@@ -1398,12 +1401,14 @@ function AbonnementsInner() {
                                 </DropdownMenuItem>
                               </>
                             ) : null}
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onClick={() => setDeleting(a)}
-                            >
-                              Supprimer définitivement
-                            </DropdownMenuItem>
+                            {mayDelete ? (
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => setDeleting(a)}
+                              >
+                                Supprimer
+                              </DropdownMenuItem>
+                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                         </div>

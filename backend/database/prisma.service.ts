@@ -1,5 +1,20 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
+import { RequestContext } from '../common/request-context';
+
+/** Rows a staff member hid stay in the DB for the admin but vanish for staff. */
+const HIDEABLE_MODELS = new Set(['Journal', 'Abonnement', 'MemberLedger']);
+const FILTERED_ACTIONS = new Set([
+  'findMany',
+  'findFirst',
+  'findFirstOrThrow',
+  'findUnique',
+  'findUniqueOrThrow',
+  'count',
+  'aggregate',
+  'groupBy',
+  'updateMany',
+]);
 
 /** Idempotent statements for app-install promo (same as migration). */
 const APP_INSTALL_PROMO_STEPS = [
@@ -212,6 +227,27 @@ AND NOT EXISTS (
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit {
   private readonly logger = new Logger(PrismaService.name);
+
+  constructor() {
+    super();
+    this.$use(async (params, next) => {
+      if (
+        params.model &&
+        HIDEABLE_MODELS.has(params.model) &&
+        FILTERED_ACTIONS.has(params.action) &&
+        RequestContext.get()?.isStaff
+      ) {
+        params.args = params.args ?? {};
+        const where = params.args.where;
+        params.args.where = params.action.startsWith('findUnique')
+          ? { ...(where || {}), hiddenAt: null }
+          : where
+            ? { AND: [where, { hiddenAt: null }] }
+            : { hiddenAt: null };
+      }
+      return next(params);
+    });
+  }
 
   async onModuleInit() {
     try {

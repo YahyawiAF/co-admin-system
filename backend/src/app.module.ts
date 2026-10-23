@@ -32,6 +32,7 @@ import { SpaceEventsModule } from './modules/events/events.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AdvisorModule } from './modules/advisor/advisor.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
+import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
   imports: [
@@ -84,6 +85,7 @@ import { PromotionModule } from './modules/promotion/promotion.module';
     AnalyticsModule,
     AdvisorModule,
     PromotionModule,
+    StaffModule,
   ],
   controllers: [AppController],
   providers: [AppService, PrismaService],

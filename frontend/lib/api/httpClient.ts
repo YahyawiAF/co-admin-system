@@ -53,6 +53,25 @@ function parseApiError(error: unknown): Error {
   return err;
 }
 
+/** Admin pages → staff permission module (lets the API pick the right rights when an endpoint is shared). */
+const PAGE_MODULE: Array<[RegExp, string]> = [
+  [/^\/journal/, "journal"],
+  [/^\/reservations/, "reservations"],
+  [/^\/impayes/, "impayes"],
+  [/^\/abonnements/, "abonnements"],
+];
+
+function contextHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const out: Record<string, string> = {};
+  const path = window.location.pathname;
+  const mod = PAGE_MODULE.find(([re]) => re.test(path))?.[1];
+  if (mod) out["X-App-Module"] = mod;
+  const org = localStorage.getItem("admin_organization_id");
+  if (org) out["X-Organization-Id"] = org;
+  return out;
+}
+
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
   skipAutoRefresh?: boolean;
@@ -104,6 +123,7 @@ export async function httpClient<T = unknown>(
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...contextHeaders(),
     ...(fetchOptions.headers as Record<string, string>),
   };
   if (currentToken) headers.Authorization = `Bearer ${currentToken}`;

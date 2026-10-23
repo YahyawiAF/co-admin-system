@@ -24,6 +24,8 @@ model User {
   Journals                Journal[]
   organizationMemberships OrganizationMembership[]
   facilityMemberships     FacilityMembership[]
+  staffActions            StaffAction[]            @relation("StaffActionActor")
+  reviewedStaffActions    StaffAction[]            @relation("StaffActionReviewer")
 
   @@map("users")
 }
@@ -203,17 +205,17 @@ model PushSubscription {
 
 /// Staff follow-up of a member (renewal, win-back, conversion, unpaid reminder).
 model MemberOutreach {
-  id        String   @id @default(uuid())
-  memberId  String
-  member    Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  memberId   String
+  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
   /// ABO_EXPIRING | ABO_ENDED | INACTIVE | CONVERT | UNPAID
-  reason    String
+  reason     String
   /// WHATSAPP | PUSH | CALL | SKIP
-  channel   String
-  message   String?
+  channel    String
+  message    String?
   /// Set when the contact belongs to a relance campaign (e.g. from an AI suggestion)
   campaignId String?
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 
   @@index([memberId, createdAt])
   @@index([createdAt])
@@ -366,6 +368,9 @@ model Journal {
   promoLabel         String?
   /// Per check-in code (QR on the visitor session screen); not unique — lookups prefer today's open visit
   checkInCode        String             @default(dbgenerated("gen_checkin_code()"))
+  /// Hidden by a staff member (delete in "hide" mode) — invisible to staff, waits for admin review
+  hiddenAt           DateTime?
+  hiddenByUserId     String?
 
   @@index([groupVisitId])
   @@index([priceId])
@@ -410,6 +415,9 @@ model Abonnement {
   reservedSeatSpaceId String?
   /// When to ask the client for payment (unpaid abonnements)
   paymentRemindAt     DateTime?
+  /// Hidden by a staff member (delete in "hide" mode) — invisible to staff, waits for admin review
+  hiddenAt            DateTime?
+  hiddenByUserId      String?
   members             Member              @relation(fields: [memberID], references: [id])
   price               Price               @relation(fields: [priceId], references: [id])
   payments            AbonnementPayment[]
@@ -577,6 +585,8 @@ model OrganizationMembership {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   role           Role         @default(ORG_ADMIN)
+  /// STAFF only: { journal: { read, write, delete: "none"|"hide"|"delete" }, reservations, impayes, abonnements }
+  permissions    Json?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -990,18 +1000,21 @@ enum LedgerKind {
 }
 
 model MemberLedger {
-  id           String     @id @default(uuid())
-  memberId     String
-  member       Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
-  kind         LedgerKind
-  amount       Float
-  note         String?
-  dueDate      DateTime?
-  source       String?
-  journalId    String?
-  abonnementId String?
-  settled      Boolean    @default(false)
-  createdAt    DateTime   @default(now())
+  id             String     @id @default(uuid())
+  memberId       String
+  member         Member     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind           LedgerKind
+  amount         Float
+  note           String?
+  dueDate        DateTime?
+  source         String?
+  journalId      String?
+  abonnementId   String?
+  settled        Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  /// Hidden by a staff member (delete in "hide" mode) — invisible to staff, waits for admin review
+  hiddenAt       DateTime?
+  hiddenByUserId String?
 
   @@index([memberId, createdAt])
   @@index([kind, settled])
@@ -1086,6 +1099,8 @@ enum Role {
   ORG_ADMIN
   FACILITY_ADMIN
   ADMIN
+  /// Employee: access limited by OrganizationMembership.permissions
+  STAFF
   USER
 }
 
@@ -1309,25 +1324,25 @@ model PromotionUse {
 
 /// A saved relance: a frozen list of clients + a message, with progress tracking
 model OutreachCampaign {
-  id                  String    @id @default(uuid())
+  id                  String   @id @default(uuid())
   facilityId          String
-  facility            Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility            Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   title               String
   /// Template; {prenom} is replaced by each client's first name
   message             String
   /// ABO_EXPIRING | ABO_ENDED | INACTIVE | CONVERT | TOP_UP | UNPAID | RECENT_30 | ALL | GROUP
   segment             String
   memberGroupId       String?
-  memberIds           String[]  @default([])
+  memberIds           String[] @default([])
   /// VISIT | SUBSCRIPTION | ANY — what counts as a result
-  goal                String    @default("ANY")
+  goal                String   @default("ANY")
   /// ACTIVE | DONE
-  status              String    @default("ACTIVE")
+  status              String   @default("ACTIVE")
   sourceReportId      String?
   recommendationTitle String?
   initiativeId        String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@index([facilityId, createdAt])
   @@map("outreach_campaigns")
@@ -1363,4 +1378,41 @@ model SyncMapping {
 
   @@unique([entityType, entityId])
   @@map("sync_mappings")
+}
+
+enum StaffActionStatus {
+  PENDING
+  CONFIRMED
+  REVERTED
+}
+
+/// Everything a STAFF user changed — the admin confirms or reverts each action.
+model StaffAction {
+  id             String            @id @default(uuid())
+  createdAt      DateTime          @default(now())
+  organizationId String?
+  userId         String
+  user           User              @relation("StaffActionActor", fields: [userId], references: [id], onDelete: Cascade)
+  /// journal | reservations | impayes | abonnements
+  module         String
+  /// CREATE | UPDATE | DELETE | HIDE
+  action         String
+  /// journal | abonnement | memberLedger | seatBooking | bookingRequest | other
+  entityType     String
+  entityId       String?
+  method         String
+  path           String
+  summary        String?
+  before         Json?
+  after          Json?
+  status         StaffActionStatus @default(PENDING)
+  reviewedAt     DateTime?
+  reviewedById   String?
+  reviewedBy     User?             @relation("StaffActionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNote     String?
+
+  @@index([organizationId, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@map("staff_actions")
 }

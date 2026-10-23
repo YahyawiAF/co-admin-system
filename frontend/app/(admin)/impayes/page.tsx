@@ -37,6 +37,7 @@ import {
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
+import { useStaffAccess } from "@/lib/staff-access";
 import type { DebtorItem, DebtorSource } from "@/lib/types";
 
 type Filter = "OPEN" | "VISIT" | "ABONNEMENT" | "RELANCE" | "LEDGER" | "HISTORY";
@@ -47,6 +48,8 @@ function remindDaysLeft(item: DebtorItem) {
 }
 
 export default function ImpayesPage() {
+  const { can } = useStaffAccess();
+  const mayDelete = can("impayes", "delete");
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("OPEN");
   const [toDelete, setToDelete] = useState<DebtorItem | null>(null);
@@ -204,9 +207,10 @@ export default function ImpayesPage() {
   ];
 
   const canDelete = (item: DebtorItem) =>
-    (item.source === "VISIT" && !!item.journalId) ||
+    mayDelete &&
+    ((item.source === "VISIT" && !!item.journalId) ||
     (item.source === "ABONNEMENT" && !!item.abonnementId) ||
-    (item.source === "LEDGER" && !!item.ledgerId);
+    (item.source === "LEDGER" && !!item.ledgerId));
 
   return (
     <div className="space-y-6">

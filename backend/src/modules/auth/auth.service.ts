@@ -15,6 +15,7 @@ import { ConfigService } from '@nestjs/config';
 import { MailerService } from '@nestjs-modules/mailer';
 import { Role } from '@prisma/client'; // Assurez-vous d'importer Role depuis Prisma
 import { isEmail, isMobilePhone } from 'class-validator';
+import { normalizePermissions } from '../staff/permissions';
 
 const roundsOfHashing = 10;
 
@@ -62,6 +63,9 @@ export class AuthService {
         slug: m.organization.slug,
         isActive: m.organization.isActive,
         membershipRole: m.role,
+        ...(user.role === Role.STAFF
+          ? { permissions: normalizePermissions(m.permissions) }
+          : {}),
       })),
     };
   }
@@ -188,6 +192,9 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new UnauthorizedException('The password you entered is incorrect');
     }
+    if (user.role === Role.STAFF && (!user.isActive || user.deletedAt)) {
+      throw new UnauthorizedException('Ce compte employé est désactivé');
+    }
 
     try {
       const payload = await this.authPayload(user);
@@ -227,17 +234,18 @@ export class AuthService {
     );
     if (!refreshTokenMatches) throw new ForbiddenException('Access Denied');
 
-    const tokens = await this.getTokens(user.id, user.email, user.role);
-    await this.updateRefreshToken(user.id, tokens.refreshToken);
+    if (user.role === Role.STAFF && (!user.isActive || user.deletedAt)) {
+      throw new ForbiddenException('Access Denied');
+    }
 
-    return {
-      ...tokens,
-      id: user.id,
-      email: user.email,
-      fullname: user.fullname,
-      phoneNumber: user.phoneNumber, // Ajouté
-      role: user.role,
-    };
+    // Same payload as login (keeps organizations / permissions) and register the
+    // new access token — JwtAuthGuard only accepts the latest stored one.
+    const payload = await this.authPayload(user);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { accessToken: payload.accessToken },
+    });
+    return payload as any;
   }
 
   /**
