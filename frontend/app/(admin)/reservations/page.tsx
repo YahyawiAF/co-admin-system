@@ -20,11 +20,14 @@ import {
 import { bookingRequestsApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
+import { useStaffAccess } from "@/lib/staff-access";
 import type { BookingRequest } from "@/lib/types";
 
 type Filter = "PENDING" | "APPROVED" | "REJECTED" | "ALL";
 
 export default function ReservationsAdminPage() {
+  const { can } = useStaffAccess();
+  const mayWrite = can("reservations", "write");
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("PENDING");
 
@@ -221,6 +224,7 @@ export default function ReservationsAdminPage() {
                           <Button
                             size="sm"
                             variant="outline"
+                            hidden={!mayWrite}
                             disabled={reject.isPending}
                             onClick={() => reject.mutate(r.id)}
                           >
@@ -229,6 +233,7 @@ export default function ReservationsAdminPage() {
                           </Button>
                           <Button
                             size="sm"
+                            hidden={!mayWrite}
                             disabled={approve.isPending}
                             onClick={() => approve.mutate(r.id)}
                           >

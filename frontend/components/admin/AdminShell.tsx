@@ -21,9 +21,12 @@ import {
   Megaphone,
   Sparkles,
   BadgePercent,
+  UserCog,
+  History,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { outreachApi } from "@/lib/api/resources";
+import { outreachApi, staffApi } from "@/lib/api/resources";
+import { useStaffAccess } from "@/lib/staff-access";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { useAdminOrg } from "@/lib/admin-org-context";
@@ -62,17 +65,34 @@ const NAV = [
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { isSuperAdmin } = useAdminOrg();
+  const { isSuperAdmin, organizationId } = useAdminOrg();
+  const { isStaff, canOpen } = useStaffAccess();
   const groupsTab = searchParams.get("tab") === "groups";
   const { data: outreach } = useQuery({
     queryKey: ["outreach"],
     queryFn: () => outreachApi.list(),
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
+    enabled: !isStaff,
   });
-  const badges: Record<string, number> = { "/relances": outreach?.todo.length ?? 0 };
+  const { data: staffSummary } = useQuery({
+    queryKey: ["staff-actions-summary", organizationId],
+    queryFn: () => staffApi.summary(),
+    enabled: !isStaff && !!organizationId,
+    refetchInterval: 60_000,
+  });
+  const badges: Record<string, number> = {
+    "/relances": outreach?.todo.length ?? 0,
+    "/activite": staffSummary?.pending ?? 0,
+  };
   const items = [
-    ...NAV,
+    ...NAV.filter((item) => canOpen(item.href.split("?")[0])),
+    ...(isStaff
+      ? []
+      : [
+          { href: "/equipe", label: "Équipe", icon: UserCog },
+          { href: "/activite", label: "Activité staff", icon: History },
+        ]),
     ...(isSuperAdmin
       ? [
           {
@@ -129,6 +149,8 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const { isStaff, can } = useStaffAccess();
+  const journalOps = can("journal", "read");
   const { organization, organizations, organizationId, setOrganizationId } =
     useAdminOrg();
   const [open, setOpen] = useState(false);
@@ -162,6 +184,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           ) : null}
           <p className="truncate px-2 text-xs text-muted-foreground">
             {user?.fullname || user?.email}
+            {isStaff ? " · Employé" : ""}
           </p>
           <Button
             variant="ghost"
@@ -192,13 +215,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Sheet>
           <div className="flex-1" />
           <RefreshButton />
-          <SeatOccupancyBoard variant="icon" />
-          <JournalAlertNavBell />
-          <StaffInboxBell />
-          <ProductOrderBell />
-          <BookingRequestBell />
-          <VisitRequestBell />
-          <CheckoutNotify />
+          {journalOps ? (
+            <>
+              <SeatOccupancyBoard variant="icon" />
+              <JournalAlertNavBell />
+              <StaffInboxBell />
+              <ProductOrderBell />
+            </>
+          ) : null}
+          {can("reservations", "read") ? <BookingRequestBell /> : null}
+          {journalOps ? (
+            <>
+              <VisitRequestBell />
+              <CheckoutNotify />
+            </>
+          ) : null}
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>

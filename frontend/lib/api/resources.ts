@@ -2,6 +2,9 @@ import { http } from "./httpClient";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
+  StaffActionRow,
+  StaffMember,
+  StaffPermissions,
   AdvisorCategory,
   AdvisorFact,
   AdvisorLocation,
@@ -1913,5 +1916,69 @@ export const promotionsApi = {
   },
   track(id: string, kind: "view" | "click") {
     return http.post(`/mobile/promotions/${id}/track`, { kind }, { skipAuth: true });
+  },
+};
+
+export const staffApi = {
+  me() {
+    return http.get<{
+      isStaff: boolean;
+      role: string;
+      organizations: Array<{ organizationId: string; permissions: StaffPermissions }>;
+    }>("/staff/me");
+  },
+  list() {
+    return http.get<StaffMember[]>(withOrgQuery("/staff"));
+  },
+  create(data: {
+    fullname: string;
+    identifier: string;
+    password: string;
+    permissions: StaffPermissions;
+  }) {
+    return http.post<StaffMember>("/staff", {
+      ...data,
+      organizationId: getAdminOrganizationId(),
+    });
+  },
+  update(
+    id: string,
+    data: Partial<{
+      fullname: string;
+      password: string;
+      isActive: boolean;
+      permissions: StaffPermissions;
+    }>
+  ) {
+    return http.patch<StaffMember>(`/staff/${id}`, {
+      ...data,
+      organizationId: getAdminOrganizationId(),
+    });
+  },
+  remove(id: string) {
+    return http.delete<{ ok: boolean }>(withOrgQuery(`/staff/${id}`));
+  },
+  actions(params: { status?: string; userId?: string; module?: string; page?: number }) {
+    const q = new URLSearchParams();
+    if (params.status) q.set("status", params.status);
+    if (params.userId) q.set("userId", params.userId);
+    if (params.module) q.set("module", params.module);
+    q.set("page", String(params.page || 1));
+    q.set("perPage", "50");
+    return http.get<{ total: number; page: number; perPage: number; data: StaffActionRow[] }>(
+      withOrgQuery(`/staff/actions?${q.toString()}`)
+    );
+  },
+  summary() {
+    return http.get<{ pending: number; hidden: number }>(withOrgQuery("/staff/actions/summary"));
+  },
+  review(id: string, decision: "confirm" | "revert", note?: string) {
+    return http.patch(`/staff/actions/${id}/${decision}`, { note });
+  },
+  confirmMany(ids?: string[]) {
+    return http.post<{ confirmed: number; errors: string[] }>("/staff/actions/confirm-all", {
+      organizationId: getAdminOrganizationId(),
+      ids,
+    });
   },
 };

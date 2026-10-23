@@ -80,6 +80,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useStaffAccess } from "@/lib/staff-access";
 import { QuickCheckInPanel } from "@/components/admin/QuickCheckInPanel";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { ReservationPanel } from "@/components/admin/ReservationPanel";
@@ -204,6 +205,8 @@ function firstArrivalMs(row: JournalListRow): number {
 }
 
 export default function JournalClient() {
+  const { can } = useStaffAccess();
+  const canDelete = can("journal", "delete");
   const router = useRouter();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
@@ -1788,6 +1791,11 @@ export default function JournalClient() {
                     ? row.passages
                     : [row]
                   ).some(isLeftUnpaid);
+                  // Only the admin ever receives hidden rows from the API.
+                  const staffHidden = (row.passages?.length
+                    ? row.passages
+                    : [row]
+                  ).some((x) => !!x.hiddenAt);
                   return (
                     <TableRow
                       key={row.id}
@@ -1805,7 +1813,9 @@ export default function JournalClient() {
                         soon && !over && row.isPayed && "bg-sky-50/50 dark:bg-sky-950/15",
                         leftUnpaid &&
                           "bg-orange-100/80 shadow-[inset_4px_0_0_0_rgb(234_88_12)] dark:bg-orange-950/30",
-                        selected && "bg-primary/5"
+                        selected && "bg-primary/5",
+                        staffHidden &&
+                          "opacity-60 shadow-[inset_4px_0_0_0_rgb(217_119_6)]"
                       )}
                     >
                       <TableCell>
@@ -1843,6 +1853,15 @@ export default function JournalClient() {
                               >
                                 {visitorLabel(row)}
                               </button>
+                              {staffHidden ? (
+                                <Link
+                                  href="/activite"
+                                  title="Masqué par un employé — à confirmer ou restaurer"
+                                  className="inline-flex h-5 items-center rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-800 transition-colors hover:bg-amber-200"
+                                >
+                                  Masqué par le staff
+                                </Link>
+                              ) : null}
                               {row.checkoutCount > 1 ? (
                                 <Badge variant="secondary" className="h-5 text-[10px]">
                                   {row.checkoutCount} check-out
@@ -2131,6 +2150,7 @@ export default function JournalClient() {
                                             variant="ghost"
                                             className="h-6 w-6"
                                             title="Supprimer ce passage"
+                                            hidden={!canDelete}
                                           >
                                             <Trash2 className="h-3 w-3 text-destructive" />
                                           </Button>
@@ -2381,7 +2401,7 @@ export default function JournalClient() {
                           ) : null}
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button size="icon" variant="ghost">
+                              <Button size="icon" variant="ghost" hidden={!canDelete}>
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </AlertDialogTrigger>
@@ -2481,6 +2501,7 @@ export default function JournalClient() {
                 <Button
                   size="sm"
                   variant="destructive"
+                  hidden={!canDelete}
                   disabled={!selectedIds.size || bulkDelete.isPending}
                 >
                   <Trash2 className="mr-1.5 h-3.5 w-3.5" />

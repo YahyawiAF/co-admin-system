@@ -3,7 +3,53 @@ export enum Role {
   ORG_ADMIN = "ORG_ADMIN",
   FACILITY_ADMIN = "FACILITY_ADMIN",
   ADMIN = "ADMIN",
+  /** Employee — access limited by per-module permissions */
+  STAFF = "STAFF",
   USER = "USER",
+}
+
+export type StaffModule = "journal" | "reservations" | "impayes" | "abonnements";
+/** none = cannot delete · hide = hidden for staff, admin decides · delete = real delete */
+export type StaffDeleteMode = "none" | "hide" | "delete";
+export type StaffModulePermission = {
+  read: boolean;
+  write: boolean;
+  delete: StaffDeleteMode;
+};
+export type StaffPermissions = Record<StaffModule, StaffModulePermission>;
+
+export interface StaffMember {
+  id: string;
+  fullname: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+  isActive: boolean;
+  createdAt: string;
+  permissions: StaffPermissions;
+  pendingActions: number;
+  lastActionAt: string | null;
+}
+
+export type StaffActionStatus = "PENDING" | "CONFIRMED" | "REVERTED";
+export interface StaffActionRow {
+  id: string;
+  createdAt: string;
+  userId: string;
+  user: { id: string; fullname: string | null; email: string | null; phoneNumber: string | null };
+  module: StaffModule;
+  action: "CREATE" | "UPDATE" | "DELETE" | "HIDE";
+  entityType: string;
+  entityId: string | null;
+  method: string;
+  path: string;
+  summary: string | null;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  status: StaffActionStatus;
+  reviewedAt: string | null;
+  reviewedBy: { id: string; fullname: string | null; email: string | null } | null;
+  reviewNote: string | null;
+  revertable: boolean;
 }
 
 export enum Subscription {
@@ -74,6 +120,8 @@ export interface User {
     slug: string;
     isActive: boolean;
     membershipRole: Role;
+    /** Present for STAFF users */
+    permissions?: StaffPermissions;
   }>;
 }
 
@@ -207,6 +255,9 @@ export interface Price {
 export interface Journal {
   id: string;
   isPayed: boolean;
+  /** Hidden by a staff member — waiting for the admin's decision (admin only sees it) */
+  hiddenAt?: string | null;
+  hiddenByUserId?: string | null;
   /** Per check-in code — the visitor shows it as a QR, reception scans it */
   checkInCode?: string;
   registredTime: string;
