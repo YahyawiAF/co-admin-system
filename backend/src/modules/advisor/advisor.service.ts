@@ -10,8 +10,10 @@ import { Prisma } from '@prisma/client';
 import { subMinutes } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { parseLocalDay } from '../../../common/parse-local-day';
+import { CampaignService, type CampaignSegment } from '../analytics/campaign.service';
 import { PerformanceService } from '../analytics/performance.service';
 import {
+  ADVICE_METRICS,
   ADVISOR_MODEL,
   AdvisorRefusalError,
   RECOMMENDATION_CATEGORIES,
@@ -25,6 +27,9 @@ import {
 import { ContextService } from './context.service';
 import { SnapshotService } from './snapshot.service';
 
+const CREDIT_MESSAGE =
+  "Crédit Anthropic épuisé : rechargez le compte (Plans & Billing), ou utilisez le copier-coller dans « Mon contexte ».";
+
 /** A PENDING report older than this is considered lost (server restarted mid-run). */
 const STALE_MINUTES = 15;
 
@@ -35,7 +40,33 @@ type InitiativeBody = {
   startDate?: string;
   endDate?: string | null;
   sourceReportId?: string | null;
+  recommendationTitle?: string | null;
+  metric?: string | null;
+  targetPct?: number | null;
+  cost?: number | null;
+  ownerVerdict?: string | null;
+  notes?: Array<{ date?: string; text?: string }>;
+  targetKind?: string;
+  targetDays?: number[];
+  targetFromHour?: number | null;
+  targetToHour?: number | null;
+  targetSegment?: string | null;
+  linkedKind?: string | null;
+  linkedId?: string | null;
 };
+
+const TARGET_KINDS = ['ALL', 'SLOT', 'LIST'];
+const LINKED_KINDS = ['PRICE', 'PRODUCT', 'PROMOTION'];
+
+const VERDICTS = ['WORKING', 'MIXED', 'NOT_WORKING'];
+
+/** Optional number from the form: empty → null, otherwise a finite number. */
+function optionalNumber(v: unknown, label: string) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  if (!Number.isFinite(n)) throw new BadRequestException(`${label} invalide`);
+  return Math.round(n * 10) / 10;
+}
 
 @Injectable()
 export class AdvisorService {
@@ -47,7 +78,59 @@ export class AdvisorService {
     private readonly performance: PerformanceService,
     private readonly snapshots: SnapshotService,
     private readonly context: ContextService,
+    private readonly campaigns: CampaignService,
   ) {}
+
+  async dataCheck(facilityId?: string) {
+    return this.snapshots.dataCheck(await this.facilityId(facilityId));
+  }
+
+  /** Target and linked sale; a client list is frozen at start so the measure doesn't drift. */
+  private async targetData(facilityId: string, body: InitiativeBody) {
+    const data: Prisma.BusinessInitiativeUncheckedUpdateInput = {};
+    if (body.targetKind !== undefined) {
+      if (!TARGET_KINDS.includes(body.targetKind)) throw new BadRequestException('Cible invalide');
+      data.targetKind = body.targetKind;
+      const hour = (h: unknown, max: number) => {
+        if (h === null || h === undefined || h === '') return null;
+        const n = Number(h);
+        if (!Number.isInteger(n) || n < 0 || n > max) throw new BadRequestException('Heure invalide');
+        return n;
+      };
+      if (body.targetKind === 'SLOT') {
+        const days = [...new Set((body.targetDays ?? []).map(Number))];
+        if (days.some((d) => !Number.isInteger(d) || d < 0 || d > 6)) {
+          throw new BadRequestException('Jours invalides');
+        }
+        const from = hour(body.targetFromHour, 23);
+        const to = hour(body.targetToHour, 24);
+        if ((from == null) !== (to == null) || (from != null && from === to)) {
+          throw new BadRequestException('Créneau invalide');
+        }
+        if (!days.length && from == null) throw new BadRequestException('Choisissez des jours ou des heures');
+        Object.assign(data, { targetDays: days.length === 7 ? [] : days, targetFromHour: from, targetToHour: to });
+      } else {
+        Object.assign(data, { targetDays: [], targetFromHour: null, targetToHour: null });
+      }
+      if (body.targetKind === 'LIST') {
+        const segment = body.targetSegment as CampaignSegment;
+        const ids = [...new Set(await this.campaigns.segmentMembers(segment, facilityId).catch(() => []))];
+        if (!ids.length) throw new BadRequestException('Personne dans cette liste pour le moment');
+        Object.assign(data, { targetSegment: segment, targetMemberIds: ids });
+      } else {
+        Object.assign(data, { targetSegment: null, targetMemberIds: [] });
+      }
+    }
+    if (body.linkedKind !== undefined || body.linkedId !== undefined) {
+      if (body.linkedKind && !LINKED_KINDS.includes(body.linkedKind)) {
+        throw new BadRequestException('Vente liée invalide');
+      }
+      const linked = !!(body.linkedKind && body.linkedId);
+      data.linkedKind = linked ? body.linkedKind : null;
+      data.linkedId = linked ? body.linkedId : null;
+    }
+    return data;
+  }
 
   private get enabled() {
     return !!(process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN);
@@ -222,6 +305,9 @@ export class AdvisorService {
       return 'Limite de requêtes atteinte, réessayez dans quelques minutes.';
     }
     if (err instanceof Anthropic.APIConnectionError) return "Impossible de joindre l'API Anthropic.";
+    if (err instanceof Anthropic.APIError && /credit balance/i.test(err.message)) {
+      return CREDIT_MESSAGE;
+    }
     if (err instanceof Anthropic.APIError) return `Erreur API (${err.status}) : ${err.message}`;
     if (err instanceof SyntaxError) return "Réponse de l'IA illisible, réessayez.";
     return (err as Error)?.message || 'Erreur inconnue';
@@ -329,6 +415,38 @@ export class AdvisorService {
       data.endDate = body.endDate ? parseLocalDay(body.endDate) : null;
     }
     if (body.sourceReportId !== undefined) data.sourceReportId = body.sourceReportId || null;
+    if (body.recommendationTitle !== undefined) {
+      data.recommendationTitle = body.recommendationTitle?.trim().slice(0, 300) || null;
+    }
+    if (body.metric !== undefined) {
+      if (body.metric && !(ADVICE_METRICS as readonly string[]).includes(body.metric)) {
+        throw new BadRequestException('Chiffre à suivre invalide');
+      }
+      data.metric = body.metric || null;
+    }
+    if (body.targetPct !== undefined) data.targetPct = optionalNumber(body.targetPct, 'Objectif');
+    if (body.cost !== undefined) {
+      const cost = optionalNumber(body.cost, 'Coût');
+      if (cost !== null && cost < 0) throw new BadRequestException('Le coût ne peut pas être négatif');
+      data.cost = cost;
+    }
+    if (body.ownerVerdict !== undefined) {
+      if (body.ownerVerdict && !VERDICTS.includes(body.ownerVerdict)) {
+        throw new BadRequestException('Verdict invalide');
+      }
+      data.ownerVerdict = body.ownerVerdict || null;
+    }
+    if (body.notes !== undefined) {
+      if (!Array.isArray(body.notes) || body.notes.length > 50) {
+        throw new BadRequestException('Notes invalides');
+      }
+      data.notes = body.notes
+        .map((n) => ({
+          date: typeof n?.date === 'string' ? n.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+          text: typeof n?.text === 'string' ? n.text.trim().slice(0, 500) : '',
+        }))
+        .filter((n) => n.text);
+    }
     for (const k of ['startDate', 'endDate'] as const) {
       const d = data[k];
       if (d instanceof Date && Number.isNaN(d.getTime())) {
@@ -341,7 +459,10 @@ export class AdvisorService {
   async createInitiative(facilityId: string | undefined, body: InitiativeBody) {
     if (!body.title) throw new BadRequestException('Titre requis');
     const id = await this.facilityId(facilityId);
-    const data = this.initiativeData({ startDate: new Date().toISOString(), ...body });
+    const data = {
+      ...this.initiativeData({ startDate: new Date().toISOString(), ...body }),
+      ...(await this.targetData(id, body)),
+    };
     const created = await this.prisma.businessInitiative.create({
       data: { ...(data as Prisma.BusinessInitiativeUncheckedCreateInput), facilityId: id },
     });
@@ -349,8 +470,11 @@ export class AdvisorService {
   }
 
   async updateInitiative(id: string, body: InitiativeBody) {
+    const row = await this.prisma.businessInitiative.findUnique({ where: { id }, select: { facilityId: true } });
+    if (!row) throw new NotFoundException('Initiative introuvable');
+    const data = { ...this.initiativeData(body), ...(await this.targetData(row.facilityId, body)) };
     await this.prisma.businessInitiative
-      .update({ where: { id }, data: this.initiativeData(body) })
+      .update({ where: { id }, data })
       .catch(() => {
         throw new NotFoundException('Initiative introuvable');
       });

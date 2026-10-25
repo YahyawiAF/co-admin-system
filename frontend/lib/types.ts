@@ -1381,6 +1381,12 @@ export interface AdvisorRecommendation {
   actions: string[];
   expectedImpact: string;
   measure: string;
+  /** Figure the app measures before / after (older reports: absent) */
+  metric?: AdviceMetric;
+  /** Expected change of that figure (% or points for rate figures) */
+  targetPct?: number;
+  /** Who it aims at; 0/0 hours = all day */
+  target?: { kind: TargetKind; days: number[]; fromHour: number; toHour: number };
   /** Clients to contact and the ready-to-send message (segment NONE = no relance) */
   outreach?: { segment: CampaignSegment | "NONE"; message: string };
 }
@@ -1449,14 +1455,115 @@ export interface InitiativeMetrics {
   newMembers: number;
 }
 
+export type AdviceMetric =
+  | "revenuePerDay"
+  | "visitsPerDay"
+  | "revenueCafe"
+  | "cafeAttachRatePct"
+  | "avgStayHours"
+  | "newMembers"
+  | "revenueSubscriptions"
+  | "avgOccupancyPct";
+
+export type InitiativeVerdict = "WORKING" | "MIXED" | "NOT_WORKING";
+
+export type TargetKind = "ALL" | "SLOT" | "LIST";
+export type LinkedKind = "PRICE" | "PRODUCT" | "PROMOTION";
+
+export interface AdvisorDataIssue {
+  key: string;
+  severity: "blocking" | "warning";
+  title: string;
+  detail: string;
+  fixLabel: string;
+  fixHref: string;
+  blocks: AdvisorCategory[];
+}
+
+export type InitiativeStatus =
+  | "too_early"
+  | "goal_reached"
+  | "below_goal"
+  | "no_effect"
+  | "up"
+  | "down";
+
+export interface InitiativeNote {
+  date: string;
+  text: string;
+}
+
 export interface BusinessInitiative {
   id: string;
   title: string;
+  /** What the owner actually did */
   description: string | null;
   category: AdvisorCategory;
   startDate: string;
   endDate: string | null;
   daysSinceStart: number;
+  windowDays: number;
+  recommendationTitle: string | null;
+  metric: AdviceMetric | null;
+  targetPct: number | null;
+  cost: number | null;
+  ownerVerdict: InitiativeVerdict | null;
+  notes: InitiativeNote[];
+  campaign: {
+    id: string;
+    title: string;
+    total: number;
+    contacted: number;
+    won: number;
+    revenue: number;
+  } | null;
+  target: {
+    kind: TargetKind;
+    days: number[];
+    fromHour: number | null;
+    toHour: number | null;
+    segment: string | null;
+    members: number;
+    label: string;
+  };
+  linked: { kind: LinkedKind; id: string } | null;
+  /** Stopped, or measured over the full window */
+  finished: boolean;
+  result: {
+    metric: AdviceMetric;
+    /** "pts" for rate figures (effect in points), "%" otherwise */
+    unit: "pts" | "%";
+    mode: "global" | "slot" | "list";
+    per: string;
+    targetLabel: string;
+    comparisonLabel: string | null;
+    before: number | null;
+    after: number | null;
+    comparison: { before: number | null; after: number | null } | null;
+    targetMove: number | null;
+    comparisonMove: number | null;
+    /** Target move − comparison move */
+    effect: number | null;
+    changePct: number | null;
+    targetPct: number | null;
+    sale: {
+      kind: LinkedKind;
+      label: string;
+      count: number;
+      revenue: number;
+      margin: number;
+      discount: number;
+    } | null;
+    gainSource: "sale" | "campaign" | "target" | "global";
+    gain: number;
+    cost: number;
+    netGain: number;
+    daysMeasured: number;
+    daysLeft: number;
+    visitsCompared: number;
+    status: InitiativeStatus;
+    disturbances: string[];
+  } | null;
   impact: {
     comparedDays: number;
     before: InitiativeMetrics;

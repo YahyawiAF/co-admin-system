@@ -252,3 +252,23 @@
     animation: none;
   }
 }
+
+/* Conseiller: cards and tab content fade up lightly when they appear */
+@keyframes advisor-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.advisor-in {
+  animation: advisor-in 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .advisor-in {
+    animation: none;
+  }
+}

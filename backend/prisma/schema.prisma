@@ -1210,6 +1210,31 @@ model BusinessInitiative {
   startDate      DateTime
   endDate        DateTime?
   sourceReportId String?
+  /// Title of the advice this action answers (links advice → follow-up)
+  recommendationTitle String?
+  /// Figure to watch: revenuePerDay, visitsPerDay, revenueCafe, cafeAttachRatePct, avgStayHours, newMembers, revenueSubscriptions, avgOccupancyPct
+  metric         String?
+  /// Expected change of the metric, in % (e.g. 20 = +20 %)
+  targetPct      Float?
+  /// What the action cost (DT): material, discounts, ads…
+  cost           Float?
+  /// Owner's own conclusion: WORKING | MIXED | NOT_WORKING
+  ownerVerdict   String?
+  /// What happened, written by the owner: [{ date: "yyyy-MM-dd", text }]
+  notes          Json      @default("[]")
+  /// Who the action aims at — only that is measured: ALL | SLOT (days + hours) | LIST (clients)
+  targetKind     String    @default("ALL")
+  /// SLOT: 0 = Sunday … 6 = Saturday; empty = every day
+  targetDays     Int[]     @default([])
+  /// SLOT: hours [from, to); to ≤ from wraps past midnight; null = all day
+  targetFromHour Int?
+  targetToHour   Int?
+  /// LIST: the list chosen (campaign segment code) and its clients, frozen at start
+  targetSegment  String?
+  targetMemberIds String[] @default([])
+  /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION
+  linkedKind     String?
+  linkedId       String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

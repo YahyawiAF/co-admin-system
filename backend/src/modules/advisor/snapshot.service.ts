@@ -21,6 +21,8 @@ import { expenseAmount } from '../expense/expense-amount';
 import { ContextService } from './context.service';
 import { OutreachService } from '../analytics/outreach.service';
 import { CampaignService } from '../analytics/campaign.service';
+import { dataIssues } from './data-check';
+import { InitiativeMeasure, RATE_METRICS, slotLabel } from './initiative-measure';
 
 const WEEKDAYS = [
   'dimanche',
@@ -36,6 +38,11 @@ const HOUR_MS = 3_600_000;
 const REGULAR_MIN_DAYS = 8;
 /** Days compared before / after an initiative starts. */
 const IMPACT_WINDOW_DAYS = 28;
+/** Below this, before / after says little: wait before judging. */
+const MIN_DAYS_TO_JUDGE = 14;
+const MIN_VISITS_TO_JUDGE = 20;
+
+type Campaigns = Awaited<ReturnType<CampaignService['list']>>;
 
 /** Opening hours for the hourly traffic slice (closeHour > 24 = after midnight). */
 function openHoursWindow(facility: {
@@ -77,7 +84,20 @@ export class SnapshotService {
     private readonly context: ContextService,
     private readonly outreach: OutreachService,
     private readonly campaigns: CampaignService,
+    private readonly measure: InitiativeMeasure,
   ) {}
+
+  /** Data problems over the last 30 days (shown before any advice). */
+  async dataCheck(facilityId: string) {
+    const facility = await this.prisma.facility.findUniqueOrThrow({ where: { id: facilityId } });
+    const seats = await this.seats(facilityId, facility.nbrPlaces);
+    const end = endOfDay(new Date());
+    const [m, catalogue] = await Promise.all([
+      this.periodMetrics(startOfDay(subDays(end, 29)), end, seats),
+      this.catalogue(),
+    ]);
+    return dataIssues(m, catalogue.products);
+  }
 
   async build(facilityId: string, days: number) {
     const now = new Date();
@@ -197,6 +217,12 @@ export class SnapshotService {
         uniqueClients: s.uniqueClients,
       })),
       catalogue,
+      dataIssues: dataIssues(current, catalogue.products).map((d) => ({
+        severity: d.severity,
+        title: d.title,
+        detail: d.detail,
+        blocksCategories: d.blocks,
+      })),
       cafe: {
         totals: cafe.totals,
         products: cafe.products.slice(0, 15).map((p) => ({
@@ -695,15 +721,37 @@ export class SnapshotService {
       take: 10,
     });
     if (!list.length) return [];
-    const capacity = seats ?? (await this.facilitySeats(facilityId));
-    return Promise.all(list.map((i) => this.initiativeImpact(i, capacity)));
+    const [capacity, campaigns] = await Promise.all([
+      seats ?? this.facilitySeats(facilityId),
+      this.campaigns.list(facilityId).catch(() => [] as Campaigns),
+    ]);
+    return Promise.all(list.map((i) => this.initiativeImpact(i, capacity, campaigns)));
   }
 
   async initiativeWithImpact(id: string) {
     const i = await this.prisma.businessInitiative.findUniqueOrThrow({
       where: { id },
     });
-    return this.initiativeImpact(i, await this.facilitySeats(i.facilityId));
+    const [seats, campaigns] = await Promise.all([
+      this.facilitySeats(i.facilityId),
+      this.campaigns.list(i.facilityId).catch(() => [] as Campaigns),
+    ]);
+    return this.initiativeImpact(i, seats, campaigns);
+  }
+
+  /** Holidays, periods and local events overlapping a window: they skew a before / after. */
+  private async disturbances(facilityId: string, from: Date, to: Date) {
+    const facts = await this.prisma.advisorFact.findMany({
+      where: {
+        facilityId,
+        kind: { in: ['HOLIDAY', 'PERIOD', 'LOCAL_EVENT'] },
+        startDate: { lte: to },
+        OR: [{ endDate: { gte: from } }, { endDate: null, startDate: { gte: from } }],
+      },
+      select: { title: true },
+      take: 5,
+    });
+    return [...new Set(facts.map((f) => f.title))];
   }
 
   private async facilitySeats(facilityId: string) {
@@ -716,15 +764,32 @@ export class SnapshotService {
   async initiativeImpact(
     i: {
       id: string;
+      facilityId: string;
       title: string;
       description: string | null;
       category: string;
       startDate: Date;
       endDate: Date | null;
+      recommendationTitle?: string | null;
+      metric?: string | null;
+      targetPct?: number | null;
+      cost?: number | null;
+      ownerVerdict?: string | null;
+      notes?: unknown;
+      targetKind?: string | null;
+      targetDays?: number[] | null;
+      targetFromHour?: number | null;
+      targetToHour?: number | null;
+      targetSegment?: string | null;
+      targetMemberIds?: string[] | null;
+      linkedKind?: string | null;
+      linkedId?: string | null;
     },
     seats: number,
+    campaigns: Campaigns = [],
   ) {
     const now = new Date();
+    const campaign = campaigns.find((c) => c.initiativeId === i.id) ?? null;
     const start = startOfDay(i.startDate);
     const afterEnd = endOfDay(
       minDate([addDays(start, IMPACT_WINDOW_DAYS - 1), i.endDate || now, now]),
@@ -741,14 +806,58 @@ export class SnapshotService {
       startDate: localDayKey(i.startDate),
       endDate: i.endDate ? localDayKey(i.endDate) : null,
       daysSinceStart: differenceInCalendarDays(now, start),
+      windowDays: IMPACT_WINDOW_DAYS,
+      recommendationTitle: i.recommendationTitle ?? null,
+      metric: i.metric ?? null,
+      targetPct: i.targetPct ?? null,
+      cost: i.cost ?? null,
+      ownerVerdict: i.ownerVerdict ?? null,
+      notes: Array.isArray(i.notes) ? (i.notes as Array<{ date: string; text: string }>) : [],
+      target: {
+        kind: i.targetKind || 'ALL',
+        days: i.targetDays ?? [],
+        fromHour: i.targetFromHour ?? null,
+        toHour: i.targetToHour ?? null,
+        segment: i.targetSegment ?? null,
+        members: i.targetMemberIds?.length ?? 0,
+        label:
+          i.targetKind === 'SLOT'
+            ? slotLabel(i)
+            : i.targetKind === 'LIST'
+              ? `${i.targetMemberIds?.length ?? 0} clients`
+              : "Tout l'espace",
+      },
+      linked: i.linkedKind && i.linkedId ? { kind: i.linkedKind, id: i.linkedId } : null,
+      finished: !!i.endDate || differenceInCalendarDays(now, start) + 1 >= IMPACT_WINDOW_DAYS,
+      campaign: campaign
+        ? {
+            id: campaign.id,
+            title: campaign.title,
+            total: campaign.progress.total,
+            contacted: campaign.progress.contacted,
+            won: campaign.progress.won,
+            revenue: campaign.progress.revenue,
+          }
+        : null,
     };
-    if (start > now || daysAfter < 1) return { ...base, impact: null };
+    if (start > now || daysAfter < 1) return { ...base, impact: null, result: null };
 
     const beforeStart = startOfDay(subDays(start, daysAfter));
     const beforeEnd = endOfDay(subDays(start, 1));
-    const [before, after] = await Promise.all([
+    const metric = i.metric || 'revenuePerDay';
+    const [before, after, disturbances, targeted, sale] = await Promise.all([
       this.periodMetrics(beforeStart, beforeEnd, seats),
       this.periodMetrics(start, afterEnd, seats),
+      this.disturbances(i.facilityId, beforeStart, afterEnd),
+      this.measure.measure(
+        i,
+        metric,
+        { from: beforeStart, to: beforeEnd },
+        { from: start, to: afterEnd },
+      ),
+      i.linkedKind && i.linkedId
+        ? this.measure.linkedSale(i.linkedKind, i.linkedId, start, afterEnd)
+        : Promise.resolve(null),
     ]);
     const pick = (m: PeriodMetrics) => ({
       visitsPerDay: m.visitsPerDay,
@@ -784,6 +893,105 @@ export class SnapshotService {
         },
         extraRevenue: round1(after.revenueTotal - before.revenueTotal),
       },
+      result: this.initiativeResult(i, before, after, daysAfter, disturbances, {
+        targeted,
+        sale,
+        campaignRevenue: campaign?.progress.revenue ?? null,
+      }),
+    };
+  }
+
+  /**
+   * The figure the owner chose on the target, against a comparison group when there is one,
+   * the money it brought (linked sales first), the net gain and whether it can be judged yet.
+   */
+  private initiativeResult(
+    i: { metric?: string | null; targetPct?: number | null; cost?: number | null; targetKind?: string | null },
+    before: PeriodMetrics,
+    after: PeriodMetrics,
+    days: number,
+    disturbances: string[],
+    extra: {
+      targeted: Awaited<ReturnType<InitiativeMeasure['measure']>>;
+      sale: Awaited<ReturnType<InitiativeMeasure['linkedSale']>>;
+      campaignRevenue: number | null;
+    },
+  ) {
+    const key = i.metric || 'revenuePerDay';
+    const rate = RATE_METRICS.includes(key);
+    const { targeted, sale, campaignRevenue } = extra;
+    const num = (m: PeriodMetrics) => {
+      const v = m[key as keyof PeriodMetrics];
+      return typeof v === 'number' ? v : null;
+    };
+    const t = targeted?.target ?? { before: num(before), after: num(after) };
+    const c = targeted?.comparison ?? null;
+    const move = (x: { before: number | null; after: number | null }) =>
+      rate
+        ? x.before != null && x.after != null
+          ? round1(x.after - x.before)
+          : null
+        : change(x.after, x.before);
+    const targetMove = move(t);
+    const comparisonMove = c ? move(c) : null;
+    const effect =
+      targetMove == null ? null : round1(targetMove - (comparisonMove ?? 0));
+
+    const gainSource = sale ? 'sale' : campaignRevenue != null ? 'campaign' : targeted ? 'target' : 'global';
+    const gain =
+      sale != null
+        ? sale.kind === 'PRODUCT'
+          ? sale.margin
+          : sale.revenue
+        : campaignRevenue != null
+          ? campaignRevenue
+          : targeted
+            ? targeted.gain
+            : round1(after.revenueTotal - before.revenueTotal);
+    const cost = round1((i.cost ?? 0) + (sale?.discount ?? 0));
+    const visits = targeted ? targeted.targetVisits : before.visits + after.visits;
+    // A client list is small by nature: judge it on time only
+    const tooEarly =
+      days < MIN_DAYS_TO_JUDGE || (targeted?.mode !== 'list' && visits < MIN_VISITS_TO_JUDGE);
+    const goal = i.targetPct ?? null;
+    const status = tooEarly
+      ? 'too_early'
+      : goal != null && effect != null
+        ? effect >= goal
+          ? 'goal_reached'
+          : effect > 0
+            ? 'below_goal'
+            : 'no_effect'
+        : effect != null && effect > 5
+          ? 'up'
+          : effect != null && effect < -5
+            ? 'down'
+            : 'no_effect';
+    return {
+      metric: key,
+      unit: rate ? 'pts' : '%',
+      mode: targeted?.mode ?? 'global',
+      per: targeted?.per ?? 'par jour',
+      targetLabel: targeted?.targetLabel ?? "Tout l'espace",
+      comparisonLabel: targeted?.comparisonLabel ?? null,
+      before: t.before,
+      after: t.after,
+      comparison: c,
+      targetMove,
+      comparisonMove,
+      effect,
+      changePct: change(t.after, t.before),
+      targetPct: goal,
+      sale,
+      gainSource,
+      gain,
+      cost,
+      netGain: round1(gain - cost),
+      daysMeasured: days,
+      daysLeft: Math.max(0, IMPACT_WINDOW_DAYS - days),
+      visitsCompared: visits,
+      status,
+      disturbances,
     };
   }
 

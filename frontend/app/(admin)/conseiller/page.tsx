@@ -1,83 +1,59 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   ClipboardPaste,
-  Coffee,
   Copy,
   HelpCircle,
   Loader2,
-  Megaphone,
   Plus,
-  Rocket,
-  Send,
   Settings2,
   Sparkles,
-  Tags,
-  Trash2,
-  UserCheck,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { advisorApi } from "@/lib/api/resources";
+import { advisorApi, outreachApi } from "@/lib/api/resources";
 import { AdvisorContextPanel } from "@/components/admin/advisor/AdvisorContextPanel";
-import { CampaignDialog, SEGMENT_LABEL, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
-import { useRouter } from "next/navigation";
+import { AdviceCard } from "@/components/admin/advisor/AdviceCard";
+import { DonePanel, type DoneDraft } from "@/components/admin/advisor/DonePanel";
+import { FollowUpCard } from "@/components/admin/advisor/FollowUpCard";
+import {
+  CATEGORY_UI,
+  copyText as copyRaw,
+  gainAmount,
+  signed,
+} from "@/components/admin/advisor/advice-ui";
+import { CampaignDialog, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
 import type {
   AdvisorCategory,
-  AdvisorRecommendation,
+  AdvisorDataIssue,
   AdvisorResult,
   BusinessInitiative,
+  CampaignSegment,
 } from "@/lib/types";
 
-const CATEGORY_UI: Record<
-  AdvisorCategory,
-  { label: string; icon: typeof Sparkles; tone: string }
-> = {
-  NEW_REVENUE: { label: "Nouveau revenu", icon: Rocket, tone: "bg-emerald-100 text-emerald-800" },
-  PROMO: { label: "Promo", icon: Megaphone, tone: "bg-violet-100 text-violet-800" },
-  PRICING: { label: "Prix & formules", icon: Tags, tone: "bg-sky-100 text-sky-800" },
-  CAFE: { label: "Café", icon: Coffee, tone: "bg-amber-100 text-amber-800" },
-  RETENTION: { label: "Fidélisation", icon: UserCheck, tone: "bg-rose-100 text-rose-700" },
-  OPERATIONS: { label: "Organisation", icon: Settings2, tone: "bg-slate-100 text-slate-700" },
-};
-
-const LEVEL: Record<"high" | "medium" | "low", string> = {
-  high: "élevé",
-  medium: "moyen",
-  low: "faible",
-};
-
-const VERDICT_UI = {
-  working: { label: "Ça marche", tone: "bg-emerald-600 text-white" },
-  not_working: { label: "Pas d'effet", tone: "bg-rose-100 text-rose-700" },
-  too_early: { label: "Trop tôt pour dire", tone: "bg-muted text-muted-foreground" },
-} as const;
-
 const PERIODS = [14, 30, 60, 90];
-const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
-const today = () => format(new Date(), "yyyy-MM-dd");
+
+async function copyText(text: string) {
+  await copyRaw(text);
+  toast.success("Copié dans le presse-papiers");
+}
 
 function FilterChip({
   active,
@@ -93,7 +69,7 @@ function FilterChip({
       type="button"
       onClick={onClick}
       className={cn(
-        "rounded-full border px-3 py-1 text-sm transition-colors",
+        "rounded-full border px-3 py-1 text-sm transition-colors duration-200",
         active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
       )}
     >
@@ -145,261 +121,6 @@ function ContextCard({ value }: { value: string }) {
       </CardContent>
     </Card>
   );
-}
-
-function recommendationBlock(rec: AdvisorRecommendation) {
-  const ui = CATEGORY_UI[rec.category] ?? CATEGORY_UI.OPERATIONS;
-  const lines = [
-    ui.label,
-    `Priorité ${LEVEL[rec.priority]} · Effort ${LEVEL[rec.effort]}`,
-    "",
-    rec.title,
-    "",
-    `Pourquoi : ${rec.evidence}`,
-  ];
-  if (rec.actions.length) {
-    lines.push("");
-    rec.actions.forEach((a, i) => lines.push(`${i + 1}. ${a}`));
-  }
-  lines.push("", `Gain estimé : ${rec.expectedImpact}`, `À surveiller : ${rec.measure}`);
-  const relance = rec.outreach && rec.outreach.segment !== "NONE" ? rec.outreach : null;
-  if (relance) {
-    const segment =
-      SEGMENT_LABEL[relance.segment as keyof typeof SEGMENT_LABEL] ?? relance.segment;
-    lines.push("", `Relance proposée · ${segment}`, relance.message);
-  }
-  return lines.join("\n");
-}
-
-function RecommendationCard({
-  rec,
-  onStart,
-  onRelance,
-}: {
-  rec: AdvisorRecommendation;
-  onStart: () => void;
-  onRelance: () => void;
-}) {
-  const relance = rec.outreach && rec.outreach.segment !== "NONE" ? rec.outreach : null;
-  const ui = CATEGORY_UI[rec.category] ?? CATEGORY_UI.OPERATIONS;
-  const Icon = ui.icon;
-  return (
-    <li className="space-y-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium", ui.tone)}>
-          <Icon className="h-3.5 w-3.5" />
-          {ui.label}
-        </span>
-        <span className="text-muted-foreground">
-          Priorité {LEVEL[rec.priority]} · Effort {LEVEL[rec.effort]}
-        </span>
-      </div>
-      <div className="font-semibold">{rec.title}</div>
-      <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">Pourquoi : </span>
-        {rec.evidence}
-      </p>
-      {rec.actions.length ? (
-        <ol className="list-decimal space-y-1 pl-5 text-sm">
-          {rec.actions.map((a, i) => (
-            <li key={i}>{a}</li>
-          ))}
-        </ol>
-      ) : null}
-      <div className="grid gap-2 text-sm sm:grid-cols-2">
-        <div className="rounded-md bg-emerald-50 px-3 py-2 text-emerald-900">
-          <div className="text-xs font-medium uppercase tracking-wide opacity-70">Gain estimé</div>
-          {rec.expectedImpact}
-        </div>
-        <div className="rounded-md bg-muted/60 px-3 py-2">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            À surveiller
-          </div>
-          {rec.measure}
-        </div>
-      </div>
-      {relance ? (
-        <div className="rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm">
-          <div className="text-xs font-medium uppercase tracking-wide text-emerald-800">
-            Relance proposée · {SEGMENT_LABEL[relance.segment as keyof typeof SEGMENT_LABEL]}
-          </div>
-          <p className="mt-0.5 text-emerald-950">{relance.message}</p>
-        </div>
-      ) : null}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button size="sm" variant="outline" onClick={() => copyText(recommendationBlock(rec))}>
-          <Copy className="mr-1.5 h-4 w-4" />
-          Copier
-        </Button>
-        <Button size="sm" variant={relance ? "default" : "outline"} onClick={onRelance}>
-          <Send className="mr-1.5 h-4 w-4" />
-          {relance ? "Relancer les clients" : "Créer une relance"}
-        </Button>
-        <Button size="sm" variant={relance ? "outline" : "default"} onClick={onStart}>
-          <Rocket className="mr-1.5 h-4 w-4" />
-          Je le lance
-        </Button>
-      </div>
-    </li>
-  );
-}
-
-function Delta({ value, suffix = "%" }: { value: number | null; suffix?: string }) {
-  if (value == null) return <span className="text-muted-foreground">—</span>;
-  const tone = value > 0 ? "text-emerald-700" : value < 0 ? "text-rose-700" : "text-muted-foreground";
-  return (
-    <span className={cn("font-semibold tabular-nums", tone)}>
-      {value > 0 ? "+" : ""}
-      {value}
-      {suffix}
-    </span>
-  );
-}
-
-function InitiativeCard({
-  item,
-  review,
-}: {
-  item: BusinessInitiative;
-  review?: AdvisorResult["initiativeReviews"][number];
-}) {
-  const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: ["advisor", "initiatives"] });
-  const stop = useMutation({
-    mutationFn: () => advisorApi.updateInitiative(item.id, { endDate: today() }),
-    onSuccess: refresh,
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const remove = useMutation({
-    mutationFn: () => advisorApi.deleteInitiative(item.id),
-    onSuccess: refresh,
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const ui = CATEGORY_UI[item.category] ?? CATEGORY_UI.OPERATIONS;
-  const m = item.impact;
-  const rows: Array<[string, (x: NonNullable<typeof m>["before"]) => string]> = [
-    ["Revenu / jour", (x) => dt(x.revenuePerDay)],
-    ["Visites / jour", (x) => String(x.visitsPerDay)],
-    ["Café (total)", (x) => dt(x.revenueCafe)],
-    ["Durée moyenne", (x) => (x.avgStayHours != null ? `${x.avgStayHours} h` : "—")],
-    ["Nouveaux membres", (x) => String(x.newMembers)],
-  ];
-  return (
-    <li className="space-y-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold">{item.title}</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-xs", ui.tone)}>{ui.label}</span>
-            {item.endDate ? (
-              <span className="rounded-full bg-muted px-2 py-0.5 text-xs">Arrêtée</span>
-            ) : null}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Depuis le {format(new Date(item.startDate), "d MMMM yyyy", { locale: fr })}
-            {item.endDate
-              ? ` jusqu'au ${format(new Date(item.endDate), "d MMMM yyyy", { locale: fr })}`
-              : ` · ${item.daysSinceStart} jours`}
-          </div>
-          {item.description ? (
-            <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
-          ) : null}
-        </div>
-        <div className="flex gap-1">
-          {!item.endDate ? (
-            <Button size="sm" variant="outline" disabled={stop.isPending} onClick={() => stop.mutate()}>
-              Arrêter
-            </Button>
-          ) : null}
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-muted-foreground"
-            title="Supprimer"
-            disabled={remove.isPending}
-            onClick={() => {
-              if (confirm(`Supprimer « ${item.title} » ?`)) remove.mutate();
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {m ? (
-        <>
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <span>
-              Revenu / jour <Delta value={m.changePct.revenuePerDay} />
-            </span>
-            <span>
-              Visites / jour <Delta value={m.changePct.visitsPerDay} />
-            </span>
-            <span>
-              Café <Delta value={m.changePct.revenueCafe} />
-            </span>
-            <span className="rounded-md bg-muted/60 px-2 py-0.5">
-              {m.extraRevenue >= 0 ? "+" : ""}
-              {dt(m.extraRevenue)} sur {m.comparedDays} j
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground">
-                  <th className="py-1 pr-3 font-normal" />
-                  <th className="py-1 pr-3 font-normal">
-                    Avant ({m.comparedDays} j)
-                  </th>
-                  <th className="py-1 font-normal">Après</th>
-                </tr>
-              </thead>
-              <tbody className="tabular-nums">
-                {rows.map(([label, get]) => (
-                  <tr key={label} className="border-t">
-                    <td className="py-1 pr-3 text-muted-foreground">{label}</td>
-                    <td className="py-1 pr-3">{get(m.before)}</td>
-                    <td className="py-1 font-medium">{get(m.after)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <p className="text-sm text-muted-foreground">Les mesures commencent à la date de début.</p>
-      )}
-
-      {review ? (
-        <div className="rounded-md border bg-muted/30 p-3 text-sm">
-          <span
-            className={cn(
-              "mr-2 rounded-full px-2 py-0.5 text-xs font-semibold",
-              VERDICT_UI[review.verdict].tone,
-            )}
-          >
-            {VERDICT_UI[review.verdict].label}
-          </span>
-          {review.detail}
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
-async function copyText(text: string) {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // Non-HTTPS origins have no clipboard API: fall back to a hidden textarea
-    const el = document.createElement("textarea");
-    el.value = text;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand("copy");
-    el.remove();
-  }
-  toast.success("Copié dans le presse-papiers");
 }
 
 /** Without an API key: copy the exact prompt, paste it into claude.ai, paste the JSON back. */
@@ -525,220 +246,120 @@ function ManualCard({ days, onImported }: { days: number; onImported: (id: strin
   );
 }
 
-type Draft = {
-  title: string;
-  description: string;
-  category: AdvisorCategory;
-  startDate: string;
-  sourceReportId?: string;
-};
 
-function InitiativeDialog({
-  draft,
-  onClose,
-}: {
-  draft: Draft | null;
-  onClose: () => void;
-}) {
-  const qc = useQueryClient();
-  const [form, setForm] = useState<Draft | null>(draft);
-  useEffect(() => setForm(draft), [draft]);
-  const create = useMutation({
-    mutationFn: (d: Draft) => advisorApi.createInitiative(d),
-    onSuccess: () => {
-      toast.success("Initiative ajoutée : son effet sera mesuré automatiquement");
-      qc.invalidateQueries({ queryKey: ["advisor", "initiatives"] });
-      onClose();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
+/** Data problems that would make the advice wrong: shown before anything else. */
+function DataCheck({ issues }: { issues: AdvisorDataIssue[] }) {
+  const [open, setOpen] = useState(false);
+  if (!issues.length) return null;
+  const blocked = [...new Set(issues.flatMap((i) => i.blocks))].map((c) => CATEGORY_UI[c]?.label.toLowerCase() ?? c);
   return (
-    <Dialog open={!!draft} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Suivre une initiative</DialogTitle>
-          <DialogDescription>
-            Notez quand vous lancez un changement : l&apos;app compare les chiffres avant et après.
-          </DialogDescription>
-        </DialogHeader>
-        {form ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label htmlFor="ini-title">Nom</Label>
-              <Input
-                id="ini-title"
-                value={form.title}
-                onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Ex. : vente de café"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="ini-desc">Détails (optionnel)</Label>
-              <Textarea
-                id="ini-desc"
-                rows={3}
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label htmlFor="ini-cat">Type</Label>
-                <select
-                  id="ini-cat"
-                  className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                  value={form.category}
-                  onChange={(e) =>
-                    setForm({ ...form, category: e.target.value as AdvisorCategory })
-                  }
+    <section className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" aria-label="Contrôle des données">
+      <div className="flex flex-wrap items-center gap-3">
+        <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+        <p className="min-w-[12rem] flex-1 text-sm">
+          <b className="text-amber-800">
+            {issues.length} problème{issues.length > 1 ? "s" : ""} dans vos données.
+          </b>{" "}
+          {blocked.length
+            ? `Les conseils ${blocked.join(", ")} sont en pause tant que ce n'est pas corrigé.`
+            : "Les conseils qui s'appuient sur ces chiffres peuvent être faux."}
+        </p>
+        <Button size="sm" variant="outline" className="bg-background" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+          {open ? "Masquer" : "Voir"}
+        </Button>
+      </div>
+      <div
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-300 ease-out motion-reduce:transition-none",
+          open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+        )}
+        aria-hidden={!open}
+      >
+        <div className="min-h-0 overflow-hidden">
+          <ul className="grid gap-2.5 pt-3 sm:grid-cols-2 xl:grid-cols-4">
+            {issues.map((i) => (
+              <li key={i.key} className="flex flex-col gap-1 rounded-lg border bg-card p-3">
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold uppercase tracking-wide",
+                    i.severity === "blocking" ? "text-rose-700" : "text-amber-700",
+                  )}
                 >
-                  {(Object.keys(CATEGORY_UI) as AdvisorCategory[]).map((c) => (
-                    <option key={c} value={c}>
-                      {CATEGORY_UI[c].label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ini-start">Date de début</Label>
-                <Input
-                  id="ini-start"
-                  type="date"
-                  value={form.startDate}
-                  onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                />
-              </div>
-            </div>
-          </div>
-        ) : null}
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Annuler
-          </Button>
-          <Button
-            disabled={!form?.title.trim() || !form.startDate || create.isPending}
-            onClick={() =>
-              form &&
-              create.mutate({ ...form, description: form.description.trim() })
-            }
-          >
-            Ajouter
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+                  {i.severity === "blocking" ? "Bloquant" : "À vérifier"}
+                </span>
+                <span className="font-semibold">{i.title}</span>
+                <span className="text-sm text-muted-foreground">{i.detail}</span>
+                <Link href={i.fixHref} className="mt-auto pt-1 text-sm font-medium text-primary hover:underline">
+                  {i.fixLabel} →
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </section>
   );
 }
 
-function ReportView({
+function Kpi({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: string }) {
+  return (
+    <div className="rounded-xl border bg-card px-4 py-3">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn("text-2xl font-bold tabular-nums tracking-tight", tone)}>{value}</div>
+      <div className="text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function FilterChips({
   result,
-  reportId,
-  onStart,
-  onRelance,
+  filter,
+  onChange,
 }: {
   result: AdvisorResult;
-  reportId: string;
-  onStart: (d: Draft) => void;
-  onRelance: (d: CampaignDraft) => void;
+  filter: AdvisorCategory | "ALL";
+  onChange: (f: AdvisorCategory | "ALL") => void;
 }) {
-  const [filter, setFilter] = useState<AdvisorCategory | "ALL">("ALL");
   const counts: Partial<Record<AdvisorCategory, number>> = {};
   for (const r of result.recommendations) counts[r.category] = (counts[r.category] ?? 0) + 1;
-  const recs = result.recommendations.filter((r) => filter === "ALL" || r.category === filter);
+  if (Object.keys(counts).length < 2) return null;
   return (
-    <div className="space-y-4">
-      <Card className="shadow-none">
-        <CardContent className="space-y-3 p-4">
-          <p className="leading-relaxed">{result.summary}</p>
-          {result.highlights.length ? (
-            <ul className="grid gap-2 sm:grid-cols-2">
-              {result.highlights.map((h, i) => {
-                const Icon =
-                  h.trend === "up" ? ArrowUpRight : h.trend === "down" ? ArrowDownRight : ArrowRight;
-                return (
-                  <li key={i} className="flex gap-2 rounded-md border p-3 text-sm">
-                    <Icon
-                      className={cn(
-                        "mt-0.5 h-4 w-4 shrink-0",
-                        h.trend === "up"
-                          ? "text-emerald-600"
-                          : h.trend === "down"
-                            ? "text-rose-600"
-                            : "text-muted-foreground",
-                      )}
-                    />
-                    <div>
-                      <div className="font-medium">{h.title}</div>
-                      <div className="text-muted-foreground">{h.detail}</div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-        </CardContent>
-      </Card>
+    <div className="flex flex-wrap gap-1.5">
+      <FilterChip active={filter === "ALL"} onClick={() => onChange("ALL")}>
+        Tous · {result.recommendations.length}
+      </FilterChip>
+      {(Object.keys(CATEGORY_UI) as AdvisorCategory[]).map((c) =>
+        counts[c] ? (
+          <FilterChip key={c} active={filter === c} onClick={() => onChange(c)}>
+            {CATEGORY_UI[c].label} · {counts[c]}
+          </FilterChip>
+        ) : null,
+      )}
+    </div>
+  );
+}
 
-      <div className="flex flex-wrap gap-2">
-        <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
-          Toutes · {result.recommendations.length}
-        </FilterChip>
-        {(Object.keys(CATEGORY_UI) as AdvisorCategory[]).map((c) =>
-          counts[c] ? (
-            <FilterChip key={c} active={filter === c} onClick={() => setFilter(c)}>
-              {CATEGORY_UI[c].label} · {counts[c]}
-            </FilterChip>
-          ) : null,
-        )}
-      </div>
-
-      <ul className="space-y-3">
-        {recs.map((r, i) => (
-          <RecommendationCard
-            key={`${r.title}-${i}`}
-            rec={r}
-            onStart={() =>
-              onStart({
-                title: r.title,
-                description: r.actions.join("\n"),
-                category: r.category,
-                startDate: today(),
-                sourceReportId: reportId,
-              })
-            }
-            onRelance={() =>
-              onRelance({
-                title: r.title,
-                message: r.outreach?.message ?? "",
-                segment:
-                  r.outreach && r.outreach.segment !== "NONE" ? r.outreach.segment : undefined,
-                sourceReportId: reportId,
-                recommendationTitle: r.title,
-                category: r.category,
-                trackAsInitiative: true,
-              })
-            }
-          />
-        ))}
-      </ul>
-
-      {result.questions.length ? (
-        <Card className="shadow-none">
-          <CardContent className="space-y-2 p-4">
-            <div className="flex items-center gap-2 font-medium">
-              <HelpCircle className="h-4 w-4" />
-              Pour des conseils plus précis
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Répondez à ces questions dans « Votre contexte », puis relancez l&apos;analyse.
-            </p>
-            <ul className="list-disc space-y-1 pl-5 text-sm">
-              {result.questions.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+function Highlights({ result }: { result: AdvisorResult }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm leading-relaxed">{result.summary}</p>
+      {result.highlights.length ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {result.highlights.map((h, i) => {
+            const Icon = h.trend === "up" ? ArrowUpRight : h.trend === "down" ? ArrowDownRight : ArrowRight;
+            return (
+              <li key={i} title={h.detail} className="flex items-center gap-1.5 rounded-full border bg-card px-2.5 py-0.5 text-xs">
+                <Icon
+                  className={cn(
+                    "h-3.5 w-3.5 shrink-0",
+                    h.trend === "up" ? "text-emerald-600" : h.trend === "down" ? "text-rose-600" : "text-muted-foreground",
+                  )}
+                />
+                {h.title}
+              </li>
+            );
+          })}
+        </ul>
       ) : null}
     </div>
   );
@@ -746,27 +367,30 @@ function ReportView({
 
 export default function ConseillerPage() {
   const qc = useQueryClient();
+  const router = useRouter();
   const [days, setDays] = useState(30);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [filter, setFilter] = useState<AdvisorCategory | "ALL">("ALL");
+  const [actionsTab, setActionsTab] = useState<"test" | "done">("test");
+  const [contextOpen, setContextOpen] = useState(false);
+  const [doneDraft, setDoneDraft] = useState<DoneDraft | null>(null);
   const [relanceDraft, setRelanceDraft] = useState<CampaignDraft | null>(null);
-  const router = useRouter();
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   const settings = useQuery({ queryKey: ["advisor", "settings"], queryFn: advisorApi.settings });
+  const dataCheck = useQuery({ queryKey: ["advisor", "data-check"], queryFn: advisorApi.dataCheck });
+  const segments = useQuery({ queryKey: ["outreach-segments", null], queryFn: () => outreachApi.segments(null) });
   const reports = useQuery({
     queryKey: ["advisor", "reports"],
     queryFn: advisorApi.reports,
-    refetchInterval: (q) =>
-      q.state.data?.some((r) => r.status === "PENDING") ? 4000 : false,
+    refetchInterval: (q) => (q.state.data?.some((r) => r.status === "PENDING") ? 4000 : false),
   });
-  const initiatives = useQuery({
-    queryKey: ["advisor", "initiatives"],
-    queryFn: advisorApi.initiatives,
-  });
+  const initiatives = useQuery({ queryKey: ["advisor", "initiatives"], queryFn: advisorApi.initiatives });
 
   const list = reports.data ?? [];
+  const done = list.filter((r) => r.status === "DONE");
   const pending = list.find((r) => r.status === "PENDING");
-  const latestDone = list.find((r) => r.status === "DONE");
+  const latestDone = done[0];
   const latestFailed = list[0]?.status === "FAILED" ? list[0] : null;
   const shownId = selectedId ?? latestDone?.id ?? null;
 
@@ -783,6 +407,7 @@ export default function ConseillerPage() {
     enabled: !!shownId,
     staleTime: Infinity,
   });
+  const result = report.data?.result ?? null;
 
   const generate = useMutation({
     mutationFn: () => advisorApi.generate(days),
@@ -793,173 +418,320 @@ export default function ConseillerPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const latestReviews = new Map(
-    (report.data?.result?.initiativeReviews ?? []).map((r) => [r.initiativeId, r]),
-  );
   const enabled = settings.data?.enabled ?? false;
+  const issues = dataCheck.data ?? [];
+  const blockedLabel = (c: AdvisorCategory) => {
+    const issue = issues.find((i) => i.blocks.includes(c));
+    return issue ? `${issue.title} : à corriger d'abord` : undefined;
+  };
+  const reviews = new Map((result?.initiativeReviews ?? []).map((r) => [r.initiativeId, r]));
+  const actions = useMemo(
+    () => [...(initiatives.data ?? [])].sort((a, b) => b.startDate.localeCompare(a.startDate)),
+    [initiatives.data],
+  );
+  const testing = actions.filter((a) => !a.finished);
+  const finished = actions.filter((a) => a.finished);
+  const shownActions = actionsTab === "test" ? testing : finished;
+
+  const judged = finished.filter((a) => a.result && a.result.status !== "too_early");
+  const netGain = judged.reduce((s, a) => s + (a.result?.netGain ?? 0), 0);
+  const working = judged.filter(
+    (a) => a.ownerVerdict === "WORKING" || a.result?.status === "goal_reached" || a.result?.status === "up",
+  ).length;
+  const possible = (result?.recommendations ?? []).reduce((s, r) => s + gainAmount(r.expectedImpact), 0);
+  const recs = (result?.recommendations ?? []).filter((r) => filter === "ALL" || r.category === filter);
+
+  // Jump to an action card and briefly highlight it
+  useEffect(() => {
+    if (!focusId) return;
+    const t = setTimeout(() => {
+      document.getElementById(`action-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+    const clear = setTimeout(() => setFocusId(null), 2200);
+    return () => {
+      clearTimeout(t);
+      clearTimeout(clear);
+    };
+  }, [focusId, actionsTab]);
+
+  const openAction = (a: BusinessInitiative) => {
+    setActionsTab(a.finished ? "done" : "test");
+    setFocusId(a.id);
+  };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <Sparkles className="h-6 w-6" />
-          Conseiller IA
-        </h1>
-        <p className="text-muted-foreground">
-          L&apos;IA lit vos chiffres (visites, abonnements, café, horaires) et propose des idées
-          pour gagner plus : nouveaux revenus, promos, prix, fidélisation.
-        </p>
-      </div>
-
-      {settings.data && !enabled ? (
-        <Alert>
-          <AlertTitle>Conseiller non configuré</AlertTitle>
-          <AlertDescription>
-            Ajoutez <code>ANTHROPIC_API_KEY=…</code> dans <code>backend/.env</code> puis redémarrez le
-            backend. Vous pouvez déjà remplir votre contexte et suivre vos initiatives.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      <AdvisorContextPanel />
-
-      <ContextCard value={settings.data?.businessContext ?? ""} />
-
-      <Card className="shadow-none">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
-          <div className="space-y-1">
-            <div className="font-medium">Analyse</div>
-            <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              Période :
-              {PERIODS.map((p) => (
-                <FilterChip key={p} active={days === p} onClick={() => setDays(p)}>
-                  {p} jours
-                </FilterChip>
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            <Sparkles className="h-6 w-6 text-primary" />
+            Conseiller IA
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Une idée → vous la faites → l&apos;app mesure ce qu&apos;elle rapporte vraiment.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {report.data ? (
+            <span className="text-xs text-muted-foreground">
+              Analyse du {format(new Date(report.data.createdAt), "d MMM", { locale: fr })} (
+              {formatDistanceToNow(new Date(report.data.createdAt), { locale: fr, addSuffix: true })})
+            </span>
+          ) : null}
+          {done.length > 1 ? (
+            <select
+              aria-label="Analyse affichée"
+              className="h-9 rounded-md border bg-background px-2 text-sm"
+              value={shownId ?? ""}
+              onChange={(e) => setSelectedId(e.target.value)}
+            >
+              {done.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {format(new Date(r.createdAt), "d MMM HH:mm", { locale: fr })}
+                  {r.trigger === "WEEKLY" ? " (hebdo)" : r.trigger === "IMPORT" ? " (collé)" : ""}
+                </option>
               ))}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Comparée à la période précédente. Un rapport est aussi généré chaque lundi à 7h.
-            </div>
-          </div>
-          <Button
-            disabled={!enabled || !!pending || generate.isPending}
-            onClick={() => generate.mutate()}
+            </select>
+          ) : null}
+          <Button variant="outline" onClick={() => setContextOpen(true)}>
+            <Settings2 className="mr-1.5 h-4 w-4" />
+            Mon contexte
+          </Button>
+          <select
+            aria-label="Période analysée"
+            className="h-9 rounded-md border bg-background px-2 text-sm"
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
           >
+            {PERIODS.map((p) => (
+              <option key={p} value={p}>
+                {p} jours
+              </option>
+            ))}
+          </select>
+          <Button disabled={!enabled || !!pending || generate.isPending} onClick={() => generate.mutate()}>
             {pending || generate.isPending ? (
               <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
             ) : (
               <Sparkles className="mr-1.5 h-4 w-4" />
             )}
-            {pending ? "Analyse en cours…" : "Lancer l'analyse"}
+            {pending ? "Analyse…" : "Analyser"}
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
-      <ManualCard days={days} onImported={setSelectedId} />
-
-      {pending ? (
+      {settings.data && !enabled ? (
         <Alert>
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <AlertTitle>L&apos;IA analyse vos chiffres</AlertTitle>
+          <AlertTitle>IA non configurée</AlertTitle>
           <AlertDescription>
-            Cela prend en général une à deux minutes. Vous pouvez quitter la page, le rapport sera
-            enregistré.
+            Ajoutez <code>ANTHROPIC_API_KEY</code> dans <code>backend/.env</code>, ou utilisez le copier-coller dans
+            « Mon contexte ».
           </AlertDescription>
         </Alert>
       ) : null}
+      {pending ? (
+        <Alert className="advisor-in">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <AlertTitle>L&apos;IA relit vos chiffres et vos notes</AlertTitle>
+          <AlertDescription>Une à deux minutes. Vous pouvez quitter la page.</AlertDescription>
+        </Alert>
+      ) : null}
       {latestFailed && !pending ? (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="advisor-in">
           <AlertTitle>La dernière analyse a échoué</AlertTitle>
-          <AlertDescription>{latestFailed.error}</AlertDescription>
+          <AlertDescription>
+            {/credit balance/i.test(latestFailed.error ?? "")
+              ? "Crédit Anthropic épuisé : rechargez le compte (Plans & Billing), ou utilisez le copier-coller dans « Mon contexte »."
+              : latestFailed.error}
+          </AlertDescription>
         </Alert>
       ) : null}
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold">Recommandations</h2>
-          {list.filter((r) => r.status === "DONE").length > 1 ? (
-            <select
-              className="h-8 rounded-md border bg-background px-2 text-sm"
-              value={shownId ?? ""}
-              onChange={(e) => setSelectedId(e.target.value)}
-            >
-              {list
-                .filter((r) => r.status === "DONE")
-                .map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {format(new Date(r.createdAt), "d MMM yyyy HH:mm", { locale: fr })}
-                    {r.trigger === "WEEKLY" ? " (hebdo)" : r.trigger === "IMPORT" ? " (collé)" : ""}
-                  </option>
-                ))}
-            </select>
-          ) : null}
-        </div>
-        {reports.isLoading || report.isLoading ? (
-          <Skeleton className="h-64" />
-        ) : report.data?.result ? (
-          <>
-            <div className="text-xs text-muted-foreground">
-              Rapport du {format(new Date(report.data.createdAt), "d MMMM yyyy", { locale: fr })} (
-              {formatDistanceToNow(new Date(report.data.createdAt), { locale: fr, addSuffix: true })}) ·
-              période du {format(new Date(report.data.periodFrom), "d MMM", { locale: fr })} au{" "}
-              {format(new Date(report.data.periodTo), "d MMM", { locale: fr })}
-            </div>
-            <ReportView
-              result={report.data.result}
-              reportId={report.data.id}
-              onStart={setDraft}
-              onRelance={setRelanceDraft}
-            />
-          </>
-        ) : (
-          <Card className="shadow-none">
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              Aucun rapport pour l&apos;instant. Lancez une analyse pour obtenir vos premières
-              recommandations.
-            </CardContent>
-          </Card>
-        )}
+      <DataCheck issues={issues} />
+
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Résumé">
+        <Kpi
+          label="Gain net mesuré"
+          value={judged.length ? signed(Math.round(netGain), " DT") : "—"}
+          sub="actions terminées, coûts déduits"
+          tone={netGain > 0 ? "text-emerald-700" : netGain < 0 ? "text-rose-700" : undefined}
+        />
+        <Kpi label="Actions qui marchent" value={judged.length ? `${working} / ${judged.length}` : "—"} sub="parmi les actions terminées" />
+        <Kpi label="En test" value={String(testing.length)} sub="mesure en cours" />
+        <Kpi
+          label="Gain possible"
+          value={possible ? `+${Math.round(possible)} DT` : "—"}
+          sub="si vous appliquez les conseils"
+        />
       </section>
 
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-semibold">Mes initiatives</h2>
-            <p className="text-sm text-muted-foreground">
-              Ce que vous avez changé (ex. : vendre du café), et ce que ça rapporte : chiffres avant
-              / après sur la même durée.
-            </p>
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <section className="flex min-w-0 flex-col gap-3" aria-label="Conseils">
+          <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">
+              Conseils de la semaine{" "}
+              {result ? <span className="font-normal text-muted-foreground">· {result.recommendations.length}</span> : null}
+            </h2>
+            {result ? <FilterChips result={result} filter={filter} onChange={setFilter} /> : null}
           </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              setDraft({ title: "", description: "", category: "NEW_REVENUE", startDate: today() })
-            }
-          >
-            <Plus className="mr-1.5 h-4 w-4" />
-            Ajouter
-          </Button>
-        </div>
-        {initiatives.isLoading ? (
-          <Skeleton className="h-32" />
-        ) : initiatives.data?.length ? (
-          <ul className="space-y-3">
-            {initiatives.data.map((i) => (
-              <InitiativeCard key={i.id} item={i} review={latestReviews.get(i.id)} />
-            ))}
-          </ul>
-        ) : (
-          <Card className="shadow-none">
-            <CardContent className="p-6 text-center text-sm text-muted-foreground">
-              Aucune initiative suivie. Ajoutez par exemple le jour où vous avez commencé à vendre
-              du café pour voir ce qu&apos;il rapporte.
-            </CardContent>
-          </Card>
-        )}
-      </section>
+          {reports.isLoading || report.isLoading ? (
+            <Skeleton className="h-64 rounded-xl" />
+          ) : result ? (
+            <>
+              <Highlights result={result} />
+              <ul className="flex flex-col gap-2.5">
+                {recs.map((r, i) => {
+                  const tracked = actions.find((a) => a.recommendationTitle === r.title || a.title === r.title);
+                  const seg =
+                    r.outreach && r.outreach.segment !== "NONE" ? (r.outreach.segment as CampaignSegment) : undefined;
+                  return (
+                    <AdviceCard
+                      key={`${filter}-${r.title}-${i}`}
+                      rec={r}
+                      index={i}
+                      tracked={tracked}
+                      blockedBy={blockedLabel(r.category)}
+                      segmentCounts={segments.data}
+                      onOpenTracked={() => tracked && openAction(tracked)}
+                      onDone={() =>
+                        setDoneDraft({
+                          title: r.title,
+                          hint: r.actions[0],
+                          category: r.category,
+                          metric: r.metric,
+                          targetPct: r.targetPct,
+                          target: r.target,
+                          segment: seg,
+                          sourceReportId: report.data!.id,
+                          recommendationTitle: r.title,
+                        })
+                      }
+                      onRelance={() =>
+                        setRelanceDraft({
+                          title: r.title,
+                          message: r.outreach?.message ?? "",
+                          segment: seg,
+                          sourceReportId: report.data!.id,
+                          recommendationTitle: r.title,
+                          category: r.category,
+                          trackAsInitiative: true,
+                        })
+                      }
+                    />
+                  );
+                })}
+              </ul>
+              {result.questions.length ? (
+                <div className="flex flex-wrap items-start gap-3 rounded-xl border border-dashed p-3 text-sm">
+                  <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium">
+                      {result.questions.length} question{result.questions.length > 1 ? "s" : ""} pour des conseils plus
+                      précis :
+                    </span>{" "}
+                    <span className="text-muted-foreground">{result.questions.join(" · ")}</span>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => setContextOpen(true)}>
+                    Répondre
+                  </Button>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Pas encore d&apos;analyse. Cliquez sur « Analyser » pour vos premiers conseils.
+            </div>
+          )}
+        </section>
 
-      <InitiativeDialog draft={draft} onClose={() => setDraft(null)} />
+        <section className="flex min-w-0 flex-col gap-3" aria-label="Mes actions">
+          <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Mes actions</h2>
+            <div className="flex items-center gap-2">
+              <div role="tablist" className="inline-flex rounded-lg bg-muted p-0.5 text-sm">
+                {(
+                  [
+                    ["test", `En test · ${testing.length}`],
+                    ["done", `Terminées · ${finished.length}`],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="tab"
+                    aria-selected={actionsTab === k}
+                    onClick={() => setActionsTab(k)}
+                    className={cn(
+                      "rounded-md px-3 py-1 font-medium transition-[background-color,color,box-shadow] duration-200",
+                      actionsTab === k
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                size="icon"
+                variant="outline"
+                className="h-8 w-8"
+                title="Suivre une autre action"
+                onClick={() => setDoneDraft({ title: "", category: "NEW_REVENUE" })}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+          {initiatives.isLoading ? (
+            <Skeleton className="h-48 rounded-xl" />
+          ) : shownActions.length ? (
+            <ul key={actionsTab} className="flex flex-col gap-2.5">
+              {shownActions.map((a, i) => (
+                <FollowUpCard key={a.id} item={a} index={i} review={reviews.get(a.id)} highlight={focusId === a.id} />
+              ))}
+            </ul>
+          ) : (
+            <div key={actionsTab} className="advisor-in rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {actionsTab === "test"
+                ? "Rien en test. Sur un conseil, cliquez « Je l'ai fait » : l'app mesurera ce qu'il rapporte."
+                : "Aucune action terminée. Une action est terminée quand vous l'arrêtez ou après 28 jours de mesure."}
+            </div>
+          )}
+        </section>
+      </div>
+
+      <Sheet open={contextOpen} onOpenChange={setContextOpen}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader className="text-left">
+            <SheetTitle>Mon contexte</SheetTitle>
+            <SheetDescription>
+              Ce que l&apos;IA ne voit pas dans les chiffres. Plus c&apos;est précis, plus les conseils collent à votre
+              espace.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-4 space-y-4">
+            <AdvisorContextPanel />
+            <ContextCard value={settings.data?.businessContext ?? ""} />
+            <ManualCard
+              days={days}
+              onImported={(id) => {
+                setSelectedId(id);
+                setContextOpen(false);
+              }}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <DonePanel
+        draft={doneDraft}
+        onClose={() => setDoneDraft(null)}
+        onSaved={(id) => {
+          setActionsTab("test");
+          setFocusId(id);
+        }}
+      />
       <CampaignDialog
         draft={relanceDraft}
         onClose={() => setRelanceDraft(null)}

@@ -16,6 +16,12 @@ import type {
   AdvisorReportSummary,
   AdvisorSettings,
   BusinessInitiative,
+  AdviceMetric,
+  InitiativeNote,
+  InitiativeVerdict,
+  AdvisorDataIssue,
+  LinkedKind,
+  TargetKind,
   CampaignInput,
   CampaignSegment,
   OutreachCampaign,
@@ -1839,6 +1845,9 @@ export const advisorApi = {
   importReport(days: number, result: string) {
     return http.post<AdvisorReportSummary>("/advisor/reports/import", { days, result });
   },
+  dataCheck() {
+    return http.get<AdvisorDataIssue[]>("/advisor/data-check");
+  },
   initiatives() {
     return http.get<BusinessInitiative[]>("/advisor/initiatives");
   },
@@ -1848,12 +1857,32 @@ export const advisorApi = {
     category: AdvisorCategory;
     startDate: string;
     sourceReportId?: string;
+    recommendationTitle?: string;
+    metric?: AdviceMetric;
+    targetPct?: number | null;
+    cost?: number | null;
+    targetKind?: TargetKind;
+    targetDays?: number[];
+    targetFromHour?: number | null;
+    targetToHour?: number | null;
+    targetSegment?: string | null;
+    linkedKind?: LinkedKind | null;
+    linkedId?: string | null;
   }) {
     return http.post<BusinessInitiative>("/advisor/initiatives", data);
   },
   updateInitiative(
     id: string,
-    data: Partial<{ title: string; description: string | null; endDate: string | null }>,
+    data: Partial<{
+      title: string;
+      description: string | null;
+      endDate: string | null;
+      metric: AdviceMetric | null;
+      targetPct: number | null;
+      cost: number | null;
+      ownerVerdict: InitiativeVerdict | null;
+      notes: InitiativeNote[];
+    }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
   },

@@ -141,6 +141,14 @@ export class CampaignService {
           category: body.category || 'RETENTION',
           startDate: startOfDay(new Date()),
           sourceReportId: body.sourceReportId || null,
+          recommendationTitle: body.recommendationTitle?.slice(0, 300) || null,
+          metric: ['ABO_EXPIRING', 'ABO_ENDED', 'TOP_UP', 'CONVERT'].includes(segment)
+            ? 'revenueSubscriptions'
+            : 'visitsPerDay',
+          // Measured on the contacted clients, compared to the others
+          targetKind: 'LIST',
+          targetSegment: segment,
+          targetMemberIds: memberIds,
         },
       });
       initiativeId = initiative.id;
