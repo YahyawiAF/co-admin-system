@@ -188,9 +188,16 @@ export default function ReservationsAdminPage() {
                           <Armchair className="h-3.5 w-3.5" />
                         )}
                         {r.kind === "ROOM"
-                          ? r.spaceName || "Salle"
-                          : `Place ${r.seatLabel}`}
+                          ? `${r.spaceName || "Salle"}${(r.places ?? 1) > 1 ? ` · ${r.places} pers.` : ""}`
+                          : (r.seatLabels?.length ?? 0) > 1
+                            ? `${r.seatLabels!.length} places · ${r.seatLabels!.join(", ")}`
+                            : `Place ${r.seatLabels?.[0] || r.seatLabel}`}
                       </span>
+                      {(r.fee ?? 0) > 0 ? (
+                        <span className="mt-0.5 block text-xs font-medium text-amber-700">
+                          Frais {r.fee!.toFixed(3)} DT à encaisser le jour J
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-sm">
                       {format(new Date(r.startAt), "EEE d MMM HH:mm", {

@@ -1474,6 +1474,31 @@ export class MobileService {
     return null;
   }
 
+  /**
+   * First seat of the member's approved reservation covering now
+   * (from 30 min before its start until its end), so check-in gives it to them.
+   */
+  private async reservedSeatForNow(
+    memberId: string,
+  ): Promise<{ label: string; spaceId: string } | null> {
+    const now = new Date();
+    const booking = await this.prisma.bookingRequest.findFirst({
+      where: {
+        memberId,
+        status: VisitRequestStatus.APPROVED,
+        kind: BookingRequestKind.SEAT,
+        startAt: { lte: new Date(now.getTime() + 30 * 60_000) },
+        endAt: { gt: now },
+      },
+      orderBy: { startAt: 'asc' },
+      select: { seatLabels: true, seatLabel: true, seatSpaceId: true, spaceId: true },
+    });
+    if (!booking) return null;
+    const label = booking.seatLabels?.[0] || booking.seatLabel;
+    const spaceId = booking.seatSpaceId || booking.spaceId;
+    return label && spaceId ? { label, spaceId } : null;
+  }
+
   /** Signed, short-lived profile QR + today's session code as a typed fallback. */
   async memberQr(memberId: string) {
     const member = await this.prisma.member.findUnique({
@@ -1657,6 +1682,11 @@ export class MobileService {
             mobileSeatMode: true,
             receptionAway: true,
             receptionAwayStartedAt: true,
+            reservationFee: true,
+            reservationFeePerPlace: true,
+            reservationMaxDaysAhead: true,
+            reservationMaxPlaces: true,
+            reservationAutoApprove: true,
           },
         });
     return {
@@ -1666,7 +1696,87 @@ export class MobileService {
       receptionAwayStartedAt:
         (facility as { receptionAwayStartedAt?: Date | null } | null)
           ?.receptionAwayStartedAt || null,
+      reservation: MobileService.reservationRules(facility),
     };
+  }
+
+  /** Visitor reservation rules (fee paid at reception on the day). */
+  static reservationRules(
+    facility?: {
+      reservationFee?: number | null;
+      reservationFeePerPlace?: boolean | null;
+      reservationMaxDaysAhead?: number | null;
+      reservationMaxPlaces?: number | null;
+      reservationAutoApprove?: boolean | null;
+    } | null,
+  ) {
+    return {
+      fee: Math.max(0, facility?.reservationFee ?? 2),
+      feePerPlace: !!facility?.reservationFeePerPlace,
+      maxDaysAhead: Math.max(1, facility?.reservationMaxDaysAhead ?? 14),
+      maxPlaces: Math.max(1, facility?.reservationMaxPlaces ?? 4),
+      autoApprove: !!facility?.reservationAutoApprove,
+    };
+  }
+
+  static reservationFeeFor(
+    rules: { fee: number; feePerPlace: boolean },
+    places: number,
+  ) {
+    return Math.round(rules.fee * (rules.feePerPlace ? Math.max(1, places) : 1) * 1000) / 1000;
+  }
+
+  private async reservationRulesForOrg(organizationId?: string | null) {
+    const facility = await this.prisma.facility.findFirst({
+      where: organizationId ? { organizationId } : undefined,
+      orderBy: { createdAt: 'asc' },
+      select: {
+        reservationFee: true,
+        reservationFeePerPlace: true,
+        reservationMaxDaysAhead: true,
+        reservationMaxPlaces: true,
+        reservationAutoApprove: true,
+      },
+    });
+    return MobileService.reservationRules(facility);
+  }
+
+  /**
+   * Seats / rooms already asked for (pending or approved) on that date and time:
+   * the visitor map shows them as occupied.
+   */
+  async bookingAvailability(opts: {
+    orgSlug?: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+  }) {
+    const org = await this.resolveOrganizationBySlug(opts.orgSlug);
+    const startAt = new Date(`${opts.date}T${opts.startTime}:00`);
+    const endAt = new Date(`${opts.date}T${opts.endTime}:00`);
+    if (Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime())) {
+      throw new BadRequestException('Horaires invalides');
+    }
+    const rows = await this.prisma.bookingRequest.findMany({
+      where: {
+        status: { in: [VisitRequestStatus.PENDING, VisitRequestStatus.APPROVED] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+        member: { organizationId: org.id },
+      },
+      select: { kind: true, spaceId: true, seatSpaceId: true, seatLabel: true, seatLabels: true },
+    });
+    const seats: { spaceId: string | null; label: string }[] = [];
+    const rooms: string[] = [];
+    for (const r of rows) {
+      if (r.kind === BookingRequestKind.ROOM) {
+        if (r.spaceId) rooms.push(r.spaceId);
+        continue;
+      }
+      const labels = r.seatLabels?.length ? r.seatLabels : r.seatLabel ? [r.seatLabel] : [];
+      for (const label of labels) seats.push({ spaceId: r.seatSpaceId || r.spaceId, label });
+    }
+    return { seats, rooms };
   }
 
   /** First free non-overflow seat (stable order), then overflow if needed. */
@@ -2367,10 +2477,13 @@ export class MobileService {
     const settings = await this.getSeatSettings(
       member.organization?.slug || undefined,
     );
-    const seat =
-      settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN &&
-      price.occupySeat !== false &&
-      !this.isOpenSpaceDay(price)
+    // Approved reservation for now: the member gets their reserved seat
+    const reserved = await this.reservedSeatForNow(memberId);
+    const seat = reserved
+      ? reserved
+      : settings.mobileSeatMode === MobileSeatMode.AUTO_ASSIGN &&
+          price.occupySeat !== false &&
+          !this.isOpenSpaceDay(price)
         ? await this.pickFreeSeat(true)
         : null;
 
@@ -5933,6 +6046,9 @@ export class MobileService {
     spaceId: string | null;
     spaceName: string | null;
     seatLabel: string | null;
+    seatLabels?: string[] | null;
+    places?: number | null;
+    fee?: number | null;
     seatSpaceId: string | null;
     date: Date;
     startAt: Date;
@@ -5961,6 +6077,13 @@ export class MobileService {
       spaceId: row.spaceId,
       spaceName: row.spaceName,
       seatLabel: row.seatLabel,
+      seatLabels: row.seatLabels?.length
+        ? row.seatLabels
+        : row.seatLabel
+          ? [row.seatLabel]
+          : [],
+      places: row.places ?? 1,
+      fee: row.fee ?? 0,
       seatSpaceId: row.seatSpaceId,
       date: row.date,
       startAt: row.startAt,
@@ -6056,6 +6179,10 @@ export class MobileService {
     kind: 'ROOM' | 'SEAT';
     spaceId?: string;
     seatLabel?: string;
+    /** Several places in one request (preferred over seatLabel) */
+    seatLabels?: string[];
+    /** People for a room request */
+    places?: number;
     seatSpaceId?: string;
     date: string;
     startTime: string;
@@ -6068,17 +6195,40 @@ export class MobileService {
     if (!member) throw new NotFoundException('Membre introuvable');
     const kind =
       dto.kind === 'SEAT' ? BookingRequestKind.SEAT : BookingRequestKind.ROOM;
+    const rules = await this.reservationRulesForOrg(member.organizationId);
+    const seatLabels = Array.from(
+      new Set(
+        (dto.seatLabels?.length ? dto.seatLabels : dto.seatLabel ? [dto.seatLabel] : [])
+          .map((l) => (l || '').trim())
+          .filter(Boolean),
+      ),
+    );
     if (kind === BookingRequestKind.ROOM && !dto.spaceId) {
       throw new BadRequestException('Choisissez une salle');
     }
-    if (kind === BookingRequestKind.SEAT && !dto.seatLabel) {
+    if (kind === BookingRequestKind.SEAT && !seatLabels.length) {
       throw new BadRequestException('Choisissez une place');
     }
+    if (kind === BookingRequestKind.SEAT && seatLabels.length > rules.maxPlaces) {
+      throw new BadRequestException(
+        `Maximum ${rules.maxPlaces} places par réservation`,
+      );
+    }
+    const places =
+      kind === BookingRequestKind.SEAT
+        ? seatLabels.length
+        : Math.max(1, Math.round(Number(dto.places) || 1));
     const day = startOfDay(new Date(`${dto.date}T12:00:00`));
     const tomorrow = startOfDay(addDays(new Date(), 1));
     if (day.getTime() < tomorrow.getTime()) {
       throw new BadRequestException(
         'Réservation mobile à partir de demain — pour aujourd’hui, appelez l’accueil',
+      );
+    }
+    const lastDay = startOfDay(addDays(new Date(), rules.maxDaysAhead));
+    if (day.getTime() > lastDay.getTime()) {
+      throw new BadRequestException(
+        `Réservation possible jusqu’à ${rules.maxDaysAhead} jours à l’avance`,
       );
     }
     const startAt = new Date(`${dto.date}T${dto.startTime}:00`);
@@ -6127,6 +6277,33 @@ export class MobileService {
       );
     }
     spaceName = space.name;
+    // Same date + overlapping time: don't give the same seat / room twice
+    const overlapping = await this.prisma.bookingRequest.findMany({
+      where: {
+        status: { in: [VisitRequestStatus.PENDING, VisitRequestStatus.APPROVED] },
+        startAt: { lt: endAt },
+        endAt: { gt: startAt },
+        member: { organizationId: member.organizationId },
+      },
+      select: { kind: true, spaceId: true, seatSpaceId: true, seatLabel: true, seatLabels: true },
+    });
+    if (kind === BookingRequestKind.ROOM) {
+      if (overlapping.some((o) => o.kind === BookingRequestKind.ROOM && o.spaceId === spaceIdToCheck)) {
+        throw new ConflictException(`${space.name} est déjà réservée sur ce créneau`);
+      }
+    } else {
+      const taken = new Set(
+        overlapping
+          .filter((o) => (o.seatSpaceId || o.spaceId) === spaceIdToCheck)
+          .flatMap((o) => (o.seatLabels?.length ? o.seatLabels : o.seatLabel ? [o.seatLabel] : [])),
+      );
+      const clash = seatLabels.filter((l) => taken.has(l));
+      if (clash.length) {
+        throw new ConflictException(
+          `Déjà réservé sur ce créneau : ${clash.join(', ')}`,
+        );
+      }
+    }
     const created = await this.prisma.bookingRequest.create({
       data: {
         memberId: dto.memberId,
@@ -6136,7 +6313,10 @@ export class MobileService {
             ? spaceIdToCheck
             : dto.spaceId || spaceIdToCheck,
         spaceName,
-        seatLabel: dto.seatLabel?.trim() || null,
+        seatLabel: seatLabels[0] || null,
+        seatLabels,
+        places,
+        fee: MobileService.reservationFeeFor(rules, places),
         seatSpaceId:
           kind === BookingRequestKind.SEAT
             ? spaceIdToCheck
@@ -6150,6 +6330,7 @@ export class MobileService {
     });
     const payload = this.serializeBooking(created);
     this.eventsGateway.sendBookingRequest(payload);
+    if (rules.autoApprove) return this.approveBookingRequest(created.id);
     return payload;
   }
 
@@ -6239,10 +6420,17 @@ export class MobileService {
         await this.bookSeatsForMemberByKind(row.memberId, {
           spaceId: row.spaceId,
         });
-      } else if (row.seatLabel) {
-        await this.bookSeatForMember(row.memberId, row.seatLabel, {
-          spaceId: row.seatSpaceId || undefined,
-        });
+      } else {
+        const labels = row.seatLabels?.length
+          ? row.seatLabels
+          : row.seatLabel
+            ? [row.seatLabel]
+            : [];
+        for (const label of labels) {
+          await this.bookSeatForMember(row.memberId, label, {
+            spaceId: row.seatSpaceId || undefined,
+          });
+        }
       }
     }
     const updated = await this.prisma.bookingRequest.update({

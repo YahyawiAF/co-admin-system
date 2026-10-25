@@ -91,6 +91,34 @@ export class CreateFacilityDto {
   @IsEnum(MobileSeatModeDto)
   mobileSeatMode?: MobileSeatModeDto;
 
+  @ApiProperty({ required: false, description: 'Visitor reservation fee (DT), paid at reception on the day' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reservationFee?: number;
+
+  @ApiProperty({ required: false, description: 'true = fee per place, false = once per reservation' })
+  @IsOptional()
+  @IsBoolean()
+  reservationFeePerPlace?: boolean;
+
+  @ApiProperty({ required: false, description: 'How many days ahead visitors can book' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  reservationMaxDaysAhead?: number;
+
+  @ApiProperty({ required: false, description: 'Max places in one visitor reservation' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  reservationMaxPlaces?: number;
+
+  @ApiProperty({ required: false, description: 'Approve visitor reservations without reception' })
+  @IsOptional()
+  @IsBoolean()
+  reservationAutoApprove?: boolean;
+
   @ApiProperty({
     required: false,
     description:

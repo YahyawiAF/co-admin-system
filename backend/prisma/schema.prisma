@@ -622,6 +622,14 @@ model Facility {
   socialNetworks              Json                 @map("social_networks")
   places                      Json                 @map("places") // legacy JSON; prefer Space/Table/Seat
   mobileSeatMode              MobileSeatMode       @default(ADMIN_ASSIGN)
+  /// Visitor reservations: fee (DT), charged once or per place, paid at reception on the day
+  reservationFee              Float                @default(2)
+  reservationFeePerPlace      Boolean              @default(false)
+  /// How far ahead a visitor can book, and how many places in one request
+  reservationMaxDaysAhead     Int                  @default(14)
+  reservationMaxPlaces        Int                  @default(4)
+  /// Approve visitor reservations without reception
+  reservationAutoApprove      Boolean              @default(false)
   receptionAway               Boolean              @default(false)
   receptionAwayStartedAt      DateTime?
   /// Global one-time promo for installing the app (DT or %)
@@ -796,6 +804,8 @@ model Table {
   spaceId     String
   space       Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   name        String
+  /// Shown to visitors next to the table photo ("Près de la fenêtre")
+  description String?
   imageUrl    String?
   galleryUrls String[] @default([])
   x           Float    @default(40)
@@ -1034,6 +1044,11 @@ model BookingRequest {
   spaceId     String?
   spaceName   String?
   seatLabel   String?
+  /// Several places in one request (seatLabel = first one, kept for older clients)
+  seatLabels  String[]           @default([])
+  places      Int                @default(1)
+  /// Reservation fee snapshot (DT), paid at reception on the day
+  fee         Float              @default(0)
   seatSpaceId String?
   date        DateTime
   startAt     DateTime

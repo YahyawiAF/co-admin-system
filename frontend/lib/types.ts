@@ -329,11 +329,21 @@ export type SessionPricingPayload = import("@/lib/session-pricing").SessionPrici
 
 export type MobileSeatMode = 'ADMIN_ASSIGN' | 'VISITOR_CHOOSE' | 'AUTO_ASSIGN';
 
+/** Visitor reservation rules (admin « Réservations »). Fee is paid at reception on the day. */
+export type ReservationRules = {
+  fee: number;
+  feePerPlace: boolean;
+  maxDaysAhead: number;
+  maxPlaces: number;
+  autoApprove: boolean;
+};
+
 export type MobileSeatSettings = {
   facilityId: string | null;
   mobileSeatMode: MobileSeatMode;
   receptionAway: boolean;
   receptionAwayStartedAt?: string | null;
+  reservation?: ReservationRules;
 };
 
 export type SeatAssignmentInfo = {
@@ -414,6 +424,12 @@ export interface Facility {
   mobileSeatMode?: MobileSeatMode;
   receptionAway?: boolean;
   receptionAwayStartedAt?: string | null;
+  /** Visitor reservations: fee (DT), once or per place, paid at reception */
+  reservationFee?: number;
+  reservationFeePerPlace?: boolean;
+  reservationMaxDaysAhead?: number;
+  reservationMaxPlaces?: number;
+  reservationAutoApprove?: boolean;
   appInstallGlobalPromoActive?: boolean;
   appInstallGlobalPromoKind?: PromoValueKind | null;
   appInstallGlobalPromoValue?: number | null;
@@ -443,6 +459,8 @@ export interface SpaceTable {
   id: string;
   spaceId: string;
   name: string;
+  /** Shown to visitors next to the table photo */
+  description?: string | null;
   imageUrl?: string | null;
   galleryUrls?: string[];
   x: number;
@@ -1349,6 +1367,11 @@ export interface BookingRequest {
   spaceId?: string | null;
   spaceName?: string | null;
   seatLabel?: string | null;
+  /** All places of the request (seatLabel = first one) */
+  seatLabels?: string[];
+  places?: number;
+  /** Reservation fee (DT), paid at reception on the day */
+  fee?: number;
   seatSpaceId?: string | null;
   date: string;
   startAt: string;
