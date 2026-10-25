@@ -4,7 +4,17 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Clock, Crown, Loader2, RefreshCw, Wifi } from "lucide-react";
+import {
+  Check,
+  Clock,
+  CreditCard,
+  Crown,
+  Loader2,
+  MapPin,
+  QrCode,
+  RefreshCw,
+  Wifi,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { mobileApi } from "@/lib/api/resources";
 import { formatDurationHm } from "@/lib/journal-utils";
@@ -23,20 +33,19 @@ import {
   formatMinutes,
   liveRowPricing,
   stageLabel,
+  uniqueTiersByDuration,
 } from "@/lib/session-pricing";
 import { cn } from "@/lib/utils";
-import { ChooseTimeCard, TierLevelUp } from "@/components/visitor/SessionTariffBoost";
+import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
-import { WelcomeTarifSheet } from "@/components/visitor/WelcomeTarifSheet";
-import { DrinkOfferSheet } from "@/components/visitor/DrinkOfferSheet";
-import { clearTarifPrompt, hasTarifPrompt } from "@/lib/visitorCache";
+import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
+import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
+import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
+import { clearCheckinReward, hasCheckinReward } from "@/lib/visitorCache";
+import { isStandalonePwa } from "@/lib/visitor-notify";
+import { dtToPoints } from "@/lib/points-catalog";
 import { SeatPickerSheet } from "@/components/visitor/SeatPickerSheet";
 import { BottomSheet } from "@/components/visitor/BottomSheet";
-import { SessionCodeCard } from "@/components/visitor/SessionCodeCard";
-import {
-  SessionSteps,
-  type SessionStep,
-} from "@/components/visitor/SessionSteps";
 
 export type ActiveSession = Journal & {
   seat?: SeatAssignmentInfo | null;
@@ -77,21 +86,26 @@ function StatTile({
   label,
   value,
   sub,
+  extra,
+  big,
   tone = "indigo",
 }: {
   label: string;
   value: ReactNode;
   sub?: ReactNode;
+  extra?: ReactNode;
+  big?: boolean;
   tone?: "indigo" | "rose" | "slate";
 }) {
   return (
-    <div className="min-w-0 rounded-2xl bg-slate-50 px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+    <div className="min-w-0 rounded-[18px] bg-slate-50 px-3 py-2.5">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
         {label}
       </p>
       <div
         className={cn(
-          "mt-1 truncate text-xl font-bold leading-tight tabular-nums",
+          "mt-1 truncate font-black leading-tight tabular-nums",
+          big ? "text-[28px]" : "text-xl",
           tone === "rose"
             ? "text-rose-600"
             : tone === "slate"
@@ -102,8 +116,9 @@ function StatTile({
         {value}
       </div>
       {sub ? (
-        <p className="mt-0.5 truncate text-[11px] text-slate-500">{sub}</p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-600">{sub}</p>
       ) : null}
+      {extra}
     </div>
   );
 }
@@ -128,11 +143,28 @@ export function ActiveSessionPanel({
   const visible = usePageVisible();
   const { slug } = useOrg();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const isOptimisticSession =
+    !!(session as { _optimistic?: boolean })._optimistic ||
+    String(session.id || "").startsWith("optimistic");
   const [passOpen, setPassOpen] = useState(false);
-  const [welcomeOpen, setWelcomeOpen] = useState(false);
   const [seatOpen, setSeatOpen] = useState(false);
-  const [codeOpen, setCodeOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [rewardOpen, setRewardOpen] = useState(false);
+  const [isPwa, setIsPwa] = useState(false);
   const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    setIsPwa(isStandalonePwa());
+  }, []);
+
+  // Fresh QR check-in: reward + quote of the day, once
+  useEffect(() => {
+    if (!isOptimisticSession && hasCheckinReward(slug)) setRewardOpen(true);
+  }, [slug, isOptimisticSession]);
+  const onRewardOpenChange = (open: boolean) => {
+    setRewardOpen(open);
+    if (!open) clearCheckinReward(slug);
+  };
 
   useEffect(() => {
     if (!promptCheckout) return;
@@ -234,7 +266,7 @@ export function ActiveSessionPanel({
       : null;
   const passTitle = live
     ? live.mode === "AUTO"
-      ? `Pass ${live.currentTier.name}`
+      ? "Tarif auto"
       : live.fixedServiceName || live.currentTier.name
     : session.prices?.name || session.price?.name || "Pass";
   const subKindLabel =
@@ -245,15 +277,6 @@ export function ActiveSessionPanel({
         : isHoursPool
           ? "Heures"
           : null;
-  const passSubtitle = live
-    ? live.mode === "AUTO"
-      ? "Tarif auto · selon la durée"
-      : `Pass fixé · ${formatDt(live.fixedAmount ?? live.baseAmount)}`
-    : covered
-      ? subKindLabel
-        ? `Abonnement · ${subKindLabel}`
-        : "Abonnement"
-      : null;
 
   const checkout = useMutation({
     mutationFn: () => mobileApi.checkout(session.id),
@@ -314,7 +337,6 @@ export function ActiveSessionPanel({
         toast.success(`Pass ${name ?? ""} choisi ✓`);
       }
       setPassOpen(false);
-      onWelcomeOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
@@ -326,28 +348,38 @@ export function ActiveSessionPanel({
     setPassOpen(true);
   };
 
-  /** Just started from the QR: ask the tarif once (closing keeps "au temps passé"). */
-  const askTarif = canChangeTariff && live?.mode === "AUTO";
-  // Flag kept until answered: the home copy of this panel unmounts on the way to /session
-  useEffect(() => {
-    if (askTarif && hasTarifPrompt(slug)) setWelcomeOpen(true);
-  }, [askTarif, slug]);
-  const onWelcomeOpenChange = (open: boolean) => {
-    setWelcomeOpen(open);
-    if (!open) clearTarifPrompt(slug);
-  };
-
   const showSubLink =
     !covered &&
     (!!pendingSubscriptionName || (!!onSwitchToSubscription && !isOptimistic));
 
   // ----- Hero figures -----
+  const pointsForSession =
+    !covered && live && isPwa ? dtToPoints(live.amountDue) : 0;
+
   const timeTile = isHoursPool ? (
     <StatTile
       label="Cette session"
       tone="slate"
       value={elapsedMs != null ? formatDurationHm(elapsedMs) : "—"}
       sub={`Depuis ${format(sessionStart, "HH:mm")}`}
+    />
+  ) : live?.mode === "AUTO" && !covered ? (
+    <StatTile
+      label="Temps passé"
+      tone="indigo"
+      big
+      value={
+        elapsedMs != null ? (
+          <>
+            {formatDurationHm(elapsedMs)}
+            <span className="text-sm font-bold text-slate-500">
+              :{String(Math.floor(elapsedMs / 1000) % 60).padStart(2, "0")}
+            </span>
+          </>
+        ) : (
+          "—"
+        )
+      }
     />
   ) : (
     <StatTile
@@ -384,7 +416,15 @@ export function ActiveSessionPanel({
     <StatTile
       label="À payer"
       tone="slate"
+      big
       value={formatDt(live.amountDue)}
+      extra={
+        pointsForSession > 0 ? (
+          <p className="mt-0.5 text-xs font-extrabold text-amber-700">
+            +{pointsForSession} pts à gagner
+          </p>
+        ) : null
+      }
       sub={
         promoOff && live.paidAmount <= 0 && !session.isPayed
           ? `Promo appliquée · −${formatDt(promoOff)}`
@@ -460,139 +500,74 @@ export function ActiveSessionPanel({
     };
   }
 
-  const checkInCode = !isOptimistic ? session.checkInCode || null : null;
-  const receptionAssignsSeat = !seatLabel && !seatSheetAvailable && !isHoursPool;
 
-  // ----- Steps -----
-  const steps: SessionStep[] = [
-    {
-      key: "checkin",
-      label: "Pointé",
-      value: format(sessionStart, "HH:mm"),
-      state: "done",
-    },
-    seatLabel
-      ? {
-          key: "seat",
-          label: "Place",
-          value: seatLabel,
-          state: "done",
-          onClick: () => setSeatOpen(true),
-        }
-      : seatSheetAvailable
-        ? {
-            key: "seat",
-            label: "Place",
-            value: "Choisir",
-            state: "todo",
-            onClick: () => setSeatOpen(true),
-          }
-        : {
-            key: "seat",
-            label: "Place",
-            value: "Accueil",
-            state: "info",
-            onClick: checkInCode ? () => setCodeOpen(true) : undefined,
-          },
-    covered
-      ? {
-          key: "pass",
-          label: "Pass",
-          value: subKindLabel ?? "Abo",
-          state: "done",
-        }
-      : live
-        ? {
-            key: "pass",
-            label: "Pass",
-            value: live.mode === "AUTO" ? "Auto" : live.currentTier.name,
-            state: live.mode === "AUTO" ? "info" : "done",
-            onClick: canChangeTariff ? openPassSheet : undefined,
-          }
-        : { key: "pass", label: "Pass", value: passTitle, state: "done" },
-    covered
-      ? { key: "payment", label: "Paiement", value: "Inclus", state: "done" }
-      : session.isPayed
-        ? { key: "payment", label: "Paiement", value: "Payé", state: "done" }
-        : {
-            key: "payment",
-            label: "Paiement",
-            value: "À l’accueil",
-            state: "todo",
-          },
-  ];
   const stepsHint =
     !covered && !session.isPayed
       ? "Demandez à l’accueil de confirmer le paiement pour collecter vos points au check-out."
       : null;
 
+  // ----- Tarif auto track (2h → 4h → 6h → Jour) -----
+  const track = useMemo(() => {
+    if (!live || live.mode !== "AUTO" || covered || !tiers.length) return null;
+    const shown = uniqueTiersByDuration(tiers).slice(0, 4);
+    const elapsedH = (elapsedMs ?? 0) / 3_600_000;
+    let idx = shown.findIndex((t) => elapsedH < t.durationHours);
+    if (idx < 0) idx = shown.length - 1;
+    const prevH = idx > 0 ? shown[idx - 1].durationHours : 0;
+    const span = Math.max(0.0001, shown[idx].durationHours - prevH);
+    const frac = Math.min(1, Math.max(0, (elapsedH - prevH) / span));
+    const fill = shown.length > 1 ? Math.min(1, (idx + frac) / (shown.length - 1)) : 1;
+    return { shown, idx, fill };
+  }, [live, covered, tiers, elapsedMs]);
+
+  const statusChip = covered
+    ? { text: subKindLabel ? `Abonnement · ${subKindLabel}` : "Abonnement", cls: "bg-violet-100 text-violet-800" }
+    : live?.mode === "AUTO"
+      ? { text: "Tarif auto", cls: "bg-indigo-100 text-indigo-800" }
+      : { text: passTitle, cls: "bg-indigo-100 text-indigo-800" };
+
+  const seatChip = seatLabel
+    ? {
+        label: (
+          <>
+            Place <strong className="text-slate-900">{seatLabel}</strong>
+          </>
+        ),
+        onClick: seatSheetAvailable ? () => setSeatOpen(true) : () => setQrOpen(true),
+        accent: false,
+      }
+    : canPickSeat && seatSheetAvailable
+      ? { label: "Choisir ma place", onClick: () => setSeatOpen(true), accent: true }
+      : { label: "Mon QR · place", onClick: () => setQrOpen(true), accent: true };
+
   return (
     <div className="space-y-3">
-      {/* Hero: pass, time left, amount, change pass */}
-      <section className="rounded-3xl bg-white p-3.5 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Session en cours
-          </p>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold",
-              covered
-                ? "bg-indigo-50 text-indigo-700"
-                : session.isPayed
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-amber-50 text-amber-700"
-            )}
-          >
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                covered
-                  ? "bg-indigo-500"
-                  : session.isPayed
-                    ? "bg-emerald-500"
-                    : "bg-amber-500"
-              )}
-            />
-            {covered ? "Abonnement actif" : session.isPayed ? "Payé" : "Non payé"}
+      {/* Hero: live status, time, amount, tarif track */}
+      <section className="v-rise rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-slate-900/5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-2 py-1 text-[11px] font-extrabold text-emerald-800">
+            <span className="v-live h-[7px] w-[7px] rounded-full bg-emerald-500" />
+            En direct · depuis {format(sessionStart, "HH:mm")}
           </span>
-        </div>
-
-        <div className="mt-2 flex items-center gap-2.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-            {covered || isHoursPool ? (
-              <Crown className="h-5 w-5" />
-            ) : (
-              <Clock className="h-5 w-5" />
-            )}
+          <span className={cn("max-w-[45%] truncate rounded-lg px-2 py-1 text-[11px] font-extrabold", statusChip.cls)}>
+            {statusChip.text}
           </span>
-          <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-bold leading-tight text-slate-900">
-              {passTitle}
-            </h2>
-            {passSubtitle ? (
-              <p className="truncate text-[11px] text-slate-500">
-                {passSubtitle}
-              </p>
-            ) : null}
-          </div>
+          <span className="flex-1" />
           {canChangeTariff ? (
             <button
               type="button"
-              aria-label="Changer de pass"
+              aria-label="Changer de tarif"
               onClick={openPassSheet}
-              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 active:scale-95"
+              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-3 text-xs font-bold text-indigo-800 ring-1 ring-indigo-200 transition-colors duration-200 hover:bg-indigo-100 active:scale-95 motion-reduce:transition-none"
             >
               <RefreshCw className="h-3.5 w-3.5" />
-              Changer
+              {live?.mode === "AUTO" ? "Fixer" : "Changer"}
             </button>
           ) : null}
         </div>
 
         {isOptimistic ? (
-          <p className="mt-1.5 text-xs font-medium text-amber-600">
-            Confirmation en cours…
-          </p>
+          <p className="mt-1.5 text-xs font-medium text-amber-700">Confirmation en cours…</p>
         ) : null}
 
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -600,18 +575,64 @@ export function ActiveSessionPanel({
           {secondTile}
         </div>
 
-        {progressPct != null ? (
+        {track ? (
+          <div className="mt-3.5">
+            <div
+              className="relative grid"
+              style={{ gridTemplateColumns: `repeat(${track.shown.length}, minmax(0, 1fr))` }}
+            >
+              <span
+                aria-hidden
+                className="absolute top-4 h-1 rounded-full bg-slate-200"
+                style={{ left: `${50 / track.shown.length}%`, right: `${50 / track.shown.length}%` }}
+              />
+              <span
+                aria-hidden
+                className="absolute top-4 h-1 rounded-full bg-gradient-to-r from-indigo-600 to-violet-600 transition-[width] duration-1000 ease-linear motion-reduce:transition-none"
+                style={{
+                  left: `${50 / track.shown.length}%`,
+                  width: `${(100 - 100 / track.shown.length) * track.fill}%`,
+                }}
+              />
+              {track.shown.map((t, i) => (
+                <div key={t.priceId} className="relative flex flex-col items-center gap-1">
+                  <span
+                    className={cn(
+                      "flex h-[34px] w-[34px] items-center justify-center rounded-full text-[11px] font-black transition-colors duration-300 motion-reduce:transition-none",
+                      i === track.idx
+                        ? "v-node-pulse bg-indigo-600 text-white"
+                        : i < track.idx
+                          ? "bg-indigo-200 text-indigo-900"
+                          : "border-2 border-indigo-200 bg-white text-indigo-800"
+                    )}
+                  >
+                    {i < track.idx ? (
+                      <Check className="h-4 w-4" strokeWidth={3} />
+                    ) : t.durationHours >= 7 ? (
+                      "Jour"
+                    ) : (
+                      `${t.durationHours}h`
+                    )}
+                  </span>
+                  <span className="text-xs font-bold tabular-nums text-slate-700">
+                    {formatDt(t.price)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : progressPct != null ? (
           <div className="mt-3 space-y-1.5">
             <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200">
               <div
                 className={cn(
-                  "h-full rounded-full transition-all",
+                  "h-full rounded-full transition-all duration-500 motion-reduce:transition-none",
                   overtime ? "bg-rose-500" : "bg-indigo-600"
                 )}
                 style={{ width: `${overtime ? 100 : progressPct}%` }}
               />
             </div>
-            <div className="flex justify-between gap-2 text-[11px] text-slate-500">
+            <div className="flex justify-between gap-2 text-[11px] text-slate-600">
               <span>{progressLeft}</span>
               {progressRight ? <span>{progressRight}</span> : null}
             </div>
@@ -621,12 +642,12 @@ export function ActiveSessionPanel({
         {hint ? (
           <p
             className={cn(
-              "mt-2.5 text-[11px] font-medium leading-snug",
+              "mt-2.5 rounded-xl px-2.5 py-2 text-xs font-medium leading-snug",
               hint.tone === "rose"
-                ? "text-rose-600"
+                ? "bg-rose-50 text-rose-700"
                 : hint.tone === "amber"
-                  ? "text-amber-700"
-                  : "text-slate-500"
+                  ? "bg-amber-50 text-amber-800"
+                  : "bg-slate-100 text-slate-700"
             )}
           >
             {hint.text}
@@ -634,24 +655,11 @@ export function ActiveSessionPanel({
         ) : null}
 
         {live && !covered && !canChangeTariff ? (
-          <p className="mt-1.5 text-[11px] text-slate-500">
+          <p className="mt-1.5 text-[11px] text-slate-600">
             Pour changer de pass, demandez à l&apos;accueil.
           </p>
         ) : null}
       </section>
-
-      {canChangeTariff && live?.mode === "AUTO" ? (
-        <ChooseTimeCard
-          live={live}
-          tiers={tiers}
-          sessionStart={sessionStart}
-          now={now}
-          pending={fixTariff.isPending}
-          error={passOpen || welcomeOpen ? null : fixError}
-          onConfirm={(id) => fixTariff.mutate({ priceId: id })}
-          onOpenAll={openPassSheet}
-        />
-      ) : null}
 
       {canChangeTariff && live?.mode === "FIXED" ? (
         <TierLevelUp
@@ -660,13 +668,62 @@ export function ActiveSessionPanel({
           sessionStart={sessionStart}
           now={now}
           pending={fixTariff.isPending}
-          error={passOpen || welcomeOpen ? null : fixError}
+          error={passOpen ? null : fixError}
           onUpgrade={(id) => fixTariff.mutate({ priceId: id, upgrade: true })}
           onOpenAll={openPassSheet}
         />
       ) : null}
 
-      <SessionSteps steps={steps} hint={stepsHint} />
+      {!isOptimistic && session.registredTime ? (
+        <EnergyCupCard memberId={memberId} since={String(session.registredTime)} />
+      ) : null}
+
+      {/* Place + payment */}
+      <div className="v-rise space-y-1.5 [animation-delay:120ms]">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={seatChip.onClick}
+            className={cn(
+              "flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full text-[13px] font-bold transition-transform duration-150 active:scale-95 motion-reduce:transition-none",
+              seatChip.accent
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                : "bg-white text-slate-700 ring-1 ring-slate-200"
+            )}
+          >
+            {seatChip.accent && !canPickSeat ? (
+              <QrCode className="h-4 w-4" />
+            ) : (
+              <MapPin className="h-4 w-4" />
+            )}
+            <span className="truncate">{seatChip.label}</span>
+          </button>
+          <span
+            className={cn(
+              "flex h-11 flex-1 items-center justify-center gap-1.5 rounded-full text-[13px] font-bold",
+              covered || session.isPayed
+                ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+            )}
+          >
+            <CreditCard className="h-4 w-4" />
+            {covered ? "Inclus" : session.isPayed ? "Payé" : "Payer à l’accueil"}
+          </span>
+        </div>
+        {stepsHint ? (
+          <p className="px-2 text-center text-[11px] leading-snug text-slate-600">{stepsHint}</p>
+        ) : null}
+        {seatLabel ? (
+          <button
+            type="button"
+            onClick={() => setQrOpen(true)}
+            className="mx-auto flex items-center gap-1 text-xs font-semibold text-indigo-700 hover:text-indigo-900"
+          >
+            <QrCode className="h-3.5 w-3.5" />
+            Mon QR
+          </button>
+        ) : null}
+      </div>
 
       <div className="space-y-2">
         {checkout.isError && !checkoutOpen ? (
@@ -675,7 +732,8 @@ export function ActiveSessionPanel({
           </p>
         ) : null}
         <Button
-          className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold hover:bg-indigo-700"
+          variant="outline"
+          className="h-12 w-full rounded-full border-2 border-rose-600 bg-white text-sm font-extrabold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
           disabled={checkout.isPending || !!session.leaveTime || isOptimistic}
           onClick={() => {
             checkout.reset();
@@ -690,7 +748,7 @@ export function ActiveSessionPanel({
               <button
                 type="button"
                 onClick={onWifi}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
               >
                 <Wifi className="h-3.5 w-3.5" />
                 Wi‑Fi
@@ -698,7 +756,7 @@ export function ActiveSessionPanel({
             ) : null}
             {showSubLink ? (
               pendingSubscriptionName ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-400">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500">
                   <Clock className="h-3.5 w-3.5" />
                   Abonnement en attente
                 </span>
@@ -706,7 +764,7 @@ export function ActiveSessionPanel({
                 <button
                   type="button"
                   onClick={onSwitchToSubscription}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
                 >
                   <Crown className="h-3.5 w-3.5" />
                   Passer à un abonnement
@@ -716,15 +774,6 @@ export function ActiveSessionPanel({
           </div>
         ) : null}
       </div>
-
-      {checkInCode ? (
-        <SessionCodeCard
-          code={checkInCode}
-          needsSeat={receptionAssignsSeat}
-          open={codeOpen}
-          onOpenChange={setCodeOpen}
-        />
-      ) : null}
 
       {belowSession}
 
@@ -743,35 +792,23 @@ export function ActiveSessionPanel({
         />
       ) : null}
 
-      {live && askTarif ? (
-        <WelcomeTarifSheet
-          open={welcomeOpen}
-          onOpenChange={onWelcomeOpenChange}
-          live={live}
-          tiers={tiers}
-          sessionStart={sessionStart}
-          now={now}
-          pending={fixTariff.isPending}
-          error={welcomeOpen ? fixError : null}
-          onConfirm={(id) => fixTariff.mutate({ priceId: id })}
-        />
-      ) : null}
+      <MemberQrSheet open={qrOpen} onOpenChange={setQrOpen} memberId={memberId} />
 
-      {!isOptimistic && session.id ? (
-        <DrinkOfferSheet
-          memberId={memberId}
-          sessionId={String(session.id)}
-          sessionStart={sessionStart}
-          blocked={
-            welcomeOpen ||
-            (askTarif && hasTarifPrompt(slug)) ||
-            passOpen ||
-            checkoutOpen ||
-            seatOpen ||
-            codeOpen
-          }
-        />
-      ) : null}
+      <CheckinRewardSheet
+        open={rewardOpen}
+        onOpenChange={onRewardOpenChange}
+        memberId={memberId}
+        firstName={session.members?.firstName}
+        startedAt={sessionStart}
+        covered={!!covered}
+        tarifLine={
+          covered
+            ? `${subKindLabel ? `Abonnement · ${subKindLabel}` : "Abonnement"} · inclus`
+            : live?.mode === "AUTO" || !live
+              ? "Tarif auto activé · rien à choisir"
+              : `${passTitle} · prix bloqué`
+        }
+      />
 
       {seatSheetAvailable ? (
         <SeatPickerSheet

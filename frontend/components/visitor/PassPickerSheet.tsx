@@ -2,27 +2,52 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Check, Loader2 } from "lucide-react";
-import { BottomSheet } from "@/components/visitor/BottomSheet";
-import { TarifIcon } from "@/components/visitor/TarifOption";
-import { formatDt, type PricingTier } from "@/lib/session-pricing";
+import { Clock, Loader2, Timer } from "lucide-react";
+import { QuestLabel, QuestSheet } from "@/components/visitor/quest/QuestSheet";
+import { QuestOption } from "@/components/visitor/quest/QuestOption";
+import { useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 import {
-  BillingUnit,
-  type PriceCategory,
-  type SessionPricingPayload,
-} from "@/lib/types";
-import { cn } from "@/lib/utils";
+  formatDt,
+  uniqueTiersByDuration,
+  type PricingTier,
+} from "@/lib/session-pricing";
+import { dtToPoints } from "@/lib/points-catalog";
+import { isStandalonePwa } from "@/lib/visitor-notify";
+import type { Promotion, SessionPricingPayload } from "@/lib/types";
 
 const H = 3_600_000;
+const AUTO = "auto";
 
 function withDiscount(price: number, discountPercent: number) {
   return Math.round(price * (1 - (discountPercent || 0) / 100) * 1000) / 1000;
 }
 
-function durationLabel(hours: number) {
-  return hours >= 7 ? "Journée" : `${hours} h`;
+function tierShort(hours: number) {
+  return hours >= 7 ? "Jour" : `${hours}h`;
 }
 
+/** Live PRICE promotions → priceId (gift badge on that tarif). */
+export function usePricePromos() {
+  const { data = [] } = useMemberPromotions();
+  return useMemo(() => {
+    const m = new Map<string, Promotion>();
+    for (const p of data) {
+      if (p.liveNow && p.target === "PRICE" && p.priceId && !m.has(p.priceId)) {
+        m.set(p.priceId, p);
+      }
+    }
+    return m;
+  }, [data]);
+}
+
+export function promoBadgeText(p: Promotion) {
+  return p.label && p.label.length <= 10 ? p.label : "Cadeau";
+}
+
+/**
+ * Tarif modal (mission style). AUTO session: "Garder le tarif auto" is the default —
+ * closing or confirming it changes nothing. A live promo on a tarif shows a glowing badge.
+ */
 export function PassPickerSheet({
   open,
   onOpenChange,
@@ -38,7 +63,7 @@ export function PassPickerSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   live: SessionPricingPayload;
-  /** e.g. "Pass 2h" — shown in the sheet subtitle */
+  /** e.g. "Tarif auto" / "Pass 4h" */
   currentLabel: string;
   tiers: PricingTier[];
   sessionStart: number;
@@ -47,20 +72,21 @@ export function PassPickerSheet({
   error?: string | null;
   onConfirm: (priceId: string) => void;
 }) {
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const isAuto = live.mode === "AUTO";
+  const [pickedId, setPickedId] = useState<string | null>(isAuto ? AUTO : null);
+  const [isPwa, setIsPwa] = useState(false);
+  const promos = usePricePromos();
 
   useEffect(() => {
-    if (open) setPickedId(null);
-  }, [open]);
-
-  const currentHours =
-    live.mode === "FIXED"
-      ? live.fixedDurationHours ?? live.currentTier.durationHours
-      : 0;
+    if (open) setPickedId(isAuto ? AUTO : null);
+  }, [open, isAuto]);
+  useEffect(() => {
+    setIsPwa(isStandalonePwa());
+  }, []);
 
   const options = useMemo(
     () =>
-      tiers
+      uniqueTiersByDuration(tiers)
         .map((t) => ({
           tier: t,
           endsAt: sessionStart + t.durationHours * H,
@@ -71,25 +97,49 @@ export function PassPickerSheet({
     [tiers, sessionStart, now, live.discountPercent, live.mode, live.fixedPriceId]
   );
 
-  const recommendedId =
-    options.find((o) => !o.isCurrent && o.tier.durationHours > currentHours)
-      ?.tier.priceId ?? null;
-  const picked = options.find((o) => o.tier.priceId === pickedId) || null;
+  const picked = options.find((o) => o.tier.priceId === pickedId) ?? null;
+  const keepAuto = isAuto && pickedId === AUTO;
+  const amount = picked ? picked.amount : live.amountDue;
   const delta = picked ? picked.amount - live.amountDue : 0;
 
+  const confirm = () => {
+    if (keepAuto) {
+      onOpenChange(false);
+      return;
+    }
+    if (picked && !picked.isCurrent) onConfirm(picked.tier.priceId);
+  };
+
   return (
-    <BottomSheet
+    <QuestSheet
       open={open}
       onOpenChange={onOpenChange}
       dismissible={!pending}
-      title="Choisir mon pass"
-      description={`Actuel : ${currentLabel} · ${formatDt(live.amountDue)}`}
+      eyebrow="Votre tarif"
+      icon={<Clock className="h-5 w-5" />}
+      title={isAuto ? "Fixer une durée ?" : "Changer de pass"}
+      subtitle={
+        isAuto
+          ? "Facultatif. Si vous fermez, le tarif auto continue."
+          : `Actuel : ${currentLabel} · prix bloqué d’avance`
+      }
+      reward={{
+        label: keepAuto ? "Tarif auto · maintenant" : picked ? picked.tier.name : "Maintenant",
+        value: formatDt(amount),
+      }}
+      chip={
+        isPwa
+          ? { label: "Points", value: `+${dtToPoints(amount)}` }
+          : picked
+            ? { label: "Fin", value: format(picked.endsAt, "HH:mm") }
+            : null
+      }
       footer={
         <>
           {error ? (
-            <p className="mb-2 text-xs font-medium text-rose-600">{error}</p>
-          ) : picked ? (
-            <p className="mb-2 text-center text-[11px] text-slate-500">
+            <p className="mb-2 text-center text-xs font-medium text-rose-600">{error}</p>
+          ) : picked && !picked.isCurrent ? (
+            <p className="mb-2 text-center text-[11px] text-slate-600">
               {Math.abs(delta) < 0.0005
                 ? "Même prix qu’actuellement"
                 : delta > 0
@@ -98,100 +148,85 @@ export function PassPickerSheet({
               {" · jusqu’à "}
               {format(picked.endsAt, "HH:mm")}
             </p>
-          ) : (
-            <p className="mb-2 text-center text-[11px] text-slate-500">
-              Prix bloqué d’avance · supplément au-delà de la durée
-            </p>
-          )}
+          ) : null}
           <button
             type="button"
-            disabled={!picked || pending}
-            onClick={() => picked && onConfirm(picked.tier.priceId)}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-indigo-600 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50"
+            disabled={pending || (!keepAuto && (!picked || picked.isCurrent))}
+            onClick={confirm}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-indigo-600 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition-colors duration-200 hover:bg-indigo-700 disabled:opacity-50 motion-reduce:transition-none"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
             {pending
               ? "Enregistrement…"
-              : picked
-                ? `Choisir ${picked.tier.name} · ${formatDt(picked.amount)}`
-                : "Sélectionnez un pass"}
+              : keepAuto
+                ? "Garder le tarif auto"
+                : picked && !picked.isCurrent
+                  ? `Valider ${picked.tier.name} · ${formatDt(picked.amount)}`
+                  : "Sélectionnez un pass"}
           </button>
+          <p className="mt-2 text-center text-[11px] text-slate-500">
+            Changement possible tant que rien n’est payé
+          </p>
         </>
       }
     >
-      {options.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">
-          Aucun pass disponible pour le temps restant. Demandez à l’accueil.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {options.map((o) => {
-            const selected = pickedId === o.tier.priceId;
-            const recommended = o.tier.priceId === recommendedId;
+      <QuestLabel>Depuis {format(sessionStart, "HH:mm")} · choisissez</QuestLabel>
+      <div className="space-y-2.5 pb-1 pt-1">
+        {isAuto ? (
+          <QuestOption
+            selected={keepAuto}
+            disabled={pending}
+            onClick={() => setPickedId(AUTO)}
+            icon={<Timer className="h-5 w-5" />}
+            title="Garder le tarif auto"
+            hint={`Le prix suit votre temps · ${formatDt(live.amountDue)} pour l’instant`}
+            badge={
+              <span className="shrink-0 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                Par défaut
+              </span>
+            }
+          />
+        ) : null}
+        {options.length === 0 ? (
+          <p className="py-4 text-center text-sm text-slate-600">
+            Aucun pass disponible pour le temps restant. Demandez à l’accueil.
+          </p>
+        ) : (
+          options.map((o, i) => {
+            const promo = promos.get(o.tier.priceId) ?? null;
             return (
-              <button
+              <div
                 key={o.tier.priceId}
-                type="button"
-                disabled={o.isCurrent || pending}
-                aria-pressed={selected}
-                onClick={() =>
-                  setPickedId((cur) =>
-                    cur === o.tier.priceId ? null : o.tier.priceId
-                  )
-                }
-                className={cn(
-                  "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left ring-1 transition active:scale-[0.99]",
-                  selected
-                    ? "bg-indigo-50/60 ring-2 ring-indigo-600"
-                    : o.isCurrent
-                      ? "bg-slate-50 ring-slate-200"
-                      : "bg-white ring-slate-200 hover:ring-indigo-200"
-                )}
+                className="v-rise"
+                style={{ animationDelay: `${Math.min(i + 1, 6) * 40}ms` }}
               >
-                <TarifIcon
-                  price={{
-                    durationHours: o.tier.durationHours,
-                    category: (o.tier.category as PriceCategory | null) ?? null,
-                    billingUnit: BillingUnit.PACK,
-                  }}
-                  className="h-11 w-11 rounded-xl"
-                  iconClassName="h-5 w-5"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="truncate text-sm font-bold text-slate-900">
-                      {o.tier.name}
-                    </span>
-                    {recommended ? (
-                      <span className="shrink-0 rounded-md bg-indigo-600 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
-                        Conseillé
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-0.5 block text-[11px] text-slate-500">
-                    {o.isCurrent
+                <QuestOption
+                  selected={pickedId === o.tier.priceId}
+                  disabled={o.isCurrent || pending}
+                  onClick={() => setPickedId(o.tier.priceId)}
+                  icon={tierShort(o.tier.durationHours)}
+                  title={o.tier.name}
+                  hint={
+                    o.isCurrent
                       ? "Pass actuel"
-                      : `${durationLabel(o.tier.durationHours)} · jusqu’à ${format(o.endsAt, "HH:mm")}`}
-                  </span>
-                </span>
-                <span className="shrink-0 text-sm font-bold tabular-nums text-indigo-600">
-                  {formatDt(o.amount)}
-                </span>
-                <span
-                  className={cn(
-                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition",
-                    selected
-                      ? "bg-indigo-600 text-white"
-                      : "border border-slate-300 text-transparent"
-                  )}
-                >
-                  <Check className="h-3 w-3" strokeWidth={3} />
-                </span>
-              </button>
+                      : `Jusqu’à ${format(o.endsAt, "HH:mm")}`
+                  }
+                  price={formatDt(o.amount)}
+                  gift={promo ? promoBadgeText(promo) : null}
+                  giftLine={promo ? `+ ${promo.title} avec ce pass` : null}
+                  badge={
+                    o.isCurrent ? (
+                      <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                        Actuel
+                      </span>
+                    ) : null
+                  }
+                />
+              </div>
             );
-          })}
-        </div>
-      )}
-    </BottomSheet>
+          })
+        )}
+      </div>
+    </QuestSheet>
   );
 }

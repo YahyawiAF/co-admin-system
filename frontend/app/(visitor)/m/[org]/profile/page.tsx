@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CreditCard,
   LogOut,
+  Palette,
   Pencil,
   Tags,
 } from "lucide-react";
@@ -33,13 +34,12 @@ import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
 import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
-import { AttendanceCard } from "@/components/visitor/AttendanceCard";
+import { ProfileHero } from "@/components/visitor/ProfileHero";
+import { TrophyGrid } from "@/components/visitor/TrophyGrid";
+import { ThemeSheet } from "@/components/visitor/ThemeSheet";
 import { MemberHistory } from "@/components/visitor/MemberHistory";
 import { ReferralCard } from "@/components/visitor/ReferralCard";
-import {
-  PointsCard,
-  dispatchPointsAward,
-} from "@/components/visitor/PointsCard";
+import { dispatchPointsAward } from "@/components/visitor/PointsCard";
 import {
   ProfileMissionEntry,
   isProfileAvatarDone,
@@ -74,6 +74,7 @@ function ProfileInner() {
   const { memberId, onboarded, logout, ready } = useVisitorSession();
   const fileRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const editOpenedRef = useRef(false);
   const [reveal, setReveal] = useState<{
     points: number;
@@ -229,20 +230,17 @@ function ProfileInner() {
   if (!hasAccount) {
     return (
       <div className="space-y-4">
-        <div className="rounded-3xl bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Visiteur
-          </p>
-          <h1 className="mt-1 text-xl font-bold text-slate-900">{displayName}</h1>
-          <p className="mt-1 text-sm text-slate-500">{member?.phone || "—"}</p>
-          {member?.visitorNumber ? (
-            <p className="mt-1 text-xs text-slate-400">#{member.visitorNumber}</p>
-          ) : null}
-        </div>
-
         {memberId ? (
           <>
-            <PointsCard memberId={memberId} compact={false} />
+            <ProfileHero
+              memberId={memberId}
+              name={displayName}
+              subtitle={[member?.phone, member?.visitorNumber ? `#${member.visitorNumber}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+              avatarUrl={member?.avatarUrl}
+            />
+            <TrophyGrid memberId={memberId} />
             <ReferralCard memberId={memberId} />
           </>
         ) : null}
@@ -296,40 +294,25 @@ function ProfileInner() {
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-        <div className="h-24 bg-gradient-to-br from-primary to-sky-400" />
-        <div className="-mt-10 px-5 pb-5">
-          <button
-            type="button"
-            className="relative"
-            onClick={openEdit}
-            aria-label="Changer la photo"
-          >
-            <VisitorAvatar
-              name={displayName}
-              src={member?.avatarUrl}
-              className="h-20 w-20 border-4 border-white shadow"
-            />
-            <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-white">
-              <Camera className="h-3.5 w-3.5" />
-            </span>
-          </button>
-          <div className="mt-2 flex items-start justify-between gap-2">
-            <div>
-              <h1 className="text-xl font-bold">{displayName}</h1>
-              <p className="text-sm text-slate-500">
-                {member?.functionality || "Ajouter un métier"}
-              </p>
-              {member?.visitorNumber ? (
-                <p className="text-xs text-slate-400">#{member.visitorNumber}</p>
-              ) : null}
-            </div>
-            <Button size="sm" variant="outline" onClick={openEdit}>
-              <Pencil className="mr-1 h-3.5 w-3.5" />
-              Modifier
-            </Button>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+      {memberId ? (
+        <ProfileHero
+          memberId={memberId}
+          name={displayName}
+          subtitle={[
+            member?.functionality || null,
+            member?.visitorNumber ? `#${member.visitorNumber}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ") || "Ajouter un métier"}
+          avatarUrl={member?.avatarUrl}
+          onEdit={openEdit}
+        />
+      ) : null}
+
+      <div className="rounded-3xl bg-white px-4 py-3 shadow-sm ring-1 ring-slate-900/5">
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap gap-1.5">
             <Badge className={subscribed ? "bg-emerald-600" : ""}>
               {subscribed ? "Abonné" : "Compte"}
             </Badge>
@@ -339,6 +322,11 @@ function ProfileInner() {
             {member?.showInDirectory ? (
               <Badge variant="outline">Annuaire</Badge>
             ) : null}
+            </div>
+            <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={openEdit}>
+              <Pencil className="mr-1 h-3.5 w-3.5" />
+              Modifier
+            </Button>
           </div>
           {(member?.skills || []).length ? (
             <p className="mt-3 text-sm text-slate-600">
@@ -347,7 +335,7 @@ function ProfileInner() {
           ) : member?.bio ? (
             <p className="mt-3 text-sm text-slate-600">{member.bio}</p>
           ) : (
-            <p className="mt-3 text-sm text-slate-400">
+            <p className="mt-2 text-sm text-slate-600">
               Ajoutez vos compétences pour apparaître dans l&apos;annuaire.
             </p>
           )}
@@ -358,9 +346,8 @@ function ProfileInner() {
 
       {memberId ? (
         <>
-          <PointsCard memberId={memberId} compact={false} />
+          <TrophyGrid memberId={memberId} />
           <ReferralCard memberId={memberId} />
-          <AttendanceCard memberId={memberId} />
           <MemberHistory memberId={memberId} />
         </>
       ) : null}
@@ -395,7 +382,26 @@ function ProfileInner() {
             <ChevronRight className="h-4 w-4 text-slate-400" />
           </Link>
         ))}
+        {memberId ? (
+          <button
+            type="button"
+            onClick={() => setThemeOpen(true)}
+            className="flex w-full items-center gap-3 border-t px-4 py-3.5 text-left"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
+              <Palette className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium">Mon thème</span>
+              <span className="block text-xs text-slate-600">Couleurs de votre app · à débloquer</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-400" />
+          </button>
+        ) : null}
       </div>
+      {memberId ? (
+        <ThemeSheet open={themeOpen} onOpenChange={setThemeOpen} memberId={memberId} />
+      ) : null}
 
       <Button
         variant="outline"

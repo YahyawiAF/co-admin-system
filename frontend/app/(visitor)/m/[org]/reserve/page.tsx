@@ -36,6 +36,11 @@ export default function ReservePage() {
   const [date, setDate] = useState(
     format(addDays(new Date(), 1), "yyyy-MM-dd")
   );
+  // Day picked on Accueil ("Réserver pour plus tard"): /reserve?date=yyyy-MM-dd
+  useEffect(() => {
+    const picked = new URLSearchParams(window.location.search).get("date");
+    if (picked && /^\d{4}-\d{2}-\d{2}$/.test(picked)) setDate(picked);
+  }, []);
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const visitorNumber = status?.member?.visitorNumber;

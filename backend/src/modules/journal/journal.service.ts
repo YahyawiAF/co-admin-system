@@ -11,6 +11,7 @@ import { endOfDay, startOfDay } from 'date-fns';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { maybeAwardVisitPaidPoints, maybeRevokeVisitPaidPoints } from '../mobile/visit-paid-points';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
+import { isMemberQr, verifyMemberQr } from '../mobile/member-qr';
 import {
   isTierPricedRow,
   loadPricingContext,
@@ -316,6 +317,7 @@ export class JournalService {
 
   /** Check-in by its QR / short code — today's open visit first, then the latest one. */
   async findByCheckInCode(raw: string, organizationId?: string) {
+    if (isMemberQr(raw)) return this.findByMemberQr(raw, organizationId);
     const code = JournalService.parseCheckInCode(raw);
     if (!code) {
       throw new BadRequestException('Code de pointage invalide');
@@ -359,6 +361,38 @@ export class JournalService {
         HttpStatus.NOT_FOUND,
         ErrorCode.NOT_FOUND,
         `Aucun pointage pour le code ${code}`,
+      );
+    }
+    return journal;
+  }
+
+  /** Profile QR ("Mon QR"): the member's open visit today, so reception can give a place. */
+  private async findByMemberQr(raw: string, organizationId?: string) {
+    const check = verifyMemberQr(raw);
+    if (check.ok === false) {
+      throw new BadRequestException(
+        check.reason === 'expired'
+          ? 'QR expiré : demandez au membre de le rouvrir'
+          : 'QR membre invalide',
+      );
+    }
+    const now = new Date();
+    const journal = await this.prisma.journal.findFirst({
+      where: {
+        memberID: check.memberId,
+        isReservation: false,
+        leaveTime: null,
+        registredTime: { gte: startOfDay(now), lte: endOfDay(now) },
+        ...(organizationId ? { members: { organizationId } } : {}),
+      },
+      include: { members: true, prices: true },
+      orderBy: { registredTime: 'desc' },
+    });
+    if (!journal) {
+      throw new GeneralException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        'Aucune session ouverte : le membre doit d’abord pointer',
       );
     }
     return journal;
