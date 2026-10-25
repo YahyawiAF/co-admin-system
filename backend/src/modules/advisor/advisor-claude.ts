@@ -11,6 +11,19 @@ export const RECOMMENDATION_CATEGORIES = [
   'OPERATIONS',
 ] as const;
 
+/** Figures measured before / after an action (same keys as the initiative impact). */
+export const ADVICE_METRICS = [
+  'revenuePerDay',
+  'visitsPerDay',
+  'revenueCafe',
+  'cafeAttachRatePct',
+  'avgStayHours',
+  'newMembers',
+  'revenueSubscriptions',
+  'avgOccupancyPct',
+] as const;
+export type AdviceMetric = (typeof ADVICE_METRICS)[number];
+
 export const OUTREACH_SEGMENTS = [
   'NONE',
   'ABO_EXPIRING',
@@ -32,6 +45,12 @@ export type AdvisorRecommendation = {
   actions: string[];
   expectedImpact: string;
   measure: string;
+  /** Figure the app measures before / after when the owner does it. */
+  metric?: AdviceMetric;
+  /** Expected change of that figure, in % (prudent). */
+  targetPct?: number;
+  /** Who it aims at: a slot (days 0 = Sunday, hours [from, to), 0/0 = all day), a client list (outreach.segment) or the whole space. */
+  target?: { kind: 'ALL' | 'SLOT' | 'LIST'; days: number[]; fromHour: number; toHour: number };
   /** Clients to contact for this idea and the ready-to-send message (segment NONE = no relance). */
   outreach?: { segment: (typeof OUTREACH_SEGMENTS)[number]; message: string };
 };
@@ -82,6 +101,9 @@ export const RESULT_SCHEMA = {
           'actions',
           'expectedImpact',
           'measure',
+          'metric',
+          'targetPct',
+          'target',
           'outreach',
         ],
         properties: {
@@ -93,6 +115,19 @@ export const RESULT_SCHEMA = {
           actions: { type: 'array', items: str },
           expectedImpact: str,
           measure: str,
+          metric: { type: 'string', enum: [...ADVICE_METRICS] },
+          targetPct: { type: 'number' },
+          target: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['kind', 'days', 'fromHour', 'toHour'],
+            properties: {
+              kind: { type: 'string', enum: ['ALL', 'SLOT', 'LIST'] },
+              days: { type: 'array', items: { type: 'integer' } },
+              fromHour: { type: 'integer' },
+              toHour: { type: 'integer' },
+            },
+          },
           outreach: {
             type: 'object',
             additionalProperties: false,
@@ -156,13 +191,26 @@ Règles :
 - Appuie chaque recommandation sur des chiffres précis de l'instantané (champ evidence). N'invente aucun chiffre. Si une donnée manque, dis-le ou pose la question dans "questions".
 - Tiens compte du contexte écrit par le propriétaire (facility.ownerContext) quand il existe.
 - Donne des actions concrètes, faisables cette semaine, avec des prix en DT cohérents avec le catalogue.
-- expectedImpact : estimation chiffrée prudente (DT par mois ou visites en plus) avec le calcul en une phrase.
-- measure : l'indicateur de l'instantané à suivre pour savoir si ça marche.
+- expectedImpact : estimation chiffrée prudente, courte, qui commence par le chiffre (ex. « +120 DT/mois : 4 clients × 30 DT »). 80 caractères max.
+- measure : l'indicateur à suivre en quelques mots (ex. « visites du mardi après-midi »).
+- metric : le chiffre que l'app mesurera avant / après (revenuePerDay revenu par jour, visitsPerDay visites par jour, revenueCafe café, cafeAttachRatePct % de visites avec café, avgStayHours durée moyenne, newMembers nouveaux membres, revenueSubscriptions revenu abonnements, avgOccupancyPct occupation). targetPct : la hausse attendue de ce chiffre, prudente (ex. 15) : en points pour cafeAttachRatePct et avgOccupancyPct, en % pour les autres. L'app la mesure sur la cible, comparée au reste.
+- target : qui est visé, pour ne mesurer que ça. SLOT = un créneau : days (0 = dimanche … 6 = samedi, vide = tous les jours), fromHour et toHour (ex. 18 et 24 ; 0 et 0 = toute la journée). LIST = les clients de outreach.segment. ALL = tout l'espace, seulement si l'action touche vraiment tout le monde.
 - Ne répète pas les recommandations de previousAdvice, sauf si les chiffres justifient d'insister ; dans ce cas dis pourquoi.
 - Pour chaque initiative ayant des données avant/après, donne un verdict dans initiativeReviews (too_early s'il y a moins de 14 jours de données ou trop peu de visites).
+- initiatives = ce que le propriétaire a vraiment fait après tes conseils : description (ce qu'il a fait), cost (ce que ça lui a coûté en DT), metric et targetPct (le chiffre suivi et l'objectif), impact (avant / après sur la même durée), campaign (résultat de la relance liée), notes (ce qui s'est passé, écrit par lui), ownerVerdict (son avis), disturbances (jours fériés ou périodes pendant la mesure, qui faussent la comparaison). Ce sont les faits les plus importants : ils disent ce qui marche dans CET espace.
+- Affine à partir de ces résultats : si une action marche, propose l'étape suivante (l'élargir, l'appliquer à un autre créneau, monter un peu le prix) ; si elle ne marche pas, propose une variante qui change UNE seule chose (prix, heure, public, message) et dis laquelle ; si c'est trop tôt, ne la remplace pas. Ne repropose jamais une action déjà faite sans dire ce qui change.
+- Chaque initiative a une cible (target : un créneau jours + heures, une liste de clients, ou tout l'espace) et result : before / after sur la cible, comparison (le même chiffre sur un groupe témoin : autres heures, autres jours ou autres clients), effect (variation de la cible moins variation du témoin, en % ou en points), sale (ventes de l'offre, du produit ou de la promo liée : preuve directe), gain, cost, netGain. Juge sur effect et sale, pas sur le revenu global.
+- dataIssues : problèmes dans les données (prix aberrant, sorties non pointées, impayés, charges absentes). Ne bâtis aucun conseil sur un chiffre touché. Si un problème bloque une catégorie (blocksCategories), mets en premier une recommandation OPERATIONS pour le corriger et n'en fais pas dans cette catégorie.
+- Dans initiativeReviews, compare au targetPct quand il existe et tiens compte du coût (gain net = gain − coût) et des disturbances.
 - Si l'activité est trop faible pour conclure, dis-le dans summary plutôt que de surinterpréter.
 - Entre 4 et 8 recommandations, triées de la plus rentable à la moins rentable. 2 à 5 highlights.
-- Écris en français simple, direct, sans jargon. Phrases courtes.`;
+- Écris en français simple, direct, sans jargon. Phrases courtes.
+- Format court, le propriétaire lit sur son téléphone :
+  - title : l'action à faire, 8 mots max (ex. « Pack café + 4h à 7 DT le soir »).
+  - evidence : UNE phrase, 20 mots max, avec le chiffre clé (ex. « 58 % des clients sont encore là après 18h, mais 2 % prennent un café »).
+  - actions : 1 à 3 étapes, 12 mots max chacune, la première faisable aujourd'hui.
+  - summary : 2 phrases max. highlights : title 6 mots max, detail 15 mots max.
+  - Pas de paragraphe, pas de répétition entre les champs.`;
 
 export class AdvisorRefusalError extends Error {}
 
@@ -217,6 +265,17 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
     recommendations: r.recommendations.map((x) => ({
       ...x,
       actions: Array.isArray(x.actions) ? x.actions : [],
+      metric: (ADVICE_METRICS as readonly string[]).includes(x.metric as string) ? x.metric : undefined,
+      targetPct: typeof x.targetPct === 'number' ? x.targetPct : undefined,
+      target:
+        x.target && ['ALL', 'SLOT', 'LIST'].includes(x.target.kind)
+          ? {
+              kind: x.target.kind,
+              days: Array.isArray(x.target.days) ? x.target.days.filter((d) => d >= 0 && d <= 6) : [],
+              fromHour: Number(x.target.fromHour) || 0,
+              toHour: Number(x.target.toHour) || 0,
+            }
+          : undefined,
       outreach:
         x.outreach && segments.includes(x.outreach.segment) && typeof x.outreach.message === 'string'
           ? x.outreach

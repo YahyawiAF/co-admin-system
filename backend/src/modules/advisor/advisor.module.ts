@@ -5,11 +5,12 @@ import { AdvisorContextController } from './advisor-context.controller';
 import { AdvisorController } from './advisor.controller';
 import { AdvisorService } from './advisor.service';
 import { ContextService } from './context.service';
+import { InitiativeMeasure } from './initiative-measure';
 import { SnapshotService } from './snapshot.service';
 
 @Module({
   imports: [AnalyticsModule],
   controllers: [AdvisorController, AdvisorContextController],
-  providers: [AdvisorService, SnapshotService, ContextService, PrismaService],
+  providers: [AdvisorService, SnapshotService, ContextService, InitiativeMeasure, PrismaService],
 })
 export class AdvisorModule {}

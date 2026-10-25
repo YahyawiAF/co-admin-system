@@ -18,6 +18,12 @@ export class AdvisorController {
     return this.advisor.updateSettings(facilityId, body);
   }
 
+  /** Data problems that would make advice wrong (rules, no AI). */
+  @Get('data-check')
+  dataCheck(@Query('facilityId') facilityId?: string) {
+    return this.advisor.dataCheck(facilityId);
+  }
+
   /** The figures Claude would receive (free, no AI call). */
   @Get('snapshot')
   snapshot(@Query('facilityId') facilityId?: string, @Query('days') days?: string) {
@@ -71,6 +77,17 @@ export class AdvisorController {
       category?: string;
       startDate?: string;
       sourceReportId?: string;
+      recommendationTitle?: string;
+      metric?: string;
+      targetPct?: number | null;
+      cost?: number | null;
+      targetKind?: string;
+      targetDays?: number[];
+      targetFromHour?: number | null;
+      targetToHour?: number | null;
+      targetSegment?: string | null;
+      linkedKind?: string | null;
+      linkedId?: string | null;
     },
   ) {
     return this.advisor.createInitiative(facilityId, body);
@@ -86,6 +103,18 @@ export class AdvisorController {
       category?: string;
       startDate?: string;
       endDate?: string | null;
+      metric?: string | null;
+      targetPct?: number | null;
+      cost?: number | null;
+      ownerVerdict?: string | null;
+      notes?: Array<{ date?: string; text?: string }>;
+      targetKind?: string;
+      targetDays?: number[];
+      targetFromHour?: number | null;
+      targetToHour?: number | null;
+      targetSegment?: string | null;
+      linkedKind?: string | null;
+      linkedId?: string | null;
     },
   ) {
     return this.advisor.updateInitiative(id, body);
