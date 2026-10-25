@@ -561,6 +561,8 @@ export class MobileController {
       kind: 'ROOM' | 'SEAT';
       spaceId?: string;
       seatLabel?: string;
+      seatLabels?: string[];
+      places?: number;
       seatSpaceId?: string;
       date: string;
       startTime: string;
@@ -569,6 +571,22 @@ export class MobileController {
     },
   ) {
     return this.mobileService.createBookingRequest(body);
+  }
+
+  /** Seats / rooms already requested on that date + time (shown as occupied). */
+  @Get('booking-availability')
+  bookingAvailability(
+    @Query('org') org: string,
+    @Query('date') date: string,
+    @Query('start') start: string,
+    @Query('end') end: string,
+  ) {
+    return this.mobileService.bookingAvailability({
+      orgSlug: org,
+      date,
+      startTime: start,
+      endTime: end,
+    });
   }
 
   @Get('review/:memberId')

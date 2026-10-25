@@ -207,11 +207,13 @@ export default function FacilityPage() {
   const [manageTableId, setManageTableId] = useState<string | null>(null);
   const [manageTableDraft, setManageTableDraft] = useState<{
     name: string;
+    /** Shown to visitors next to the table photo when they reserve */
+    description: string;
     imageUrl: string | null;
     galleryUrls: string[];
     width: number;
     height: number;
-  }>({ name: "", imageUrl: null, galleryUrls: [], width: 120, height: 80 });
+  }>({ name: "", description: "", imageUrl: null, galleryUrls: [], width: 120, height: 80 });
   const [manageTableBusy, setManageTableBusy] = useState(false);
   const [seatLayoutMode, setSeatLayoutMode] =
     useState<SeatLayoutMode>("left-right");
@@ -758,6 +760,41 @@ export default function FacilityPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  /** Visitor reservations (/m/reserve): fee paid at reception + rules */
+  const [resa, setResa] = useState({
+    fee: "2",
+    perPlace: false,
+    maxDaysAhead: "14",
+    maxPlaces: "4",
+    autoApprove: false,
+  });
+  useEffect(() => {
+    if (!facility) return;
+    setResa({
+      fee: String(facility.reservationFee ?? 2),
+      perPlace: !!facility.reservationFeePerPlace,
+      maxDaysAhead: String(facility.reservationMaxDaysAhead ?? 14),
+      maxPlaces: String(facility.reservationMaxPlaces ?? 4),
+      autoApprove: !!facility.reservationAutoApprove,
+    });
+  }, [facility]);
+  const saveResa = useMutation({
+    mutationFn: () =>
+      facilityApi.update(facility!.id, {
+        reservationFee: Math.max(0, Number(resa.fee.replace(",", ".")) || 0),
+        reservationFeePerPlace: resa.perPlace,
+        reservationMaxDaysAhead: Math.max(1, Math.round(Number(resa.maxDaysAhead) || 14)),
+        reservationMaxPlaces: Math.max(1, Math.round(Number(resa.maxPlaces) || 4)),
+        reservationAutoApprove: resa.autoApprove,
+      }),
+    onSuccess: () => {
+      toast.success("Réservations enregistrées");
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const resaFee = Math.max(0, Number(resa.fee.replace(",", ".")) || 0);
 
   const [pricingRules, setPricingRules] = useState({
     sessionWarnBeforeMin: "5",
@@ -2008,6 +2045,7 @@ export default function FacilityPage() {
                                       setManageTableId(t.id);
                                       setManageTableDraft({
                                         name: t.name,
+                                        description: t.description || "",
                                         imageUrl: t.imageUrl || null,
                                         galleryUrls: t.galleryUrls || [],
                                         width: t.width || 120,
@@ -2081,6 +2119,23 @@ export default function FacilityPage() {
                                         }))
                                       }
                                     />
+                                  </div>
+                                  <div className="space-y-1 sm:col-span-2">
+                                    <Label>Description (vue par les visiteurs)</Label>
+                                    <Input
+                                      placeholder="Ex. Près de la fenêtre · prises au mur"
+                                      maxLength={120}
+                                      value={manageTableDraft.description}
+                                      onChange={(e) =>
+                                        setManageTableDraft((d) => ({
+                                          ...d,
+                                          description: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                      Avec la photo ci-dessous, aide le visiteur à reconnaître la table quand il réserve.
+                                    </p>
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
@@ -2241,6 +2296,7 @@ export default function FacilityPage() {
                                       facilityApi
                                         .updateTable(t.id, {
                                           name: manageTableDraft.name.trim(),
+                                          description: manageTableDraft.description.trim() || null,
                                           imageUrl: manageTableDraft.imageUrl,
                                           galleryUrls: manageTableDraft.galleryUrls,
                                           width: Math.max(
@@ -2421,6 +2477,100 @@ export default function FacilityPage() {
               >
                 Enregistrer les places mobile
               </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Réservations visiteurs</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Frais affichés aux visiteurs à la réservation (/m) et réglés à
+                l’accueil le jour J, en plus du tarif sur place.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="resa-fee">Frais de réservation (DT)</Label>
+                  <Input
+                    id="resa-fee"
+                    inputMode="decimal"
+                    value={resa.fee}
+                    onChange={(e) => setResa((r) => ({ ...r, fee: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Calcul</Label>
+                  <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
+                    {(
+                      [
+                        [false, "Par réservation"],
+                        [true, "Par place"],
+                      ] as const
+                    ).map(([v, label]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() => setResa((r) => ({ ...r, perPlace: v }))}
+                        className={`h-8 rounded-md text-sm font-medium transition-colors ${
+                          resa.perPlace === v ? "bg-background shadow-sm" : "text-muted-foreground"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="resa-days">Réservable jusqu’à (jours)</Label>
+                  <Input
+                    id="resa-days"
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={resa.maxDaysAhead}
+                    onChange={(e) => setResa((r) => ({ ...r, maxDaysAhead: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="resa-places">Places max par demande</Label>
+                  <Input
+                    id="resa-places"
+                    type="number"
+                    min={1}
+                    max={12}
+                    value={resa.maxPlaces}
+                    onChange={(e) => setResa((r) => ({ ...r, maxPlaces: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <label className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
+                <span>
+                  Confirmation automatique
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    Sinon l’accueil valide chaque demande (Réservations)
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={resa.autoApprove}
+                  onChange={(e) => setResa((r) => ({ ...r, autoApprove: e.target.checked }))}
+                />
+              </label>
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Aperçu visiteur : <strong>Frais de réservation {resaFee.toFixed(3)} DT</strong>
+                {resa.perPlace ? " par place" : ""} · exemple 3 places :{" "}
+                <strong>{(resa.perPlace ? resaFee * 3 : resaFee).toFixed(3)} DT</strong>
+              </p>
+              <Button
+                disabled={!facility || saveResa.isPending}
+                onClick={() => saveResa.mutate()}
+              >
+                Enregistrer les réservations
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Photos et description de chaque table : onglet Espaces &amp; tables → table.
+              </p>
             </CardContent>
           </Card>
 

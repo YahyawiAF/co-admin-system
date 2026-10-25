@@ -1581,6 +1581,8 @@ export const mobileApi = {
     kind: "ROOM" | "SEAT";
     spaceId?: string;
     seatLabel?: string;
+    seatLabels?: string[];
+    places?: number;
     seatSpaceId?: string;
     date: string;
     startTime: string;
@@ -1626,6 +1628,8 @@ export const mobileApi = {
     kind: "ROOM" | "SEAT";
     spaceId?: string;
     seatLabel?: string;
+    seatLabels?: string[];
+    places?: number;
     seatSpaceId?: string;
     date: string;
     startTime: string;
@@ -1637,6 +1641,14 @@ export const mobileApi = {
       member: Member;
       accessToken: string;
     }>("/mobile/public/booking-request", data, { skipAuth: true });
+  },
+  /** Seats / rooms already requested on that date + time (occupied on the map). */
+  bookingAvailability(org: string, date: string, start: string, end: string) {
+    const q = new URLSearchParams({ org, date, start, end }).toString();
+    return http.get<{
+      seats: { spaceId: string | null; label: string }[];
+      rooms: string[];
+    }>(`/mobile/booking-availability?${q}`, { skipAuth: true });
   },
   myBookingRequests(memberId: string) {
     return http.get<BookingRequest[]>(`/mobile/booking-request/${memberId}`, {

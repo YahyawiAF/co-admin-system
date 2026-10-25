@@ -649,6 +649,7 @@ export class FacilityService {
     id: string,
     data: Partial<{
       name: string;
+      description: string | null;
       imageUrl: string | null;
       x: number;
       y: number;

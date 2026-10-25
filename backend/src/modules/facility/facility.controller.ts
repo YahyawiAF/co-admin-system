@@ -115,6 +115,7 @@ export class FacilityController {
     @Body()
     body: Partial<{
       name: string;
+      description: string | null;
       imageUrl: string | null;
       x: number;
       y: number;
