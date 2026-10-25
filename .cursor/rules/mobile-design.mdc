@@ -17,14 +17,16 @@ Light, calm, card-based UI (reference: Collabora Hub mockups). One accent color,
 
 ## Color
 
-- Single accent: **indigo-600** (`bg-indigo-600`, `text-indigo-600`). Hover `indigo-700`.
+- Single accent: **indigo-600** (`bg-indigo-600`, `text-indigo-600`). Hover `indigo-700`. Second accent for gradients: `violet-*`.
+- **Themes** ("Mon thème", `lib/visitor-theme.ts`): `indigo-*` / `violet-*` and shadcn `primary` are CSS variables swapped per member. Always use `indigo-*`/`violet-*` for accent — never hard-coded hex or `primary`-only blues. A new theme = one entry in `VISITOR_THEMES`.
+- Amber/gold is reserved for rewards (points, trophies, gifts, promos).
 - Never mix two different accent blues in one screen (no `primary` + `indigo` side by side).
-- Text: titles `text-slate-900 font-bold`, body `text-slate-500`, hints `text-slate-400`.
+- Text: titles `text-slate-900 font-bold`, body `text-slate-600`, labels/hints `text-slate-500` minimum (never slate-400 for readable text; 11px minimum).
 - Destructive: rose/red only for errors and overtime.
 
 ## Typography
 
-- Card section label: `text-[10px] font-semibold uppercase tracking-wide text-slate-400` (e.g. "SUIVI DU FORFAIT", "VOTRE ACCÈS").
+- Card section label: `text-[11px] font-bold uppercase tracking-wide text-slate-500` (e.g. "SUIVI DU FORFAIT", "VOTRE ACCÈS").
 - Key figures: `text-2xl font-bold tabular-nums` (+ `text-indigo-600` when accent).
 - Hints/footnotes: `text-[11px] text-slate-500`.
 
@@ -57,16 +59,19 @@ The user has asked many times for blocks to take less space. Treat every new or 
 
 - Announcement slot: `AnnouncementBanner` right under the hero — white card, sparkles icon in `bg-indigo-50` circle, one-line truncated text, dismissible (sessionStorage).
 - Wi-Fi: circular glass button (`bg-white/20 backdrop-blur-sm`) in hero top-right; modal via `WifiCredentialsModal`.
-- No session: one-tap "Démarrer ma session" (`StartSessionCard`) is the dominant action — no in-app QR scan. The entry QR adds the `QrWelcome` header and auto-starts the session once (no extra tap).
+- **Game layer (pro + jeu)**: points, streak, levels and trophies come from `usePlayer(memberId)` (`lib/hooks/use-player.ts`, same cache as `PointsCard`). Motion uses the `v-*` classes at the end of `app/globals.css` (all off under reduced motion).
+- **Mission modal = the app's modal style** (`components/visitor/quest/QuestSheet.tsx`): gradient banner (eyebrow, icon + title, subtitle, reward + glass chip) over a white list of `QuestOption` rows, one main button in the footer. Use it for every picker/confirmation (tarif, abonnement, QR, theme, reward). A promo tied to a tarif shows `GiftBadge` (glowing "Cadeau") on that row.
+- No session (Accueil): `PlayerCard` (level ring, streak) → `StartSessionCard` "Mission du jour" (one glowing tap, tarif auto) → `TarifLadder` (2h → Jour, promo tier glows) → `BoostsRow` (drinks) → `ReserveLaterCard` (day chips → `/reserve?date=`). The entry QR auto-starts the session once.
+- Tarif: **auto is always the default**. Never ask the visitor to choose after a scan; `PassPickerSheet` opens only from "Fixer"/"Changer" and preselects "Garder le tarif auto".
 - Wording: on mobile say **pass** (never "forfait"/"palier"): "Pass 2h", "Changer de pass", "Choisir mon pass".
-- Active session (`ActiveSessionPanel`) = **hero → steps → check-out**, nothing else inline:
-  - Hero card: paid status chip, pass name + **Changer** button, two `StatTile`s (time left / amount, or session time / pool hours), progress bar, one-line next-change or overtime hint.
-  - `SessionSteps`: Pointé · Place · Pass · Paiement; tappable steps open the matching sheet; unpaid note sits under the steps.
-  - `SessionCodeCard` under the steps: per-check-in QR (`CHECKIN:<code>`) + 6-char code; tap → bottom sheet with the large QR. Highlighted (indigo ring) when reception assigns the place; the "Place · Accueil" step opens it too. Reception scans it from Journal → **Scanner** (`CheckInScanDialog`) to open `AssignSeatDialog`.
-  - "Terminer ma session" primary button with text links (Wi-Fi, abonnement) below; events strip after.
-  - FIXED sessions also get the `TierLevelUp` nudge to the next tier (arrow-up, level track, two-tap confirm).
-- Pickers and confirmations open in a **bottom sheet** (`BottomSheet`: handle, title + close, scrollable body, sticky footer with safe-area) — never an inline expansion that scrolls the page. Examples: `PassPickerSheet` (row list, "Conseillé" badge, price delta in footer), `SeatPickerSheet`, check-out confirmation.
-- After pointage/check-in go straight to `/session` — no intermediate "Pointage OK" screen.
+- Active session (`ActiveSessionPanel`) = **live hero → energy cup → place/payment → check-out**:
+  - Hero: "En direct" chip, tarif chip, Fixer/Changer; tiles Temps passé (live seconds) / À payer (+pts in the app); AUTO shows the tier track, FIXED a progress bar; one-line hint.
+  - `EnergyCupCard`: energy drains with time since the last drink, one-tap order refills the cup, "Habitué café" progress.
+  - Place chip ("Place A3" / "Choisir ma place" / "Mon QR · place") + payment chip. **Mon QR** (`MemberQrSheet`): signed, 15-min profile QR (`MEMBER:<id>.<exp>.<sig>`, `GET /mobile/qr/:memberId`) + session code fallback; reception scans it with the Journal scanner (`CheckInScanDialog`) to open that member's visit and assign a place; the sheet celebrates when the place arrives.
+  - Fresh QR check-in: `CheckinRewardSheet` once (streak, level, quote of the day typed by the mascot in a manga bubble), auto-closes after 12 s unless touched.
+  - "Terminer ma session" outline rose button with text links (Wi-Fi, abonnement) below; FIXED sessions also get `TierLevelUp`.
+- Pickers and confirmations open in a **bottom sheet** (`QuestSheet`, or `BottomSheet` for plain ones) — never an inline expansion that scrolls the page.
+- After pointage/check-in go straight to `/session` — the reward sheet opens there, no intermediate page.
 - Event attendee counts are admin-only: visitors never see "N inscrits"/"x/y places" (only "Complet" / "Inscrit ✓").
 - Abonnement dates go through `lib/subscription-dates.ts` (`subscriptionTiming`, `dayLabel`): weekday dates ("Lundi 13 oct."), days remaining **inclusive** of the end day, tone indigo → amber (≤ 3 days / today / tomorrow) → rose (ended). Wording: "Se termine aujourd’hui (lundi)", "Se termine demain (mardi)", "Terminé hier (dimanche)", "Terminé il y a N jours"; amber/rose states add a renewal hint + outline "Renouveler" (`/choose?mode=subscription&priceId=`).
 - Accueil: `SubscriptionStatusCard` under the announcement (active / upcoming / ended ≤ 30 days, else nothing); during a session it only appears for alerts (ends ≤ tomorrow or ended).

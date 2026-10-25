@@ -9,8 +9,17 @@ export function checkInQrImageUrl(code: string, size = 280) {
   )}`;
 }
 
-/** Accepts `CHECKIN:ABC123`, a typed code (spaces / dashes ignored) or text ending with it. */
+/** Profile QR from the visitor app ("Mon QR"): `MEMBER:<id>.<exp>.<sig>`, kept as-is. */
+export function isMemberQrPayload(raw: string) {
+  return /^MEMBER:[\w-]+\.\d+\.[\w-]+$/.test((raw || "").trim());
+}
+
+/**
+ * Accepts `CHECKIN:ABC123`, a typed code (spaces / dashes ignored) or text ending with it,
+ * or a visitor profile QR (`MEMBER:…`, returned unchanged — the server resolves it).
+ */
 export function parseCheckInCode(raw: string): string | null {
+  if (isMemberQrPayload(raw)) return raw.trim();
   const cleaned = (raw || "").trim().toUpperCase().replace(/[\s-]/g, "");
   const match = cleaned.match(/(?:CHECKIN[:=/])?([A-Z0-9]{6})$/);
   return match ? match[1] : null;

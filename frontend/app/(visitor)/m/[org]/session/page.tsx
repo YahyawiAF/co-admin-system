@@ -9,7 +9,6 @@ import { PointsCard } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
 import { EventsPreview } from "@/components/visitor/EventCard";
 import { OffersStrip } from "@/components/visitor/VisitorSpotlight";
-import { EnergyBoostCard } from "@/components/visitor/EnergyBoostCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -110,9 +109,6 @@ export default function SessionPage() {
           <>
             <OffersStrip />
             <EventsPreview />
-            {session.registredTime ? (
-              <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
-            ) : null}
             <PointsCard memberId={memberId} />
             <ProfileMissionEntry hideWhenComplete />
           </>

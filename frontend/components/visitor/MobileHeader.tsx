@@ -60,7 +60,7 @@ export function MobileHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const { org, slug, href } = useOrg();
-  const { memberId, onboarded } = useVisitorSession();
+  const { memberId, onboarded, ready } = useVisitorSession();
   const [loginOpen, setLoginOpen] = useState(false);
   const [isApp, setIsApp] = useState(false);
   const base = `/m/${slug}`;
@@ -150,8 +150,8 @@ export function MobileHeader() {
 
   const unread = hasAccount ? inbox.filter((t) => t.unreadHint).length : 0;
   const notifCount = notices.length + unread;
-  /** Connexion for guests + light profiles; PIN members stay in-session. */
-  const showLogin = !onboarded || !hasAccount;
+  /** Connexion only for guests: a phone-only (no PIN) login is still a login. */
+  const showLogin = ready && !onboarded;
 
   return (
     <>
@@ -160,7 +160,7 @@ export function MobileHeader() {
           {isRoot ? (
             <Link
               href={href()}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-bold text-white shadow-sm"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-sm font-bold text-white shadow-sm"
               aria-label="Accueil"
             >
               {(org.name || "C").trim().charAt(0).toUpperCase()}
@@ -178,7 +178,7 @@ export function MobileHeader() {
             <p className="truncate text-[15px] font-semibold leading-tight">
               {title}
             </p>
-            <p className="truncate text-[11px] text-slate-500">{facilityName}</p>
+            <p className="truncate text-[11px] text-slate-600">{facilityName}</p>
           </div>
           {showLogin ? (
             <Button
@@ -191,7 +191,7 @@ export function MobileHeader() {
               Connexion
             </Button>
           ) : null}
-          <RefreshButton className="h-10 w-10 rounded-full bg-slate-50 text-primary" />
+          <RefreshButton className="h-10 w-10 rounded-full bg-slate-50 text-indigo-600" />
           {onboarded && communityUnlocked ? (
             <Button
               variant="ghost"
@@ -200,7 +200,7 @@ export function MobileHeader() {
               onClick={() => router.push(href("/community"))}
               aria-label="Messages"
             >
-              <MessageCircle className="h-5 w-5 text-primary" />
+              <MessageCircle className="h-5 w-5 text-indigo-600" />
               {unread > 0 ? (
                 <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
                   {unread}
@@ -216,7 +216,7 @@ export function MobileHeader() {
                 className="relative h-10 w-10 rounded-full bg-slate-50"
                 aria-label="Notifications"
               >
-                <Bell className="h-5 w-5 text-primary" />
+                <Bell className="h-5 w-5 text-indigo-600" />
                 {notifCount > 0 ? (
                   <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white">
                     {notifCount}
@@ -281,7 +281,7 @@ export function VisitorAvatar({
   return (
     <div
       className={cn(
-        "flex items-center justify-center rounded-full bg-primary/15 text-sm font-bold text-primary",
+        "flex items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700",
         className
       )}
     >

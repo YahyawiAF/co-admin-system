@@ -446,3 +446,11 @@ export function isStageAlert(p: SessionPricingResult | null | undefined) {
       p.stage === 'OVERTIME')
   );
 }
+
+/** One tier per duration (catalogs can hold duplicates, e.g. two "Demi-journée (6h)"). */
+export function uniqueTiersByDuration<T extends { durationHours: number }>(tiers: T[]): T[] {
+  const seen = new Set<number>();
+  return [...tiers]
+    .sort((a, b) => a.durationHours - b.durationHours)
+    .filter((t) => (seen.has(t.durationHours) ? false : (seen.add(t.durationHours), true)));
+}

@@ -17,6 +17,7 @@ import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { useMobileKeyboardOpen } from "@/lib/hooks/use-mobile-keyboard";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 import { isCommunityUnlocked } from "@/lib/community";
+import { useApplyVisitorTheme } from "@/lib/visitor-theme";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
@@ -95,6 +96,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
   const hasAccount = !!status?.member?.hasPin;
   const communityUnlocked = isCommunityUnlocked(hasAccount, isApp);
   const keyboardOpen = useMobileKeyboardOpen();
+  useApplyVisitorTheme(orgSlug);
   const nav = !onboarded
     ? GUEST_NAV
     : communityUnlocked
@@ -167,7 +169,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
-        "mobile-shell mx-auto max-w-[480px] bg-[#f3f6fb] text-slate-900",
+        "mobile-shell mx-auto max-w-[480px] bg-[var(--v-bg,#f3f6fb)] text-slate-900 transition-colors duration-300",
         immersiveChat
           ? "h-dvh overflow-hidden"
           : keyboardOpen
@@ -218,13 +220,13 @@ export function MobileShell({ children }: { children: ReactNode }) {
                 href={href}
                 className={cn(
                   "flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium",
-                  active ? "text-primary" : "text-slate-400"
+                  active ? "text-indigo-600" : "text-slate-500"
                 )}
               >
                 <span
                   className={cn(
-                    "relative flex h-8 w-8 items-center justify-center rounded-full",
-                    active && "bg-primary/10"
+                    "relative flex h-8 w-8 items-center justify-center rounded-full transition-colors duration-200",
+                    active && "bg-indigo-50"
                   )}
                 >
                   <Icon className="h-5 w-5" />

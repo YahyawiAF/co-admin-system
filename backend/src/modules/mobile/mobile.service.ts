@@ -20,6 +20,7 @@ import {
   subDays,
 } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
+import { issueMemberQr } from './member-qr';
 import {
   CheckoutSessionDto,
   CreateVisitRequestDto,
@@ -1471,6 +1472,20 @@ export class MobileService {
       });
     }
     return null;
+  }
+
+  /** Signed, short-lived profile QR + today's session code as a typed fallback. */
+  async memberQr(memberId: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true },
+    });
+    if (!member) throw new NotFoundException('Member not found');
+    const open = await this.getOpenSession(memberId);
+    return {
+      ...issueMemberQr(memberId),
+      checkInCode: (open as { checkInCode?: string | null } | null)?.checkInCode ?? null,
+    };
   }
 
   async getOpenSession(memberId: string) {

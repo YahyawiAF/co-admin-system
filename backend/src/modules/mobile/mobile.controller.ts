@@ -587,6 +587,12 @@ export class MobileController {
     return this.mobileService.markReview(memberId, action);
   }
 
+  /** Profile QR ("Mon QR"): reception scans it to give this member a place. */
+  @Get('qr/:memberId')
+  memberQr(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.memberQr(memberId);
+  }
+
   @Get('referral/:memberId')
   referral(@Param('memberId', ParseUUIDPipe) memberId: string) {
     return this.mobileService.referral(memberId);

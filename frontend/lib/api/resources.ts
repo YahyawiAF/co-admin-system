@@ -1456,6 +1456,14 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
+  /** Profile QR ("Mon QR"): signed payload for reception's scanner. */
+  memberQr(memberId: string) {
+    return http.get<{
+      payload: string;
+      expiresAt: string;
+      checkInCode: string | null;
+    }>(`/mobile/qr/${memberId}`, { skipAuth: true });
+  },
   getPoints(memberId: string, isPwa: boolean) {
     return http.get<import("@/lib/points-catalog").MemberPointsSnapshot>(
       `/mobile/points/${memberId}?pwa=${isPwa ? "1" : "0"}`,

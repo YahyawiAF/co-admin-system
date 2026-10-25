@@ -6,15 +6,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  CalendarDays,
   CreditCard,
   MessageSquare,
-  Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { mobileApi, type MobileSession } from "@/lib/api/resources";
-import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { WelcomeRegister } from "@/components/visitor/WelcomeRegister";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
@@ -25,9 +22,15 @@ import {
 } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
 import { ReviewPromptCard } from "@/components/visitor/ReviewPromptCard";
-import { EnergyBoostCard } from "@/components/visitor/EnergyBoostCard";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
+import { PlayerCard } from "@/components/visitor/PlayerCard";
+import {
+  BoostsRow,
+  ReserveLaterCard,
+  TarifLadder,
+} from "@/components/visitor/HomeBlocks";
+import { usePlayer } from "@/lib/hooks/use-player";
 import {
   QrWelcome,
   StartSessionCard,
@@ -42,7 +45,7 @@ import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
-import { clearQrEntry, markTarifPrompt } from "@/lib/visitorCache";
+import { clearQrEntry, markCheckinReward } from "@/lib/visitorCache";
 import {
   startFromQrEntry,
   wantsQrCheckin,
@@ -53,6 +56,7 @@ export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
+  const { player } = usePlayer(memberId);
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
@@ -121,8 +125,7 @@ export default function MobileHomePage() {
       else if (res?.alreadyOpen) {
         toast.message("Votre session est déjà en cours");
       } else if (res) {
-        toast.success("Présence enregistrée ✓");
-        if (res.pricingMode === "AUTO") markTarifPrompt(slug);
+        markCheckinReward(slug);
       }
       clearQrEntry(slug);
       setFromQr(false);
@@ -296,16 +299,6 @@ export default function MobileHomePage() {
 
   const openWifi = () => setWifiOpen(true);
 
-  const goChooseDay = (priceId?: string) => {
-    router.push(
-      href(
-        priceId
-          ? `/choose?mode=day&priceId=${encodeURIComponent(priceId)}`
-          : "/choose?mode=day"
-      )
-    );
-  };
-
   const goSubscription = () => {
     router.push(
       href(
@@ -390,9 +383,6 @@ export default function MobileHomePage() {
             <>
               <OffersStrip />
               <EventsPreview />
-              {session.registredTime && memberId ? (
-                <EnergyBoostCard memberId={memberId} since={String(session.registredTime)} />
-              ) : null}
               {subscriptionCard(true)}
               {showInstallPromo ? (
                 <AppInstallPromo
@@ -404,73 +394,44 @@ export default function MobileHomePage() {
             </>
           }
         />
-      ) : showQrWelcome ? null : (
-        <div className="relative h-28 overflow-hidden rounded-3xl bg-slate-800 text-white shadow-sm">
-          <div
-            className="absolute inset-0 bg-cover bg-center opacity-60"
-            style={{
-              backgroundImage:
-                "url(https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=900&q=60)",
-            }}
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/70 to-slate-900/10" />
-          <div className="relative flex h-full items-center justify-between px-4">
-            <div>
-              <p className="text-xs text-white/75">Bonjour,</p>
-              <p className="text-lg font-bold leading-tight">
-                {greetingName}
-              </p>
-              <p className="mt-0.5 text-[11px] text-white/70">
-                {facilityName}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {hasWifi ? (
-                <button
-                  type="button"
-                  onClick={openWifi}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm"
-                  aria-label="Wi‑Fi"
-                >
-                  <Wifi className="h-4 w-4" />
-                </button>
-              ) : null}
-              {member ? (
-                <Link href={href("/profile")}>
-                  <VisitorAvatar
-                    name={displayName}
-                    src={member.avatarUrl}
-                    className="h-9 w-9 border-2 border-white/80"
-                  />
-                </Link>
-              ) : null}
-            </div>
-          </div>
-        </div>
+      ) : showQrWelcome || !memberId ? null : (
+        <PlayerCard
+          memberId={memberId}
+          name={displayName}
+          greetingName={greetingName}
+          avatarUrl={member?.avatarUrl}
+          facilityName={facilityName}
+          profileHref={href("/profile")}
+          onWifi={hasWifi ? openWifi : undefined}
+        />
       )}
-
-      {idle ? <OffersStrip /> : null}
-
-      {idle || (pending && !session) ? subscriptionCard(false) : null}
-
-      {idle ? <EventsPreview /> : null}
 
       {idle ? (
         <StartSessionCard
-          tarifs={tarifs}
           hasActiveSubscription={!!status?.hasActiveSubscription}
           subscriptionName={status?.subscription?.price?.name}
-          subscriptionDaysRemaining={status?.subscription?.daysRemaining}
           subscriptionHoursRemaining={status?.subscription?.hoursRemaining}
           dailyRemainingHours={periodSub ? dailyRem : null}
+          streak={player?.streak ?? 0}
           pending={startAuto.isPending}
           error={scanError}
-          canChooseForfait={canChooseForfait}
           onStart={startSession}
-          onPickForfait={goChooseDay}
-          onSubscription={goSubscription}
         />
       ) : null}
+
+      {idle || (pending && !session) ? subscriptionCard(false) : null}
+
+      {idle ? <OffersStrip /> : null}
+
+      {idle && canChooseForfait && !status?.hasActiveSubscription ? (
+        <TarifLadder tarifs={tarifs} />
+      ) : null}
+
+      {idle ? <BoostsRow /> : null}
+
+      {idle ? <ReserveLaterCard /> : null}
+
+      {idle ? <EventsPreview /> : null}
 
       {showQrWelcome && showInstallPromo ? (
         <AppInstallPromo
@@ -527,27 +488,21 @@ export default function MobileHomePage() {
 
       {/* Secondary: contact + install (Café/Communauté live in the bottom nav) */}
       <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-1">
-        {isApp && !session ? (
+        {status?.hasActiveSubscription && !session ? (
           <>
             <Link
-              href={href(
-                status?.hasActiveSubscription ? "/subscription" : "/reserve"
-              )}
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+              href={href("/subscription")}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
             >
-              {status?.hasActiveSubscription ? (
-                <CreditCard className="h-3.5 w-3.5" />
-              ) : (
-                <CalendarDays className="h-3.5 w-3.5" />
-              )}
-              {status?.hasActiveSubscription ? "Mon abonnement" : "Autre jour"}
+              <CreditCard className="h-3.5 w-3.5" />
+              Mon abonnement
             </Link>
             <span className="text-slate-300">·</span>
           </>
         ) : null}
         <Link
           href={href("/staff")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-700"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 hover:text-slate-800"
         >
           <MessageSquare className="h-3.5 w-3.5" />
           Contacter l&apos;accueil

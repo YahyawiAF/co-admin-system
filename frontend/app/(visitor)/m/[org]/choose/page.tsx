@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, Crown, Loader2, Timer } from "lucide-react";
+import { CalendarDays, ChevronLeft, Crown, Gift, Loader2, Timer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,12 @@ import {
   promoCategoriesOf,
 } from "@/lib/promo-price";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
-import { TarifOptionCard } from "@/components/visitor/TarifOption";
+import { QuestBanner, QuestLabel } from "@/components/visitor/quest/QuestSheet";
+import { QuestOption } from "@/components/visitor/quest/QuestOption";
+import { promoBadgeText, usePricePromos } from "@/components/visitor/PassPickerSheet";
+import { usePlayer } from "@/lib/hooks/use-player";
+import { dtToPoints } from "@/lib/points-catalog";
+import { formatDt } from "@/lib/session-pricing";
 import { toast } from "sonner";
 import { useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 
@@ -58,6 +63,7 @@ function ChooseInner() {
   const [seatLabel, setSeatLabel] = useState("");
   const [seatSpaceId, setSeatSpaceId] = useState("");
   const [occupyWhole, setOccupyWhole] = useState(false);
+  const [subKindTab, setSubKindTab] = useState<"half" | "full">("half");
   const { socket } = useRealtime();
   const pendingPoll = useVisibleInterval(pendingId ? 8_000 : false);
 
@@ -112,6 +118,8 @@ function ChooseInner() {
     ? { promos: appPromos.promos, globalPromo: appPromos.globalPromo }
     : { promos: null, globalPromo: null };
   const { data: flashPromos = [] } = useMemberPromotions();
+  const pricePromos = usePricePromos();
+  const { player, isPwa } = usePlayer(memberId);
   /** Install promo or live golden-card offer, whichever is cheaper (the server applies the same rule). */
   const priceFor = (o: Price) => {
     const priced = pricedWithPromo(o.price, o.id, {
@@ -199,6 +207,11 @@ function ChooseInner() {
     return tarifs.filter((t) => isJournalPack(t));
   }, [tarifs, mode]);
   const selectedOption = options.find((o) => o.id === selectedId) || null;
+  // Preselected abonnement (e.g. "Renouveler"): open the matching half/full tab
+  useEffect(() => {
+    if (!selectedOption) return;
+    setSubKindTab((selectedOption.durationHours ?? 0) > 6 ? "full" : "half");
+  }, [selectedOption]);
 
   const create = useMutation({
     mutationFn: (opts: {
@@ -665,19 +678,30 @@ function ChooseInner() {
     );
   }
 
+  const isSub = mode === "subscription";
+  const halfOpts = options.filter((o) => (o.durationHours ?? 0) > 0 && (o.durationHours ?? 0) <= 6);
+  const fullOpts = options.filter((o) => (o.durationHours ?? 0) > 6);
+  const showKindToggle = isSub && halfOpts.length > 0 && fullOpts.length > 0;
+  const listed = showKindToggle ? (subKindTab === "half" ? halfOpts : fullOpts) : options;
+  const selectedPriced = selectedOption ? priceFor(selectedOption) : null;
+  const selectedAmount = selectedPriced ? selectedPriced.final : null;
+  const earned = selectedAmount != null ? dtToPoints(selectedAmount) : 0;
+  const nextTrophy = player?.nextTrophy ?? null;
+  const unlocks =
+    player && nextTrophy && earned > 0 && player.points + earned >= nextTrophy.target
+      ? nextTrophy.name
+      : null;
+
   return (
-    <div>
-      <div className="mb-3 grid grid-cols-2 gap-1 rounded-full bg-white p-1 shadow-sm">
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-900/5">
         {(
           [
             { id: "day", label: "Pass", icon: Timer },
             { id: "subscription", label: "Abonnement", icon: Crown },
           ] as const
         ).map((tab) => {
-          const active =
-            tab.id === "subscription"
-              ? mode === "subscription"
-              : mode !== "subscription";
+          const active = tab.id === "subscription" ? isSub : !isSub;
           const Icon = tab.icon;
           return (
             <button
@@ -685,10 +709,12 @@ function ChooseInner() {
               type="button"
               onClick={() => router.replace(href(`/choose?mode=${tab.id}`))}
               className={cn(
-                "flex h-9 items-center justify-center gap-1.5 rounded-full text-sm font-semibold transition",
+                "flex h-10 items-center justify-center gap-1.5 rounded-full text-sm font-bold transition-colors duration-200 motion-reduce:transition-none",
                 active
-                  ? "bg-indigo-600 text-white shadow-sm"
-                  : "text-slate-500 hover:text-slate-700"
+                  ? tab.id === "subscription"
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "bg-indigo-600 text-white shadow-sm"
+                  : "text-slate-600 hover:text-slate-800"
               )}
             >
               <Icon className="h-4 w-4" />
@@ -697,66 +723,170 @@ function ChooseInner() {
           );
         })}
       </div>
-      <p className="mb-3 px-1 text-xs text-slate-500">{hint}</p>
-      {mode === "subscription" && status?.session ? (
-        <Alert className="mb-3 border-indigo-200 bg-indigo-50">
-          <AlertDescription className="text-indigo-800">
-            Session en cours : une fois l&apos;abonnement validé par
-            l&apos;accueil, votre session passe sur l&apos;abonnement (plus de
-            tarif à payer pour aujourd&apos;hui).
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {create.isError ? (
-        <Alert variant="destructive" className="mb-3">
-          <AlertDescription>
-            {(create.error as Error).message}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {options.length ? (
-        <div className="grid grid-cols-2 gap-2.5">
-          {options.map((o) => {
-            const priced = priceFor(o);
-            return (
-              <TarifOptionCard
-                key={o.id}
-                price={o}
-                selected={selectedOption?.id === o.id}
-                disabled={create.isPending}
-                badge={priced.hasPromo ? "Promo" : null}
-                priceNode={<PromoPrice {...priced} size="sm" align="start" />}
-                onSelect={() =>
-                  setSelectedId((cur) => (cur === o.id ? null : o.id))
-                }
-              />
-            );
-          })}
+
+      <div key={mode} className="v-rise overflow-hidden rounded-[28px] bg-white shadow-sm ring-1 ring-slate-900/5">
+        <QuestBanner
+          tone={isSub ? "violet" : "brand"}
+          eyebrow={isSub ? "Abonnement" : "Pass du jour"}
+          icon={
+            isSub ? (
+              <Crown className="v-float h-5 w-5 text-amber-200" />
+            ) : (
+              <Timer className="h-5 w-5" />
+            )
+          }
+          title={isSub ? "Venez quand vous voulez" : "Choisir un pass"}
+          subtitle={isSub ? "Demandé ici, validé et payé à l’accueil." : hint}
+          reward={
+            selectedOption && selectedPriced
+              ? isSub && earned > 0
+                ? {
+                    label: "Récompense",
+                    value: (
+                      <>
+                        <Gift className="h-5 w-5" />+{earned.toLocaleString("fr-FR")}
+                        <span className="text-sm font-bold opacity-80">pts</span>
+                      </>
+                    ),
+                  }
+                : { label: selectedOption.name, value: formatDt(selectedPriced.final) }
+              : null
+          }
+          chip={
+            unlocks
+              ? { label: "Débloque", value: unlocks }
+              : !isSub && earned > 0 && isPwa
+                ? { label: "Points", value: `+${earned}` }
+                : null
+          }
+        />
+        <div className="space-y-2.5 px-4 pb-4 pt-4">
+          {isSub && status?.session ? (
+            <p className="rounded-2xl bg-violet-50 px-3 py-2 text-xs text-violet-900">
+              Session en cours : une fois l&apos;abonnement validé, elle passe sur
+              l&apos;abonnement (plus rien à payer aujourd&apos;hui).
+            </p>
+          ) : null}
+          {showKindToggle ? (
+            <div className="grid grid-cols-2 gap-1 rounded-full bg-slate-100 p-1">
+              {(
+                [
+                  { id: "half", label: "Demi-journée · 6h" },
+                  { id: "full", label: "Journée · 12h" },
+                ] as const
+              ).map((k) => (
+                <button
+                  key={k.id}
+                  type="button"
+                  aria-pressed={subKindTab === k.id}
+                  onClick={() => setSubKindTab(k.id)}
+                  className={cn(
+                    "h-9 rounded-full text-xs font-extrabold transition-[background-color,color,box-shadow] duration-200 motion-reduce:transition-none",
+                    subKindTab === k.id
+                      ? "bg-white text-violet-900 shadow-sm"
+                      : "text-slate-600"
+                  )}
+                >
+                  {k.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {create.isError ? (
+            <p className="rounded-2xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
+              {(create.error as Error).message}
+            </p>
+          ) : null}
+          {listed.length ? (
+            <>
+              <QuestLabel className="mb-0 mt-1">{isSub ? "Durée" : "Durée du pass"}</QuestLabel>
+              {listed.map((o, i) => {
+                const priced = priceFor(o);
+                const promo = pricePromos.get(o.id) ?? null;
+                const pts = dtToPoints(priced.final);
+                return (
+                  <div
+                    key={o.id}
+                    className="v-rise pt-1"
+                    style={{ animationDelay: `${Math.min(i, 6) * 40}ms` }}
+                  >
+                    <QuestOption
+                      tone={isSub ? "violet" : "indigo"}
+                      selected={selectedOption?.id === o.id}
+                      disabled={create.isPending}
+                      onClick={() => setSelectedId(o.id)}
+                      icon={
+                        isSub ? (
+                          <CalendarDays className="h-5 w-5" />
+                        ) : (o.durationHours ?? 0) >= 7 ? (
+                          "Jour"
+                        ) : (o.durationHours ?? 0) > 0 ? (
+                          `${o.durationHours}h`
+                        ) : (
+                          <Timer className="h-5 w-5" />
+                        )
+                      }
+                      title={o.name}
+                      hint={
+                        isSub ? (
+                          pts > 0 ? (
+                            <span className="font-bold text-amber-700">
+                              +{pts.toLocaleString("fr-FR")} pts
+                            </span>
+                          ) : null
+                        ) : (o.durationHours ?? 0) > 0 ? (
+                          `${o.durationHours} h sur place`
+                        ) : null
+                      }
+                      price={<PromoPrice {...priced} size="sm" align="end" />}
+                      gift={
+                        promo
+                          ? promoBadgeText(promo)
+                          : priced.hasPromo
+                            ? "Promo"
+                            : null
+                      }
+                      giftLine={promo ? `+ ${promo.title}` : null}
+                    />
+                  </div>
+                );
+              })}
+            </>
+          ) : (
+            <p className="py-5 text-center text-sm text-slate-600">Aucun tarif disponible.</p>
+          )}
         </div>
-      ) : (
-        <div className="rounded-3xl bg-white py-5 text-center text-sm text-slate-500 shadow-sm">
-          Aucun tarif disponible.
-        </div>
-      )}
+      </div>
+
       {options.length ? (
-        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 mt-4">
+        <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10">
           <Button
-            className="h-12 w-full rounded-full bg-indigo-600 text-sm font-semibold shadow-lg hover:bg-indigo-700"
+            className={cn(
+              "h-12 w-full rounded-full text-sm font-bold shadow-lg transition-colors duration-200 motion-reduce:transition-none",
+              isSub
+                ? "bg-gradient-to-r from-violet-600 to-indigo-600 shadow-violet-600/30 hover:from-violet-700 hover:to-indigo-700"
+                : "bg-indigo-600 shadow-indigo-600/30 hover:bg-indigo-700"
+            )}
             disabled={!selectedOption || create.isPending}
             onClick={() => selectedOption && onPickTarif(selectedOption)}
           >
             {create.isPending
               ? "Envoi…"
               : !selectedOption
-                ? mode === "subscription"
+                ? isSub
                   ? "Choisissez votre abonnement"
                   : "Choisissez votre pass"
-                : mode === "subscription"
-                  ? `Demander « ${selectedOption.name} »`
+                : isSub
+                  ? `Demander · ${selectedOption.name} · ${formatDt(selectedPriced!.final)}`
                   : needPlaceStep
                     ? `Continuer avec « ${selectedOption.name} »`
                     : `Prendre « ${selectedOption.name} »`}
           </Button>
+          {isSub ? (
+            <p className="mt-1.5 text-center text-[11px] text-slate-600">
+              Points crédités une fois l’abonnement payé
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>
