@@ -1665,8 +1665,11 @@ export const mobileApi = {
 };
 
 export const bookingRequestsApi = {
-  list(status?: "PENDING" | "APPROVED" | "REJECTED") {
-    const q = status ? `?status=${status}` : "";
+  list(status?: "PENDING" | "APPROVED" | "REJECTED", date?: string) {
+    const params = new URLSearchParams();
+    if (status) params.set("status", status);
+    if (date) params.set("date", date);
+    const q = params.toString() ? `?${params}` : "";
     return http.get<BookingRequest[]>(`/mobile/admin/booking-requests${q}`);
   },
   pending() {

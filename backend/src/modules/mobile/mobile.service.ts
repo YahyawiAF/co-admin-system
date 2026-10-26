@@ -6334,12 +6334,24 @@ export class MobileService {
     return payload;
   }
 
-  async listBookingRequests(status?: VisitRequestStatus) {
+  async listBookingRequests(status?: VisitRequestStatus, date?: string) {
+    // date = yyyy-MM-dd: every request whose slot starts that day (local time)
+    let day: { gte: Date; lt: Date } | undefined;
+    if (date) {
+      const from = new Date(`${date}T00:00:00`);
+      if (Number.isNaN(from.getTime())) throw new BadRequestException('Date invalide');
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
+      day = { gte: from, lt: to };
+    }
     const rows = await this.prisma.bookingRequest.findMany({
-      where: status ? { status } : undefined,
+      where: {
+        ...(status ? { status } : {}),
+        ...(day ? { startAt: day } : {}),
+      },
       include: { member: true },
-      orderBy: { createdAt: 'desc' },
-      take: 50,
+      orderBy: day ? { startAt: 'asc' } : { createdAt: 'desc' },
+      take: day ? 300 : 50,
     });
     return rows.map((r) => this.serializeBooking(r));
   }

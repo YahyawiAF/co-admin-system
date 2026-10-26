@@ -191,9 +191,8 @@ export default function MyReservationsPage() {
                     activeTableId={
                       space.tables?.find((t) => (t.seats || []).some((s) => s.label === labels[0]))?.id ?? null
                     }
-                    onActiveTable={() => {}}
-                    onToggle={() => {}}
                     initials={initials}
+                    showOrder={false}
                   />
                 </div>
               ) : null}

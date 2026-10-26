@@ -656,8 +656,11 @@ export class MobileController {
   }
 
   @Get('admin/booking-requests')
-  adminBookings(@Query('status') status?: VisitRequestStatus) {
-    return this.mobileService.listBookingRequests(status);
+  adminBookings(
+    @Query('status') status?: VisitRequestStatus,
+    @Query('date') date?: string,
+  ) {
+    return this.mobileService.listBookingRequests(status, date);
   }
 
   @Patch('admin/booking-requests/:id/approve')

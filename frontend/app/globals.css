@@ -364,12 +364,16 @@
 .v-tuck { animation: v-tuck 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) both; }
 .v-ring-out { animation: v-ring-out 1.3s ease-out infinite; }
 .v-tip { animation: v-tip 1.4s ease-in-out infinite; }
+@keyframes v-zoom-in { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: none; } }
+@keyframes v-pulse-ring { 0%, 100% { box-shadow: 0 0 0 0 rgb(15 23 42 / 0.45); } 50% { box-shadow: 0 0 0 6px rgb(15 23 42 / 0); } }
+.v-zoom-in { animation: v-zoom-in 0.3s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.v-pulse-ring { animation: v-pulse-ring 1.6s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .v-breathe, .v-tuck, .v-ring-out, .v-tip, .v-shine, .v-glow, .v-gift-glow, .v-wiggle, .v-twinkle, .v-flame, .v-ring-fill,
   .v-bar-grow, .v-rise, .v-node-pulse, .v-live, .v-steam, .v-liquid-wave, .v-cup-bump,
   .v-pop, .v-ripple, .v-spark, .v-float, .v-blink, .v-wave-arm, .v-star-spin, .v-caret,
-  .v-bubble-in, .v-drain, .v-laser, .v-dot, .v-stamp, .v-slide-up {
+  .v-bubble-in, .v-drain, .v-laser, .v-dot, .v-stamp, .v-slide-up, .v-zoom-in, .v-pulse-ring {
     animation: none !important;
   }
   .v-ripple, .v-spark, .v-laser, .v-shine, .v-ring-out { display: none; }

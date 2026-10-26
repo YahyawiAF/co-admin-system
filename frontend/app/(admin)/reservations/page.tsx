@@ -1,35 +1,40 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { fr } from "date-fns/locale";
-import { Armchair, Check, DoorOpen, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { bookingRequestsApi } from "@/lib/api/resources";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { DemandesView } from "@/components/admin/reservations/DemandesView";
+import { DayPlanView } from "@/components/admin/reservations/DayPlanView";
+import { ResaSettingsView } from "@/components/admin/reservations/ResaSettingsView";
+import { pickMainFacility, seatSpacesOf } from "@/components/admin/reservations/shared";
+import { bookingRequestsApi, facilityApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
-import { cn } from "@/lib/utils";
 import { useStaffAccess } from "@/lib/staff-access";
-import type { BookingRequest } from "@/lib/types";
 
-type Filter = "PENDING" | "APPROVED" | "REJECTED" | "ALL";
+type Tab = "demandes" | "jour" | "reglages";
+const TABS: Tab[] = ["demandes", "jour", "reglages"];
 
 export default function ReservationsAdminPage() {
-  const { can } = useStaffAccess();
+  const { can, isStaff } = useStaffAccess();
   const mayWrite = can("reservations", "write");
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<Filter>("PENDING");
+
+  // ?tab=jour|reglages keeps the view on reload and lets other pages link here
+  const [tab, setTab] = useState<Tab>("demandes");
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    if (t && TABS.includes(t)) setTab(t);
+  }, []);
+  const changeTab = (v: string) => {
+    const t = v as Tab;
+    setTab(t);
+    const url = new URL(window.location.href);
+    if (t === "demandes") url.searchParams.delete("tab");
+    else url.searchParams.set("tab", t);
+    window.history.replaceState(null, "", url.toString());
+  };
 
   const { data: pending = [] } = useQuery({
     queryKey: queryKeys.bookingRequestsPending,
@@ -45,23 +50,28 @@ export default function ReservationsAdminPage() {
     queryFn: () => bookingRequestsApi.list("REJECTED"),
   });
 
-  const rows = useMemo(() => {
-    if (filter === "PENDING") return pending;
-    if (filter === "APPROVED") return approved;
-    if (filter === "REJECTED") return rejected;
-    return [...pending, ...approved, ...rejected].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-  }, [filter, pending, approved, rejected]);
+  const { data: facilities = [] } = useQuery({
+    queryKey: queryKeys.facility,
+    queryFn: () => facilityApi.list(),
+  });
+  const facility = useMemo(() => pickMainFacility(facilities), [facilities]);
+  const { data: layout } = useQuery({
+    queryKey: ["facility-layout", facility?.id],
+    queryFn: () => facilityApi.layout(facility?.id),
+    enabled: !!facility?.id,
+  });
+  const spaces = useMemo(() => seatSpacesOf(layout?.spaces || []), [layout?.spaces]);
+  const allSpaces = layout?.spaces || [];
+
+  const markedDays = useMemo(
+    () => new Set([...pending, ...approved].map((r) => format(new Date(r.startAt), "yyyy-MM-dd"))),
+    [pending, approved]
+  );
 
   const invalidate = () => {
-    queryClient.invalidateQueries({
-      queryKey: queryKeys.bookingRequestsPending,
-    });
+    queryClient.invalidateQueries({ queryKey: queryKeys.bookingRequestsPending });
     queryClient.invalidateQueries({ queryKey: ["booking-requests"] });
   };
-
   const approve = useMutation({
     mutationFn: (id: string) => bookingRequestsApi.approve(id),
     onSuccess: () => {
@@ -79,186 +89,55 @@ export default function ReservationsAdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const chips: { id: Filter; label: string; count: number }[] = [
-    { id: "PENDING", label: "En attente", count: pending.length },
-    { id: "APPROVED", label: "Acceptées", count: approved.length },
-    { id: "REJECTED", label: "Refusées", count: rejected.length },
-    {
-      id: "ALL",
-      label: "Toutes",
-      count: pending.length + approved.length + rejected.length,
-    },
-  ];
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Demandes de réservation
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Salles, open spaces et places demandées depuis le mobile.
-        </p>
+    <Tabs value={isStaff && tab === "reglages" ? "demandes" : tab} onValueChange={changeTab} className="space-y-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Réservations</h1>
+          <p className="text-sm text-muted-foreground">
+            {tab === "demandes"
+              ? "Demandes du mobile, avec les chaises exactes sur le plan"
+              : tab === "jour"
+                ? "Toute la salle, jour par jour"
+                : "Frais, règles et photos vues par les visiteurs"}
+          </p>
+        </div>
+        <TabsList className="h-11 rounded-xl p-1">
+          <TabsTrigger value="demandes" className="h-9 gap-1.5 rounded-lg px-4 font-bold">
+            Demandes
+            {pending.length ? (
+              <span className="rounded-full bg-rose-600 px-1.5 text-[11px] font-extrabold text-white">{pending.length}</span>
+            ) : null}
+          </TabsTrigger>
+          <TabsTrigger value="jour" className="h-9 rounded-lg px-4 font-bold">
+            Plan du jour
+          </TabsTrigger>
+          {!isStaff ? (
+            <TabsTrigger value="reglages" className="h-9 rounded-lg px-4 font-bold">
+              Réglages &amp; photos
+            </TabsTrigger>
+          ) : null}
+        </TabsList>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          { label: "En attente", value: pending.length },
-          { label: "Acceptées", value: approved.length },
-          { label: "Refusées", value: rejected.length },
-        ].map((k) => (
-          <Card key={k.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {k.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{k.value}</div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {chips.map((c) => (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => setFilter(c.id)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",
-              filter === c.id
-                ? "border-primary bg-primary text-primary-foreground"
-                : "bg-card text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {c.label}
-            <span className="rounded-full bg-black/10 px-1.5 py-0.5 text-[10px] font-bold">
-              {c.count}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <Card>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Membre</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Créneau</TableHead>
-                <TableHead>Note</TableHead>
-                <TableHead>Statut</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!rows.length ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={6}
-                    className="py-10 text-center text-muted-foreground"
-                  >
-                    Aucune demande
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((r: BookingRequest) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <p className="font-medium">
-                        {r.memberName}
-                        {r.visitorNumber != null
-                          ? ` #${r.visitorNumber}`
-                          : ""}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {format(new Date(r.createdAt), "d MMM HH:mm", {
-                          locale: fr,
-                        })}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5 text-sm">
-                        {r.kind === "ROOM" ? (
-                          <DoorOpen className="h-3.5 w-3.5" />
-                        ) : (
-                          <Armchair className="h-3.5 w-3.5" />
-                        )}
-                        {r.kind === "ROOM"
-                          ? `${r.spaceName || "Salle"}${(r.places ?? 1) > 1 ? ` · ${r.places} pers.` : ""}`
-                          : (r.seatLabels?.length ?? 0) > 1
-                            ? `${r.seatLabels!.length} places · ${r.seatLabels!.join(", ")}`
-                            : `Place ${r.seatLabels?.[0] || r.seatLabel}`}
-                      </span>
-                      {(r.fee ?? 0) > 0 ? (
-                        <span className="mt-0.5 block text-xs font-medium text-amber-700">
-                          Frais {r.fee!.toFixed(3)} DT à encaisser le jour J
-                        </span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {format(new Date(r.startAt), "EEE d MMM HH:mm", {
-                        locale: fr,
-                      })}{" "}
-                      → {format(new Date(r.endAt), "HH:mm", { locale: fr })}
-                    </TableCell>
-                    <TableCell className="max-w-[180px] truncate text-sm text-muted-foreground">
-                      {r.note || "—"}
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          r.status === "PENDING"
-                            ? "secondary"
-                            : r.status === "APPROVED"
-                              ? "default"
-                              : "outline"
-                        }
-                      >
-                        {r.status === "PENDING"
-                          ? "En attente"
-                          : r.status === "APPROVED"
-                            ? "Acceptée"
-                            : "Refusée"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {r.status === "PENDING" ? (
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            hidden={!mayWrite}
-                            disabled={reject.isPending}
-                            onClick={() => reject.mutate(r.id)}
-                          >
-                            <X className="mr-1 h-3.5 w-3.5" />
-                            Refuser
-                          </Button>
-                          <Button
-                            size="sm"
-                            hidden={!mayWrite}
-                            disabled={approve.isPending}
-                            onClick={() => approve.mutate(r.id)}
-                          >
-                            <Check className="mr-1 h-3.5 w-3.5" />
-                            Accepter
-                          </Button>
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div>
+      <TabsContent value="demandes" className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-0">
+        <DemandesView
+          lists={{ PENDING: pending, APPROVED: approved, REJECTED: rejected }}
+          spaces={allSpaces}
+          mayWrite={mayWrite}
+          onApprove={(id) => approve.mutate(id)}
+          onReject={(id) => reject.mutate(id)}
+          busy={approve.isPending || reject.isPending}
+        />
+      </TabsContent>
+      <TabsContent value="jour" className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-0">
+        <DayPlanView spaces={spaces} daysAhead={facility?.reservationMaxDaysAhead ?? 14} markedDays={markedDays} />
+      </TabsContent>
+      {!isStaff ? (
+        <TabsContent value="reglages" className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-0">
+          <ResaSettingsView facility={facility} spaces={spaces} />
+        </TabsContent>
+      ) : null}
+    </Tabs>
   );
 }

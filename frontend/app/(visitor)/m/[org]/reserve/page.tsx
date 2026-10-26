@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { QuestBanner } from "@/components/visitor/quest/QuestSheet";
 import { ChairMap } from "@/components/visitor/reserve/ChairMap";
+import { TableZoom } from "@/components/visitor/reserve/TableZoom";
 import { TablePhoto } from "@/components/visitor/reserve/TablePhoto";
 import { mobileApi } from "@/lib/api/resources";
 import { useOrg } from "@/lib/org";
@@ -134,12 +135,20 @@ export default function ReservePage() {
   const [zoneId, setZoneId] = useState<string | null>(null);
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [picked, setPicked] = useState<string[]>([]);
+  /** Table opened large (tap a table on the room map) */
+  const [zoomTableId, setZoomTableId] = useState<string | null>(null);
   const [roomId, setRoomId] = useState<string | null>(null);
   const zone = seatSpaces.find((s) => s.id === zoneId) || seatSpaces[0] || null;
   const activeTable =
     zone?.tables?.find((t) => t.id === activeTableId) ||
     zone?.tables?.find((t) => (t.seats || []).length > 0) ||
     null;
+
+  const zoomTable = zone?.tables?.find((t) => t.id === zoomTableId) || null;
+  const openTable = (id: string) => {
+    setActiveTableId(id);
+    setZoomTableId(id);
+  };
 
   const { data: availability } = useQuery({
     queryKey: ["booking-availability", slug, day?.iso, startTime, endTime],
@@ -170,6 +179,7 @@ export default function ReservePage() {
     if (id === zone?.id) return;
     setZoneId(id);
     setActiveTableId(null);
+    setZoomTableId(null);
     setPicked([]);
   };
 
@@ -251,7 +261,7 @@ export default function ReservePage() {
         : step === 2
           ? kind === "SEAT"
             ? picked.length === 0
-              ? "Touchez les chaises vertes sur le plan."
+              ? "Touchez une table, puis vos chaises."
               : picked.length === need
                 ? "Parfait, vos places sont prêtes."
                 : `Encore ${need - picked.length} chaise${need - picked.length > 1 ? "s" : ""} à choisir.`
@@ -510,21 +520,37 @@ export default function ReservePage() {
 
           {zone ? (
             <section className={CARD}>
-              <div className="flex items-center justify-between px-0.5">
-                <p className={LABEL}>Plan · {zone.name}</p>
-                <span className="text-[11px] font-semibold text-slate-600">1 chaise = 1 place</span>
-              </div>
-              <div className="mt-1.5">
-                <ChairMap
-                  space={zone}
+              {zoomTable ? (
+                <TableZoom
+                  key={zoomTable.id}
+                  table={zoomTable}
                   taken={takenInZone}
                   picked={picked}
-                  activeTableId={activeTable?.id ?? null}
-                  onActiveTable={setActiveTableId}
-                  onToggle={toggleSeat}
                   initials={initialsOf(member?.firstName || guest.firstName, member?.lastName || guest.lastName)}
+                  onToggle={toggleSeat}
+                  onBack={() => setZoomTableId(null)}
                 />
-              </div>
+              ) : (
+                <div key="room" className="v-rise">
+                  <div className="flex items-center justify-between px-0.5">
+                    <p className={LABEL}>Plan · {zone.name}</p>
+                    <span className="text-[11px] font-semibold text-slate-600">Touchez une table pour choisir</span>
+                  </div>
+                  <div className="mt-1.5">
+                    <ChairMap
+                      space={zone}
+                      taken={takenInZone}
+                      picked={picked}
+                      activeTableId={activeTable?.id ?? null}
+                      onActiveTable={openTable}
+                      onSeat={toggleSeat}
+                      seatTap="loose"
+                      guide={picked.length === 0}
+                      initials={initialsOf(member?.firstName || guest.firstName, member?.lastName || guest.lastName)}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="mt-2 flex justify-center gap-3.5 text-[11px] font-bold text-slate-600">
                 <span className="flex items-center gap-1.5">
                   <span className="flex flex-col items-center gap-px">
@@ -669,7 +695,7 @@ export default function ReservePage() {
                   </span>
                 ))
               ) : (
-                <span className="text-xs font-semibold text-slate-600">Touchez {need} chaise{need > 1 ? "s" : ""} verte{need > 1 ? "s" : ""} sur le plan</span>
+                <span className="text-xs font-semibold text-slate-600">{zoomTableId ? `Touchez ${need} chaise${need > 1 ? "s" : ""} verte${need > 1 ? "s" : ""}` : "Touchez une table sur le plan"}</span>
               )}
             </div>
           ) : step === 1 ? (
