@@ -4,7 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { AlertTriangle, Check, CheckCircle2, DoorOpen, Phone, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, DoorOpen, Phone, Trash2, X } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { ChairMap, type SeatInfo } from "@/components/visitor/reserve/ChairMap";
 import { TablePhoto } from "@/components/visitor/reserve/TablePhoto";
@@ -46,6 +57,7 @@ export function DemandesView({
   mayWrite,
   onApprove,
   onReject,
+  onDelete,
   busy,
 }: {
   lists: Record<Status, BookingRequest[]>;
@@ -53,6 +65,7 @@ export function DemandesView({
   mayWrite: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onDelete: (id: string) => void;
   busy: boolean;
 }) {
   const [filter, setFilter] = useState<Status>("PENDING");
@@ -93,7 +106,7 @@ export function DemandesView({
           ))}
         </div>
 
-        <div className="mt-3 flex-1 space-y-1.5 overflow-y-auto pr-0.5">
+        <div className="-mx-1 mt-2 flex-1 space-y-1.5 overflow-y-auto px-1 py-1">
           {!rows.length ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Aucune demande</p>
           ) : (
@@ -163,6 +176,7 @@ export function DemandesView({
           mayWrite={mayWrite}
           onApprove={onApprove}
           onReject={onReject}
+          onDelete={onDelete}
           busy={busy}
         />
       ) : (
@@ -180,6 +194,7 @@ function RequestDetail({
   mayWrite,
   onApprove,
   onReject,
+  onDelete,
   busy,
 }: {
   r: BookingRequest;
@@ -187,6 +202,7 @@ function RequestDetail({
   mayWrite: boolean;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onDelete: (id: string) => void;
   busy: boolean;
 }) {
   const labels = labelsOf(r);
@@ -244,6 +260,33 @@ function RequestDetail({
             Demandé le {format(new Date(r.createdAt), "d MMM 'à' HH:mm", { locale: fr })}
           </p>
         </div>
+        {mayWrite ? (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" className="text-rose-700 hover:bg-rose-50 hover:text-rose-800" disabled={busy}>
+                <Trash2 className="mr-1 h-4 w-4" />
+                Supprimer
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer cette réservation ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {r.memberName || "Visiteur"} · {format(new Date(r.startAt), "EEEE d MMM HH:mm", { locale: fr })}
+                  {r.status === "APPROVED"
+                    ? ". Les places seront libérées, la ligne non payée du journal retirée et le visiteur prévenu."
+                    : "."}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Garder</AlertDialogCancel>
+                <AlertDialogAction className="bg-rose-600 hover:bg-rose-700" onClick={() => onDelete(r.id)}>
+                  Supprimer
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
         {r.status === "PENDING" && mayWrite ? (
           <div className="flex gap-2">
             <Button variant="outline" disabled={busy} onClick={() => onReject(r.id)}>

@@ -1677,6 +1677,14 @@ export const bookingRequestsApi = {
       "/mobile/admin/booking-requests?status=PENDING"
     );
   },
+  /** Delete a request (also after acceptance: frees its places) */
+  remove(id: string) {
+    return http.delete<{ id: string; deleted: boolean }>(`/mobile/admin/booking-requests/${id}`);
+  },
+  /** On the day: mark the accepted places as taken on the plan */
+  holdSeats(id: string) {
+    return http.patch<BookingRequest>(`/mobile/admin/booking-requests/${id}/hold-seats`, {});
+  },
   approve(id: string) {
     return http.patch<BookingRequest>(
       `/mobile/admin/booking-requests/${id}/approve`,

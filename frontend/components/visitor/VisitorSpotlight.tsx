@@ -274,7 +274,7 @@ export function OffersStrip({ only }: { only?: Promotion["target"] }) {
       <p className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
         Offres du moment
       </p>
-      <div className="flex snap-x gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="-mx-1 -mt-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {list.map((p) => (
           <PromoGoldenCard
             key={p.id}

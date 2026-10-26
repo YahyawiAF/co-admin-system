@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -666,6 +667,18 @@ export class MobileController {
   @Patch('admin/booking-requests/:id/approve')
   approveBooking(@Param('id', ParseUUIDPipe) id: string) {
     return this.mobileService.approveBookingRequest(id);
+  }
+
+  @Patch('admin/booking-requests/:id/hold-seats')
+  @UseGuards(JwtAuthGuard)
+  holdBookingSeats(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.holdBookingSeats(id);
+  }
+
+  @Delete('admin/booking-requests/:id')
+  @UseGuards(JwtAuthGuard)
+  deleteBooking(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mobileService.deleteBookingRequest(id);
   }
 
   @Patch('admin/booking-requests/:id/reject')

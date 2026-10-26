@@ -348,7 +348,7 @@ export default function ReservePage() {
         <>
           <section className={cn(CARD, "v-rise [animation-delay:40ms]")}>
             <p className={LABEL}>Quel jour ?</p>
-            <div className="-mx-1 mt-2 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="radiogroup" aria-label="Jour">
+            <div className="-mx-1 mt-1 flex gap-1.5 overflow-x-auto px-1 py-1.5 [mask-image:linear-gradient(to_right,#000_85%,transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="radiogroup" aria-label="Jour">
               {days.map((d, i) => {
                 const on = i === dayIdx;
                 return (
