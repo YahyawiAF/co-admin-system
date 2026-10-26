@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ActiveSessionPanel } from "@/components/visitor/ActiveSessionPanel";
 import { PointsCard } from "@/components/visitor/PointsCard";
 import { ProfileMissionEntry } from "@/components/visitor/ProfileMissionEntry";
-import { EventsPreview } from "@/components/visitor/EventCard";
+import { EventSpotlight } from "@/components/visitor/EventSpotlight";
 import { OffersStrip } from "@/components/visitor/VisitorSpotlight";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
@@ -108,7 +108,7 @@ export default function SessionPage() {
         belowSession={
           <>
             <OffersStrip />
-            <EventsPreview />
+            <EventSpotlight />
             <PointsCard memberId={memberId} />
             <ProfileMissionEntry hideWhenComplete />
           </>
