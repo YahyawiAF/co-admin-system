@@ -35,7 +35,7 @@ import {
   QrWelcome,
   StartSessionCard,
 } from "@/components/visitor/StartSessionCard";
-import { EventsPreview } from "@/components/visitor/EventCard";
+import { EventSpotlight } from "@/components/visitor/EventSpotlight";
 import { OffersStrip } from "@/components/visitor/VisitorSpotlight";
 import { SubscriptionStatusCard } from "@/components/visitor/SubscriptionStatusCard";
 import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
@@ -382,7 +382,7 @@ export default function MobileHomePage() {
           belowSession={
             <>
               <OffersStrip />
-              <EventsPreview />
+              <EventSpotlight />
               {subscriptionCard(true)}
               {showInstallPromo ? (
                 <AppInstallPromo
@@ -419,6 +419,9 @@ export default function MobileHomePage() {
         />
       ) : null}
 
+      {/* "À l’affiche": right under the check-in card, visible without scrolling */}
+      {idle ? <EventSpotlight /> : null}
+
       {idle || (pending && !session) ? subscriptionCard(false) : null}
 
       {idle ? <OffersStrip /> : null}
@@ -431,7 +434,6 @@ export default function MobileHomePage() {
 
       {idle ? <ReserveLaterCard /> : null}
 
-      {idle ? <EventsPreview /> : null}
 
       {showQrWelcome && showInstallPromo ? (
         <AppInstallPromo
@@ -478,7 +480,7 @@ export default function MobileHomePage() {
         </Alert>
       ) : null}
 
-      {pending && !session ? <EventsPreview /> : null}
+      {pending && !session ? <EventSpotlight /> : null}
 
       {memberId && !session ? <ReviewPromptCard memberId={memberId} /> : null}
       {memberId ? (
