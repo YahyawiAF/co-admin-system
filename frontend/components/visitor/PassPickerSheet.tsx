@@ -45,7 +45,7 @@ export function promoBadgeText(p: Promotion) {
 }
 
 /**
- * Tarif modal (mission style). AUTO session: "Garder le tarif auto" is the default —
+ * Tarif modal (mission style). AUTO session: "Tarif auto" is preselected —
  * closing or confirming it changes nothing. A live promo on a tarif shows a glowing badge.
  */
 export function PassPickerSheet({
@@ -59,7 +59,10 @@ export function PassPickerSheet({
   pending,
   error,
   onConfirm,
+  fresh = false,
 }: {
+  /** Opened right after « Pointer mon arrivée » */
+  fresh?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   live: SessionPricingPayload;
@@ -115,12 +118,12 @@ export function PassPickerSheet({
       open={open}
       onOpenChange={onOpenChange}
       dismissible={!pending}
-      eyebrow="Votre tarif"
+      eyebrow={fresh ? "Arrivée pointée ✓ · votre tarif" : "Votre tarif"}
       icon={<Clock className="h-5 w-5" />}
-      title={isAuto ? "Fixer une durée ?" : "Changer de pass"}
+      title={isAuto ? "Comment payer ?" : "Changer de pass"}
       subtitle={
         isAuto
-          ? "Facultatif. Si vous fermez, le tarif auto continue."
+          ? "Pas sûr ? Gardez l’auto : vous payez juste le temps passé."
           : `Actuel : ${currentLabel} · prix bloqué d’avance`
       }
       reward={{
@@ -159,9 +162,9 @@ export function PassPickerSheet({
             {pending
               ? "Enregistrement…"
               : keepAuto
-                ? "Garder le tarif auto"
+                ? "Continuer en tarif auto"
                 : picked && !picked.isCurrent
-                  ? `Valider ${picked.tier.name} · ${formatDt(picked.amount)}`
+                  ? `${isAuto ? "Bloquer" : "Valider"} ${picked.tier.name} · ${formatDt(picked.amount)}`
                   : "Sélectionnez un pass"}
           </button>
           <p className="mt-2 text-center text-[11px] text-slate-500">
@@ -178,11 +181,11 @@ export function PassPickerSheet({
             disabled={pending}
             onClick={() => setPickedId(AUTO)}
             icon={<Timer className="h-5 w-5" />}
-            title="Garder le tarif auto"
+            title="Tarif auto"
             hint={`Le prix suit votre temps · ${formatDt(live.amountDue)} pour l’instant`}
             badge={
               <span className="shrink-0 rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
-                Par défaut
+                Recommandé
               </span>
             }
           />
@@ -209,7 +212,7 @@ export function PassPickerSheet({
                   hint={
                     o.isCurrent
                       ? "Pass actuel"
-                      : `Jusqu’à ${format(o.endsAt, "HH:mm")}`
+                      : `Prix bloqué · jusqu’à ${format(o.endsAt, "HH:mm")}`
                   }
                   price={formatDt(o.amount)}
                   gift={promo ? promoBadgeText(promo) : null}
