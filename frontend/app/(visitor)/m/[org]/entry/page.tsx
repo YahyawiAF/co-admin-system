@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { loadVisitorCache, markQrEntry } from "@/lib/visitorCache";
+import { restoreVisitor } from "@/lib/visitor-remember";
 import { startFromQrEntry } from "@/lib/visitor-qr-checkin";
 
 /**
@@ -23,12 +24,13 @@ export default function VisitorEntryPage() {
 
     void (async () => {
       markQrEntry(slug);
-      const cache = loadVisitorCache(slug);
-      if (cache?.memberId) {
+      // Safari can wipe localStorage after 7 days: fall back to the long-lived cookie
+      const memberId = loadVisitorCache(slug)?.memberId || (await restoreVisitor(slug));
+      if (memberId) {
         try {
           await startFromQrEntry({
             org: slug,
-            memberId: cache.memberId,
+            memberId,
             force: true,
           });
           if (cancelled) return;

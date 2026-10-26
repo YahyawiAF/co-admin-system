@@ -11,9 +11,11 @@ import {
   clearVisitorCache,
   ensureAnonId,
   loadVisitorCache,
+  rememberVisitor,
   saveVisitorCache,
   setActiveOrg,
 } from "@/lib/visitorCache";
+import { restoreVisitor } from "@/lib/visitor-remember";
 import type { Member } from "@/lib/types";
 
 type VisitorSessionValue = {
@@ -40,17 +42,28 @@ export function VisitorSessionProvider({
 
   const refresh = () => {
     // A storage/crypto failure must never leave the visitor on "Chargement…"
+    let cache: ReturnType<typeof loadVisitorCache> = null;
     try {
       setActiveOrg(orgSlug);
       ensureAnonId(orgSlug);
-      const cache = loadVisitorCache(orgSlug);
-      setOnboarded(!!cache?.memberId);
-      setMemberId(cache?.memberId || null);
+      cache = loadVisitorCache(orgSlug);
     } catch {
-      setOnboarded(false);
-      setMemberId(null);
+      cache = null;
     }
-    setReady(true);
+    if (cache?.memberId) {
+      setOnboarded(true);
+      setMemberId(cache.memberId);
+      setReady(true);
+      // Keep the long-lived cookie fresh (also gives it to visitors logged in before it existed)
+      rememberVisitor(orgSlug, cache.memberId);
+      return;
+    }
+    // iPhone Safari may have wiped localStorage: get the visitor back from the cookie
+    void restoreVisitor(orgSlug).then((id) => {
+      setOnboarded(!!id);
+      setMemberId(id);
+      setReady(true);
+    });
   };
 
   useLayoutEffect(() => {

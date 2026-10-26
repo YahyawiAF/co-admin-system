@@ -100,6 +100,40 @@ export function loadVisitorCache(org?: string): VisitorCache | null {
   }
 }
 
+/**
+ * Long-lived, server-set cookie that survives iPhone Safari's 7-day wipe of
+ * localStorage (see app/api/visitor-remember/route.ts). Restore: lib/visitor-remember.ts.
+ */
+export const REMEMBER_URL = "/api/visitor-remember";
+
+export function rememberVisitor(org: string, memberId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    void fetch(REMEMBER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ org, memberId }),
+      credentials: "same-origin",
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function forgetVisitor(org: string) {
+  if (typeof window === "undefined") return;
+  try {
+    void fetch(`${REMEMBER_URL}?org=${encodeURIComponent(org)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+    }).catch(() => undefined);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function saveVisitorCache(
   member: {
     id: string;
@@ -122,6 +156,7 @@ export function saveVisitorCache(
     orgSlug: slug,
   };
   localStorage.setItem(cacheKey(slug), JSON.stringify(data));
+  rememberVisitor(slug, member.id);
   sessionStorage.setItem(sessionMemberKey(slug), member.id);
   if (accessToken) sessionStorage.setItem(sessionTokenKey(slug), accessToken);
   if (member.phone) sessionStorage.setItem(sessionPhoneKey(slug), member.phone);
@@ -142,6 +177,7 @@ export function clearVisitorCache(org?: string) {
     sessionStorage.removeItem(`accueil_routed_${mid}`);
   }
   if (slug) {
+    forgetVisitor(slug);
     localStorage.removeItem(cacheKey(slug));
     sessionStorage.removeItem(sessionMemberKey(slug));
     sessionStorage.removeItem(sessionTokenKey(slug));

@@ -14,7 +14,9 @@ export function middleware(request: NextRequest) {
   if (
     pathname === "/sw.js" ||
     pathname === "/manifest.webmanifest" ||
-    pathname === "/manifest.json"
+    pathname === "/manifest.json" ||
+    // visitor "remember this phone" cookie (called from /m pages)
+    pathname === "/api/visitor-remember"
   ) {
     return NextResponse.next();
   }
