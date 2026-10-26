@@ -409,7 +409,7 @@ function CommunityInner() {
       {tab === "people" ? (
         <>
           {quickSkills.length ? (
-            <div className="-mx-3 flex gap-1.5 overflow-x-auto px-3 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="-mx-3 -my-1 flex gap-1.5 overflow-x-auto px-3 py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {quickSkills.map((s) => {
                 const active = filters.skills.some(
                   (x) => x.toLowerCase() === s.label.toLowerCase()

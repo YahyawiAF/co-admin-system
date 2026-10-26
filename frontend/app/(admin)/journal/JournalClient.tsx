@@ -172,6 +172,7 @@ import {
   paymentRemindDaysLeft,
 } from "@/lib/subscription-utils";
 import { useJournalAlertsDataEffect, useJournalAlerts } from "@/lib/journal-alerts-context";
+import { JournalReservationReminder } from "@/components/admin/reservations/JournalReservationReminder";
 import {
   Dialog,
   DialogContent,
@@ -1404,6 +1405,15 @@ export default function JournalClient() {
       </div>
 
       <JournalAlertStrip />
+
+      <JournalReservationReminder
+        date={selectedDate}
+        onShowSeat={(label, spaceId) => {
+          setFocusSeatLabel(label);
+          setFocusSpaceId(spaceId);
+          setOccupancyOpen(true);
+        }}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card>

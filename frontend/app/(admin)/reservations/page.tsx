@@ -89,6 +89,16 @@ export default function ReservationsAdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const remove = useMutation({
+    mutationFn: (id: string) => bookingRequestsApi.remove(id),
+    onSuccess: () => {
+      toast.success("Réservation supprimée");
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <Tabs value={isStaff && tab === "reglages" ? "demandes" : tab} onValueChange={changeTab} className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
@@ -127,7 +137,8 @@ export default function ReservationsAdminPage() {
           mayWrite={mayWrite}
           onApprove={(id) => approve.mutate(id)}
           onReject={(id) => reject.mutate(id)}
-          busy={approve.isPending || reject.isPending}
+          onDelete={(id) => remove.mutate(id)}
+          busy={approve.isPending || reject.isPending || remove.isPending}
         />
       </TabsContent>
       <TabsContent value="jour" className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-0">

@@ -1384,6 +1384,8 @@ export interface BookingRequest {
   visitorNumber?: number | null;
   phone?: string | null;
   avatarUrl?: string | null;
+  /** Day list only: accepted seats already marked as taken on the plan */
+  seatsHeld?: boolean;
 }
 
 // ---- Conseiller IA ----

@@ -6353,7 +6353,18 @@ export class MobileService {
       orderBy: day ? { startAt: 'asc' } : { createdAt: 'desc' },
       take: day ? 300 : 50,
     });
-    return rows.map((r) => this.serializeBooking(r));
+    if (!day) return rows.map((r) => this.serializeBooking(r));
+    const held = await this.heldSeatLabels(rows.filter((r) => r.status === VisitRequestStatus.APPROVED));
+    return rows.map((r) => {
+      const labels = r.seatLabels?.length ? r.seatLabels : r.seatLabel ? [r.seatLabel] : [];
+      const mine = held.get(r.memberId);
+      const seatsHeld =
+        r.status === VisitRequestStatus.APPROVED &&
+        r.kind === BookingRequestKind.SEAT &&
+        labels.length > 0 &&
+        labels.every((l) => mine?.has(l));
+      return { ...this.serializeBooking(r), seatsHeld };
+    });
   }
 
   async listMemberBookingRequests(memberId: string) {
@@ -6438,9 +6449,10 @@ export class MobileService {
           : row.seatLabel
             ? [row.seatLabel]
             : [];
-        for (const label of labels) {
+        for (const [i, label] of labels.entries()) {
           await this.bookSeatForMember(row.memberId, label, {
             spaceId: row.seatSpaceId || undefined,
+            keepExisting: i > 0,
           });
         }
       }
@@ -6465,6 +6477,94 @@ export class MobileService {
       url: '/m',
     });
     return this.serializeBooking(updated);
+  }
+
+  /** Seats of a booking that are held right now for its member (label list). */
+  private async heldSeatLabels(rows: { memberId: string; kind: BookingRequestKind; seatLabel: string | null; seatLabels?: string[] | null }[]) {
+    const memberIds = [...new Set(rows.filter((r) => r.kind === BookingRequestKind.SEAT).map((r) => r.memberId))];
+    if (!memberIds.length) return new Map<string, Set<string>>();
+    const held = await this.prisma.seatBooking.findMany({
+      where: { eventKey: 'collabora-hub', isBooked: true, memberId: { in: memberIds } },
+      select: { memberId: true, seatId: true },
+    });
+    const out = new Map<string, Set<string>>();
+    for (const h of held) {
+      if (!h.memberId) continue;
+      if (!out.has(h.memberId)) out.set(h.memberId, new Set());
+      out.get(h.memberId)!.add(h.seatId);
+    }
+    return out;
+  }
+
+  /**
+   * Reception, on the day: mark the reserved places as taken on the plan
+   * (accepted ahead of time, so nothing was held yet).
+   */
+  async holdBookingSeats(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id }, include: { member: true } });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    if (row.status !== VisitRequestStatus.APPROVED) {
+      throw new ConflictException('Acceptez la réservation d’abord');
+    }
+    if (row.kind === BookingRequestKind.ROOM) {
+      if (row.spaceId) await this.bookSeatsForMemberByKind(row.memberId, { spaceId: row.spaceId });
+    } else {
+      const labels = row.seatLabels?.length ? row.seatLabels : row.seatLabel ? [row.seatLabel] : [];
+      for (const label of labels) {
+        await this.bookSeatForMember(row.memberId, label, {
+          spaceId: row.seatSpaceId || row.spaceId || undefined,
+          keepExisting: true,
+        });
+      }
+    }
+    return { ...this.serializeBooking(row), seatsHeld: true };
+  }
+
+  /**
+   * Admin delete (any status, also after acceptance): frees the held places,
+   * removes the unpaid reservation line from the journal, then the request.
+   */
+  async deleteBookingRequest(id: string) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    const labels = row.seatLabels?.length ? row.seatLabels : row.seatLabel ? [row.seatLabel] : [];
+    if (row.status === VisitRequestStatus.APPROVED) {
+      if (row.kind === BookingRequestKind.SEAT && labels.length) {
+        await this.prisma.seatBooking.deleteMany({
+          where: {
+            eventKey: 'collabora-hub',
+            memberId: row.memberId,
+            isPermanent: false,
+            seatId: { in: labels },
+            ...(row.seatSpaceId || row.spaceId ? { spaceId: (row.seatSpaceId || row.spaceId)! } : {}),
+          },
+        });
+      } else if (row.kind === BookingRequestKind.ROOM && row.spaceId) {
+        await this.prisma.seatBooking.deleteMany({
+          where: { eventKey: 'collabora-hub', memberId: row.memberId, isPermanent: false, spaceId: row.spaceId },
+        });
+      }
+      if (row.journalId) {
+        await this.prisma.journal.deleteMany({
+          where: { id: row.journalId, isReservation: true, isPayed: false },
+        });
+      }
+    }
+    await this.prisma.bookingRequest.delete({ where: { id } });
+    this.eventsGateway.sendBookingRequestResolved({
+      id: row.id,
+      status: 'DELETED',
+      memberId: row.memberId,
+    });
+    if (row.status !== VisitRequestStatus.REJECTED) {
+      void this.pushService.sendToMember(row.memberId, {
+        title: 'Réservation annulée',
+        body: 'L’accueil a annulé votre réservation.',
+        tag: `book-del-${row.id}`,
+        url: '/m',
+      });
+    }
+    return { id: row.id, deleted: true };
   }
 
   async rejectBookingRequest(id: string) {

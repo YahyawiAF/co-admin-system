@@ -92,7 +92,7 @@ export function DayPlanView({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex max-w-full gap-1.5 overflow-x-auto pb-1">
+        <div className="-m-1 flex max-w-full gap-1.5 overflow-x-auto p-1">
           {days.map((d) => {
             const iso = format(d, "yyyy-MM-dd");
             const on = iso === dayIso;

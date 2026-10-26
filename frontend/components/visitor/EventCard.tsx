@@ -463,7 +463,7 @@ export function EventsPreview() {
           <ChevronRight className="h-3 w-3" />
         </Link>
       </div>
-      <div className="mt-1.5 flex snap-x gap-2 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="mt-1 flex snap-x gap-2 overflow-x-auto px-4 py-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {events.map((event) => {
           const style = KIND_STYLE[event.kind] || KIND_STYLE.OTHER;
           const spots = eventSpots(event, statuses.get(event.id));
