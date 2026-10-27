@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -12,7 +12,8 @@ import {
   Loader2,
   MapPin,
   QrCode,
-  RefreshCw,
+  Lock,
+  Timer,
   Wifi,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,12 @@ import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
 import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
 import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
-import { clearCheckinReward, hasCheckinReward } from "@/lib/visitorCache";
+import {
+  clearCheckinReward,
+  clearTarifPrompt,
+  hasCheckinReward,
+  hasTarifPrompt,
+} from "@/lib/visitorCache";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 import { dtToPoints } from "@/lib/points-catalog";
 import { SeatPickerSheet } from "@/components/visitor/SeatPickerSheet";
@@ -157,10 +163,6 @@ export function ActiveSessionPanel({
     setIsPwa(isStandalonePwa());
   }, []);
 
-  // Fresh QR check-in: reward + quote of the day, once
-  useEffect(() => {
-    if (!isOptimisticSession && hasCheckinReward(slug)) setRewardOpen(true);
-  }, [slug, isOptimisticSession]);
   const onRewardOpenChange = (open: boolean) => {
     setRewardOpen(open);
     if (!open) clearCheckinReward(slug);
@@ -336,7 +338,7 @@ export function ActiveSessionPanel({
       } else {
         toast.success(`Pass ${name ?? ""} choisi ✓`);
       }
-      setPassOpen(false);
+      onPassOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
     },
   });
@@ -346,6 +348,34 @@ export function ActiveSessionPanel({
   const openPassSheet = () => {
     fixTariff.reset();
     setPassOpen(true);
+  };
+
+  // Fresh check-in: reward + quote of the day, once. After a "Pointer mon arrivée"
+  // tap the tarif modal comes first (auto stays the default); a QR scan never asks.
+  const freshRef = useRef<boolean | null>(null);
+  const rewardAfterPass = useRef(false);
+  const pricingReady = !session.pricing || covered || !!pricingCtx;
+  useEffect(() => {
+    if (isOptimisticSession || freshRef.current !== null || !pricingReady) return;
+    freshRef.current = hasCheckinReward(slug);
+    const askTarif = hasTarifPrompt(slug);
+    if (askTarif && freshRef.current && canChangeTariff && live?.mode === "AUTO") {
+      rewardAfterPass.current = true;
+      openPassSheet();
+      return;
+    }
+    clearTarifPrompt(slug);
+    if (freshRef.current) setRewardOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug, isOptimisticSession, pricingReady, canChangeTariff, live?.mode]);
+  const onPassOpenChange = (open: boolean) => {
+    setPassOpen(open);
+    if (!open && rewardAfterPass.current) {
+      rewardAfterPass.current = false;
+      clearTarifPrompt(slug);
+      // let the tarif sheet slide out first
+      setTimeout(() => setRewardOpen(true), 350);
+    }
   };
 
   const showSubLink =
@@ -552,18 +582,6 @@ export function ActiveSessionPanel({
           <span className={cn("max-w-[45%] truncate rounded-lg px-2 py-1 text-[11px] font-extrabold", statusChip.cls)}>
             {statusChip.text}
           </span>
-          <span className="flex-1" />
-          {canChangeTariff ? (
-            <button
-              type="button"
-              aria-label="Changer de tarif"
-              onClick={openPassSheet}
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-indigo-50 px-3 text-xs font-bold text-indigo-800 ring-1 ring-indigo-200 transition-colors duration-200 hover:bg-indigo-100 active:scale-95 motion-reduce:transition-none"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              {live?.mode === "AUTO" ? "Fixer" : "Changer"}
-            </button>
-          ) : null}
         </div>
 
         {isOptimistic ? (
@@ -574,6 +592,19 @@ export function ActiveSessionPanel({
           {timeTile}
           {secondTile}
         </div>
+
+        {live && canChangeTariff ? (
+          <TarifRow
+            fixed={live.mode === "FIXED"}
+            title={live.mode === "FIXED" ? `${passTitle} · prix bloqué` : "Tarif auto"}
+            hint={
+              live.mode === "FIXED"
+                ? `Jusqu’à ${format(live.tierEndsAt, "HH:mm")} · ${formatDt(live.fixedAmount ?? live.amountDue)}`
+                : "Le prix monte avec votre temps"
+            }
+            onOpen={openPassSheet}
+          />
+        ) : null}
 
         {track ? (
           <div className="mt-3.5">
@@ -780,7 +811,8 @@ export function ActiveSessionPanel({
       {live && canChangeTariff ? (
         <PassPickerSheet
           open={passOpen}
-          onOpenChange={setPassOpen}
+          onOpenChange={onPassOpenChange}
+          fresh={rewardAfterPass.current}
           live={live}
           currentLabel={passTitle}
           tiers={tiers}
@@ -805,7 +837,7 @@ export function ActiveSessionPanel({
           covered
             ? `${subKindLabel ? `Abonnement · ${subKindLabel}` : "Abonnement"} · inclus`
             : live?.mode === "AUTO" || !live
-              ? "Tarif auto activé · rien à choisir"
+              ? "Tarif auto activé"
               : `${passTitle} · prix bloqué`
         }
       />
@@ -898,6 +930,54 @@ export function ActiveSessionPanel({
           </p>
         ) : null}
       </BottomSheet>
+    </div>
+  );
+}
+
+/** Session hero: current tarif in plain words + one clear button to the tarif modal. */
+function TarifRow({
+  fixed,
+  title,
+  hint,
+  onOpen,
+}: {
+  fixed: boolean;
+  title: string;
+  hint: string;
+  onOpen: () => void;
+}) {
+  return (
+    <div
+      key={fixed ? "fixed" : "auto"}
+      className={cn(
+        "v-rise mt-3 flex items-center gap-2.5 rounded-[18px] p-2.5 ring-[1.5px] ring-inset transition-colors duration-300 motion-reduce:transition-none",
+        fixed ? "bg-violet-50 ring-violet-300" : "bg-indigo-50 ring-indigo-200"
+      )}
+    >
+      <span
+        className={cn(
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+          fixed ? "bg-violet-600 text-white" : "bg-white text-indigo-700"
+        )}
+      >
+        {fixed ? <Lock className="h-[18px] w-[18px]" /> : <Timer className="h-[18px] w-[18px]" />}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-black text-slate-900">{title}</p>
+        <p className="truncate text-xs text-slate-600">{hint}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        className={cn(
+          "h-[38px] shrink-0 rounded-full px-3.5 text-[13px] font-black transition-[background-color,transform] duration-150 active:scale-95 motion-reduce:transition-none",
+          fixed
+            ? "bg-white text-violet-800 ring-[1.5px] ring-inset ring-violet-300 hover:bg-violet-100"
+            : "bg-indigo-600 text-white hover:bg-indigo-700"
+        )}
+      >
+        {fixed ? "Changer" : "Prix fixe ?"}
+      </button>
     </div>
   );
 }

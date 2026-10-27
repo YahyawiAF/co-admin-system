@@ -312,3 +312,30 @@ export function clearCheckinReward(org: string) {
   }
 }
 
+
+/** "Pointer mon arrivée" tapped → the session screen opens the tarif modal once. */
+const tarifPromptKey = (org: string) => `visitor-tarif-prompt:${org}`;
+
+export function markTarifPrompt(org: string) {
+  try {
+    localStorage.setItem(tarifPromptKey(org), String(Date.now()));
+  } catch {
+    /* ignore */
+  }
+}
+export function hasTarifPrompt(org: string): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const at = Number(localStorage.getItem(tarifPromptKey(org)));
+    return !!at && Date.now() - at < CHECKIN_REWARD_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+export function clearTarifPrompt(org: string) {
+  try {
+    localStorage.removeItem(tarifPromptKey(org));
+  } catch {
+    /* ignore */
+  }
+}

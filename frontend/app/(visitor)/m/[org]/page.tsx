@@ -45,7 +45,12 @@ import {
   readLocalCache,
   writeLocalCache,
 } from "@/lib/visitor-local-cache";
-import { clearQrEntry, markCheckinReward } from "@/lib/visitorCache";
+import {
+  clearQrEntry,
+  clearTarifPrompt,
+  markCheckinReward,
+  markTarifPrompt,
+} from "@/lib/visitorCache";
 import {
   startFromQrEntry,
   wantsQrCheckin,
@@ -142,6 +147,7 @@ export default function MobileHomePage() {
     onSuccess: (res) => goSession(res),
     onError: (e: Error) => {
       qrAutoStartedRef.current = false;
+      clearTarifPrompt(slug);
       toast.error(e.message);
     },
   });
@@ -154,6 +160,8 @@ export default function MobileHomePage() {
       if (status.session) router.push(href("/session"));
       return;
     }
+    // the session screen opens the tarif modal right away (auto stays the default)
+    markTarifPrompt(slug);
     startAuto.mutate();
   };
 

@@ -91,7 +91,7 @@ export function StartSessionCard({
       }`
     : creditUsed
       ? "Crédit du jour terminé : tarif auto, vous payez le temps passé."
-      : "Tarif auto inclus : rien à choisir, vous payez le temps passé.";
+      : "Tarif auto par défaut, ou un prix fixe juste après.";
 
   return (
     <section className="v-rise rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-slate-900/5 [animation-delay:60ms]">
