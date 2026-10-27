@@ -422,6 +422,9 @@ export class JournalService {
 
       const existing = await this.prisma.journal.findUnique({ where: { id } });
       const data: Prisma.JournalUncheckedUpdateInput = { ...updateJournalDto };
+      if (existing) {
+        Object.assign(data, await this.tariffEditSnapshot(existing, updateJournalDto));
+      }
       if (updateJournalDto.isPayed === false) {
         data.paidAmount = 0;
         data.paidAt = null;
@@ -433,6 +436,8 @@ export class JournalService {
         data.paidAmount =
           updateJournalDto.payedAmount ?? existing?.payedAmount ?? 0;
         if (!existing?.isPayed) data.paidAt = new Date();
+      } else if (updateJournalDto.isPayed === true && !existing?.isPayed) {
+        data.paidAt = new Date();
       }
       const updated = await this.prisma.journal.update({
         where: { id },
@@ -459,6 +464,60 @@ export class JournalService {
         (error as Error).message,
       );
     }
+  }
+
+  /**
+   * Staff picked another forfait or typed another amount: pin it as the
+   * visit's fixed tariff. Without this the list keeps recomputing the price
+   * from the old auto / fixed pass and the edit seems ignored.
+   */
+  private async tariffEditSnapshot(
+    existing: {
+      priceId: string | null;
+      payedAmount: number;
+      leaveTime: Date | null;
+      isReservation: boolean;
+    },
+    dto: UpdateJournalDto,
+  ): Promise<Prisma.JournalUncheckedUpdateInput> {
+    if (existing.isReservation || dto.isReservation) return {};
+    const priceChanged = !!dto.priceId && dto.priceId !== existing.priceId;
+    const amountChanged =
+      dto.payedAmount !== undefined &&
+      dto.payedAmount !== null &&
+      Math.abs(Number(dto.payedAmount) - (existing.payedAmount || 0)) > 0.0005;
+    if (!priceChanged && !amountChanged) return {};
+    const priceId = dto.priceId || existing.priceId;
+    const price = priceId
+      ? await this.prisma.price.findUnique({ where: { id: priceId } })
+      : null;
+    const amount =
+      dto.payedAmount !== undefined && dto.payedAmount !== null
+        ? Math.max(0, Number(dto.payedAmount))
+        : Number(price?.price ?? existing.payedAmount ?? 0);
+    const isPack =
+      !!price &&
+      price.billingUnit !== 'HOURLY' &&
+      price.category !== 'ABONNEMENT' &&
+      price.type !== 'abonnement' &&
+      !!price.durationHours &&
+      price.durationHours > 0;
+    const closed = !!(dto.leaveTime ?? existing.leaveTime);
+    return {
+      pricingMode: 'FIXED',
+      payedAmount: amount,
+      fixedPriceId: isPack ? price!.id : null,
+      fixedServiceName: isPack ? price!.name : null,
+      fixedDurationHours: isPack ? price!.durationHours : null,
+      fixedAmount: isPack ? amount : null,
+      fixedAt: new Date(),
+      lastPricingNotice: null,
+      // The edited amount becomes the base for a late payment
+      ...(closed ? { amountAtCheckout: amount } : {}),
+      ...(priceChanged && price
+        ? { serviceName: price.name, listPrice: price.price }
+        : {}),
+    };
   }
 
   private async releaseDaySeats(memberId: string, journalId: string) {

@@ -47,6 +47,8 @@ import {
   PointEvent,
   PointEntryStatus,
   PromoValueKind,
+  LedgerKind,
+  Prisma,
 } from '@prisma/client';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventsGateway } from '../webSocket/events.gateway';
@@ -108,6 +110,9 @@ import { orderUnitPrice } from '../product/order-price';
 export const roundsOfHashing = 10;
 /** Re-check-in this soon after a checkout resumes the same visit. */
 const REOPEN_WINDOW_MS = 59 * 60_000;
+
+/** MemberLedger source of a fee kept when an accepted booking is cancelled. */
+export const BOOKING_CANCEL_SOURCE = 'reservation-cancel';
 
 @Injectable()
 export class MobileService {
@@ -2583,7 +2588,8 @@ export class MobileService {
       include: { prices: true, members: { include: { group: true } } },
     });
     if (!journal) throw new NotFoundException('Session not found');
-    if (journal.leaveTime) {
+    // Reception may re-price a finished visit (stayed less, forgot to fix the pass)
+    if (journal.leaveTime && !opts.byAdmin) {
       throw new ConflictException('Session déjà terminée');
     }
     const price = await this.prisma.price.findUnique({ where: { id: priceId } });
@@ -2625,7 +2631,7 @@ export class MobileService {
     const percent = memberDiscountPercent(journal.members, price);
     const amount = this.applyPercentOff(price.price, percent);
 
-    const updated = await this.prisma.journal.update({
+    let updated = await this.prisma.journal.update({
       where: { id: journalId },
       data: {
         pricingMode: 'FIXED',
@@ -2642,6 +2648,25 @@ export class MobileService {
       },
       include: { prices: true, members: { include: { group: true } } },
     });
+    if (updated.leaveTime) {
+      // Finished visit: bill the new pass at the real departure time
+      const ctx = await loadPricingContext(
+        this.prisma,
+        updated.members?.organizationId ?? null,
+      );
+      const due = visitAmountAt(
+        updated as unknown as PricedJournalRow,
+        ctx,
+        updated.leaveTime,
+      );
+      const billed =
+        Math.round(Math.max(0, (due ?? amount) - (updated.promoDiscount || 0)) * 1000) / 1000;
+      updated = await this.prisma.journal.update({
+        where: { id: journalId },
+        data: { payedAmount: billed, amountAtCheckout: billed },
+        include: { prices: true, members: { include: { group: true } } },
+      });
+    }
 
     this.eventsGateway.sendTableUpdates({
       type: 'session_tariff_fixed',
@@ -6057,6 +6082,10 @@ export class MobileService {
     status: VisitRequestStatus;
     journalId: string | null;
     createdAt: Date;
+    cancelledAt?: Date | null;
+    cancelledBy?: string | null;
+    cancelFee?: number | null;
+    feePaid?: boolean;
     member?: {
       firstName: string | null;
       lastName: string | null;
@@ -6092,6 +6121,10 @@ export class MobileService {
       status: row.status,
       journalId: row.journalId,
       createdAt: row.createdAt,
+      cancelledAt: row.cancelledAt ?? null,
+      cancelledBy: row.cancelledBy ?? null,
+      cancelFee: row.cancelFee ?? null,
+      feePaid: row.feePaid ?? false,
       memberName,
       visitorNumber: row.member?.visitorNumber ?? null,
       phone: row.member?.phone ?? null,
@@ -6353,9 +6386,15 @@ export class MobileService {
       orderBy: day ? { startAt: 'asc' } : { createdAt: 'desc' },
       take: day ? 300 : 50,
     });
-    if (!day) return rows.map((r) => this.serializeBooking(r));
+    const paidFees = await this.settledFeeLedgers(rows);
+    const withFee = <T extends { feeLedgerId: string | null }>(r: T) => ({
+      ...r,
+      feePaid: r.feeLedgerId ? paidFees.has(r.feeLedgerId) : false,
+    });
+    if (!day) return rows.map((r) => this.serializeBooking(withFee(r)));
     const held = await this.heldSeatLabels(rows.filter((r) => r.status === VisitRequestStatus.APPROVED));
-    return rows.map((r) => {
+    return rows.map((raw) => {
+      const r = withFee(raw);
       const labels = r.seatLabels?.length ? r.seatLabels : r.seatLabel ? [r.seatLabel] : [];
       const mine = held.get(r.memberId);
       const seatsHeld =
@@ -6367,27 +6406,96 @@ export class MobileService {
     });
   }
 
+  /** Cancellation-fee ledger rows already collected, among these bookings. */
+  private async settledFeeLedgers(rows: { feeLedgerId: string | null }[]) {
+    const ids = rows.map((r) => r.feeLedgerId).filter((v): v is string => !!v);
+    if (!ids.length) return new Set<string>();
+    const paid = await this.prisma.memberLedger.findMany({
+      where: { id: { in: ids }, settled: true },
+      select: { id: true },
+    });
+    return new Set(paid.map((l) => l.id));
+  }
+
   async listMemberBookingRequests(memberId: string) {
     const rows = await this.prisma.bookingRequest.findMany({
       where: { memberId },
       orderBy: { createdAt: 'desc' },
       take: 20,
     });
-    return rows.map((r) => this.serializeBooking(r));
+    const settled = await this.settledFeeLedgers(rows);
+    return rows.map((r) =>
+      this.serializeBooking({
+        ...r,
+        feePaid: r.feeLedgerId ? settled.has(r.feeLedgerId) : false,
+      }),
+    );
   }
 
+  /**
+   * Visitor cancels their own booking. Pending: free. Accepted: the fee is
+   * kept as a debt, asked at the next visit.
+   */
   async cancelBookingRequest(id: string, memberId: string) {
     const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Réservation introuvable');
     if (row.memberId !== memberId) {
       throw new ConflictException('Pas votre réservation');
     }
-    if (row.status !== VisitRequestStatus.PENDING) {
-      throw new ConflictException('Déjà traitée');
+    if (row.status === VisitRequestStatus.REJECTED) {
+      throw new ConflictException('Déjà annulée');
     }
+    if (row.endAt.getTime() < Date.now()) {
+      throw new ConflictException('Réservation déjà passée');
+    }
+    return this.cancelBooking(row, 'member', true);
+  }
+
+  /** Reception cancels a pending or accepted booking; keepFee records the fee as debt. */
+  async adminCancelBookingRequest(id: string, keepFee = true) {
+    const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Réservation introuvable');
+    if (row.status === VisitRequestStatus.REJECTED) {
+      throw new ConflictException('Déjà annulée ou refusée');
+    }
+    return this.cancelBooking(row, 'staff', keepFee);
+  }
+
+  private async cancelBooking(
+    row: Prisma.BookingRequestGetPayload<object>,
+    by: 'member' | 'staff',
+    keepFee: boolean,
+  ) {
+    const wasApproved = row.status === VisitRequestStatus.APPROVED;
+    if (wasApproved) await this.releaseBookingHold(row);
+    const fee =
+      wasApproved && keepFee && (row.fee || 0) > 0.009 ? row.fee : 0;
+    const day = row.startAt.toLocaleDateString('fr-FR', {
+      timeZone: 'Africa/Tunis',
+      day: '2-digit',
+      month: '2-digit',
+    });
+    const ledger = fee
+      ? await this.prisma.memberLedger.create({
+          data: {
+            memberId: row.memberId,
+            kind: LedgerKind.CREDIT,
+            amount: fee,
+            note: `Réservation annulée du ${day} · frais`,
+            source: BOOKING_CANCEL_SOURCE,
+          },
+        })
+      : null;
     const updated = await this.prisma.bookingRequest.update({
-      where: { id },
-      data: { status: VisitRequestStatus.REJECTED },
+      where: { id: row.id },
+      data: {
+        status: VisitRequestStatus.REJECTED,
+        cancelledAt: new Date(),
+        cancelledBy: by,
+        cancelFee: fee || null,
+        feeLedgerId: ledger?.id ?? null,
+        journalId: wasApproved ? null : row.journalId,
+      },
       include: { member: true },
     });
     this.eventsGateway.sendBookingRequestResolved({
@@ -6395,7 +6503,73 @@ export class MobileService {
       status: 'CANCELLED',
       memberId: updated.memberId,
     });
-    return this.serializeBooking(updated);
+    if (wasApproved) {
+      this.eventsGateway.sendTableUpdates({
+        type: 'booking_cancelled',
+        memberId: updated.memberId,
+      });
+    }
+    if (by === 'staff') {
+      void this.pushService.sendToMember(updated.memberId, {
+        title: 'Réservation annulée',
+        body: fee
+          ? `Les frais de ${fee} DT restent dus : à régler à votre prochaine visite.`
+          : 'L’accueil a annulé votre réservation.',
+        tag: `book-cancel-${updated.id}`,
+        url: '/m',
+      });
+    }
+    return this.serializeBooking({ ...updated, feePaid: false });
+  }
+
+  /** Cancellation fees still owed by a member (shown in the visitor app). */
+  async openBookingFees(memberId: string) {
+    const rows = await this.prisma.memberLedger.findMany({
+      where: {
+        memberId,
+        kind: LedgerKind.CREDIT,
+        settled: false,
+        hiddenAt: null,
+        source: BOOKING_CANCEL_SOURCE,
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, amount: true, note: true, createdAt: true },
+    });
+    const total = Math.round(rows.reduce((s, r) => s + r.amount, 0) * 1000) / 1000;
+    return { total, items: rows };
+  }
+
+  /** Frees the seats held by an accepted booking and drops its unpaid reservation visit. */
+  private async releaseBookingHold(row: {
+    memberId: string;
+    kind: BookingRequestKind;
+    seatLabel: string | null;
+    seatLabels: string[];
+    seatSpaceId: string | null;
+    spaceId: string | null;
+    journalId: string | null;
+  }) {
+    const labels = row.seatLabels?.length ? row.seatLabels : row.seatLabel ? [row.seatLabel] : [];
+    if (row.kind === BookingRequestKind.SEAT && labels.length) {
+      await this.prisma.seatBooking.deleteMany({
+        where: {
+          eventKey: 'collabora-hub',
+          memberId: row.memberId,
+          isPermanent: false,
+          seatId: { in: labels },
+          ...(row.seatSpaceId || row.spaceId ? { spaceId: (row.seatSpaceId || row.spaceId)! } : {}),
+        },
+      });
+    } else if (row.kind === BookingRequestKind.ROOM && row.spaceId) {
+      await this.prisma.seatBooking.deleteMany({
+        where: { eventKey: 'collabora-hub', memberId: row.memberId, isPermanent: false, spaceId: row.spaceId },
+      });
+    }
+    if (row.journalId) {
+      await this.prisma.journal.deleteMany({
+        where: { id: row.journalId, isReservation: true, isPayed: false },
+      });
+    }
   }
 
   async approveBookingRequest(id: string) {
@@ -6527,28 +6701,8 @@ export class MobileService {
   async deleteBookingRequest(id: string) {
     const row = await this.prisma.bookingRequest.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Réservation introuvable');
-    const labels = row.seatLabels?.length ? row.seatLabels : row.seatLabel ? [row.seatLabel] : [];
     if (row.status === VisitRequestStatus.APPROVED) {
-      if (row.kind === BookingRequestKind.SEAT && labels.length) {
-        await this.prisma.seatBooking.deleteMany({
-          where: {
-            eventKey: 'collabora-hub',
-            memberId: row.memberId,
-            isPermanent: false,
-            seatId: { in: labels },
-            ...(row.seatSpaceId || row.spaceId ? { spaceId: (row.seatSpaceId || row.spaceId)! } : {}),
-          },
-        });
-      } else if (row.kind === BookingRequestKind.ROOM && row.spaceId) {
-        await this.prisma.seatBooking.deleteMany({
-          where: { eventKey: 'collabora-hub', memberId: row.memberId, isPermanent: false, spaceId: row.spaceId },
-        });
-      }
-      if (row.journalId) {
-        await this.prisma.journal.deleteMany({
-          where: { id: row.journalId, isReservation: true, isPayed: false },
-        });
-      }
+      await this.releaseBookingHold(row);
     }
     await this.prisma.bookingRequest.delete({ where: { id } });
     this.eventsGateway.sendBookingRequestResolved({

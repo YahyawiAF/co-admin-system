@@ -1386,6 +1386,19 @@ export interface BookingRequest {
   avatarUrl?: string | null;
   /** Day list only: accepted seats already marked as taken on the plan */
   seatsHeld?: boolean;
+  /** Cancelled by the visitor or reception (status stays REJECTED) */
+  cancelledAt?: string | null;
+  cancelledBy?: "member" | "staff" | null;
+  /** Fee kept as debt when an accepted booking was cancelled */
+  cancelFee?: number | null;
+  /** That fee has been collected since */
+  feePaid?: boolean;
+}
+
+/** Cancellation fees a member still owes (visitor app). */
+export interface OpenBookingFees {
+  total: number;
+  items: { id: string; amount: number; note: string | null; createdAt: string }[];
 }
 
 // ---- Conseiller IA ----

@@ -35,12 +35,12 @@ import {
   ScanLine,
   MoreHorizontal,
   CalendarDays,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -135,10 +135,9 @@ import {
   setJournalPricingLadder,
   isLeftUnpaid,
   amountIfPaidNow,
-  lateAmountForMode,
   type JournalListRow,
 } from "@/lib/journal-utils";
-import { LateBillingChoice } from "@/components/admin/LateBillingChoice";
+import { JournalReglerDialog } from "@/components/admin/JournalReglerDialog";
 import { JournalCaisseDrawer } from "@/components/admin/JournalCaisseDrawer";
 import { usePricingContext } from "@/lib/hooks/use-pricing-context";
 import { getAdminOrganizationId } from "@/lib/admin-org";
@@ -150,17 +149,12 @@ import {
   JournalPricingStageChip,
 } from "@/components/admin/JournalPricingCells";
 import {
-  CloseSessionAtDialog,
-  FixSessionTariffDialog,
-} from "@/components/admin/SessionTariffDialogs";
-import {
   buildDayWhatsAppText,
   openDayPrintView,
 } from "@/lib/journal-export";
 import type {
   Abonnement,
   Journal,
-  LateBillingMode,
   Member,
   Space,
 } from "@/lib/types";
@@ -268,8 +262,8 @@ export default function JournalClient() {
     firstName: "",
     phone: "",
   });
-  const [tariffRow, setTariffRow] = useState<Journal | null>(null);
-  const [closeRow, setCloseRow] = useState<Journal | null>(null);
+  /** One dialog to settle a visit: departure, pass, late billing, debts. */
+  const [reglerRow, setReglerRow] = useState<Journal | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -949,55 +943,6 @@ export default function JournalClient() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
-
-  const setPayment = useMutation({
-    mutationFn: ({
-      id,
-      isPayed,
-      billing,
-    }: {
-      id: string;
-      isPayed: boolean;
-      billing?: LateBillingMode;
-    }) => mobileApi.setPayment(id, isPayed, billing),
-    onSuccess: (res, vars) => {
-      invalidateJournal();
-      queryClient.invalidateQueries({ queryKey: queryKeys.members });
-      const delta = res?.pointsAwarded ?? 0;
-      if (delta !== 0) {
-        toast.success(
-          delta > 0
-            ? `+${delta.toLocaleString("fr-FR")} pts`
-            : `−${Math.abs(delta).toLocaleString("fr-FR")} pts retirés`
-        );
-        bumpMemberPoints(
-          memberIdForJournal(vars.id),
-          delta,
-          res?.memberPoints
-        );
-      }
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const [latePayRow, setLatePayRow] = useState<Journal | null>(null);
-  const [latePayMode, setLatePayMode] = useState<LateBillingMode>("now");
-  const latePayInfo = latePayRow ? amountIfPaidNow(latePayRow, now) : null;
-
-  const requestPayment = (journal: Journal, isPayed: boolean) => {
-    const late = isPayed ? amountIfPaidNow(journal, now) : null;
-    const hasChoice =
-      !!late &&
-      (late.extra > 0.001 ||
-        (late.amountFixed != null &&
-          Math.abs(late.amountFixed - late.amountAtCheckout) > 0.001));
-    if (hasChoice) {
-      setLatePayMode("now");
-      setLatePayRow(journal);
-      return;
-    }
-    setPayment.mutate({ id: journal.id, isPayed });
-  };
 
   const redeemVisit = useMutation({
     mutationFn: ({ journalId, points }: { journalId: string; points: number }) =>
@@ -1767,16 +1712,12 @@ export default function JournalClient() {
                       aria-label="Tout sélectionner"
                     />
                   </TableHead>
-                  <TableHead>#</TableHead>
-                  <TableHead>Nom</TableHead>
+                  <TableHead>Visiteur</TableHead>
                   <TableHead>Café</TableHead>
                   <TableHead>Forfait</TableHead>
                   <TableHead>Place</TableHead>
-                  <TableHead>Arrivée</TableHead>
-                  <TableHead>Durée / reste</TableHead>
-                  <TableHead>Montant</TableHead>
-                  <TableHead>Payé</TableHead>
-                  <TableHead>Statut</TableHead>
+                  <TableHead>Temps</TableHead>
+                  <TableHead>À payer</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1836,15 +1777,6 @@ export default function JournalClient() {
                           }
                           aria-label="Sélectionner"
                         />
-                      </TableCell>
-                      <TableCell>
-                        {isAnonymousVisit(row) ? (
-                          <Badge variant="outline">Anon</Badge>
-                        ) : m?.visitorNumber ? (
-                          `#${m.visitorNumber}`
-                        ) : (
-                          "—"
-                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -1926,9 +1858,24 @@ export default function JournalClient() {
                               ) : null}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {isAnonymousVisit(row)
-                                ? "Sans fiche membre"
-                                : m?.phone || "—"}
+                              {isAnonymousVisit(row) ? (
+                                <>
+                                  <Badge variant="outline" className="mr-1 h-4 px-1 text-[10px]">
+                                    Anon
+                                  </Badge>
+                                  Sans fiche membre
+                                </>
+                              ) : (
+                                <>
+                                  {m?.visitorNumber &&
+                                  !visitorLabel(row).includes(`#${m.visitorNumber}`) ? (
+                                    <span className="font-semibold text-foreground/70">
+                                      #{m.visitorNumber} ·{" "}
+                                    </span>
+                                  ) : null}
+                                  {m?.phone || "—"}
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2018,10 +1965,20 @@ export default function JournalClient() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {format(new Date(row.registredTime), "HH:mm")}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-1">
+                        <div className="whitespace-nowrap text-sm tabular-nums">
+                          {format(new Date(row.registredTime), "HH:mm")}
+                          {status === "left" && row.leaveTime ? (
+                            <span className="text-muted-foreground">
+                              {" "}→ {format(new Date(row.leaveTime), "HH:mm")}
+                            </span>
+                          ) : status === "present" ? (
+                            <span className="ml-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500 motion-reduce:animate-none" />
+                              en cours
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                           <span>
                             {status === "reservation"
                               ? "Réservation"
@@ -2131,17 +2088,6 @@ export default function JournalClient() {
                                       ) : null}
                                     </span>
                                     <div className="flex shrink-0 items-center gap-0.5">
-                                      {!p.isPayed && p.memberID ? (
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant="ghost"
-                                          className="h-6 px-1.5 text-[10px]"
-                                          onClick={() => openRedeem(p)}
-                                        >
-                                          Pts
-                                        </Button>
-                                      ) : null}
                                       <Button
                                         type="button"
                                         size="icon"
@@ -2193,11 +2139,12 @@ export default function JournalClient() {
                                           </AlertDialogFooter>
                                         </AlertDialogContent>
                                       </AlertDialog>
-                                      <Switch
-                                        checked={p.isPayed}
-                                        onCheckedChange={(v) =>
-                                          requestPayment(p, v)
-                                        }
+                                      <PayStateButton
+                                        status={visitStatus(p)}
+                                        paid={p.isPayed}
+                                        leftUnpaid={isLeftUnpaid(p)}
+                                        onClick={() => setReglerRow(p)}
+                                        small
                                       />
                                     </div>
                                   </div>
@@ -2236,72 +2183,21 @@ export default function JournalClient() {
                             ) : null}
                           </>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {row.visitCount > 1 && row.passages?.length ? (
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="text-[10px] text-muted-foreground">
-                              {
-                                row.passages.filter((p) => p.isPayed).length
-                              }
-                              /{row.passages.length} payés
+                        <div className="mt-1.5">
+                          {row.visitCount > 1 && row.passages?.length ? (
+                            <span className="text-[11px] text-muted-foreground">
+                              {row.passages.filter((p) => p.isPayed).length}/
+                              {row.passages.length} payés
                             </span>
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-xs"
-                              onClick={() =>
-                                setExpandedPassages((prev) => {
-                                  const next = new Set(prev);
-                                  next.add(row.id);
-                                  return next;
-                                })
-                              }
-                            >
-                              Détail
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col items-start gap-1.5">
-                            <Switch
-                              checked={row.isPayed}
-                              onCheckedChange={(v) => requestPayment(row, v)}
+                          ) : (
+                            <PayStateButton
+                              status={status}
+                              paid={row.isPayed}
+                              leftUnpaid={leftUnpaid}
+                              onClick={() => setReglerRow(row)}
                             />
-                            {!row.isPayed &&
-                            row.memberID &&
-                            !isAnonymousVisit(row) ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-7 gap-1 px-2 text-[11px]"
-                                onClick={() => openRedeem(row)}
-                              >
-                                <Wallet className="h-3 w-3" />
-                                Points
-                              </Button>
-                            ) : null}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {status === "reservation" ? (
-                          <Badge
-                            variant="outline"
-                            className="border-violet-400 text-violet-800"
-                          >
-                            Réservé
-                          </Badge>
-                        ) : status === "left" && leftUnpaid ? (
-                          <Badge className="bg-orange-600 hover:bg-orange-600">
-                            Parti sans payer
-                          </Badge>
-                        ) : status === "left" ? (
-                          <Badge variant="secondary">Terminé</Badge>
-                        ) : (
-                          <Badge>En cours</Badge>
-                        )}
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -2324,29 +2220,6 @@ export default function JournalClient() {
                             >
                               <LogOut className="h-4 w-4 text-primary" />
                             </Button>
-                          ) : null}
-                          {status === "present" && row.pricing ? (
-                            <>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                title="Clôturer à une heure (checkout oublié)"
-                                onClick={() => setCloseRow(row)}
-                              >
-                                <AlarmClock className="h-4 w-4 text-violet-700" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-xs"
-                                title="Fixer / changer le forfait"
-                                onClick={() => setTariffRow(row)}
-                              >
-                                {rowPricing(row, now)?.mode === "AUTO"
-                                  ? "Fixer"
-                                  : "Forfait"}
-                              </Button>
-                            </>
                           ) : null}
                           {isAnonymousVisit(row) && status === "present" ? (
                             <>
@@ -2546,73 +2419,14 @@ export default function JournalClient() {
           if (!o) setEditRow(null);
         }}
       />
-      <FixSessionTariffDialog
-        row={tariffRow}
+      <JournalReglerDialog
+        row={reglerRow}
         tiers={pricingCtx?.allTiers ?? []}
         onOpenChange={(o) => {
-          if (!o) setTariffRow(null);
+          if (!o) setReglerRow(null);
         }}
+        onPayWithPoints={openRedeem}
       />
-      <CloseSessionAtDialog
-        row={closeRow}
-        ladder={pricingCtx?.allTiers}
-        onOpenChange={(o) => {
-          if (!o) setCloseRow(null);
-        }}
-      />
-      <AlertDialog
-        open={!!latePayRow}
-        onOpenChange={(o) => {
-          if (!o) setLatePayRow(null);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Paiement après départ</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <div className="space-y-2 text-sm">
-                {latePayRow ? (
-                  <p>
-                    {visitorLabel(latePayRow)} a fait son check-out à{" "}
-                    {latePayRow.leaveTime
-                      ? format(new Date(latePayRow.leaveTime), "HH:mm")
-                      : "—"}{" "}
-                    sans payer. Choisissez le montant à encaisser.
-                  </p>
-                ) : null}
-                {latePayInfo ? (
-                  <LateBillingChoice
-                    value={latePayMode}
-                    onChange={setLatePayMode}
-                    info={latePayInfo}
-                  />
-                ) : null}
-              </div>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-orange-600 hover:bg-orange-700"
-              onClick={() => {
-                if (!latePayRow) return;
-                setPayment.mutate({
-                  id: latePayRow.id,
-                  isPayed: true,
-                  billing: latePayMode,
-                });
-                setLatePayRow(null);
-              }}
-            >
-              Encaisser{" "}
-              {latePayInfo
-                ? lateAmountForMode(latePayInfo, latePayMode).toFixed(1)
-                : ""}{" "}
-              DT
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       <Dialog
         open={!!redeemRow}
         onOpenChange={(o) => {
@@ -2887,5 +2701,58 @@ function LeftUnpaidAmount({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** Payment state + the single "Régler" entry point (pay, late billing, forgotten check-out, pass). */
+function PayStateButton({
+  status,
+  paid,
+  leftUnpaid,
+  onClick,
+  small,
+}: {
+  status: "reservation" | "present" | "left";
+  paid: boolean;
+  leftUnpaid: boolean;
+  onClick: () => void;
+  small?: boolean;
+}) {
+  if (status === "reservation") {
+    return (
+      <Badge variant="outline" className="border-violet-400 text-violet-800">
+        Réservé
+      </Badge>
+    );
+  }
+  if (paid) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        title="Payé — cliquer pour modifier"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full bg-emerald-100 font-semibold text-emerald-800 transition-colors duration-150 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300",
+          small ? "h-6 px-2 text-[10px]" : "h-7 px-2.5 text-xs"
+        )}
+      >
+        <Check className="h-3 w-3" />
+        Payé
+      </button>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold text-white shadow-sm transition-[background-color,transform] duration-150 active:scale-[.97] motion-reduce:transition-none",
+        small ? "h-6 px-2 text-[10px]" : "h-7 px-3 text-xs",
+        leftUnpaid ? "bg-orange-600 hover:bg-orange-700" : "bg-rose-600 hover:bg-rose-700"
+      )}
+    >
+      <Wallet className="h-3 w-3" />
+      {leftUnpaid ? "Parti · Régler" : "Régler"}
+    </button>
   );
 }

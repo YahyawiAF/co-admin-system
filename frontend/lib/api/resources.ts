@@ -69,6 +69,7 @@ import type {
   MemberLedgerEntry,
   LedgerKind,
   BookingRequest,
+  OpenBookingFees,
   DebtorMember,
   AwayArrivalsResponse,
   SeatHistoryDay,
@@ -1662,6 +1663,12 @@ export const mobileApi = {
       { skipAuth: true },
     );
   },
+  /** Cancellation fees still owed (asked at the next visit) */
+  myBookingFees(memberId: string) {
+    return http.get<OpenBookingFees>(`/mobile/member/${memberId}/booking-fees`, {
+      skipAuth: true,
+    });
+  },
 };
 
 export const bookingRequestsApi = {
@@ -1695,6 +1702,13 @@ export const bookingRequestsApi = {
     return http.patch<BookingRequest>(
       `/mobile/admin/booking-requests/${id}/reject`,
       {}
+    );
+  },
+  /** Cancel a pending or accepted booking; keepFee records the fee as the member's debt */
+  cancel(id: string, keepFee: boolean) {
+    return http.patch<BookingRequest>(
+      `/mobile/admin/booking-requests/${id}/cancel`,
+      { keepFee }
     );
   },
 };
