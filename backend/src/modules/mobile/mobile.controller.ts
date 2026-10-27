@@ -681,6 +681,23 @@ export class MobileController {
     return this.mobileService.deleteBookingRequest(id);
   }
 
+  @Patch('admin/booking-requests/:id/cancel')
+  @UseGuards(JwtAuthGuard)
+  adminCancelBooking(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: { keepFee?: boolean },
+  ) {
+    return this.mobileService.adminCancelBookingRequest(
+      id,
+      body?.keepFee !== false,
+    );
+  }
+
+  @Get('member/:memberId/booking-fees')
+  memberBookingFees(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.openBookingFees(memberId);
+  }
+
   @Patch('admin/booking-requests/:id/reject')
   rejectBooking(@Param('id', ParseUUIDPipe) id: string) {
     return this.mobileService.rejectBookingRequest(id);

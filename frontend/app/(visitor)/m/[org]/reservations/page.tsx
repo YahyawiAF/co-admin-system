@@ -16,6 +16,7 @@ import { useMobileStatus } from "@/lib/hooks/use-mobile-status";
 import { formatDt } from "@/lib/session-pricing";
 import type { BookingRequest, Space, SpaceTable } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { BookingFeeNotice, bookingFeesKey } from "@/components/visitor/BookingFeeNotice";
 
 const CARD = "rounded-3xl bg-white shadow-sm ring-1 ring-slate-900/5";
 const LABEL = "text-[11px] font-extrabold uppercase tracking-[.06em] text-slate-500";
@@ -57,7 +58,25 @@ function joinLabels(labels: string[]) {
   return `${l.slice(0, -1).join(", ")} et ${l[l.length - 1]}`;
 }
 
-function StatusChip({ status }: { status: BookingRequest["status"] }) {
+function StatusChip({ b }: { b: BookingRequest }) {
+  const status = b.status;
+  if (b.cancelledAt) {
+    return (
+      <span className="flex shrink-0 flex-col items-end gap-0.5">
+        <span className="rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-extrabold text-slate-700">Annulée</span>
+        {b.cancelFee ? (
+          <span
+            className={cn(
+              "rounded-lg px-2 py-0.5 text-[11px] font-extrabold",
+              b.feePaid ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"
+            )}
+          >
+            {b.feePaid ? `Frais ${formatDt(b.cancelFee)} réglés` : `Frais ${formatDt(b.cancelFee)} à régler`}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
   const cls =
     status === "APPROVED"
       ? "bg-emerald-100 text-emerald-800"
@@ -66,7 +85,7 @@ function StatusChip({ status }: { status: BookingRequest["status"] }) {
         : "bg-slate-100 text-slate-700";
   return (
     <span className={cn("shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-extrabold", cls)}>
-      {status === "APPROVED" ? "Confirmée" : status === "PENDING" ? "En attente" : "Refusée / annulée"}
+      {status === "APPROVED" ? "Confirmée" : status === "PENDING" ? "En attente" : "Refusée"}
     </span>
   );
 }
@@ -94,10 +113,15 @@ export default function MyReservationsPage() {
 
   const cancel = useMutation({
     mutationFn: (id: string) => mobileApi.cancelBookingRequest(id, memberId!),
-    onSuccess: () => {
-      toast.success("Demande annulée");
+    onSuccess: (res) => {
+      toast.success(
+        res.cancelFee
+          ? `Réservation annulée · frais ${formatDt(res.cancelFee)} à régler à votre prochaine visite`
+          : "Demande annulée"
+      );
       setSelId(null);
       queryClient.invalidateQueries({ queryKey: ["my-bookings", memberId] });
+      queryClient.invalidateQueries({ queryKey: bookingFeesKey(memberId) });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -141,6 +165,7 @@ export default function MyReservationsPage() {
 
   return (
     <div className="space-y-3 pb-2">
+      <BookingFeeNotice memberId={memberId} />
       <div className="grid grid-cols-2 gap-1 rounded-full bg-white p-1 shadow-sm ring-1 ring-slate-900/5">
         {(
           [
@@ -268,6 +293,8 @@ function Ticket({
         : "Place attribuée à l’arrivée";
   const fee = b.fee ?? 0;
   const canSeePlace = !room && !!space;
+  const [confirming, setConfirming] = useState(false);
+  const feeKept = ok && fee > 0;
 
   const steps = [
     { label: "Demande envoyée", state: 2 },
@@ -389,19 +416,45 @@ function Ticket({
         ) : (
           <span className="flex-1" />
         )}
-        {b.status === "PENDING" ? (
+        {!confirming ? (
           <button
             type="button"
             disabled={cancelling}
-            onClick={onCancel}
+            onClick={() => setConfirming(true)}
             className="h-11 rounded-full bg-white px-4 text-sm font-extrabold text-rose-700 ring-[1.5px] ring-inset ring-rose-200 transition-colors duration-200 hover:bg-rose-50 disabled:opacity-50"
           >
             Annuler
           </button>
         ) : null}
       </div>
-      {ok ? (
-        <p className="-mt-1.5 pb-3 text-center text-[11px] text-slate-500">Un empêchement ? Prévenez l’accueil.</p>
+      {confirming ? (
+        <div className="v-rise mx-3.5 mb-3.5 rounded-[18px] bg-rose-50 p-3 ring-1 ring-inset ring-rose-200">
+          <p className="text-sm font-black text-rose-950">
+            {ok ? "Annuler cette réservation ?" : "Annuler cette demande ?"}
+          </p>
+          <p className="mt-0.5 text-xs text-rose-900/80">
+            {feeKept
+              ? `Les frais de ${formatDt(fee)} restent dus : ils seront demandés à votre prochaine visite.`
+              : "Gratuit : la demande n’était pas encore acceptée."}
+          </p>
+          <div className="mt-2.5 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirming(false)}
+              className="h-10 flex-1 rounded-full bg-white text-sm font-extrabold text-slate-700 ring-1 ring-inset ring-slate-200 transition-colors duration-150 hover:bg-slate-50"
+            >
+              Garder
+            </button>
+            <button
+              type="button"
+              disabled={cancelling}
+              onClick={onCancel}
+              className="h-10 flex-1 rounded-full bg-rose-600 text-sm font-extrabold text-white transition-colors duration-150 hover:bg-rose-700 disabled:opacity-50"
+            >
+              {feeKept ? `Annuler · ${formatDt(fee)} dus` : "Oui, annuler"}
+            </button>
+          </div>
+        </div>
       ) : null}
     </article>
   );
@@ -450,7 +503,7 @@ function Row({
       {past && b.status === "APPROVED" ? (
         <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-0.5 text-[11px] font-extrabold text-slate-700">Passée</span>
       ) : (
-        <StatusChip status={b.status} />
+        <StatusChip b={b} />
       )}
     </>
   );

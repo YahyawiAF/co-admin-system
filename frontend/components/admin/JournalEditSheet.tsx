@@ -26,7 +26,12 @@ import { cn } from "@/lib/utils";
 import { journalApi, membersApi, mobileApi, pricesApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { Journal } from "@/lib/types";
-import { isJournalPack } from "@/lib/journal-utils";
+import {
+  isActiveVisit,
+  isJournalPack,
+  visitAmountDue,
+  visitPaidAmount,
+} from "@/lib/journal-utils";
 import { JournalPricingTimeline } from "@/components/admin/JournalPricingCells";
 
 const schema = z.object({
@@ -34,7 +39,10 @@ const schema = z.object({
   registredTime: z.string().min(1),
   leaveTime: z.string().nullable().optional(),
   isPayed: z.boolean(),
+  /** Amount owed for the visit (the tarif) */
   payedAmount: z.coerce.number().min(0),
+  /** Amount actually collected */
+  paidAmount: z.coerce.number().min(0),
   isReservation: z.boolean(),
 });
 
@@ -74,18 +82,22 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
       leaveTime: null,
       isPayed: false,
       payedAmount: 0,
+      paidAmount: 0,
       isReservation: false,
     },
   });
 
   useEffect(() => {
     if (!journal) return;
+    // Show the live amount owed (auto / pass pricing), not a stale stored one
+    const due = Math.round(visitAmountDue(journal) * 1000) / 1000;
     form.reset({
       priceId: journal.priceId || journal.prices?.id || journal.price?.id || "",
       registredTime: toLocalInput(journal.registredTime),
       leaveTime: journal.leaveTime ? toLocalInput(journal.leaveTime) : null,
       isPayed: journal.isPayed,
-      payedAmount: journal.payedAmount,
+      payedAmount: due,
+      paidAmount: journal.isPayed ? visitPaidAmount(journal) || due : due,
       isReservation: journal.isReservation,
     });
   }, [journal, form]);
@@ -95,6 +107,11 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
   const registredTime = form.watch("registredTime");
   const isPayed = form.watch("isPayed");
   const isReservation = form.watch("isReservation");
+
+  const tariffDirty =
+    !!form.formState.dirtyFields.priceId || !!form.formState.dirtyFields.payedAmount;
+  const payDiff =
+    (Number(form.watch("paidAmount")) || 0) - (Number(form.watch("payedAmount")) || 0);
 
   const selectedPrice = useMemo(
     () => prices.find((p) => p.id === priceId) || null,
@@ -113,36 +130,37 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
 
   const update = useMutation({
     mutationFn: async (values: FormValues) => {
-      const catalog = selectedPrice?.price ?? journal?.payedAmount ?? 0;
-      const paid = values.payedAmount;
+      const dirty = form.formState.dirtyFields;
       const mid =
         journal?.memberID || journal?.members?.id || journal?.member?.id;
-      const samePrice =
-        values.priceId === (journal?.priceId || journal?.prices?.id);
-      // Unpaid remised visits store due in payedAmount — don't treat remise as underpay
-      const expected =
-        samePrice && !journal?.isPayed
-          ? Number(journal?.payedAmount || catalog)
-          : catalog;
+      // Only send the tarif when staff changed it: the backend then pins it
+      // as the visit's fixed price, so the list stops recomputing it.
+      const tariffEdited = !!dirty.priceId || !!dirty.payedAmount;
+      const due = Number(values.payedAmount) || 0;
+      const paid = Number(values.paidAmount) || 0;
 
       await journalApi.update(journal!.id, {
-        priceId: values.priceId,
         registredTime: new Date(values.registredTime).toISOString(),
         leaveTime: values.leaveTime
           ? new Date(values.leaveTime).toISOString()
           : null,
         isPayed: values.isPayed,
-        payedAmount: values.payedAmount,
         isReservation: values.isReservation,
+        ...(tariffEdited
+          ? { priceId: values.priceId, payedAmount: due }
+          : {}),
+        ...(values.isPayed ? { paidAmount: paid } : {}),
       });
 
-      if (values.isPayed && mid && expected > 0) {
-        const diff = Math.round((paid - expected) * 100) / 100;
+      const paymentEdited =
+        tariffEdited || !!dirty.isPayed || !!dirty.paidAmount;
+      if (values.isPayed && paymentEdited && mid && due > 0) {
+        const diff = Math.round((paid - due) * 100) / 100;
         if (diff > 0.009) {
           await membersApi.addLedger(mid, {
             kind: "ECHEANCE",
             amount: diff,
-            note: `Trop-perçu visite (${paid} vs ${expected} DT)`,
+            note: `Trop-perçu visite (${paid} vs ${due} DT)`,
             source: "journal-edit",
             journalId: journal!.id,
           });
@@ -150,7 +168,7 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
           await membersApi.addLedger(mid, {
             kind: "CREDIT",
             amount: Math.abs(diff),
-            note: `Reste après paiement partiel (${paid} / ${expected} DT)`,
+            note: `Reste après paiement partiel (${paid} / ${due} DT)`,
             source: "journal-edit",
             journalId: journal!.id,
           });
@@ -167,6 +185,14 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  /** New tarif typed or picked: the collected amount follows until staff edits it. */
+  const setDue = (amount: number) => {
+    form.setValue("payedAmount", amount, { shouldDirty: true });
+    if (!form.formState.dirtyFields.paidAmount) {
+      form.setValue("paidAmount", amount);
+    }
+  };
 
   const applyExpectedLeave = () => {
     if (!expectedLeaveLocal) {
@@ -369,14 +395,10 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
                       type="button"
                       onClick={() => {
                         form.setValue("priceId", p.id, { shouldDirty: true });
-                        form.setValue("payedAmount", p.price, {
-                          shouldDirty: true,
-                        });
-                        // If still present (no leave), refresh expected depart display only;
-                        // user can apply it explicitly to leaveTime.
+                        setDue(p.price);
                       }}
                       className={cn(
-                        "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm",
+                        "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-muted/60",
                         priceId === p.id && "border-primary bg-primary/5"
                       )}
                     >
@@ -459,40 +481,62 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-              <div>
-                <Label>Payé</Label>
-                <p className="text-xs text-muted-foreground">
-                  Indépendant du check-out
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2 rounded-lg border p-3">
+                <Label htmlFor="payedAmount">Tarif · montant dû (DT)</Label>
+                <Input
+                  id="payedAmount"
+                  type="number"
+                  step="0.1"
+                  min={0}
+                  value={form.watch("payedAmount")}
+                  onChange={(e) => setDue(Number(e.target.value) || 0)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {tariffDirty
+                    ? "Nouveau tarif : la liste affichera ce montant (forfait fixé)."
+                    : journal.leaveTime || !isActiveVisit(journal)
+                      ? "Montant de la visite."
+                      : "Montant actuel (suit le temps). Modifiez-le pour le fixer."}
+                  {selectedPrice ? ` Catalogue ${selectedPrice.name} : ${selectedPrice.price} DT.` : ""}
                 </p>
               </div>
-              <Switch
-                checked={isPayed}
-                onCheckedChange={(v) =>
-                  form.setValue("isPayed", v, { shouldDirty: true })
-                }
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="payedAmount">Montant encaissé (DT)</Label>
-              <Input
-                id="payedAmount"
-                type="number"
-                step="0.1"
-                {...form.register("payedAmount")}
-              />
-              {selectedPrice ? (
-                <p className="text-[11px] text-muted-foreground">
-                  Tarif catalogue : {selectedPrice.price} DT.
-                  {isPayed && Number(form.watch("payedAmount")) < selectedPrice.price
-                    ? " Moins → reste enregistré comme dette (il nous doit)."
-                    : ""}
-                  {isPayed && Number(form.watch("payedAmount")) > selectedPrice.price
-                    ? " Plus → crédit enregistré (nous lui devons)."
-                    : ""}
-                </p>
-              ) : null}
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="paidAmount">Payé</Label>
+                  <Switch
+                    checked={isPayed}
+                    onCheckedChange={(v) =>
+                      form.setValue("isPayed", v, { shouldDirty: true })
+                    }
+                  />
+                </div>
+                <div
+                  className={cn(
+                    "grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none",
+                    isPayed ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  )}
+                >
+                  <div className="overflow-hidden">
+                    <Input
+                      id="paidAmount"
+                      type="number"
+                      step="0.1"
+                      min={0}
+                      aria-label="Montant encaissé"
+                      {...form.register("paidAmount")}
+                    />
+                    <p className="pt-1 text-[11px] text-muted-foreground">
+                      Encaissé.
+                      {payDiff < -0.009 ? ` Moins → ${Math.abs(payDiff).toFixed(1)} DT en dette.` : ""}
+                      {payDiff > 0.009 ? ` Plus → ${payDiff.toFixed(1)} DT d’avoir.` : ""}
+                    </p>
+                  </div>
+                </div>
+                {!isPayed ? (
+                  <p className="text-[11px] text-muted-foreground">Non payé · indépendant du check-out</p>
+                ) : null}
+              </div>
             </div>
 
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">

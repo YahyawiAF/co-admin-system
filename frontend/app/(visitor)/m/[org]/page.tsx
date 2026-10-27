@@ -56,6 +56,7 @@ import {
   wantsQrCheckin,
 } from "@/lib/visitor-qr-checkin";
 import { isStandalonePwa } from "@/lib/visitor-notify";
+import { BookingFeeNotice } from "@/components/visitor/BookingFeeNotice";
 
 export default function MobileHomePage() {
   const router = useRouter();
@@ -413,6 +414,8 @@ export default function MobileHomePage() {
           onWifi={hasWifi ? openWifi : undefined}
         />
       )}
+
+      {memberId ? <BookingFeeNotice memberId={memberId} arrived={!!session} /> : null}
 
       {idle ? (
         <StartSessionCard

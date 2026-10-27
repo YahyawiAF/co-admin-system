@@ -89,6 +89,19 @@ export default function ReservationsAdminPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const cancel = useMutation({
+    mutationFn: ({ id, keepFee }: { id: string; keepFee: boolean }) => bookingRequestsApi.cancel(id, keepFee),
+    onSuccess: (res) => {
+      toast.success(
+        res.cancelFee ? `Réservation annulée · ${res.cancelFee} DT gardés en dette` : "Réservation annulée"
+      );
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["journal"] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => bookingRequestsApi.remove(id),
     onSuccess: () => {
@@ -138,7 +151,8 @@ export default function ReservationsAdminPage() {
           onApprove={(id) => approve.mutate(id)}
           onReject={(id) => reject.mutate(id)}
           onDelete={(id) => remove.mutate(id)}
-          busy={approve.isPending || reject.isPending || remove.isPending}
+          onCancel={(id, keepFee) => cancel.mutate({ id, keepFee })}
+          busy={approve.isPending || reject.isPending || remove.isPending || cancel.isPending}
         />
       </TabsContent>
       <TabsContent value="jour" className="mt-0 data-[state=active]:animate-in data-[state=active]:fade-in-0">

@@ -1056,6 +1056,14 @@ model BookingRequest {
   note        String?
   status      VisitRequestStatus @default(PENDING)
   journalId   String?
+  /// Cancelled by the visitor or reception (status stays REJECTED)
+  cancelledAt DateTime?
+  /// "member" | "staff"
+  cancelledBy String?            @db.VarChar(16)
+  /// Fee kept as a member debt when an accepted booking is cancelled
+  cancelFee   Float?
+  /// MemberLedger CREDIT row holding that debt
+  feeLedgerId String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
 

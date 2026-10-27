@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { AlertTriangle, Check, CheckCircle2, DoorOpen, Phone, Trash2, X } from "lucide-react";
+import { AlertTriangle, Ban, Check, CheckCircle2, DoorOpen, Phone, Trash2, X } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -17,6 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ChairMap, type SeatInfo } from "@/components/visitor/reserve/ChairMap";
 import { TablePhoto } from "@/components/visitor/reserve/TablePhoto";
 import { bookingRequestsApi } from "@/lib/api/resources";
@@ -32,10 +33,30 @@ const STATUS: Record<Status, { label: string; cls: string }> = {
   REJECTED: { label: "Refusée", cls: "bg-slate-100 text-slate-600" },
 };
 
-export function StatusPill({ status }: { status: Status }) {
+export function StatusPill({ status, cancelled }: { status: Status; cancelled?: boolean }) {
+  if (cancelled) {
+    return (
+      <span className="rounded-md bg-rose-100 px-1.5 py-px text-[11px] font-extrabold text-rose-800">Annulée</span>
+    );
+  }
   return (
     <span className={cn("rounded-md px-1.5 py-px text-[11px] font-extrabold", STATUS[status].cls)}>
       {STATUS[status].label}
+    </span>
+  );
+}
+
+/** Fee kept on a cancelled booking: still owed, or already collected. */
+function CancelFeeChip({ r }: { r: BookingRequest }) {
+  if (!r.cancelFee) return null;
+  return (
+    <span
+      className={cn(
+        "rounded-md px-1.5 py-px text-[11px] font-extrabold",
+        r.feePaid ? "bg-emerald-100 text-emerald-800" : "bg-rose-600 text-white"
+      )}
+    >
+      {r.feePaid ? `Frais ${dt(r.cancelFee)} réglés` : `Frais ${dt(r.cancelFee)} dus`}
     </span>
   );
 }
@@ -58,6 +79,7 @@ export function DemandesView({
   onApprove,
   onReject,
   onDelete,
+  onCancel,
   busy,
 }: {
   lists: Record<Status, BookingRequest[]>;
@@ -66,6 +88,7 @@ export function DemandesView({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onDelete: (id: string) => void;
+  onCancel: (id: string, keepFee: boolean) => void;
   busy: boolean;
 }) {
   const [filter, setFilter] = useState<Status>("PENDING");
@@ -93,7 +116,7 @@ export function DemandesView({
                 filter === s ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {s === "PENDING" ? "En attente" : s === "APPROVED" ? "Acceptées" : "Refusées"}
+              {s === "PENDING" ? "En attente" : s === "APPROVED" ? "Acceptées" : "Refusées / annulées"}
               <span
                 className={cn(
                   "rounded-full px-1.5 text-[11px] font-extrabold",
@@ -156,7 +179,12 @@ export function DemandesView({
                           </span>
                         ))
                       )}
-                      {(r.fee ?? 0) > 0 ? (
+                      {r.cancelledAt ? (
+                        <span className="ml-auto flex gap-1">
+                          <StatusPill status={r.status} cancelled />
+                          <CancelFeeChip r={r} />
+                        </span>
+                      ) : (r.fee ?? 0) > 0 ? (
                         <span className="ml-auto text-[11px] font-extrabold text-amber-800">{dt(r.fee!)}</span>
                       ) : null}
                     </span>
@@ -177,6 +205,7 @@ export function DemandesView({
           onApprove={onApprove}
           onReject={onReject}
           onDelete={onDelete}
+          onCancel={onCancel}
           busy={busy}
         />
       ) : (
@@ -195,6 +224,7 @@ function RequestDetail({
   onApprove,
   onReject,
   onDelete,
+  onCancel,
   busy,
 }: {
   r: BookingRequest;
@@ -203,8 +233,10 @@ function RequestDetail({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
   onDelete: (id: string) => void;
+  onCancel: (id: string, keepFee: boolean) => void;
   busy: boolean;
 }) {
+  const [keepFee, setKeepFee] = useState(true);
   const labels = labelsOf(r);
   const space = r.kind === "SEAT" ? spaceOfBooking(r, spaces) : spaces.find((s) => s.id === r.spaceId);
   const dayIso = format(new Date(r.startAt), "yyyy-MM-dd");
@@ -248,7 +280,8 @@ function RequestDetail({
           <p className="flex items-center gap-2 text-lg font-extrabold">
             {r.memberName || "Visiteur"}
             {r.visitorNumber != null ? <span className="text-sm font-bold text-muted-foreground">#{r.visitorNumber}</span> : null}
-            <StatusPill status={r.status} />
+            <StatusPill status={r.status} cancelled={!!r.cancelledAt} />
+            <CancelFeeChip r={r} />
           </p>
           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
             {r.phone ? (
@@ -260,6 +293,42 @@ function RequestDetail({
             Demandé le {format(new Date(r.createdAt), "d MMM 'à' HH:mm", { locale: fr })}
           </p>
         </div>
+        {mayWrite && r.status === "APPROVED" ? (
+          <AlertDialog onOpenChange={(o) => o && setKeepFee(true)}>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800" disabled={busy}>
+                <Ban className="mr-1 h-4 w-4" />
+                Annuler
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Annuler cette réservation ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {r.memberName || "Visiteur"} · {format(new Date(r.startAt), "EEEE d MMM HH:mm", { locale: fr })}. Les
+                  places sont libérées et le visiteur prévenu.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              {(r.fee ?? 0) > 0 ? (
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-amber-50 px-3 py-2.5 text-sm ring-1 ring-amber-200">
+                  <Checkbox checked={keepFee} onCheckedChange={(v) => setKeepFee(v === true)} className="mt-0.5" />
+                  <span>
+                    <span className="block font-bold text-amber-950">Garder les frais · {dt(r.fee!)}</span>
+                    <span className="block text-xs text-amber-900/80">
+                      Enregistrés en dette, demandés à sa prochaine visite.
+                    </span>
+                  </span>
+                </label>
+              ) : null}
+              <AlertDialogFooter>
+                <AlertDialogCancel>Garder la réservation</AlertDialogCancel>
+                <AlertDialogAction className="bg-rose-600 hover:bg-rose-700" onClick={() => onCancel(r.id, keepFee)}>
+                  Annuler la réservation
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        ) : null}
         {mayWrite ? (
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -308,7 +377,11 @@ function RequestDetail({
           label="Places"
           value={r.kind === "ROOM" ? `${r.spaceName || "Salle"} · ${places} pers.` : `${places} · ${labels.join(", ") || "—"}`}
         />
-        <Tile label="Frais à encaisser" value={dt(r.fee ?? 0)} tone="fee" />
+        <Tile
+          label={r.cancelledAt ? (r.cancelFee ? "Frais gardés (dette)" : "Frais") : "Frais à encaisser"}
+          value={r.cancelledAt ? (r.cancelFee ? `${dt(r.cancelFee)}${r.feePaid ? " · réglés" : ""}` : "Aucun") : dt(r.fee ?? 0)}
+          tone="fee"
+        />
       </div>
 
       <div
