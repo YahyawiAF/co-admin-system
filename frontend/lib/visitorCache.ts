@@ -256,7 +256,18 @@ export function skipInstall(org: string) {
 const qrEntryKey = (org: string) => `visitor-qr-entry:${org}`;
 
 /** Survives the sign-up step and a tab switch (camera app → browser / PWA). */
-const QR_ENTRY_TTL_MS = 20 * 60_000;
+export const QR_ENTRY_TTL_MS = 20 * 60_000;
+
+/**
+ * A scan time (ms) from the URL is still a check-in only for 20 min.
+ * iOS Safari reloads old tabs when reopened: without this a tab left on the
+ * QR page checked the visitor in again the next morning.
+ */
+export function isFreshScanTime(at: number): boolean {
+  if (!Number.isFinite(at) || at <= 0) return false;
+  const age = Date.now() - at;
+  return age > -60_000 && age < QR_ENTRY_TTL_MS;
+}
 
 export function markQrEntry(org: string) {
   try {
@@ -279,6 +290,15 @@ export function hasRecentQrEntry(org: string): boolean {
 export function clearQrEntry(org: string) {
   try {
     localStorage.removeItem(qrEntryKey(org));
+  } catch {
+    /* ignore */
+  }
+  // Used once: a later reload of this page must not check in again
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("checkin")) return;
+    url.searchParams.delete("checkin");
+    window.history.replaceState(window.history.state, "", url.toString());
   } catch {
     /* ignore */
   }
