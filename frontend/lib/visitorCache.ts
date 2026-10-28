@@ -308,21 +308,33 @@ export function clearQrEntry(org: string) {
 const checkinRewardKey = (org: string) => `visitor-checkin-reward:${org}`;
 const CHECKIN_REWARD_TTL_MS = 10 * 60_000;
 
-export function markCheckinReward(org: string) {
+/** `firstVisit`: very first check-in → the "Niveau 1" welcome instead of the reward. */
+export function markCheckinReward(org: string, firstVisit = false) {
   try {
-    localStorage.setItem(checkinRewardKey(org), String(Date.now()));
+    localStorage.setItem(
+      checkinRewardKey(org),
+      `${Date.now()}${firstVisit ? ":first" : ""}`,
+    );
   } catch {
     /* ignore */
   }
 }
-export function hasCheckinReward(org: string): boolean {
-  if (typeof window === "undefined") return false;
+function readCheckinReward(org: string): { at: number; first: boolean } | null {
+  if (typeof window === "undefined") return null;
   try {
-    const at = Number(localStorage.getItem(checkinRewardKey(org)));
-    return !!at && Date.now() - at < CHECKIN_REWARD_TTL_MS;
+    const raw = localStorage.getItem(checkinRewardKey(org)) || "";
+    const at = Number(raw.split(":")[0]);
+    if (!at || Date.now() - at >= CHECKIN_REWARD_TTL_MS) return null;
+    return { at, first: raw.endsWith(":first") };
   } catch {
-    return false;
+    return null;
   }
+}
+export function hasCheckinReward(org: string): boolean {
+  return !!readCheckinReward(org);
+}
+export function checkinRewardIsFirstVisit(org: string): boolean {
+  return !!readCheckinReward(org)?.first;
 }
 export function clearCheckinReward(org: string) {
   try {

@@ -84,4 +84,8 @@ export class JournalEntity {
 
   @ApiProperty({ required: false })
   openDebtAmount?: number;
+
+  /** The member's first visit ever is on this row's day. */
+  @ApiProperty({ required: false })
+  isFirstVisit?: boolean;
 }

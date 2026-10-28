@@ -10,6 +10,10 @@ export class MemberEntity implements Member {
   @ApiProperty({ description: 'Unique identifier for the member' })
   id: string;
 
+  /** First visit ever is today ("Nouveau" badge in the admin). */
+  @ApiProperty({ required: false })
+  isFirstVisitToday?: boolean;
+
   @ApiProperty({ description: 'Organization this member belongs to' })
   organizationId: string;
 

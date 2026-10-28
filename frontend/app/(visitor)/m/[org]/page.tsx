@@ -131,7 +131,7 @@ export default function MobileHomePage() {
       else if (res?.alreadyOpen) {
         toast.message("Votre session est déjà en cours");
       } else if (res) {
-        markCheckinReward(slug);
+        markCheckinReward(slug, !!res.firstVisit);
       }
       clearQrEntry(slug);
       setFromQr(false);

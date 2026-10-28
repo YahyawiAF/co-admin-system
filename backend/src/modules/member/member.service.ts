@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { orderUnitPrice } from '../product/order-price';
 import { PrismaService } from '../../../database/prisma.service';
+import { firstVisitTodayIds, newClientsTodayCount } from './first-visit';
 import { AddMemberDto } from './dtos/createMember.dto';
 import { UpdateMemberDto } from './dtos/updateMember.dto';
 import {
@@ -182,17 +183,19 @@ export class MemberService {
 
   async stats(organizationId?: string) {
     const orgWhere = organizationId ? { organizationId } : {};
-    const [total, activeIds, presentIds] = await Promise.all([
+    const [total, activeIds, presentIds, newToday] = await Promise.all([
       this.prisma.member.count({
         where: { deletedAt: null, ...orgWhere },
       }),
       this.activeAbonnementMemberIds(organizationId),
       this.presentMemberIds(organizationId),
+      newClientsTodayCount(this.prisma, organizationId),
     ]);
     return {
       total,
       activeAbonnements: activeIds.size,
       presentNow: presentIds.size,
+      newToday,
     };
   }
 
@@ -327,8 +330,18 @@ export class MemberService {
       },
       { page: pageNum },
     );
+    const newToday = await firstVisitTodayIds(
+      this.prisma,
+      paginatedResult.data.map((m: { id: string }) => m.id),
+    );
     return {
-      data: paginatedResult.data.map((member) => new MemberEntity(member)),
+      data: paginatedResult.data.map(
+        (member: { id: string }) =>
+          new MemberEntity({
+            ...member,
+            isFirstVisitToday: newToday.has(member.id),
+          } as Partial<MemberEntity>),
+      ),
       meta: paginatedResult.meta,
     };
   }

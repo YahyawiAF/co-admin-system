@@ -29,7 +29,7 @@ export function startFromQrEntry(opts: {
   const job = (async () => {
     const session = await mobileApi.startAutoSession(opts.memberId);
     if (session && !session.alreadyOpen && !session.resumed) {
-      markCheckinReward(opts.org);
+      markCheckinReward(opts.org, !!session.firstVisit);
     }
     clearQrEntry(opts.org);
     return session;

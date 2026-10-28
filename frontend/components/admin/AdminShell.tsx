@@ -25,7 +25,8 @@ import {
   History,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { outreachApi, staffApi } from "@/lib/api/resources";
+import { membersApi, outreachApi, staffApi } from "@/lib/api/resources";
+import { queryKeys } from "@/lib/query-client";
 import { useStaffAccess } from "@/lib/staff-access";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth/AuthContext";
@@ -33,6 +34,7 @@ import { useAdminOrg } from "@/lib/admin-org-context";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { VisitRequestBell } from "@/components/admin/VisitRequestBell";
+import { NewClientPopup } from "@/components/admin/NewClientPopup";
 import { ProductOrderBell } from "@/components/admin/ProductOrderBell";
 import { StaffInboxBell } from "@/components/admin/StaffInboxBell";
 import { BookingRequestBell } from "@/components/admin/BookingRequestBell";
@@ -81,6 +83,13 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
     enabled: !isStaff && !!organizationId,
     refetchInterval: 60_000,
   });
+  const { data: memberStats } = useQuery({
+    queryKey: queryKeys.membersStats,
+    queryFn: () => membersApi.stats(),
+    enabled: canOpen("/members"),
+    refetchInterval: 5 * 60_000,
+  });
+  const newClients = memberStats?.newToday ?? 0;
   const badges: Record<string, number> = {
     "/relances": outreach?.todo.length ?? 0,
     "/activite": staffSummary?.pending ?? 0,
@@ -130,6 +139,11 @@ function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
           >
             <Icon className="h-4 w-4" />
             {item.label}
+            {item.href === "/members" && newClients ? (
+              <span className="nc-badge ml-auto rounded-full px-1.5 text-[10px] font-bold text-white">
+                {newClients} nouveau{newClients > 1 ? "x" : ""}
+              </span>
+            ) : null}
             {badges[item.href] ? (
               <span
                 className={cn(
@@ -228,6 +242,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <>
               <VisitRequestBell />
               <CheckoutNotify />
+              <NewClientPopup />
             </>
           ) : null}
         </header>

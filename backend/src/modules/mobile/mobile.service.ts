@@ -106,6 +106,7 @@ import {
 import { appPromoUsage, GLOBAL_APP_PROMO_KEY } from './app-install-promo-usage';
 import { PromotionService } from '../promotion/promotion.service';
 import { orderUnitPrice } from '../product/order-price';
+import { firstVisitTodayIds } from '../member/first-visit';
 
 export const roundsOfHashing = 10;
 /** Re-check-in this soon after a checkout resumes the same visit. */
@@ -2112,8 +2113,10 @@ export class MobileService {
       throw err;
     }
 
+    const firstVisit = await this.announceFirstVisit(dto.memberId, journal.id);
     return {
       ...journal,
+      firstVisit,
       expectedLeaveTime: expectedLeave,
       remainingMs: expectedLeave
         ? Math.max(0, expectedLeave.getTime() - Date.now())
@@ -2570,7 +2573,40 @@ export class MobileService {
       memberId,
     });
 
-    return this.enrichSessionWithSeat(journal as any);
+    const firstVisit = await this.announceFirstVisit(memberId, journal.id);
+    const session = await this.enrichSessionWithSeat(journal as any);
+    return session ? { ...session, firstVisit } : session;
+  }
+
+  /**
+   * Very first journal row of this member: tell reception (live "Nouveau
+   * client" pop-up) and let the app play its welcome. False on any later visit.
+   */
+  private async announceFirstVisit(memberId: string, journalId: string) {
+    try {
+      const visits = await this.prisma.journal.count({
+        where: { memberID: memberId },
+      });
+      if (visits !== 1) return false;
+      const member = await this.prisma.member.findUnique({
+        where: { id: memberId },
+        select: { firstName: true, lastName: true, phone: true },
+      });
+      const seat = await this.resolveSeatForMember(memberId);
+      this.eventsGateway.sendNewClient({
+        memberId,
+        journalId,
+        memberName:
+          [member?.firstName, member?.lastName].filter(Boolean).join(' ') ||
+          'Visiteur',
+        memberPhone: member?.phone ?? null,
+        seatLabel: seat?.seatLabel || null,
+        at: new Date(),
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -3686,9 +3722,11 @@ export class MobileService {
       memberId,
       seatLabel: seat?.seatLabel || null,
     });
+    const firstVisit = await this.announceFirstVisit(memberId, journal.id);
 
     return {
       ...journal,
+      firstVisit,
       expectedLeaveTime: expectedLeave,
       remainingMs: expectedLeave
         ? Math.max(0, expectedLeave.getTime() - Date.now())
@@ -4338,7 +4376,7 @@ export class MobileService {
   async listUnackedArrivals() {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
-    return this.prisma.visitRequest.findMany({
+    const rows = await this.prisma.visitRequest.findMany({
       where: {
         status: VisitRequestStatus.APPROVED,
         autoApproved: true,
@@ -4349,6 +4387,11 @@ export class MobileService {
       orderBy: { createdAt: 'desc' },
       take: 50,
     });
+    const newToday = await firstVisitTodayIds(
+      this.prisma,
+      rows.map((r) => r.memberId),
+    );
+    return rows.map((r) => ({ ...r, isFirstVisit: newToday.has(r.memberId) }));
   }
 
   async acknowledgeArrivals(ids?: string[]) {

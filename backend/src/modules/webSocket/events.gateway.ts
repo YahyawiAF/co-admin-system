@@ -43,6 +43,11 @@ export class EventsGateway {
     this.server.sockets.emit('visit_arrival', data);
   }
 
+  /** A member's very first check-in: reception greets them. */
+  sendNewClient(data: any) {
+    this.server.sockets.emit('new_client', data);
+  }
+
   sendVisitorCheckout(data: any) {
     this.server.sockets.emit('visitor_checkout', data);
   }

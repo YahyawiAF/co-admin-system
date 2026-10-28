@@ -40,6 +40,7 @@ import {
 import { MemberFormModal } from "@/components/admin/MemberFormModal";
 import { DeleteMemberDialog } from "@/components/admin/DeleteMemberDialog";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
+import { NewClientBadge } from "@/components/admin/NewClientPopup";
 import { MemberRewardsBadges } from "@/components/admin/MemberRewardsBadges";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
@@ -481,6 +482,7 @@ export default function MembersPage() {
                           {[m.firstName, m.lastName].filter(Boolean).join(" ") ||
                             "Visiteur"}
                         </span>
+                        {m.isFirstVisitToday ? <NewClientBadge /> : null}
                       </button>
                     </TableCell>
                     <TableCell>{m.phone || "—"}</TableCell>

@@ -277,6 +277,8 @@ export const membersApi = {
       total: number;
       activeAbonnements: number;
       presentNow: number;
+      /** Members whose first visit ever is today. */
+      newToday?: number;
     }>(withOrgQuery("/members/stats"));
   },
   create(data: Partial<Member> & { password?: string }) {
@@ -955,6 +957,8 @@ export type MobileSession = Journal & {
   alreadyOpen?: boolean;
   /** Checked out < 59 min ago: the same visit was reopened. */
   resumed?: boolean;
+  /** The member's very first check-in: the app plays its welcome. */
+  firstVisit?: boolean;
 };
 
 export type PricingContextResponse = {

@@ -127,6 +127,8 @@ export interface User {
 
 export interface Member {
   id: string;
+  /** First visit ever is today ("Nouveau" badge). Members list only. */
+  isFirstVisitToday?: boolean;
   organizationId?: string;
   email?: string | null;
   firstName?: string | null;
@@ -255,6 +257,8 @@ export interface Price {
 export interface Journal {
   id: string;
   isPayed: boolean;
+  /** The member's first visit ever is on this row's day ("Nouveau" badge). */
+  isFirstVisit?: boolean;
   /** Hidden by a staff member — waiting for the admin's decision (admin only sees it) */
   hiddenAt?: string | null;
   hiddenByUserId?: string | null;
@@ -1074,6 +1078,8 @@ export type VisitRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
 export interface VisitRequest {
   id: string;
   memberId: string;
+  /** Arrivals list: the member's first visit ever is today. */
+  isFirstVisit?: boolean;
   priceId: string;
   type: VisitRequestType;
   status: VisitRequestStatus;
