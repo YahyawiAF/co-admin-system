@@ -597,6 +597,7 @@ export default function ConseillerPage() {
                         setDoneDraft({
                           title: r.title,
                           hint: r.actions[0],
+                          steps: r.actions,
                           category: r.category,
                           metric: r.metric,
                           targetPct: r.targetPct,

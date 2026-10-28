@@ -23,6 +23,7 @@ import { OutreachService } from '../analytics/outreach.service';
 import { CampaignService } from '../analytics/campaign.service';
 import { dataIssues } from './data-check';
 import { InitiativeMeasure, RATE_METRICS, slotLabel } from './initiative-measure';
+import { buildFunnel, diagnose, parseManualFunnel, parseSteps } from './funnel';
 
 const WEEKDAYS = [
   'dimanche',
@@ -784,6 +785,11 @@ export class SnapshotService {
       targetMemberIds?: string[] | null;
       linkedKind?: string | null;
       linkedId?: string | null;
+      objective?: string | null;
+      hypothesis?: string | null;
+      channels?: string[] | null;
+      steps?: unknown;
+      manualFunnel?: unknown;
     },
     seats: number,
     campaigns: Campaigns = [],
@@ -791,6 +797,30 @@ export class SnapshotService {
     const now = new Date();
     const campaign = campaigns.find((c) => c.initiativeId === i.id) ?? null;
     const start = startOfDay(i.startDate);
+    // Planned steps, funnel and where it breaks: rules only, shown as is and sent to the AI
+    const steps = parseSteps(i.steps);
+    const manualFunnel = parseManualFunnel(i.manualFunnel);
+    const reach = manualFunnel.length ? manualFunnel.reduce((a, r) => a + r.reach, 0) : null;
+    const links = await this.prisma.shareLink.findMany({
+      where: { initiativeId: i.id },
+      select: { id: true, code: true, channel: true, opens: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const { input: funnelInput, price } = await this.measure.funnelInput(
+      i,
+      reach,
+      links,
+      campaign
+        ? { total: campaign.progress.total, contacted: campaign.progress.contacted, won: campaign.progress.won }
+        : null,
+    );
+    const funnel = buildFunnel(funnelInput);
+    const diagnosis = diagnose({
+      steps,
+      funnel,
+      daysSinceStart: Math.max(0, differenceInCalendarDays(now, start)),
+      price,
+    });
     const afterEnd = endOfDay(
       minDate([addDays(start, IMPACT_WINDOW_DAYS - 1), i.endDate || now, now]),
     );
@@ -828,6 +858,15 @@ export class SnapshotService {
               : "Tout l'espace",
       },
       linked: i.linkedKind && i.linkedId ? { kind: i.linkedKind, id: i.linkedId } : null,
+      objective: i.objective ?? null,
+      hypothesis: i.hypothesis ?? null,
+      channels: i.channels ?? [],
+      steps,
+      manualFunnel,
+      reach,
+      links: links.map((l) => ({ id: l.id, code: l.code, channel: l.channel, opens: l.opens })),
+      funnel,
+      diagnosis,
       finished: !!i.endDate || differenceInCalendarDays(now, start) + 1 >= IMPACT_WINDOW_DAYS,
       campaign: campaign
         ? {

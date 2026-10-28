@@ -30,6 +30,8 @@ import { eventsApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import type { EventKind, EventStatus, SpaceEvent } from "@/lib/types";
 import { ImageUpload } from "@/components/admin/ImageUpload";
+import { CHANNEL_UI } from "@/components/admin/advisor/advice-ui";
+import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<EventKind, string> = {
   WORKSHOP: "Atelier",
@@ -58,6 +60,8 @@ type FormState = {
   startAt: string;
   endAt: string;
   capacity: string;
+  /** "" = free */
+  price: string;
   status: EventStatus;
   coverImage: string;
 };
@@ -70,6 +74,7 @@ const emptyForm: FormState = {
   startAt: "",
   endAt: "",
   capacity: "",
+  price: "",
   status: "PUBLISHED",
   coverImage: "",
 };
@@ -107,6 +112,7 @@ export default function AdminEventsPage() {
         startAt: new Date(form.startAt).toISOString(),
         endAt: new Date(form.endAt).toISOString(),
         capacity: form.capacity ? Number(form.capacity) : null,
+        price: form.price ? Number(form.price.replace(",", ".")) || null : null,
         status: form.status,
         coverImage: form.coverImage || "",
       };
@@ -142,6 +148,12 @@ export default function AdminEventsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const paid = useMutation({
+    mutationFn: (v: { regId: string; paid: boolean }) => eventsApi.markPaid(detailId!, v.regId, v.paid),
+    onSuccess: invalidate,
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const openCreate = () => {
     setEdit(null);
     setForm(emptyForm);
@@ -157,6 +169,7 @@ export default function AdminEventsPage() {
       startAt: toLocalInput(event.startAt),
       endAt: toLocalInput(event.endAt),
       capacity: event.capacity != null ? String(event.capacity) : "",
+      price: event.price ? String(event.price) : "",
       status: event.status,
       coverImage: event.coverImage || "",
     });
@@ -231,6 +244,7 @@ export default function AdminEventsPage() {
                     {event.capacity == null
                       ? `${event.registeredCount || 0} inscrits`
                       : `${event.registeredCount || 0}/${event.capacity}`}
+                    {event.price ? ` · ${event.price} DT` : ""}
                   </p>
                 </div>
                 <Button
@@ -362,6 +376,24 @@ export default function AdminEventsPage() {
                   }
                 />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="event-price">Prix de la place (DT, vide = gratuit)</Label>
+                <Input
+                  id="event-price"
+                  type="number"
+                  min={0}
+                  step="0.5"
+                  inputMode="decimal"
+                  placeholder="Gratuit"
+                  value={form.price}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, price: e.target.value }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Affiché dans l’app. On encaisse à l’accueil ou au pointage.
+                </p>
+              </div>
             </div>
             <div className="space-y-1">
               <Label>Description</Label>
@@ -424,6 +456,29 @@ export default function AdminEventsPage() {
                   Marquer présent
                 </Button>
               </form>
+              {(() => {
+                const active = detail.registrations.filter((r) => r.status !== "CANCELLED");
+                const paidRegs = active.filter((r) => r.paidAt);
+                const bySource = new Map<string, number>();
+                for (const r of active) {
+                  const k = r.sourceChannel ? CHANNEL_UI[r.sourceChannel] : "Sans lien";
+                  bySource.set(k, (bySource.get(k) ?? 0) + 1);
+                }
+                return active.length ? (
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                    {detail.price ? (
+                      <span className="mr-1 text-sm font-medium tabular-nums">
+                        {paidRegs.length} payés · {paidRegs.reduce((a, r) => a + (r.paidAmount ?? 0), 0)} DT
+                      </span>
+                    ) : null}
+                    {[...bySource].map(([k, n]) => (
+                      <span key={k} className="rounded-full border px-2 py-0.5 text-muted-foreground">
+                        {k} {n}
+                      </span>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
               {detail.feedback.count > 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Avis : {detail.feedback.average}/5 ({detail.feedback.count})
@@ -448,12 +503,31 @@ export default function AdminEventsPage() {
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {r.attendanceCode}
+                          {r.sourceChannel ? ` · ${CHANNEL_UI[r.sourceChannel]}` : ""}
                           {r.feedbackRating
                             ? ` · ${r.feedbackRating}/5`
                             : ""}
                         </p>
                       </div>
-                      <Badge variant="outline">{r.status}</Badge>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {detail.price && r.status !== "CANCELLED" ? (
+                          <button
+                            type="button"
+                            aria-pressed={!!r.paidAt}
+                            disabled={paid.isPending}
+                            onClick={() => paid.mutate({ regId: r.id, paid: !r.paidAt })}
+                            className={cn(
+                              "h-8 rounded-md border px-2.5 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none",
+                              r.paidAt
+                                ? "border-emerald-300 bg-emerald-100 text-emerald-800"
+                                : "bg-background hover:bg-muted",
+                            )}
+                          >
+                            {r.paidAt ? `Payé ${r.paidAmount ?? detail.price} DT` : "Marquer payé"}
+                          </button>
+                        ) : null}
+                        <Badge variant="outline">{r.status}</Badge>
+                      </div>
                     </div>
                   ))
                 )}

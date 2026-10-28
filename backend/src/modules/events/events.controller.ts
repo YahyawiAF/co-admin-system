@@ -16,6 +16,7 @@ import {
   EventAttendanceDto,
   EventFeedbackDto,
   EventMemberDto,
+  EventPaidDto,
   UpdateEventDto,
 } from './dtos/event.dto';
 
@@ -62,6 +63,27 @@ export class EventsAdminReadController {
   ) {
     return this.eventsService.markAttendance(id, dto.code);
   }
+
+  @Patch(':id/registrations/:regId/paid')
+  paid(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('regId', ParseUUIDPipe) regId: string,
+    @Body() dto: EventPaidDto,
+  ) {
+    return this.eventsService.markPaid(id, regId, dto.paid, dto.amount);
+  }
+}
+
+/** Tracked share links (Story, WhatsApp…): public, counts each open. */
+@Controller('mobile/links')
+@ApiTags('mobile-events')
+export class MobileLinksController {
+  constructor(private readonly eventsService: SpaceEventsService) {}
+
+  @Post(':code/open')
+  open(@Param('code') code: string) {
+    return this.eventsService.openLink(code);
+  }
 }
 
 @Controller('mobile/events')
@@ -103,7 +125,7 @@ export class MobileEventsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: EventMemberDto,
   ) {
-    return this.eventsService.register(id, dto.memberId);
+    return this.eventsService.register(id, dto.memberId, dto.sourceCode);
   }
 
   @Delete(':id/register')

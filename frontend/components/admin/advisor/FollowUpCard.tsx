@@ -12,12 +12,14 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { advisorApi } from "@/lib/api/resources";
 import type { AdvisorResult, BusinessInitiative, InitiativeVerdict } from "@/lib/types";
-import { METRIC_UI, STATUS_UI, VERDICT_UI, dt, fr1, metricValue, signed, today } from "./advice-ui";
+import { CHANNEL_UI, METRIC_UI, OBJECTIVE_UI, STATUS_UI, VERDICT_UI, dt, fr1, metricValue, signed, today } from "./advice-ui";
+import { DiagnosisBanner, FunnelBars, ReachInput, ShareLinks, StepsChecklist } from "./FunnelBlock";
 
 const AI_VERDICT = {
   working: "Ça marche",
   not_working: "Pas d'effet",
   too_early: "Trop tôt",
+  not_tested: "Pas encore testé",
 } as const;
 
 const GAIN_SOURCE = {
@@ -27,7 +29,7 @@ const GAIN_SOURCE = {
   global: "revenu total",
 } as const;
 
-const SALE_UNIT = { PRICE: "vendus", PRODUCT: "vendus", PROMOTION: "utilisées" } as const;
+const SALE_UNIT = { PRICE: "vendus", PRODUCT: "vendus", PROMOTION: "utilisées", EVENT: "places" } as const;
 
 /** Ratios and averages: never "per day" or "per client". */
 const RATE_LABEL = new Set(["cafeAttachRatePct", "avgOccupancyPct", "avgStayHours"]);
@@ -143,11 +145,45 @@ export function FollowUpCard({
         )}
       </div>
 
+      {item.objective || item.hypothesis || item.channels.length ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {item.objective ? (
+            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 font-semibold text-blue-800">{OBJECTIVE_UI[item.objective]}</span>
+          ) : null}
+          {item.channels.map((c) => (
+            <span key={c} className="rounded-full border px-2.5 py-0.5 text-muted-foreground">{CHANNEL_UI[c]}</span>
+          ))}
+          {item.hypothesis ? (
+            <span className="basis-full text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Pourquoi : </span>
+              {item.hypothesis}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       {item.description ? (
         <p className="text-sm">
           <span className="font-medium">Fait : </span>
           <span className="text-muted-foreground">{item.description}</span>
         </p>
+      ) : null}
+
+      {/* Planned vs done, funnel and where it breaks (older actions have neither) */}
+      {item.steps.length || item.funnel ? <DiagnosisBanner item={item} /> : null}
+      {item.steps.length || item.funnel || item.linked?.kind === "EVENT" ? (
+        <div className="grid gap-3 2xl:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-2.5">
+            <StepsChecklist item={item} />
+            <ShareLinks item={item} />
+          </div>
+          {item.funnel ? (
+            <div className="flex min-w-0 flex-col gap-2.5">
+              <FunnelBars item={item} />
+              <ReachInput item={item} />
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {r ? (
@@ -255,7 +291,8 @@ export function FollowUpCard({
         <p className="flex gap-2 text-sm">
           <b className="text-violet-700">IA</b>
           <span>
-            <span className="font-medium">{AI_VERDICT[review.verdict]}.</span> {review.detail}
+            <span className="font-medium">{AI_VERDICT[review.verdict] ?? review.verdict}.</span> {review.detail}
+            {review.brokenStep ? <span className="text-muted-foreground"> Étape : {review.brokenStep}.</span> : null}
           </span>
         </p>
       ) : null}

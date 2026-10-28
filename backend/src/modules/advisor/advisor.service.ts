@@ -25,6 +25,7 @@ import {
   userMessage,
 } from './advisor-claude';
 import { ContextService } from './context.service';
+import { parseManualFunnel, parseSteps } from './funnel';
 import { SnapshotService } from './snapshot.service';
 
 const CREDIT_MESSAGE =
@@ -53,10 +54,17 @@ type InitiativeBody = {
   targetSegment?: string | null;
   linkedKind?: string | null;
   linkedId?: string | null;
+  objective?: string | null;
+  hypothesis?: string | null;
+  channels?: string[];
+  steps?: Array<{ text?: string; done?: boolean; doneAt?: string | null }>;
+  manualFunnel?: Array<{ date?: string; channel?: string | null; reach?: number }>;
 };
 
 const TARGET_KINDS = ['ALL', 'SLOT', 'LIST'];
-const LINKED_KINDS = ['PRICE', 'PRODUCT', 'PROMOTION'];
+const LINKED_KINDS = ['PRICE', 'PRODUCT', 'PROMOTION', 'EVENT'];
+const OBJECTIVES = ['TICKETS', 'SUBSCRIBERS', 'CAFE', 'QUIET_HOURS', 'OTHER'];
+export const CHANNELS = ['INSTAGRAM_POST', 'INSTAGRAM_STORY', 'WHATSAPP', 'APP', 'PARTNER', 'WALK_IN'];
 
 const VERDICTS = ['WORKING', 'MIXED', 'NOT_WORKING'];
 
@@ -447,6 +455,29 @@ export class AdvisorService {
         }))
         .filter((n) => n.text);
     }
+    if (body.objective !== undefined) {
+      if (body.objective && !OBJECTIVES.includes(body.objective)) throw new BadRequestException('But invalide');
+      data.objective = body.objective || null;
+    }
+    if (body.hypothesis !== undefined) data.hypothesis = body.hypothesis?.trim().slice(0, 300) || null;
+    if (body.channels !== undefined) {
+      if (!Array.isArray(body.channels) || body.channels.some((c) => !CHANNELS.includes(c))) {
+        throw new BadRequestException('Canal invalide');
+      }
+      data.channels = [...new Set(body.channels)];
+    }
+    if (body.steps !== undefined) {
+      if (!Array.isArray(body.steps) || body.steps.length > 20) throw new BadRequestException('Étapes invalides');
+      const today = new Date().toISOString().slice(0, 10);
+      // A step ticked now gets today's date; one already done keeps its date
+      data.steps = parseSteps(body.steps).map((s) => ({ ...s, doneAt: s.done ? s.doneAt || today : null }));
+    }
+    if (body.manualFunnel !== undefined) {
+      if (!Array.isArray(body.manualFunnel) || body.manualFunnel.length > 50) {
+        throw new BadRequestException('Chiffres invalides');
+      }
+      data.manualFunnel = parseManualFunnel(body.manualFunnel);
+    }
     for (const k of ['startDate', 'endDate'] as const) {
       const d = data[k];
       if (d instanceof Date && Number.isNaN(d.getTime())) {
@@ -488,7 +519,45 @@ export class AdvisorService {
     return { ok: true };
   }
 
+  /** A tracked link for one channel; the action must be tied to an event. */
+  async createLink(initiativeId: string, channel: string) {
+    if (!CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
+    const i = await this.prisma.businessInitiative.findUnique({
+      where: { id: initiativeId },
+      select: { facilityId: true, linkedKind: true, linkedId: true },
+    });
+    if (!i) throw new NotFoundException('Initiative introuvable');
+    if (i.linkedKind !== 'EVENT' || !i.linkedId) {
+      throw new BadRequestException("Liez d'abord l'action à un événement");
+    }
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = randomCode();
+      const created = await this.prisma.shareLink
+        .create({
+          data: { code, facilityId: i.facilityId, initiativeId, kind: 'EVENT', targetId: i.linkedId, channel },
+        })
+        .catch(() => null);
+      if (created) return this.withImpact(initiativeId);
+    }
+    throw new BadRequestException('Réessayez');
+  }
+
+  async deleteLink(initiativeId: string, linkId: string) {
+    const link = await this.prisma.shareLink.findUnique({ where: { id: linkId }, select: { initiativeId: true } });
+    if (!link || link.initiativeId !== initiativeId) throw new NotFoundException('Lien introuvable');
+    await this.prisma.shareLink.delete({ where: { id: linkId } });
+    return this.withImpact(initiativeId);
+  }
+
   private withImpact(id: string) {
     return this.snapshots.initiativeWithImpact(id);
   }
+}
+
+/** Short code for a share link: easy to type, no look-alike letters. */
+function randomCode() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let k = 0; k < 6; k++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
 }

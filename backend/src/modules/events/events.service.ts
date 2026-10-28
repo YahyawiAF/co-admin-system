@@ -92,6 +92,7 @@ export class SpaceEventsService {
     startAt: Date;
     endAt: Date;
     capacity: number | null;
+    price: number | null;
     status: EventStatus;
     coverImage: string | null;
     facilityId: string;
@@ -113,6 +114,7 @@ export class SpaceEventsService {
       startAt: event.startAt,
       endAt: event.endAt,
       capacity: event.capacity,
+      price: event.price,
       status: event.status,
       coverImage: event.coverImage,
       createdAt: event.createdAt,
@@ -153,6 +155,12 @@ export class SpaceEventsService {
       },
     });
     if (!event) throw new NotFoundException('Événement introuvable');
+    // Which share link each member came from (Story, WhatsApp…)
+    const codes = [...new Set(event.registrations.map((r) => r.sourceCode).filter((c): c is string => !!c))];
+    const links = codes.length
+      ? await this.prisma.shareLink.findMany({ where: { code: { in: codes } }, select: { code: true, channel: true } })
+      : [];
+    const channelOf = new Map(links.map((l) => [l.code, l.channel]));
     const ratings = event.registrations
       .map((r) => r.feedbackRating)
       .filter((n): n is number => n != null);
@@ -187,9 +195,41 @@ export class SpaceEventsService {
         createdAt: r.createdAt,
         feedbackRating: r.feedbackRating,
         feedbackComment: r.feedbackComment,
+        paidAmount: r.paidAmount,
+        paidAt: r.paidAt,
+        sourceChannel: r.sourceCode ? channelOf.get(r.sourceCode) ?? null : null,
         member: r.member,
       })),
     };
+  }
+
+  /** Paid event: the desk marks a place as paid (or undoes it). */
+  async markPaid(eventId: string, registrationId: string, paid: boolean, amount?: number) {
+    const reg = await this.prisma.eventRegistration.findUnique({
+      where: { id: registrationId },
+      include: { event: { select: { price: true } } },
+    });
+    if (!reg || reg.eventId !== eventId) throw new NotFoundException('Inscription introuvable');
+    return this.prisma.eventRegistration.update({
+      where: { id: registrationId },
+      data: paid
+        ? { paidAt: new Date(), paidAmount: amount ?? reg.event.price ?? 0 }
+        : { paidAt: null, paidAmount: null },
+      select: { id: true, paidAt: true, paidAmount: true },
+    });
+  }
+
+  /** A tracked share link was opened: count it and say where to go. */
+  async openLink(code: string) {
+    const link = await this.prisma.shareLink
+      .update({
+        where: { code },
+        data: { opens: { increment: 1 } },
+        select: { kind: true, targetId: true, code: true },
+      })
+      .catch(() => null);
+    if (!link) throw new NotFoundException('Lien introuvable');
+    return link;
   }
 
   async create(dto: CreateEventDto) {
@@ -207,6 +247,7 @@ export class SpaceEventsService {
         startAt: new Date(dto.startAt),
         endAt: new Date(dto.endAt),
         capacity: dto.capacity ?? null,
+        price: dto.price ? dto.price : null,
         status: dto.status || EventStatus.PUBLISHED,
         coverImage: dto.coverImage || null,
       },
@@ -235,6 +276,7 @@ export class SpaceEventsService {
         startAt: dto.startAt ? startAt : undefined,
         endAt: dto.endAt ? endAt : undefined,
         capacity: dto.capacity === undefined ? undefined : dto.capacity,
+        price: dto.price === undefined ? undefined : dto.price || null,
         status: dto.status,
         coverImage:
           dto.coverImage !== undefined ? dto.coverImage || null : undefined,
@@ -348,7 +390,8 @@ export class SpaceEventsService {
     };
   }
 
-  async register(eventId: string, memberId: string) {
+  async register(eventId: string, memberId: string, sourceCode?: string) {
+    const source = sourceCode?.trim().slice(0, 32) || undefined;
     const [event, member] = await Promise.all([
       this.prisma.event.findUnique({
         where: { id: eventId },
@@ -384,6 +427,7 @@ export class SpaceEventsService {
           status: EventRegistrationStatus.REGISTERED,
           attendanceCode:
             existing.attendanceCode || (await this.uniqueAttendanceCode()),
+          ...(source && { sourceCode: source }),
         },
       });
     }
@@ -393,6 +437,7 @@ export class SpaceEventsService {
         memberId,
         attendanceCode: await this.uniqueAttendanceCode(),
         status: EventRegistrationStatus.REGISTERED,
+        sourceCode: source ?? null,
       },
     });
   }

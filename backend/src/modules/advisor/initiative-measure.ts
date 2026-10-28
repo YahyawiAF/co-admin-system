@@ -4,6 +4,7 @@ import { PrismaService } from 'database/prisma.service';
 import { localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from '../analytics/traffic';
 import { orderUnitPrice } from '../product/order-price';
+import type { FunnelInput } from './funnel';
 
 /** Figures in % already: the effect is a difference in points, not a % change. */
 export const RATE_METRICS = ['cafeAttachRatePct', 'avgOccupancyPct'];
@@ -302,6 +303,75 @@ export class InitiativeMeasure {
         discount: round1(uses.reduce((a, u) => a + u.discount, 0)),
       };
     }
+    if (kind === 'EVENT') {
+      const event = await this.prisma.event.findUnique({
+        where: { id },
+        select: { title: true, price: true, registrations: { select: { status: true, paidAmount: true, paidAt: true } } },
+      });
+      const regs = (event?.registrations ?? []).filter((r) => r.status !== 'CANCELLED');
+      const paid = regs.filter((r) => r.paidAt);
+      const revenue = paid.reduce((a, r) => a + (r.paidAmount ?? event?.price ?? 0), 0);
+      return {
+        kind,
+        label: event?.title ?? 'Événement supprimé',
+        count: event?.price ? paid.length : regs.length,
+        revenue: round1(revenue),
+        margin: round1(revenue),
+        discount: 0,
+      };
+    }
     return null;
+  }
+
+  /**
+   * The raw numbers of the action's funnel, from what the app records:
+   * event → typed reach, tracked link opens, registrations, payments, attendance;
+   * promo → views, clicks, uses; client relance → contacted, came back.
+   */
+  async funnelInput(
+    i: { id: string; linkedKind?: string | null; linkedId?: string | null; channels?: string[] | null },
+    reach: number | null,
+    links: Array<{ opens: number }>,
+    campaign: { total: number; contacted: number; won: number } | null,
+  ): Promise<{ input: FunnelInput | null; price: number | null }> {
+    if (i.linkedKind === 'EVENT' && i.linkedId) {
+      const event = await this.prisma.event.findUnique({
+        where: { id: i.linkedId },
+        select: {
+          price: true,
+          startAt: true,
+          registrations: { select: { status: true, paidAt: true } },
+        },
+      });
+      if (!event) return { input: null, price: null };
+      const regs = event.registrations.filter((r) => r.status !== 'CANCELLED');
+      const held = event.startAt <= new Date();
+      return {
+        price: event.price,
+        input: {
+          kind: 'EVENT',
+          channels: i.channels ?? [],
+          reach,
+          links: links.length,
+          opens: links.reduce((a, l) => a + l.opens, 0),
+          registered: regs.length,
+          paid: event.price ? regs.filter((r) => r.paidAt).length : null,
+          price: event.price,
+          came: held ? regs.filter((r) => r.status === 'ATTENDED').length : null,
+        },
+      };
+    }
+    if (i.linkedKind === 'PROMOTION' && i.linkedId) {
+      const promo = await this.prisma.promotion.findUnique({
+        where: { id: i.linkedId },
+        select: { views: true, clicks: true, _count: { select: { uses: true } } },
+      });
+      if (!promo) return { input: null, price: null };
+      return { price: null, input: { kind: 'PROMOTION', views: promo.views, clicks: promo.clicks, uses: promo._count.uses } };
+    }
+    if (campaign) {
+      return { price: null, input: { kind: 'CAMPAIGN', ...campaign } };
+    }
+    return { input: null, price: null };
   }
 }

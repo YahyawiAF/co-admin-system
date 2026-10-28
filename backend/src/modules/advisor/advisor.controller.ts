@@ -88,6 +88,10 @@ export class AdvisorController {
       targetSegment?: string | null;
       linkedKind?: string | null;
       linkedId?: string | null;
+      objective?: string | null;
+      hypothesis?: string | null;
+      channels?: string[];
+      steps?: Array<{ text?: string; done?: boolean }>;
     },
   ) {
     return this.advisor.createInitiative(facilityId, body);
@@ -115,9 +119,25 @@ export class AdvisorController {
       targetSegment?: string | null;
       linkedKind?: string | null;
       linkedId?: string | null;
+      objective?: string | null;
+      hypothesis?: string | null;
+      channels?: string[];
+      steps?: Array<{ text?: string; done?: boolean; doneAt?: string | null }>;
+      manualFunnel?: Array<{ date?: string; channel?: string | null; reach?: number }>;
     },
   ) {
     return this.advisor.updateInitiative(id, body);
+  }
+
+  /** Tracked share link for one channel (Story, WhatsApp…). */
+  @Post('initiatives/:id/links')
+  createLink(@Param('id') id: string, @Body() body: { channel?: string }) {
+    return this.advisor.createLink(id, body?.channel ?? '');
+  }
+
+  @Delete('initiatives/:id/links/:linkId')
+  deleteLink(@Param('id') id: string, @Param('linkId') linkId: string) {
+    return this.advisor.deleteLink(id, linkId);
   }
 
   @Delete('initiatives/:id')
