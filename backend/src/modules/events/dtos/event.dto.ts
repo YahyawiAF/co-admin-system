@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
+  IsNumber,
   IsDateString,
   IsEnum,
   IsInt,
@@ -53,6 +55,13 @@ export class CreateEventDto {
   @Min(1)
   capacity?: number | null;
 
+  @ApiPropertyOptional({ description: 'Price of a place in DT; null = free' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  price?: number | null;
+
   @ApiPropertyOptional({ enum: EventStatus })
   @IsOptional()
   @IsEnum(EventStatus)
@@ -102,6 +111,13 @@ export class UpdateEventDto {
   @Min(1)
   capacity?: number | null;
 
+  @ApiPropertyOptional({ description: 'Price of a place in DT; null = free' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  price?: number | null;
+
   @ApiPropertyOptional({ enum: EventStatus })
   @IsOptional()
   @IsEnum(EventStatus)
@@ -125,6 +141,24 @@ export class EventMemberDto {
   @IsString()
   @IsNotEmpty()
   memberId: string;
+
+  @ApiPropertyOptional({ description: 'Share link code the member came from' })
+  @IsOptional()
+  @IsString()
+  sourceCode?: string;
+}
+
+export class EventPaidDto {
+  @ApiProperty()
+  @IsBoolean()
+  paid: boolean;
+
+  @ApiPropertyOptional({ description: 'Amount taken (DT); defaults to the event price' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
 }
 
 export class EventFeedbackDto {

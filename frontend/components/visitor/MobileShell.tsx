@@ -65,13 +65,17 @@ function isLightAllowed(rest: string) {
     rest.startsWith("/session") ||
     rest.startsWith("/reserve") ||
     rest.startsWith("/reservations") ||
-    rest.startsWith("/staff")
+    rest.startsWith("/staff") ||
+    rest.startsWith("/l/")
   );
 }
 
 function isGuestAllowed(rest: string) {
   return (
     rest === "" ||
+    // Tracked share links and the event they open (from Instagram, WhatsApp…)
+    rest.startsWith("/l/") ||
+    /^\/events\/[^/]+$/.test(rest) ||
     rest === "/" ||
     rest.startsWith("/entry") ||
     rest.startsWith("/profile") ||

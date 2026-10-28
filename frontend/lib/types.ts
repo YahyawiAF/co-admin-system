@@ -1215,6 +1215,8 @@ export interface SpaceEvent {
   startAt: string;
   endAt: string;
   capacity?: number | null;
+  /** Price of a place in DT; null = free */
+  price?: number | null;
   status: EventStatus;
   coverImage?: string | null;
   registeredCount?: number;
@@ -1441,8 +1443,10 @@ export interface AdvisorResult {
   recommendations: AdvisorRecommendation[];
   initiativeReviews: Array<{
     initiativeId: string;
-    verdict: "working" | "not_working" | "too_early";
+    verdict: "working" | "not_working" | "too_early" | "not_tested";
     detail: string;
+    /** The planned step not done, or the funnel stage that blocks */
+    brokenStep?: string;
   }>;
   questions: string[];
 }
@@ -1512,7 +1516,52 @@ export type AdviceMetric =
 export type InitiativeVerdict = "WORKING" | "MIXED" | "NOT_WORKING";
 
 export type TargetKind = "ALL" | "SLOT" | "LIST";
-export type LinkedKind = "PRICE" | "PRODUCT" | "PROMOTION";
+export type LinkedKind = "PRICE" | "PRODUCT" | "PROMOTION" | "EVENT";
+
+export type InitiativeObjective = "TICKETS" | "SUBSCRIBERS" | "CAFE" | "QUIET_HOURS" | "OTHER";
+export type InitiativeChannel =
+  | "INSTAGRAM_POST"
+  | "INSTAGRAM_STORY"
+  | "WHATSAPP"
+  | "APP"
+  | "PARTNER"
+  | "WALK_IN";
+
+export interface InitiativeStep {
+  text: string;
+  done: boolean;
+  doneAt?: string | null;
+}
+
+export type FunnelStageKey = "seen" | "opened" | "registered" | "paid" | "came" | "contacted" | "won";
+
+export interface FunnelStage {
+  key: FunnelStageKey;
+  label: string;
+  source: string;
+  value: number | null;
+  rate: number | null;
+  pending?: boolean;
+}
+
+export type DiagnosisStatus = "NOT_TESTED" | "MISSING_DATA" | "TOO_EARLY" | "BOTTLENECK" | "ON_TRACK";
+
+export interface InitiativeDiagnosis {
+  status: DiagnosisStatus;
+  stage: FunnelStageKey | null;
+  brokenStep: string | null;
+  title: string;
+  known: string[];
+  unproven: string[];
+  next: string;
+}
+
+export interface InitiativeShareLink {
+  id: string;
+  code: string;
+  channel: InitiativeChannel;
+  opens: number;
+}
 
 export interface AdvisorDataIssue {
   key: string;
@@ -1571,6 +1620,16 @@ export interface BusinessInitiative {
     label: string;
   };
   linked: { kind: LinkedKind; id: string } | null;
+  objective: InitiativeObjective | null;
+  hypothesis: string | null;
+  channels: InitiativeChannel[];
+  steps: InitiativeStep[];
+  manualFunnel: Array<{ date: string; channel: string | null; reach: number }>;
+  /** Sum of the reach typed from Instagram; null = never typed */
+  reach: number | null;
+  links: InitiativeShareLink[];
+  funnel: FunnelStage[] | null;
+  diagnosis: InitiativeDiagnosis;
   /** Stopped, or measured over the full window */
   finished: boolean;
   result: {

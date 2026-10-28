@@ -10,15 +10,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { SEGMENT_LABEL } from "@/components/admin/OutreachCampaigns";
-import { advisorApi, outreachApi, pricesApi, productsApi, promotionsApi } from "@/lib/api/resources";
+import { advisorApi, eventsApi, outreachApi, pricesApi, productsApi, promotionsApi } from "@/lib/api/resources";
 import type {
   AdviceMetric,
   AdvisorCategory,
   CampaignSegment,
+  InitiativeChannel,
+  InitiativeObjective,
   LinkedKind,
   TargetKind,
 } from "@/lib/types";
-import { CATEGORY_UI, METRICS, METRIC_UI, WEEK, goalUnit, today } from "./advice-ui";
+import { CATEGORY_UI, CHANNELS, CHANNEL_UI, METRICS, METRIC_UI, OBJECTIVES, OBJECTIVE_UI, WEEK, goalUnit, today } from "./advice-ui";
+
+/** Channels where a tracked link makes sense (not the desk, not the app itself). */
+const LINK_CHANNELS: InitiativeChannel[] = ["INSTAGRAM_POST", "INSTAGRAM_STORY", "WHATSAPP", "PARTNER"];
 
 export type DoneDraft = {
   title: string;
@@ -31,6 +36,8 @@ export type DoneDraft = {
   segment?: CampaignSegment;
   sourceReportId?: string;
   recommendationTitle?: string;
+  /** The advice's steps, to tick as they get done */
+  steps?: string[];
 };
 
 const select = "h-9 w-full rounded-md border bg-background px-2 text-sm";
@@ -53,6 +60,11 @@ type Form = {
   metric: AdviceMetric;
   goal: string;
   category: AdvisorCategory;
+  objective: InitiativeObjective | "";
+  hypothesis: string;
+  channels: InitiativeChannel[];
+  steps: Array<{ text: string; done: boolean }>;
+  newStep: string;
 };
 
 function Step({ n, title, hint, children }: { n: number; title: string; hint: string; children: React.ReactNode }) {
@@ -98,6 +110,11 @@ export function DonePanel({
       metric: draft.metric ?? "revenuePerDay",
       goal: draft.targetPct != null ? String(draft.targetPct) : "",
       category: draft.category,
+      objective: "",
+      hypothesis: "",
+      channels: [],
+      steps: (draft.steps ?? []).map((text) => ({ text, done: false })),
+      newStep: "",
     });
   }, [draft]);
   const set = (patch: Partial<Form>) => setF((x) => (x ? { ...x, ...patch } : x));
@@ -107,6 +124,7 @@ export function DonePanel({
   const prices = useQuery({ queryKey: ["prices"], queryFn: pricesApi.list, enabled: open && f?.linkedKind === "PRICE" });
   const products = useQuery({ queryKey: ["products"], queryFn: productsApi.list, enabled: open && f?.linkedKind === "PRODUCT" });
   const promos = useQuery({ queryKey: ["promotions"], queryFn: promotionsApi.list, enabled: open && f?.linkedKind === "PROMOTION" });
+  const events = useQuery({ queryKey: ["admin-events"], queryFn: eventsApi.adminList, enabled: open && f?.linkedKind === "EVENT" });
   const items: Array<{ id: string; name: string }> =
     f?.linkedKind === "PRICE"
       ? (prices.data ?? []).filter((p) => p.isActive !== false).map((p) => ({ id: p.id, name: `${p.name} · ${p.price} DT` }))
@@ -114,7 +132,12 @@ export function DonePanel({
         ? (products.data ?? []).map((p) => ({ id: p.id, name: p.name }))
         : f?.linkedKind === "PROMOTION"
           ? (promos.data ?? []).map((p) => ({ id: p.id, name: p.title }))
-          : [];
+          : f?.linkedKind === "EVENT"
+            ? (events.data ?? [])
+                .filter((e) => e.status !== "CANCELLED" && new Date(e.endAt) >= new Date())
+                .map((e) => ({ id: e.id, name: `${e.title} · ${e.startAt.slice(8, 10)}/${e.startAt.slice(5, 7)}` }))
+            : [];
+  const linkChannels = f?.linkedKind === "EVENT" && f.linkedId ? f.channels.filter((c) => LINK_CHANNELS.includes(c)) : [];
 
   const save = useMutation({
     mutationFn: () => {
@@ -137,9 +160,17 @@ export function DonePanel({
         linkedId: x.linkedKind && x.linkedId ? x.linkedId : null,
         sourceReportId: draft?.sourceReportId,
         recommendationTitle: draft?.recommendationTitle,
+        objective: x.objective || null,
+        hypothesis: x.hypothesis.trim() || null,
+        channels: x.channels,
+        steps: x.steps.filter((s) => s.text.trim()),
       });
     },
-    onSuccess: (created) => {
+    onSuccess: async (created) => {
+      // One tracked link per channel, ready to copy from the action card
+      for (const c of linkChannels) {
+        await advisorApi.createLink(created.id, c).catch(() => null);
+      }
       toast.success("Enregistré : la mesure commence aujourd'hui");
       qc.invalidateQueries({ queryKey: ["advisor", "initiatives"] });
       onClose();
@@ -206,7 +237,109 @@ export function DonePanel({
               </div>
             </div>
 
-            <Step n={1} title="Qui est visé" hint="on mesure seulement ça">
+            <Step n={1} title="Le but" hint="ce que l'action doit vendre">
+              <div className="flex flex-wrap gap-1.5">
+                {OBJECTIVES.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    aria-pressed={f.objective === o}
+                    onClick={() => set({ objective: f.objective === o ? "" : o })}
+                    className={cn(
+                      "h-9 rounded-full border px-3 text-sm transition-colors duration-200",
+                      f.objective === o ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
+                    )}
+                  >
+                    {OBJECTIVE_UI[o]}
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="done-why" className="text-xs text-muted-foreground">Pourquoi ça peut marcher (une ligne)</Label>
+                <Input
+                  id="done-why"
+                  value={f.hypothesis}
+                  maxLength={300}
+                  onChange={(e) => set({ hypothesis: e.target.value })}
+                  placeholder="Ex. : beaucoup d'étudiants jouent, rien de ce genre dans le quartier"
+                />
+              </div>
+            </Step>
+
+            <Step n={2} title="Les étapes prévues" hint="coche ce qui est fait">
+              {f.steps.length ? (
+                <ul className="space-y-1.5">
+                  {f.steps.map((s, i) => (
+                    <li key={i} className="advisor-in flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
+                      <input
+                        type="checkbox"
+                        aria-label={`Fait : ${s.text}`}
+                        checked={s.done}
+                        onChange={() => set({ steps: f.steps.map((x, k) => (k === i ? { ...x, done: !x.done } : x)) })}
+                        className="h-4 w-4 accent-emerald-600"
+                      />
+                      <span className={cn("flex-1 transition-colors duration-200", s.done && "text-muted-foreground")}>{s.text}</span>
+                      <button
+                        type="button"
+                        aria-label={`Retirer : ${s.text}`}
+                        onClick={() => set({ steps: f.steps.filter((_, k) => k !== i) })}
+                        className="rounded px-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        ×
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              <div className="flex gap-2">
+                <Input
+                  aria-label="Nouvelle étape"
+                  value={f.newStep}
+                  maxLength={200}
+                  onChange={(e) => set({ newStep: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && f.newStep.trim()) {
+                      e.preventDefault();
+                      set({ steps: [...f.steps, { text: f.newStep.trim(), done: false }], newStep: "" });
+                    }
+                  }}
+                  placeholder="Ex. : mettre le lien d'inscription en story"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!f.newStep.trim()}
+                  onClick={() => set({ steps: [...f.steps, { text: f.newStep.trim(), done: false }], newStep: "" })}
+                >
+                  Ajouter
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Une étape pas faite = l&apos;action n&apos;est pas encore testée.</p>
+            </Step>
+
+            <Step n={3} title="Où tu en parles" hint="les canaux">
+              <div className="flex flex-wrap gap-1.5">
+                {CHANNELS.map((c) => {
+                  const on = f.channels.includes(c);
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => set({ channels: on ? f.channels.filter((x) => x !== c) : [...f.channels, c] })}
+                      className={cn(
+                        "h-9 rounded-full border px-3 text-sm transition-colors duration-200",
+                        on ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
+                      )}
+                    >
+                      {CHANNEL_UI[c]}
+                    </button>
+                  );
+                })}
+              </div>
+            </Step>
+
+            <Step n={4} title="Qui est visé" hint="on mesure seulement ça">
               <div className="inline-flex rounded-md bg-muted p-0.5 text-sm">
                 {(
                   [
@@ -285,19 +418,27 @@ export function DonePanel({
               ) : null}
             </Step>
 
-            <Step n={2} title="Comparé à" hint="pour écarter la saison">
+            <Step n={5} title="Comparé à" hint="pour écarter la saison">
               <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">{comparison}</p>
             </Step>
 
-            <Step n={3} title="Vente liée" hint="preuve directe">
+            <Step n={6} title="Vente liée" hint="preuve directe">
               <div className="grid grid-cols-[8.5rem_1fr] gap-2">
                 <select
                   aria-label="Type de vente liée"
                   className={select}
                   value={f.linkedKind}
-                  onChange={(e) => set({ linkedKind: e.target.value as LinkedKind | "", linkedId: "" })}
+                  onChange={(e) => {
+                    const kind = e.target.value as LinkedKind | "";
+                    set({
+                      linkedKind: kind,
+                      linkedId: "",
+                      ...(kind === "EVENT" && !f.objective ? { objective: "TICKETS" as const } : {}),
+                    });
+                  }}
                 >
                   <option value="">Aucune</option>
+                  <option value="EVENT">Un événement</option>
                   <option value="PRICE">Une offre</option>
                   <option value="PRODUCT">Un produit</option>
                   <option value="PROMOTION">Une promo</option>
@@ -318,9 +459,18 @@ export function DonePanel({
               <p className="text-xs text-muted-foreground">
                 Chaque vente de cette offre, produit ou promo est comptée pour l&apos;action. Créez-la d&apos;abord dans Services, Products ou Promotions.
               </p>
+              {linkChannels.length ? (
+                <p className="advisor-in rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                  Un lien suivi sera créé pour : {linkChannels.map((c) => CHANNEL_UI[c]).join(", ")}. Copie-les depuis la carte de l&apos;action.
+                </p>
+              ) : f.linkedKind === "EVENT" && f.linkedId ? (
+                <p className="advisor-in text-xs text-muted-foreground">
+                  Choisis un canal (Instagram, WhatsApp…) pour avoir un lien suivi.
+                </p>
+              ) : null}
             </Step>
 
-            <Step n={4} title="Objectif" hint="verdict après 14 jours">
+            <Step n={7} title="Objectif" hint="verdict après 14 jours">
               <div className="grid grid-cols-[1fr_6.5rem] gap-3">
                 <div className="space-y-1">
                   <Label htmlFor="done-metric" className="text-xs text-muted-foreground">Chiffre à suivre</Label>

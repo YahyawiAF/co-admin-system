@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
-import { CalendarDays, MapPin, Star, Users } from "lucide-react";
+import { CalendarDays, MapPin, Star, Ticket, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import { DirectoryCard } from "@/components/visitor/DirectoryCard";
 import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { markEventSeen } from "@/components/visitor/VisitorSpotlight";
+import { readShareSource } from "@/lib/share-source";
 import type { EventKind, Member } from "@/lib/types";
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -47,7 +48,7 @@ export default function EventDetailPage() {
   });
 
   const register = useMutation({
-    mutationFn: () => eventsApi.register(params.id, memberId!),
+    mutationFn: () => eventsApi.register(params.id, memberId!, readShareSource(params.id)),
     onSuccess: () => {
       toast.success("Inscription confirmée");
       queryClient.invalidateQueries({ queryKey: ["mobile-event"] });
@@ -130,6 +131,12 @@ export default function EventDetailPage() {
               {event.location}
             </p>
           ) : null}
+          {event.price ? (
+            <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+              <Ticket className="h-4 w-4" />
+              {event.price} DT la place · à payer à l&apos;accueil
+            </p>
+          ) : null}
           {full ? (
             <p className="mt-1 flex items-center gap-1.5 text-sm font-medium text-rose-600">
               <Users className="h-4 w-4" />
@@ -152,6 +159,10 @@ export default function EventDetailPage() {
               >
                 Annuler mon inscription
               </Button>
+            ) : !memberId ? (
+              <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                Inscription depuis l&apos;app membre. Pas encore membre ? Passe à l&apos;accueil, on t&apos;inscrit.
+              </p>
             ) : (
               <Button
                 className="mt-4 h-11 w-full rounded-full"

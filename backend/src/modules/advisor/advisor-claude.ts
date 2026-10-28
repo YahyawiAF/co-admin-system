@@ -61,8 +61,10 @@ export type AdvisorResult = {
   recommendations: AdvisorRecommendation[];
   initiativeReviews: Array<{
     initiativeId: string;
-    verdict: 'working' | 'not_working' | 'too_early';
+    verdict: 'working' | 'not_working' | 'too_early' | 'not_tested';
     detail: string;
+    /** The planned step not done, or the funnel stage where it breaks; '' if none */
+    brokenStep: string;
   }>;
   questions: string[];
 };
@@ -145,11 +147,12 @@ export const RESULT_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['initiativeId', 'verdict', 'detail'],
+        required: ['initiativeId', 'verdict', 'detail', 'brokenStep'],
         properties: {
           initiativeId: str,
-          verdict: { type: 'string', enum: ['working', 'not_working', 'too_early'] },
+          verdict: { type: 'string', enum: ['working', 'not_working', 'too_early', 'not_tested'] },
           detail: str,
+          brokenStep: str,
         },
       },
     },
@@ -202,6 +205,11 @@ Règles :
 - Chaque initiative a une cible (target : un créneau jours + heures, une liste de clients, ou tout l'espace) et result : before / after sur la cible, comparison (le même chiffre sur un groupe témoin : autres heures, autres jours ou autres clients), effect (variation de la cible moins variation du témoin, en % ou en points), sale (ventes de l'offre, du produit ou de la promo liée : preuve directe), gain, cost, netGain. Juge sur effect et sale, pas sur le revenu global.
 - dataIssues : problèmes dans les données (prix aberrant, sorties non pointées, impayés, charges absentes). Ne bâtis aucun conseil sur un chiffre touché. Si un problème bloque une catégorie (blocksCategories), mets en premier une recommandation OPERATIONS pour le corriger et n'en fais pas dans cette catégorie.
 - Dans initiativeReviews, compare au targetPct quand il existe et tiens compte du coût (gain net = gain − coût) et des disturbances.
+- Chaque initiative a aussi : objective (le but), hypothesis (pourquoi le propriétaire pense que ça marche), channels (où il en parle), steps (les étapes prévues, done = fait ou pas), funnel (l'entonnoir : seen vues Instagram saisies, opened ouvertures du lien suivi, registered inscrits, paid payés, came venus, contacted / won pour une relance ; value null = inconnu, pending = pas encore possible) et diagnosis (calculé par l'app : status NOT_TESTED / MISSING_DATA / TOO_EARLY / BOTTLENECK / ON_TRACK, stage, brokenStep, known, unproven, next). Prends diagnosis comme un fait.
+- Diagnostique l'étape cassée avant de juger l'idée. Si diagnosis.status = NOT_TESTED, le verdict est not_tested, jamais not_working : une étape prévue n'a pas été faite, le test n'a pas eu lieu. Ne propose ni d'abandonner l'idée ni de changer le prix : propose de faire l'étape manquante (brokenStep).
+- Si status = BOTTLENECK, nomme l'étape (stage) dans brokenStep et propose de changer UNE chose à cette étape seulement. Si MISSING_DATA, demande le chiffre dans questions. Sépare ce qui est su (known) de ce qui n'est pas prouvé (unproven) : n'affirme jamais qu'un prix, une date ou un format ne plaît pas tant que l'entonnoir ne l'a pas montré.
+- Des abonnés en plus ne prouvent pas que les gens paieront : juge un événement sur inscrits, payés et venus.
+- brokenStep : l'étape pas faite ou l'étape de l'entonnoir qui bloque, en quelques mots ; chaîne vide s'il n'y en a pas.
 - Si l'activité est trop faible pour conclure, dis-le dans summary plutôt que de surinterpréter.
 - Entre 4 et 8 recommandations, triées de la plus rentable à la moins rentable. 2 à 5 highlights.
 - Écris en français simple, direct, sans jargon. Phrases courtes.
@@ -281,7 +289,9 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
           ? x.outreach
           : { segment: 'NONE' as const, message: '' },
     })),
-    initiativeReviews: Array.isArray(r.initiativeReviews) ? r.initiativeReviews : [],
+    initiativeReviews: Array.isArray(r.initiativeReviews)
+      ? r.initiativeReviews.map((x) => ({ ...x, brokenStep: typeof x?.brokenStep === 'string' ? x.brokenStep : '' }))
+      : [],
     questions: Array.isArray(r.questions) ? r.questions : [],
   };
 }

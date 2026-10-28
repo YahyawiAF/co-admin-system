@@ -17,7 +17,10 @@ import type {
   AdvisorSettings,
   BusinessInitiative,
   AdviceMetric,
+  InitiativeChannel,
   InitiativeNote,
+  InitiativeObjective,
+  InitiativeStep,
   InitiativeVerdict,
   AdvisorDataIssue,
   LinkedKind,
@@ -1788,10 +1791,21 @@ export const eventsApi = {
           createdAt: string;
           feedbackRating?: number | null;
           feedbackComment?: string | null;
+          paidAmount?: number | null;
+          paidAt?: string | null;
+          /** Share link channel the member came from */
+          sourceChannel?: InitiativeChannel | null;
           member: Member;
         }>;
       }
     >(`/admin/events/${id}`);
+  },
+  markPaid(id: string, registrationId: string, paid: boolean) {
+    return http.patch(`/admin/events/${id}/registrations/${registrationId}/paid`, { paid });
+  },
+  /** Public: count a share link open and get where it points */
+  openLink(code: string) {
+    return http.post<{ kind: "EVENT"; targetId: string; code: string }>(`/mobile/links/${encodeURIComponent(code)}/open`, {});
   },
   create(data: {
     title: string;
@@ -1801,6 +1815,7 @@ export const eventsApi = {
     startAt: string;
     endAt: string;
     capacity?: number | null;
+    price?: number | null;
     status?: EventStatus;
     coverImage?: string;
   }) {
@@ -1816,6 +1831,7 @@ export const eventsApi = {
       startAt?: string;
       endAt?: string;
       capacity?: number | null;
+      price?: number | null;
       status?: EventStatus;
       coverImage?: string;
     },
@@ -1840,10 +1856,10 @@ export const eventsApi = {
       skipAuth: true,
     });
   },
-  register(id: string, memberId: string) {
+  register(id: string, memberId: string, sourceCode?: string) {
     return http.post(
       `/mobile/events/${id}/register`,
-      { memberId },
+      { memberId, ...(sourceCode && { sourceCode }) },
       {
         skipAuth: true,
       },
@@ -1917,6 +1933,10 @@ export const advisorApi = {
     targetSegment?: string | null;
     linkedKind?: LinkedKind | null;
     linkedId?: string | null;
+    objective?: InitiativeObjective | null;
+    hypothesis?: string | null;
+    channels?: InitiativeChannel[];
+    steps?: InitiativeStep[];
   }) {
     return http.post<BusinessInitiative>("/advisor/initiatives", data);
   },
@@ -1931,9 +1951,17 @@ export const advisorApi = {
       cost: number | null;
       ownerVerdict: InitiativeVerdict | null;
       notes: InitiativeNote[];
+      steps: InitiativeStep[];
+      manualFunnel: Array<{ date: string; channel?: string | null; reach: number }>;
     }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
+  },
+  createLink(initiativeId: string, channel: InitiativeChannel) {
+    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/links`, { channel });
+  },
+  deleteLink(initiativeId: string, linkId: string) {
+    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/links/${linkId}`);
   },
   deleteInitiative(id: string) {
     return http.delete(`/advisor/initiatives/${id}`);
