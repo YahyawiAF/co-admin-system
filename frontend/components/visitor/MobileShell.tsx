@@ -66,7 +66,8 @@ function isLightAllowed(rest: string) {
     rest.startsWith("/reserve") ||
     rest.startsWith("/reservations") ||
     rest.startsWith("/staff") ||
-    rest.startsWith("/l/")
+    rest.startsWith("/l/") ||
+    rest.startsWith("/s/")
   );
 }
 
@@ -75,6 +76,8 @@ function isGuestAllowed(rest: string) {
     rest === "" ||
     // Tracked share links and the event they open (from Instagram, WhatsApp…)
     rest.startsWith("/l/") ||
+    // Public surveys (Learn & Share): no login
+    rest.startsWith("/s/") ||
     /^\/events\/[^/]+$/.test(rest) ||
     rest === "/" ||
     rest.startsWith("/entry") ||
@@ -108,6 +111,8 @@ export function MobileShell({ children }: { children: ReactNode }) {
       : LIGHT_NAV;
   const base = `/m/${orgSlug}`;
   const rest = pathname === base ? "" : pathname.slice(base.length);
+  /** Public survey: its own full screen, no app header, menu or pop-ups */
+  const surveyPage = rest.startsWith("/s/");
   const immersiveChat =
     rest.startsWith("/staff") || rest.startsWith("/chat/");
 
@@ -161,6 +166,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
   ]);
 
   useEffect(() => {
+    if (surveyPage) return;
     if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
       return;
     }
@@ -168,7 +174,15 @@ export function MobileShell({ children }: { children: ReactNode }) {
       scope: "/",
       updateViaCache: "none",
     });
-  }, []);
+  }, [surveyPage]);
+
+  if (surveyPage) {
+    return (
+      <div className="mobile-shell mx-auto min-h-dvh max-w-[480px] bg-white text-slate-900">
+        {children}
+      </div>
+    );
+  }
 
   return (
     <div

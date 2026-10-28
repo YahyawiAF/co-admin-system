@@ -17,6 +17,7 @@ const ART: Record<EventKind, { bg: string; a: string; b: string; tone: string }>
   WORKSHOP: { bg: "linear-gradient(135deg,#312e81,#6d28d9 55%,#db2777)", a: "rgba(251,191,36,.35)", b: "rgba(99,102,241,.45)", tone: "#6d28d9" },
   NETWORKING: { bg: "linear-gradient(135deg,#0c4a6e,#0891b2 60%,#22d3ee)", a: "rgba(255,255,255,.18)", b: "rgba(14,165,233,.5)", tone: "#0e7490" },
   OTHER: { bg: "linear-gradient(135deg,#7c2d12,#ea580c 55%,#f59e0b)", a: "rgba(254,243,199,.25)", b: "rgba(220,38,38,.35)", tone: "#c2410c" },
+  LEARNING: { bg: "linear-gradient(135deg,#064e3b,#059669 55%,#2dd4bf)", a: "rgba(236,253,245,.22)", b: "rgba(16,185,129,.45)", tone: "#047857" },
 };
 
 const MAX = 5;

@@ -1197,7 +1197,7 @@ export interface Organization {
   facility?: { id: string; name: string; logo?: string | null } | null;
 }
 
-export type EventKind = "WORKSHOP" | "NETWORKING" | "OTHER";
+export type EventKind = "WORKSHOP" | "NETWORKING" | "OTHER" | "LEARNING";
 export type EventStatus = "DRAFT" | "PUBLISHED" | "CANCELLED";
 export type EventRegistrationStatus =
   | "REGISTERED"

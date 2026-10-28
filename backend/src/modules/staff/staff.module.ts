@@ -27,7 +27,7 @@ import { StaffService } from './staff.service';
     { provide: APP_GUARD, useExisting: StaffAccessGuard },
     { provide: APP_INTERCEPTOR, useClass: StaffAuditInterceptor },
   ],
-  exports: [StaffAccessGuard],
+  exports: [StaffAccessGuard, StaffService],
 })
 export class StaffModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

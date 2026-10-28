@@ -11,9 +11,11 @@ import {
   EventStatus,
 } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
+import { MobileService } from '../mobile/mobile.service';
 import {
   CreateEventDto,
   EventFeedbackDto,
+  EventGuestDto,
   UpdateEventDto,
 } from './dtos/event.dto';
 
@@ -24,7 +26,10 @@ const ACTIVE_REG = [
 
 @Injectable()
 export class SpaceEventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mobile: MobileService,
+  ) {}
 
   private async defaultFacilityId(facilityId?: string) {
     if (facilityId) {
@@ -156,9 +161,18 @@ export class SpaceEventsService {
     });
     if (!event) throw new NotFoundException('Événement introuvable');
     // Which share link each member came from (Story, WhatsApp…)
-    const codes = [...new Set(event.registrations.map((r) => r.sourceCode).filter((c): c is string => !!c))];
+    const codes = [
+      ...new Set(
+        event.registrations
+          .map((r) => r.sourceCode)
+          .filter((c): c is string => !!c),
+      ),
+    ];
     const links = codes.length
-      ? await this.prisma.shareLink.findMany({ where: { code: { in: codes } }, select: { code: true, channel: true } })
+      ? await this.prisma.shareLink.findMany({
+          where: { code: { in: codes } },
+          select: { code: true, channel: true },
+        })
       : [];
     const channelOf = new Map(links.map((l) => [l.code, l.channel]));
     const ratings = event.registrations
@@ -197,19 +211,27 @@ export class SpaceEventsService {
         feedbackComment: r.feedbackComment,
         paidAmount: r.paidAmount,
         paidAt: r.paidAt,
-        sourceChannel: r.sourceCode ? channelOf.get(r.sourceCode) ?? null : null,
+        sourceChannel: r.sourceCode
+          ? channelOf.get(r.sourceCode) ?? null
+          : null,
         member: r.member,
       })),
     };
   }
 
   /** Paid event: the desk marks a place as paid (or undoes it). */
-  async markPaid(eventId: string, registrationId: string, paid: boolean, amount?: number) {
+  async markPaid(
+    eventId: string,
+    registrationId: string,
+    paid: boolean,
+    amount?: number,
+  ) {
     const reg = await this.prisma.eventRegistration.findUnique({
       where: { id: registrationId },
       include: { event: { select: { price: true } } },
     });
-    if (!reg || reg.eventId !== eventId) throw new NotFoundException('Inscription introuvable');
+    if (!reg || reg.eventId !== eventId)
+      throw new NotFoundException('Inscription introuvable');
     return this.prisma.eventRegistration.update({
       where: { id: registrationId },
       data: paid
@@ -440,6 +462,58 @@ export class SpaceEventsService {
         sourceCode: source ?? null,
       },
     });
+  }
+
+  /**
+   * Register someone who has no account yet (e.g. came from an Instagram survey):
+   * light visitor by phone, then the normal registration. Returns the visitor
+   * identity so the app treats them as known from now on.
+   */
+  async registerGuest(eventId: string, dto: EventGuestDto) {
+    const event = await this.prisma.event.findUnique({
+      where: { id: eventId },
+      select: { status: true, facility: { select: { organizationId: true } } },
+    });
+    if (
+      !event ||
+      event.status !== EventStatus.PUBLISHED ||
+      !event.facility.organizationId
+    ) {
+      throw new NotFoundException('Événement introuvable');
+    }
+    const organizationId = event.facility.organizationId;
+    const { member, sanitized, accessToken } = await this.mobile.guestIdentity(
+      organizationId,
+      {
+        firstName: dto.firstName,
+        phone: dto.phone,
+        accountMessage:
+          'Ce numéro a déjà un compte : connectez-vous pour vous inscrire',
+      },
+    );
+    const registration = await this.register(
+      eventId,
+      member.id,
+      dto.sourceCode,
+    );
+
+    // Same browser answered the survey: tie that answer to the person (original source kept)
+    if (dto.surveyResponseId && dto.visitorKey) {
+      await this.prisma.surveyResponse.updateMany({
+        where: {
+          id: dto.surveyResponseId,
+          visitorKey: dto.visitorKey,
+          memberId: null,
+          survey: { facility: { organizationId } },
+        },
+        data: {
+          memberId: member.id,
+          memberLinkMethod: 'SELF_REGISTER',
+          memberLinkedAt: new Date(),
+        },
+      });
+    }
+    return { registration, member: sanitized, accessToken };
   }
 
   async unregister(eventId: string, memberId: string) {

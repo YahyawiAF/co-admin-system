@@ -29,6 +29,7 @@ import { CaisseModule } from './modules/caisse/caisse.module';
 import { GroupsModule } from './modules/groups/groups.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { SpaceEventsModule } from './modules/events/events.module';
+import { SurveysModule } from './modules/surveys/surveys.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AdvisorModule } from './modules/advisor/advisor.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
@@ -82,6 +83,7 @@ import { StaffModule } from './modules/staff/staff.module';
     GroupsModule,
     OrganizationsModule,
     SpaceEventsModule,
+    SurveysModule,
     AnalyticsModule,
     AdvisorModule,
     PromotionModule,

@@ -15,6 +15,7 @@ import {
   CreateEventDto,
   EventAttendanceDto,
   EventFeedbackDto,
+  EventGuestDto,
   EventMemberDto,
   EventPaidDto,
   UpdateEventDto,
@@ -126,6 +127,15 @@ export class MobileEventsController {
     @Body() dto: EventMemberDto,
   ) {
     return this.eventsService.register(id, dto.memberId, dto.sourceCode);
+  }
+
+  /** No account: first name + phone */
+  @Post(':id/register-guest')
+  registerGuest(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EventGuestDto,
+  ) {
+    return this.eventsService.registerGuest(id, dto);
   }
 
   @Delete(':id/register')

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { randomCode } from './share-code';
 import {
   BadRequestException,
   Injectable,
@@ -552,12 +553,4 @@ export class AdvisorService {
   private withImpact(id: string) {
     return this.snapshots.initiativeWithImpact(id);
   }
-}
-
-/** Short code for a share link: easy to type, no look-alike letters. */
-function randomCode() {
-  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
-  let out = '';
-  for (let k = 0; k < 6; k++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
 }
