@@ -23,6 +23,7 @@ import {
   BadgePercent,
   UserCog,
   History,
+  GraduationCap,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { membersApi, outreachApi, staffApi } from "@/lib/api/resources";
@@ -60,6 +61,7 @@ const NAV = [
   { href: "/tarifs", label: "Services", icon: Tags },
   { href: "/facility", label: "Facility / Map", icon: Building2 },
   { href: "/events", label: "Événements", icon: Calendar },
+  { href: "/learn-share", label: "Learn & Share", icon: GraduationCap },
   { href: "/commandes", label: "Commandes", icon: Coffee },
   { href: "/products", label: "Products", icon: Package },
 ];

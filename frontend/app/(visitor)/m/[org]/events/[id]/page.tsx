@@ -17,12 +17,15 @@ import { useOrg } from "@/lib/org";
 import { useVisitorSession } from "@/lib/visitor-session";
 import { markEventSeen } from "@/components/visitor/VisitorSpotlight";
 import { readShareSource } from "@/lib/share-source";
+import { lastResponse } from "@/lib/survey-attribution";
 import type { EventKind, Member } from "@/lib/types";
+import { Input } from "@/components/ui/input";
 
 const KIND_LABEL: Record<EventKind, string> = {
   WORKSHOP: "Atelier",
   NETWORKING: "Networking",
   OTHER: "Événement",
+  LEARNING: "Séance gratuite",
 };
 
 export default function EventDetailPage() {
@@ -160,9 +163,11 @@ export default function EventDetailPage() {
                 Annuler mon inscription
               </Button>
             ) : !memberId ? (
-              <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                Inscription depuis l&apos;app membre. Pas encore membre ? Passe à l&apos;accueil, on t&apos;inscrit.
-              </p>
+              full ? (
+                <p className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-600">Complet.</p>
+              ) : (
+                <GuestSignup eventId={params.id} free={!event.price} />
+              )
             ) : (
               <Button
                 className="mt-4 h-11 w-full rounded-full"
@@ -263,5 +268,68 @@ export default function EventDetailPage() {
         <Link href={href("/events")}>Retour au calendrier</Link>
       </Button>
     </div>
+  );
+}
+
+/** No account yet (e.g. came from an Instagram survey): first name + phone, no password. */
+function GuestSignup({ eventId, free }: { eventId: string; free: boolean }) {
+  const { slug } = useOrg();
+  const { confirm } = useVisitorSession();
+  const queryClient = useQueryClient();
+  const [firstName, setFirstName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState("");
+  const signup = useMutation({
+    mutationFn: () => {
+      const answer = lastResponse(slug);
+      return eventsApi.registerGuest(eventId, {
+        firstName: firstName.trim(),
+        phone: phone.trim(),
+        sourceCode: readShareSource(eventId),
+        ...(answer && { surveyResponseId: answer.responseId, visitorKey: answer.visitorKey }),
+      });
+    },
+    onSuccess: (res) => {
+      confirm(res.member, res.accessToken);
+      toast.success("Inscription confirmée");
+      queryClient.invalidateQueries({ queryKey: ["mobile-event"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-event-attendees"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-events"] });
+    },
+    onError: (e: Error) => setError(e.message),
+  });
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!firstName.trim()) return setError("Indique ton prénom.");
+    if (phone.replace(/\D/g, "").replace(/^216/, "").length !== 8) return setError("Numéro tunisien attendu : 8 chiffres, ex. 22 123 456.");
+    setError("");
+    signup.mutate();
+  };
+  return (
+    <form onSubmit={submit} className="ls-enter mt-4 space-y-3 rounded-2xl bg-slate-50 p-4">
+      <p className="text-sm font-semibold text-slate-800">
+        {free ? "Inscription gratuite" : "Inscription"} : pas de compte à créer.
+      </p>
+      <label htmlFor="guest-name" className="block space-y-1 text-sm font-medium text-slate-700">
+        Prénom
+        <Input id="guest-name" autoComplete="given-name" maxLength={56} value={firstName} onChange={(e) => setFirstName(e.target.value)} className="h-11 bg-white" />
+      </label>
+      <label htmlFor="guest-phone" className="block space-y-1 text-sm font-medium text-slate-700">
+        Téléphone
+        <span className="flex gap-2">
+          <span className="grid h-11 place-items-center rounded-md border bg-white px-3 text-sm font-semibold text-slate-500">+216</span>
+          <Input id="guest-phone" type="tel" inputMode="numeric" autoComplete="tel-national" placeholder="22 123 456" maxLength={20} value={phone} onChange={(e) => setPhone(e.target.value)} className="h-11 bg-white" />
+        </span>
+      </label>
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-rose-600">
+          {error}
+        </p>
+      ) : null}
+      <Button type="submit" className="h-11 w-full rounded-full" disabled={signup.isPending}>
+        {signup.isPending ? "Inscription…" : "M’inscrire"}
+      </Button>
+      <p className="text-xs text-slate-500">Si ce numéro a déjà un compte, connecte-toi depuis l&apos;accueil de l&apos;app pour t&apos;inscrire.</p>
+    </form>
   );
 }

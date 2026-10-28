@@ -10,6 +10,7 @@ import {
   Check,
   ChevronRight,
   Clock,
+  GraduationCap,
   Mic,
   Sparkles,
   Star,
@@ -25,12 +26,14 @@ export const EVENT_KIND_LABEL: Record<EventKind, string> = {
   WORKSHOP: "Atelier",
   NETWORKING: "Networking",
   OTHER: "Événement",
+  LEARNING: "Séance gratuite",
 };
 
 const KIND_STYLE: Record<EventKind, { Icon: typeof Mic; cover: string }> = {
   WORKSHOP: { Icon: Mic, cover: "from-indigo-500 to-violet-500" },
   NETWORKING: { Icon: Users, cover: "from-sky-500 to-cyan-500" },
   OTHER: { Icon: Sparkles, cover: "from-amber-400 to-orange-500" },
+  LEARNING: { Icon: GraduationCap, cover: "from-emerald-500 to-teal-500" },
 };
 
 const CARD = "rounded-3xl bg-white shadow-sm ring-1 ring-slate-900/5";

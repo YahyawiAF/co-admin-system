@@ -431,3 +431,20 @@
   .w-badge-in, .w-rays, .w-burst, .w-slam, .w-spin, .w-cta { animation: none !important; }
   .nc-ping, .w-burst { display: none; }
 }
+
+/* Learn & Share: tab and step changes, bars */
+@keyframes ls-enter { from { opacity: 0; transform: translateY(6px); } }
+@keyframes ls-in-right { from { opacity: 0; transform: translateX(28px); } }
+@keyframes ls-in-left { from { opacity: 0; transform: translateX(-28px); } }
+@keyframes ls-grow { from { transform: scaleX(0); } }
+@keyframes ls-draw { to { stroke-dashoffset: 0; } }
+.ls-enter { animation: ls-enter 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ls-stagger > * { animation: ls-enter 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: calc(min(var(--i, 0), 10) * 28ms); }
+.ls-in-right { animation: ls-in-right 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ls-in-left { animation: ls-in-left 280ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ls-bar { transform-origin: left center; animation: ls-grow 450ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.ls-check path { stroke-dasharray: 60; stroke-dashoffset: 60; animation: ls-draw 500ms 150ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .ls-enter, .ls-stagger > *, .ls-in-right, .ls-in-left, .ls-bar { animation: none !important; }
+  .ls-check path { animation: none; stroke-dashoffset: 0; }
+}

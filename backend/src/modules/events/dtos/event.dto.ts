@@ -11,6 +11,8 @@ import {
   IsString,
   Max,
   Min,
+  MaxLength,
+  IsUUID,
 } from 'class-validator';
 import { EventKind, EventStatus } from '@prisma/client';
 
@@ -148,12 +150,51 @@ export class EventMemberDto {
   sourceCode?: string;
 }
 
+/** Sign-up without an account: first name + phone (light visitor found or created by phone). */
+export class EventGuestDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(56)
+  firstName: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  phone: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  sourceCode?: string;
+
+  @ApiPropertyOptional({
+    description: 'Survey answer given earlier in this browser',
+  })
+  @IsOptional()
+  @IsUUID()
+  surveyResponseId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Browser key of that survey answer (proves it is the same browser)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  visitorKey?: string;
+}
+
 export class EventPaidDto {
   @ApiProperty()
   @IsBoolean()
   paid: boolean;
 
-  @ApiPropertyOptional({ description: 'Amount taken (DT); defaults to the event price' })
+  @ApiPropertyOptional({
+    description: 'Amount taken (DT); defaults to the event price',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

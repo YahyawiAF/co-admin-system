@@ -37,6 +37,7 @@ const KIND_LABEL: Record<EventKind, string> = {
   WORKSHOP: "Atelier",
   NETWORKING: "Networking",
   OTHER: "Autre",
+  LEARNING: "Learn & Share",
 };
 
 const STATUS_LABEL: Record<EventStatus, string> = {
@@ -311,6 +312,7 @@ export default function AdminEventsPage() {
                     <SelectItem value="WORKSHOP">Atelier</SelectItem>
                     <SelectItem value="NETWORKING">Networking</SelectItem>
                     <SelectItem value="OTHER">Autre</SelectItem>
+                    <SelectItem value="LEARNING">Learn &amp; Share (gratuit)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

@@ -7,8 +7,10 @@ import {
   MobileLinksController,
 } from './events.controller';
 import { SpaceEventsService } from './events.service';
+import { MobileModule } from '../mobile/mobile.module';
 
 @Module({
+  imports: [MobileModule],
   controllers: [
     EventsAdminWriteController,
     EventsAdminReadController,

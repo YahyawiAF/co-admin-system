@@ -1,4 +1,19 @@
-import { http } from "./httpClient";
+import { http, API_BASE_URL } from "./httpClient";
+import type {
+  LearningSession,
+  LinkPresetKey,
+  PublicSurvey,
+  SurveyDashboard,
+  SurveyDetail,
+  SurveyFilters,
+  SurveyLink,
+  SurveyQuestion,
+  SurveyResponseRow,
+  SurveySettings,
+  SurveyStatus,
+  SurveySummary,
+  SurveyVolunteer,
+} from "@/lib/surveys";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
@@ -1865,6 +1880,17 @@ export const eventsApi = {
       },
     );
   },
+  /** No account yet: first name + phone (light visitor found or created by phone) */
+  registerGuest(
+    id: string,
+    data: { firstName: string; phone: string; sourceCode?: string; surveyResponseId?: string; visitorKey?: string }
+  ) {
+    return http.post<{ registration: { id: string; status: string; attendanceCode: string }; member: Member; accessToken: string }>(
+      `/mobile/events/${id}/register-guest`,
+      data,
+      { skipAuth: true }
+    );
+  },
   unregister(id: string, memberId: string) {
     return http.delete(`/mobile/events/${id}/register?memberId=${memberId}`, {
       skipAuth: true,
@@ -2086,5 +2112,170 @@ export const staffApi = {
       organizationId: getAdminOrganizationId(),
       ids,
     });
+  },
+};
+
+/* ───────────── Learn & Share surveys ───────────── */
+
+function surveyQuery(f: SurveyFilters = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(f)) {
+    if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export const surveysApi = {
+  list() {
+    return http.get<{ orgSlug: string; surveys: SurveySummary[] }>(withOrgQuery("/admin/surveys"));
+  },
+  create(data: { templateCode?: string; duplicateOf?: string; title?: string }) {
+    return http.post<{ id: string }>(withOrgQuery("/admin/surveys"), data);
+  },
+  get(id: string) {
+    return http.get<SurveyDetail>(`/admin/surveys/${id}`);
+  },
+  update(
+    id: string,
+    data: Partial<{
+      title: string;
+      slug: string;
+      intro: string;
+      closesAt: string | null;
+      questions: SurveyQuestion[];
+      settings: Partial<SurveySettings>;
+    }>
+  ) {
+    return http.patch<SurveyDetail>(`/admin/surveys/${id}`, data);
+  },
+  setStatus(id: string, status: SurveyStatus) {
+    return http.patch<SurveyDetail>(`/admin/surveys/${id}/status`, { status });
+  },
+  createLink(id: string, data: { preset: LinkPresetKey; label?: string; campaign?: string }) {
+    return http.post<SurveyLink[]>(`/admin/surveys/${id}/links`, data);
+  },
+  deleteLink(id: string, linkId: string) {
+    return http.delete<SurveyLink[]>(`/admin/surveys/${id}/links/${linkId}`);
+  },
+  /** Only an untouched draft can be deleted */
+  remove(id: string) {
+    return http.delete<{ ok: true }>(`/admin/surveys/${id}`);
+  },
+  templates() {
+    return http.get<Array<{ code: string; name: string; title: string; questions: number }>>("/admin/surveys/templates");
+  },
+  dashboard(id: string, f: SurveyFilters) {
+    return http.get<SurveyDashboard>(`/admin/surveys/${id}/dashboard${surveyQuery(f)}`);
+  },
+  responses(id: string, f: SurveyFilters) {
+    return http.get<{ total: number; page: number; pageSize: number; rows: SurveyResponseRow[] }>(
+      `/admin/surveys/${id}/responses${surveyQuery(f)}`
+    );
+  },
+  /** CSV needs the auth header, so it is fetched as a blob and saved by the browser. */
+  async downloadCsv(id: string, f: SurveyFilters) {
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const org = getAdminOrganizationId();
+    const res = await fetch(`${API_BASE_URL}/admin/surveys/${id}/responses.csv${surveyQuery(f)}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(org && { "X-Organization-Id": org }),
+      },
+    });
+    if (!res.ok) throw new Error("Export impossible");
+    const name =
+      /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] ||
+      "reponses.csv";
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+  matches(id: string, responseId: string) {
+    return http.get<
+      Array<{
+        id: string;
+        firstName: string | null;
+        lastName: string | null;
+        phone: string | null;
+        visitorNumber: number | null;
+        createdAt: string;
+      }>
+    >(`/admin/surveys/${id}/responses/${responseId}/matches`);
+  },
+  linkMember(id: string, responseId: string, memberId: string) {
+    return http.patch<{ ok: true }>(`/admin/surveys/${id}/responses/${responseId}/member`, { memberId });
+  },
+  unlinkMember(id: string, responseId: string) {
+    return http.delete<{ ok: true }>(`/admin/surveys/${id}/responses/${responseId}/member`);
+  },
+  volunteers(id: string, subject?: string) {
+    return http.get<SurveyVolunteer[]>(
+      `/admin/surveys/${id}/volunteers${subject ? `?subject=${encodeURIComponent(subject)}` : ""}`
+    );
+  },
+  sessions(id: string) {
+    return http.get<LearningSession[]>(`/admin/surveys/${id}/sessions`);
+  },
+  createSession(
+    id: string,
+    data: {
+      title: string;
+      description?: string;
+      subject?: string;
+      startAt: string;
+      endAt: string;
+      location?: string;
+      capacity?: number;
+      hostResponseId?: string;
+      status?: "DRAFT" | "PUBLISHED";
+    }
+  ) {
+    return http.post<LearningSession>(`/admin/surveys/${id}/sessions`, data);
+  },
+  setReward(id: string, eventId: string, given: boolean, note?: string) {
+    return http.patch<{ id: string; rewardGivenAt: string | null; rewardNote: string | null }>(
+      `/admin/surveys/${id}/sessions/${eventId}/reward`,
+      { given, note }
+    );
+  },
+
+  /* public, no login */
+  publicGet(org: string, slug: string) {
+    return http.get<PublicSurvey>(`/mobile/surveys/${encodeURIComponent(org)}/${encodeURIComponent(slug)}`, {
+      skipAuth: true,
+    });
+  },
+  publicVisit(org: string, slug: string, data: Record<string, unknown>) {
+    return http.post<{ open: boolean; counted?: boolean }>(
+      `/mobile/surveys/${encodeURIComponent(org)}/${encodeURIComponent(slug)}/visit`,
+      data,
+      { skipAuth: true }
+    );
+  },
+  publicStart(org: string, slug: string, visitorKey: string) {
+    return http.post<{ ok: boolean }>(
+      `/mobile/surveys/${encodeURIComponent(org)}/${encodeURIComponent(slug)}/start`,
+      { visitorKey },
+      { skipAuth: true }
+    );
+  },
+  /** Keeps the per-question errors of a 400 so the form can point at them. */
+  async publicSubmit(org: string, slug: string, data: Record<string, unknown>) {
+    const res = await fetch(
+      `${API_BASE_URL}/mobile/surveys/${encodeURIComponent(org)}/${encodeURIComponent(slug)}/responses`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }
+    );
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = typeof body.message === "string" ? body.message : "Envoi impossible, réessayez";
+      const err = new Error(msg) as Error & { errors?: Array<{ questionId: string; message: string }> };
+      if (Array.isArray(body.errors)) err.errors = body.errors;
+      throw err;
+    }
+    return body as { id: string; deduplicated: boolean; successMessage: string };
   },
 };

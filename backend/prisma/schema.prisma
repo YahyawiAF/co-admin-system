@@ -106,6 +106,7 @@ model Member {
   referralRewardedAt       DateTime?
   reviewPromptedAt         DateTime?
   reviewClickedAt          DateTime?
+  surveyResponses          SurveyResponse[]
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
@@ -684,6 +685,7 @@ model Facility {
   promotions                  Promotion[]
   shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]
+  surveys                     Survey[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -1132,6 +1134,8 @@ enum EventKind {
   WORKSHOP
   NETWORKING
   OTHER
+  /// Free peer-learning session (Learn & Share)
+  LEARNING
 }
 
 enum EventStatus {
@@ -1148,25 +1152,34 @@ enum EventRegistrationStatus {
 }
 
 model Event {
-  id            String              @id @default(uuid())
-  facilityId    String
-  facility      Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  title         String
-  description   String?
-  kind          EventKind           @default(OTHER)
-  location      String?
-  startAt       DateTime
-  endAt         DateTime
-  capacity      Int?
+  id             String              @id @default(uuid())
+  facilityId     String
+  facility       Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  kind           EventKind           @default(OTHER)
+  location       String?
+  startAt        DateTime
+  endAt          DateTime
+  capacity       Int?
   /// Price of a place in DT; null = free
-  price         Float?
-  status        EventStatus         @default(DRAFT)
-  coverImage    String?
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  registrations EventRegistration[]
+  price          Float?
+  status         EventStatus         @default(DRAFT)
+  coverImage     String?
+  /// Learn & Share: survey that showed the demand, subject, volunteer host and their reward
+  surveyId       String?
+  survey         Survey?             @relation(fields: [surveyId], references: [id], onDelete: SetNull)
+  subject        String?             @db.VarChar(80)
+  hostMemberId   String?
+  hostResponseId String?
+  rewardNote     String?
+  rewardGivenAt  DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  registrations  EventRegistration[]
 
   @@index([facilityId, startAt])
+  @@index([surveyId])
   @@index([status, startAt])
   @@map("events")
 }
@@ -1286,21 +1299,31 @@ model BusinessInitiative {
 
 /// A tracked link shared on one channel; the app counts who opens it
 model ShareLink {
-  id           String              @id @default(uuid())
-  code         String              @unique
-  facilityId   String
-  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  initiativeId String?
-  initiative   BusinessInitiative? @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
-  /// EVENT (only kind for now)
-  kind         String              @default("EVENT")
-  targetId     String
-  /// Same codes as BusinessInitiative.channels
-  channel      String
-  opens        Int                 @default(0)
-  createdAt    DateTime            @default(now())
+  id              String              @id @default(uuid())
+  code            String              @unique
+  facilityId      String
+  facility        Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  initiativeId    String?
+  initiative      BusinessInitiative? @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+  /// EVENT | SURVEY
+  kind            String              @default("EVENT")
+  targetId        String
+  /// Same codes as BusinessInitiative.channels (survey links: INSTAGRAM, WHATSAPP, FACEBOOK, CLUB, QR, OTHER…)
+  channel         String
+  opens           Int                 @default(0)
+  /// Survey links: who/where it is for ("Club IEEE ENIT") and the UTM values written in the URL
+  label           String?             @db.VarChar(80)
+  source          String?             @db.VarChar(40)
+  medium          String?             @db.VarChar(40)
+  campaign        String?             @db.VarChar(80)
+  content         String?             @db.VarChar(80)
+  term            String?             @db.VarChar(80)
+  surveyVisits    SurveyVisit[]
+  surveyResponses SurveyResponse[]
+  createdAt       DateTime            @default(now())
 
   @@index([initiativeId])
+  @@index([kind, targetId])
   @@map("share_links")
 }
 
@@ -1502,4 +1525,115 @@ model StaffAction {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("staff_actions")
+}
+
+enum SurveyStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  CLOSED
+}
+
+/// Learn & Share survey: public at /m/<org>/s/<slug>, no login needed
+model Survey {
+  id           String           @id @default(uuid())
+  facilityId   String
+  facility     Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  slug         String           @db.VarChar(60)
+  title        String           @db.VarChar(120)
+  intro        String?
+  description  String?
+  /// Why the survey exists and who it is for (admin only)
+  purpose      String?
+  audience     String?
+  status       SurveyStatus     @default(DRAFT)
+  closesAt     DateTime?
+  /// Ordered questions: [{ id, section, type, label, help?, options?, required, allowOther?, showIf? }]
+  questions    Json             @default("[]")
+  /// { contactMode, duplicatePolicy, attributionDays, requireLogin }
+  settings     Json             @default("{}")
+  /// Built-in template it was made from (e.g. "learn_share")
+  templateCode String?          @db.VarChar(40)
+  publishedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  visits       SurveyVisit[]
+  responses    SurveyResponse[]
+  events       Event[]
+
+  @@unique([facilityId, slug])
+  @@index([status])
+  @@map("surveys")
+}
+
+/// One browser on one survey: first-touch attribution kept server-side (no fingerprinting)
+model SurveyVisit {
+  id          String     @id @default(uuid())
+  surveyId    String
+  survey      Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  /// Random id generated by the browser and kept in its storage
+  visitorKey  String     @db.VarChar(64)
+  linkId      String?
+  link        ShareLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  source      String     @db.VarChar(40)
+  medium      String?    @db.VarChar(40)
+  campaign    String?    @db.VarChar(80)
+  content     String?    @db.VarChar(80)
+  term        String?    @db.VarChar(80)
+  /// LINK (tracked code) | UTM (parameters only) | DIRECT (nothing)
+  method      String     @db.VarChar(10)
+  firstSeenAt DateTime   @default(now())
+  lastSeenAt  DateTime   @default(now())
+  startedAt   DateTime?
+  submittedAt DateTime?
+
+  @@unique([surveyId, visitorKey])
+  @@index([surveyId, firstSeenAt])
+  @@index([linkId])
+  @@map("survey_visits")
+}
+
+model SurveyResponse {
+  id               String     @id @default(uuid())
+  surveyId         String
+  survey           Survey     @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  visitorKey       String     @db.VarChar(64)
+  /// Sent by the browser for each submit attempt: a retry returns the same row
+  idempotencyKey   String     @unique @db.VarChar(64)
+  linkId           String?
+  link             ShareLink? @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  /// Attribution frozen at submission (never overwritten)
+  source           String     @db.VarChar(40)
+  medium           String?    @db.VarChar(40)
+  campaign         String?    @db.VarChar(80)
+  content          String?    @db.VarChar(80)
+  term             String?    @db.VarChar(80)
+  method           String     @db.VarChar(10)
+  answers          Json
+  /// LEARN | SHARE | BOTH
+  role             String?    @db.VarChar(8)
+  subjects         String[]   @default([])
+  contactName      String?    @db.VarChar(80)
+  /// Normalised phone (WhatsApp)
+  contactPhone     String?    @db.VarChar(32)
+  contactConsentAt DateTime?
+  memberId         String?
+  member           Member?    @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  /// SESSION (signed in at submit) | SELF_REGISTER (signed up for a session) | STAFF (matched by an admin)
+  memberLinkMethod String?    @db.VarChar(16)
+  memberLinkedAt   DateTime?
+  memberLinkedBy   String?
+  /// Older answer from the same browser when a newer one replaced it (kept, not deleted)
+  supersededAt     DateTime?
+  /// Honeypot or too-fast submit: kept for review, left out of results
+  flagged          Boolean    @default(false)
+  createdAt        DateTime   @default(now())
+
+  @@index([surveyId, createdAt])
+  @@index([surveyId, source])
+  @@index([surveyId, visitorKey])
+  @@index([linkId])
+  @@index([memberId])
+  @@index([contactPhone])
+  @@map("survey_responses")
 }

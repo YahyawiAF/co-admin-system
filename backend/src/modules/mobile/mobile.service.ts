@@ -1,5 +1,4 @@
 import { randomUUID, createHash, randomBytes } from 'crypto';
-import { parsePhoneNumberFromString } from 'libphonenumber-js';
 import {
   BadRequestException,
   ConflictException,
@@ -20,6 +19,12 @@ import {
   subDays,
 } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
+import {
+  findMemberByPhone,
+  nextVisitorNumber,
+  parseTunisiaPhoneOrNull,
+  phoneLookupVariants,
+} from './member-phone';
 import { issueMemberQr } from './member-qr';
 import {
   CheckoutSessionDto,
@@ -793,36 +798,21 @@ export class MobileService {
   }
 
   private parseTunisiaPhone(raw: string): string {
-    const input = (raw || '').trim();
-    const parsed =
-      parsePhoneNumberFromString(input, 'TN') ||
-      parsePhoneNumberFromString(input);
-    if (!parsed || parsed.country !== 'TN' || !parsed.isValid()) {
+    const phone = parseTunisiaPhoneOrNull(raw);
+    if (!phone) {
       throw new BadRequestException(
         'Seuls les numéros tunisiens (+216) sont acceptés',
       );
     }
-    return parsed.number;
+    return phone;
   }
 
   private phoneLookupVariants(phone: string): string[] {
-    const digits = phone.replace(/\D/g, '');
-    const national = digits.replace(/^216/, '');
-    return Array.from(
-      new Set(
-        [phone, `+${digits}`, digits, national, `0${national}`].filter(Boolean),
-      ),
-    );
+    return phoneLookupVariants(phone);
   }
 
   private async findMemberByPhone(phone: string, organizationId: string) {
-    const variants = this.phoneLookupVariants(phone);
-    return this.prisma.member.findFirst({
-      where: {
-        organizationId,
-        phone: { in: variants },
-      },
-    });
+    return findMemberByPhone(this.prisma, phone, organizationId);
   }
 
   private phonesEqual(stored: string | null | undefined, submitted: string) {
@@ -963,12 +953,7 @@ export class MobileService {
   }
 
   private async nextVisitorNumber(organizationId: string): Promise<number> {
-    const last = await this.prisma.member.findFirst({
-      where: { organizationId, visitorNumber: { not: null } },
-      orderBy: { visitorNumber: 'desc' },
-      select: { visitorNumber: true },
-    });
-    return (last?.visitorNumber || 0) + 1;
+    return nextVisitorNumber(this.prisma, organizationId);
   }
 
   private async ensureVisitorIdentity(
@@ -6212,29 +6197,13 @@ export class MobileService {
     const org = await this.resolveOrganizationBySlug(dto.orgSlug);
     const firstName = (dto.firstName || '').trim();
     const lastName = (dto.lastName || '').trim();
-    if (!firstName) throw new BadRequestException('Indiquez votre prénom');
-    const phone = this.parseTunisiaPhone(dto.phone || '');
-    let member = await this.findMemberByPhone(phone, org.id);
-    if (!member) {
-      member = await this.prisma.member.create({
-        data: {
-          organizationId: org.id,
-          phone,
-          firstName,
-          lastName: lastName || null,
-          visitorNumber: await this.nextVisitorNumber(org.id),
-          credits: 0,
-          isActive: true,
-          plan: Subscription.Journal,
-          openToCollaboration: true,
-          showInDirectory: true,
-        },
-      });
-    } else if (member.pinHash || member.passwordHash) {
-      throw new BadRequestException(
+    const { member, accessToken } = await this.guestIdentity(org.id, {
+      firstName,
+      lastName,
+      phone: dto.phone || '',
+      accountMessage:
         'Ce numéro a déjà un compte : connectez-vous pour réserver',
-      );
-    }
+    });
     const booking = await this.createBookingRequest({
       memberId: member.id,
       kind: dto.kind,
@@ -6246,8 +6215,52 @@ export class MobileService {
       endTime: dto.endTime,
       note: [`${firstName} ${lastName}`.trim(), dto.note?.trim()].filter(Boolean).join(' · '),
     });
-    const accessToken = await this.signMemberToken(member.id, member.phone);
     return { booking, member: this.sanitizeMember(member as any), accessToken };
+  }
+
+  /**
+   * Visitor who acts without an account (reservation, session sign-up):
+   * found by phone or created as a light visitor. A number that already has an
+   * account must log in instead, so nobody acts on someone else's account.
+   */
+  async guestIdentity(
+    organizationId: string,
+    dto: {
+      firstName: string;
+      lastName?: string;
+      phone: string;
+      accountMessage: string;
+    },
+  ) {
+    const firstName = (dto.firstName || '').trim().slice(0, 56);
+    const lastName = (dto.lastName || '').trim().slice(0, 56);
+    if (!firstName) throw new BadRequestException('Indiquez votre prénom');
+    const phone = this.parseTunisiaPhone(dto.phone || '');
+    let member = await this.findMemberByPhone(phone, organizationId);
+    if (!member) {
+      member = await this.prisma.member.create({
+        data: {
+          organizationId,
+          phone,
+          firstName,
+          lastName: lastName || null,
+          visitorNumber: await this.nextVisitorNumber(organizationId),
+          credits: 0,
+          isActive: true,
+          plan: Subscription.Journal,
+          openToCollaboration: true,
+          showInDirectory: true,
+        },
+      });
+    } else if (member.pinHash || member.passwordHash) {
+      throw new BadRequestException(dto.accountMessage);
+    }
+    const accessToken = await this.signMemberToken(member.id, member.phone);
+    return {
+      member,
+      sanitized: this.sanitizeMember(member as any),
+      accessToken,
+    };
   }
 
   async createBookingRequest(dto: {
