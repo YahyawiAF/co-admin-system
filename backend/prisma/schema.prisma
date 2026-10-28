@@ -683,6 +683,8 @@ model Facility {
   advisorQuestions            AdvisorQuestion[]
   promotions                  Promotion[]
   outreachCampaigns           OutreachCampaign[]
+  businessAnswers             BusinessAnswer[]
+  featureProposals            FeatureProposal[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -1463,4 +1465,45 @@ model StaffAction {
   @@index([userId, createdAt])
   @@index([entityType, entityId])
   @@map("staff_actions")
+}
+
+/// Conseiller: the owner's answers to the manager's questions (bank balance, charges, reserve…)
+model BusinessAnswer {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  /// bank | safe | charges | payroll | taxes | promised | reserve
+  key        String
+  /// DT (reserve: months); null when the owner does not know
+  value      Float?
+  /// What the owner picked, e.g. "3 000 – 8 000 DT"
+  label      String
+  /// How the value was counted, e.g. "bas de la fourchette"
+  note       String?
+  unknown    Boolean  @default(false)
+  answeredAt DateTime @default(now())
+  answeredBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([facilityId, key])
+  @@map("business_answers")
+}
+
+/// Conseiller: a tool the manager asks for; the owner approves before anything is built
+model FeatureProposal {
+  id            String    @id @default(uuid())
+  facilityId    String
+  facility      Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  key           String
+  title         String
+  /// SUGGESTED | APPROVED | TICKET_READY | DEFERRED | REJECTED
+  stage         String    @default("SUGGESTED")
+  deferredUntil DateTime?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([facilityId, key])
+  @@map("feature_proposals")
 }

@@ -754,7 +754,7 @@ export class SnapshotService {
     return [...new Set(facts.map((f) => f.title))];
   }
 
-  private async facilitySeats(facilityId: string) {
+  async facilitySeats(facilityId: string) {
     const f = await this.prisma.facility.findUnique({
       where: { id: facilityId },
     });
