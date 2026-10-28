@@ -4,6 +4,7 @@ import {
   EventsAdminReadController,
   EventsAdminWriteController,
   MobileEventsController,
+  MobileLinksController,
 } from './events.controller';
 import { SpaceEventsService } from './events.service';
 
@@ -12,6 +13,7 @@ import { SpaceEventsService } from './events.service';
     EventsAdminWriteController,
     EventsAdminReadController,
     MobileEventsController,
+    MobileLinksController,
   ],
   providers: [SpaceEventsService, PrismaService],
   exports: [SpaceEventsService],

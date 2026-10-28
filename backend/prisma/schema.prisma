@@ -682,6 +682,7 @@ model Facility {
   advisorFacts                AdvisorFact[]
   advisorQuestions            AdvisorQuestion[]
   promotions                  Promotion[]
+  shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]
 
   @@index([organizationId])
@@ -1157,6 +1158,8 @@ model Event {
   startAt       DateTime
   endAt         DateTime
   capacity      Int?
+  /// Price of a place in DT; null = free
+  price         Float?
   status        EventStatus         @default(DRAFT)
   coverImage    String?
   createdAt     DateTime            @default(now())
@@ -1180,6 +1183,11 @@ model EventRegistration {
   feedbackRating  Int?
   feedbackComment String?
   feedbackAt      DateTime?
+  /// Paid event: amount taken at the desk (DT) and when
+  paidAmount      Float?
+  paidAt          DateTime?
+  /// Share link code the member came from (ShareLink.code)
+  sourceCode      String?
   createdAt       DateTime                @default(now())
 
   @@unique([eventId, memberId])
@@ -1255,14 +1263,45 @@ model BusinessInitiative {
   /// LIST: the list chosen (campaign segment code) and its clients, frozen at start
   targetSegment  String?
   targetMemberIds String[] @default([])
-  /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION
+  /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION | EVENT
   linkedKind     String?
   linkedId       String?
+  /// TICKETS | SUBSCRIBERS | CAFE | QUIET_HOURS | OTHER
+  objective      String?
+  /// Why it should work, one line
+  hypothesis     String?
+  /// INSTAGRAM_POST | INSTAGRAM_STORY | WHATSAPP | APP | PARTNER | WALK_IN
+  channels       String[]  @default([])
+  /// Planned steps: [{ text, done, doneAt?: "yyyy-MM-dd" }]
+  steps          Json      @default("[]")
+  /// Figures typed from Instagram: [{ date: "yyyy-MM-dd", channel?, reach }]
+  manualFunnel   Json      @default("[]")
+  shareLinks     ShareLink[]
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
+}
+
+/// A tracked link shared on one channel; the app counts who opens it
+model ShareLink {
+  id           String              @id @default(uuid())
+  code         String              @unique
+  facilityId   String
+  facility     Facility            @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  initiativeId String?
+  initiative   BusinessInitiative? @relation(fields: [initiativeId], references: [id], onDelete: SetNull)
+  /// EVENT (only kind for now)
+  kind         String              @default("EVENT")
+  targetId     String
+  /// Same codes as BusinessInitiative.channels
+  channel      String
+  opens        Int                 @default(0)
+  createdAt    DateTime            @default(now())
+
+  @@index([initiativeId])
+  @@map("share_links")
 }
 
 /// Context the AI cannot see in the figures: calendar, neighbourhood, clientele

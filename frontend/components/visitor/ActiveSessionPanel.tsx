@@ -42,10 +42,12 @@ import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
 import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
 import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
+import { FirstVisitWelcome } from "@/components/visitor/FirstVisitWelcome";
 import {
   clearCheckinReward,
   clearTarifPrompt,
   hasCheckinReward,
+  checkinRewardIsFirstVisit,
   hasTarifPrompt,
 } from "@/lib/visitorCache";
 import { isStandalonePwa } from "@/lib/visitor-notify";
@@ -156,6 +158,8 @@ export function ActiveSessionPanel({
   const [seatOpen, setSeatOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [rewardOpen, setRewardOpen] = useState(false);
+  /** Very first check-in: the "Niveau 1" welcome replaces the reward. */
+  const [firstVisit, setFirstVisit] = useState(false);
   const [isPwa, setIsPwa] = useState(false);
   const [leaving, setLeaving] = useState(false);
 
@@ -358,6 +362,7 @@ export function ActiveSessionPanel({
   useEffect(() => {
     if (isOptimisticSession || freshRef.current !== null || !pricingReady) return;
     freshRef.current = hasCheckinReward(slug);
+    setFirstVisit(checkinRewardIsFirstVisit(slug));
     const askTarif = hasTarifPrompt(slug);
     if (askTarif && freshRef.current && canChangeTariff && live?.mode === "AUTO") {
       rewardAfterPass.current = true;
@@ -826,8 +831,24 @@ export function ActiveSessionPanel({
 
       <MemberQrSheet open={qrOpen} onOpenChange={setQrOpen} memberId={memberId} />
 
+      <FirstVisitWelcome
+        open={rewardOpen && firstVisit}
+        onOpenChange={onRewardOpenChange}
+        memberId={memberId}
+        firstName={session.members?.firstName}
+        seatLabel={seatLabel}
+        spaceName={seat?.spaceName}
+        wifiSsid={seat?.wifiSsid}
+        tarifLine={
+          covered
+            ? "Abonnement · inclus"
+            : live?.mode === "AUTO" || !live
+              ? "Tarif auto · rien à choisir"
+              : `${passTitle} · prix bloqué`
+        }
+      />
       <CheckinRewardSheet
-        open={rewardOpen}
+        open={rewardOpen && !firstVisit}
         onOpenChange={onRewardOpenChange}
         memberId={memberId}
         firstName={session.members?.firstName}

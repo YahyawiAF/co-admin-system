@@ -256,7 +256,18 @@ export function skipInstall(org: string) {
 const qrEntryKey = (org: string) => `visitor-qr-entry:${org}`;
 
 /** Survives the sign-up step and a tab switch (camera app → browser / PWA). */
-const QR_ENTRY_TTL_MS = 20 * 60_000;
+export const QR_ENTRY_TTL_MS = 20 * 60_000;
+
+/**
+ * A scan time (ms) from the URL is still a check-in only for 20 min.
+ * iOS Safari reloads old tabs when reopened: without this a tab left on the
+ * QR page checked the visitor in again the next morning.
+ */
+export function isFreshScanTime(at: number): boolean {
+  if (!Number.isFinite(at) || at <= 0) return false;
+  const age = Date.now() - at;
+  return age > -60_000 && age < QR_ENTRY_TTL_MS;
+}
 
 export function markQrEntry(org: string) {
   try {
@@ -282,27 +293,48 @@ export function clearQrEntry(org: string) {
   } catch {
     /* ignore */
   }
+  // Used once: a later reload of this page must not check in again
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("checkin")) return;
+    url.searchParams.delete("checkin");
+    window.history.replaceState(window.history.state, "", url.toString());
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Fresh QR check-in → the session screen shows the reward + quote of the day once. */
 const checkinRewardKey = (org: string) => `visitor-checkin-reward:${org}`;
 const CHECKIN_REWARD_TTL_MS = 10 * 60_000;
 
-export function markCheckinReward(org: string) {
+/** `firstVisit`: very first check-in → the "Niveau 1" welcome instead of the reward. */
+export function markCheckinReward(org: string, firstVisit = false) {
   try {
-    localStorage.setItem(checkinRewardKey(org), String(Date.now()));
+    localStorage.setItem(
+      checkinRewardKey(org),
+      `${Date.now()}${firstVisit ? ":first" : ""}`,
+    );
   } catch {
     /* ignore */
   }
 }
-export function hasCheckinReward(org: string): boolean {
-  if (typeof window === "undefined") return false;
+function readCheckinReward(org: string): { at: number; first: boolean } | null {
+  if (typeof window === "undefined") return null;
   try {
-    const at = Number(localStorage.getItem(checkinRewardKey(org)));
-    return !!at && Date.now() - at < CHECKIN_REWARD_TTL_MS;
+    const raw = localStorage.getItem(checkinRewardKey(org)) || "";
+    const at = Number(raw.split(":")[0]);
+    if (!at || Date.now() - at >= CHECKIN_REWARD_TTL_MS) return null;
+    return { at, first: raw.endsWith(":first") };
   } catch {
-    return false;
+    return null;
   }
+}
+export function hasCheckinReward(org: string): boolean {
+  return !!readCheckinReward(org);
+}
+export function checkinRewardIsFirstVisit(org: string): boolean {
+  return !!readCheckinReward(org)?.first;
 }
 export function clearCheckinReward(org: string) {
   try {

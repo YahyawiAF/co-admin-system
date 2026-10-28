@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
+import { firstVisitTimes, onFirstVisitDay } from '../member/first-visit';
 import { UpdateJournalDto } from './dtos/updateJournal.dto';
 import { Journal, Prisma, Subscription } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
@@ -210,7 +211,10 @@ export class JournalService {
         rows.map((row) => row.memberID).filter((id): id is string => !!id),
       ),
     ];
-    const debt = await this.debtFlagsForMembers(memberIds);
+    const [debt, firsts] = await Promise.all([
+      this.debtFlagsForMembers(memberIds),
+      firstVisitTimes(this.prisma, memberIds),
+    ]);
 
     const ctxByOrg = new Map<string, PricingContext>();
     const ctxFor = async (orgId: string | null | undefined) => {
@@ -246,6 +250,11 @@ export class JournalService {
           ...row,
           hasOpenDebt: past > 0.009,
           openDebtAmount: Math.round(past * 100) / 100,
+          isFirstVisit: onFirstVisitDay(
+            firsts,
+            row.memberID,
+            (row as unknown as { registredTime: Date }).registredTime,
+          ),
           pricing,
           latePayment,
         } as any) as unknown as Journal,

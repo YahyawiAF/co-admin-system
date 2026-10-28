@@ -11,6 +11,9 @@ import { format } from "date-fns";
 import type {
   AdviceMetric,
   AdvisorCategory,
+  DiagnosisStatus,
+  InitiativeChannel,
+  InitiativeObjective,
   InitiativeStatus,
   InitiativeVerdict,
 } from "@/lib/types";
@@ -119,3 +122,31 @@ export async function copyText(text: string) {
     el.remove();
   }
 }
+
+export const OBJECTIVE_UI: Record<InitiativeObjective, string> = {
+  TICKETS: "Vendre des places",
+  SUBSCRIBERS: "Nouveaux abonnés",
+  CAFE: "Ventes café",
+  QUIET_HOURS: "Remplir les heures creuses",
+  OTHER: "Autre",
+};
+export const OBJECTIVES = Object.keys(OBJECTIVE_UI) as InitiativeObjective[];
+
+export const CHANNEL_UI: Record<InitiativeChannel, string> = {
+  INSTAGRAM_POST: "Post Instagram",
+  INSTAGRAM_STORY: "Story Instagram",
+  WHATSAPP: "WhatsApp",
+  APP: "App membres",
+  PARTNER: "Partenaire",
+  WALK_IN: "À l'accueil",
+};
+export const CHANNELS = Object.keys(CHANNEL_UI) as InitiativeChannel[];
+
+/** Diagnosis badge: label + colours (banner border / background / ink). */
+export const DIAGNOSIS_UI: Record<DiagnosisStatus, { label: string; box: string; badge: string }> = {
+  NOT_TESTED: { label: "Pas encore testé", box: "border-orange-300 bg-orange-50", badge: "border-orange-300 text-orange-800" },
+  BOTTLENECK: { label: "Blocage trouvé", box: "border-orange-300 bg-orange-50", badge: "border-orange-300 text-orange-800" },
+  MISSING_DATA: { label: "Chiffre manquant", box: "border-blue-300 bg-blue-50", badge: "border-blue-300 text-blue-800" },
+  TOO_EARLY: { label: "Trop tôt", box: "border-slate-300 bg-slate-50", badge: "border-slate-300 text-slate-700" },
+  ON_TRACK: { label: "En bonne voie", box: "border-emerald-300 bg-emerald-50", badge: "border-emerald-300 text-emerald-800" },
+};

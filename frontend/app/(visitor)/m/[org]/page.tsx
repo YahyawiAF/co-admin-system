@@ -66,7 +66,7 @@ export default function MobileHomePage() {
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
   const [showCheckoutPromo, setShowCheckoutPromo] = useState(false);
-  /** localStorage and/or ?checkin=1 (iPhone Camera → Safari). */
+  /** localStorage and/or a fresh ?checkin=<scan time> (iPhone Camera → Safari). */
   const [fromQr, setFromQr] = useState(() =>
     typeof window !== "undefined" ? wantsQrCheckin(slug) : false,
   );
@@ -131,7 +131,7 @@ export default function MobileHomePage() {
       else if (res?.alreadyOpen) {
         toast.message("Votre session est déjà en cours");
       } else if (res) {
-        markCheckinReward(slug);
+        markCheckinReward(slug, !!res.firstVisit);
       }
       clearQrEntry(slug);
       setFromQr(false);

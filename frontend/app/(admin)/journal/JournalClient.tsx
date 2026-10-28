@@ -94,6 +94,7 @@ import { AssignSeatDialog } from "@/components/admin/AssignSeatDialog";
 import { CheckInScanDialog } from "@/components/admin/CheckInScanDialog";
 import { JournalCoffeeCell } from "@/components/admin/JournalCoffeeCell";
 import { MemberDetailSheet } from "@/components/admin/MemberDetailSheet";
+import { NewClientBadge } from "@/components/admin/NewClientPopup";
 import { MemberLedgerDialog } from "@/components/admin/MemberLedgerDialog";
 import { JournalCommandesRail } from "@/components/admin/JournalCommandesRail";
 import { QuickExpenseDialog } from "@/components/admin/finance/QuickExpenseDialog";
@@ -1747,11 +1748,17 @@ export default function JournalClient() {
                     ? row.passages
                     : [row]
                   ).some((x) => !!x.hiddenAt);
+                  // First visit ever on this day: reception greets them
+                  const firstVisit =
+                    !!row.isFirstVisit ||
+                    !!row.passages?.some((x) => x.isFirstVisit);
                   return (
                     <TableRow
                       key={row.id}
                       data-state={selected ? "selected" : undefined}
                       className={cn(
+                        firstVisit &&
+                          "nc-row bg-gradient-to-r from-violet-50 to-transparent dark:from-violet-950/30",
                         status === "reservation" &&
                           "bg-violet-50/60 dark:bg-violet-950/20",
                         !row.isPayed &&
@@ -1780,11 +1787,19 @@ export default function JournalClient() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <VisitorAvatar
-                            name={visitorLabel(row)}
-                            src={m?.avatarUrl}
-                            className="h-8 w-8"
-                          />
+                          <span className="relative shrink-0">
+                            {firstVisit ? (
+                              <span
+                                aria-hidden
+                                className="nc-ping absolute inset-0 rounded-full bg-violet-400"
+                              />
+                            ) : null}
+                            <VisitorAvatar
+                              name={visitorLabel(row)}
+                              src={m?.avatarUrl}
+                              className="relative h-8 w-8"
+                            />
+                          </span>
                           <div>
                             <div className="flex flex-wrap items-center gap-1.5 font-medium">
                               <button
@@ -1795,6 +1810,7 @@ export default function JournalClient() {
                               >
                                 {visitorLabel(row)}
                               </button>
+                              {firstVisit ? <NewClientBadge /> : null}
                               {staffHidden ? (
                                 <Link
                                   href="/activite"
