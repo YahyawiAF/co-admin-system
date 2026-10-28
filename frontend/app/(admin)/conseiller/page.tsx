@@ -40,7 +40,11 @@ import {
   signed,
 } from "@/components/admin/advisor/advice-ui";
 import { CampaignDialog, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
+import { ConseillerTabs, type ConseillerTab } from "@/components/admin/advisor/ConseillerTabs";
+import { MoneyTab } from "@/components/admin/advisor/MoneyTab";
+import { QuestionsTab } from "@/components/admin/advisor/QuestionsTab";
 import type {
+  AdviceMetric,
   AdvisorCategory,
   AdvisorDataIssue,
   AdvisorResult,
@@ -376,6 +380,7 @@ export default function ConseillerPage() {
   const [doneDraft, setDoneDraft] = useState<DoneDraft | null>(null);
   const [relanceDraft, setRelanceDraft] = useState<CampaignDraft | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [tab, setTab] = useState<ConseillerTab>("conseils");
 
   const settings = useQuery({ queryKey: ["advisor", "settings"], queryFn: advisorApi.settings });
   const dataCheck = useQuery({ queryKey: ["advisor", "data-check"], queryFn: advisorApi.dataCheck });
@@ -471,7 +476,7 @@ export default function ConseillerPage() {
             Une idée → vous la faites → l&apos;app mesure ce qu&apos;elle rapporte vraiment.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className={cn("flex flex-wrap items-center gap-2", tab !== "conseils" && "hidden")}>
           {report.data ? (
             <span className="text-xs text-muted-foreground">
               Analyse du {format(new Date(report.data.createdAt), "d MMM", { locale: fr })} (
@@ -520,6 +525,28 @@ export default function ConseillerPage() {
         </div>
       </div>
 
+      <ConseillerTabs tab={tab} onChange={setTab} />
+
+      {tab === "questions" ? <QuestionsTab onShowMoney={() => setTab("argent")} /> : null}
+      {tab === "argent" ? (
+        <MoneyTab
+          onAnswer={() => setTab("questions")}
+          onStartTest={(idea) =>
+            idea.draft &&
+            setDoneDraft({
+              title: idea.title,
+              hint: idea.test,
+              category: idea.draft.category as AdvisorCategory,
+              metric: idea.draft.metric as AdviceMetric,
+              targetPct: idea.draft.targetPct,
+              target: { kind: "SLOT", days: [], fromHour: idea.draft.fromHour, toHour: idea.draft.toHour },
+            })
+          }
+        />
+      ) : null}
+
+      {tab === "conseils" ? (
+      <>
       {settings.data && !enabled ? (
         <Alert>
           <AlertTitle>IA non configurée</AlertTitle>
@@ -701,6 +728,8 @@ export default function ConseillerPage() {
           )}
         </section>
       </div>
+      </>
+      ) : null}
 
       <Sheet open={contextOpen} onOpenChange={setContextOpen}>
         <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
@@ -729,6 +758,7 @@ export default function ConseillerPage() {
         draft={doneDraft}
         onClose={() => setDoneDraft(null)}
         onSaved={(id) => {
+          setTab("conseils");
           setActionsTab("test");
           setFocusId(id);
         }}

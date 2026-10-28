@@ -686,6 +686,8 @@ model Facility {
   shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]
   surveys                     Survey[]
+  businessAnswers             BusinessAnswer[]
+  featureProposals            FeatureProposal[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -1244,54 +1246,54 @@ model AdvisorReport {
 
 /// A business change the owner started (e.g. "selling coffee"), tracked before/after
 model BusinessInitiative {
-  id             String    @id @default(uuid())
-  facilityId     String
-  facility       Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
-  title          String
-  description    String?
+  id                  String      @id @default(uuid())
+  facilityId          String
+  facility            Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title               String
+  description         String?
   /// NEW_REVENUE, PROMO, PRICING, CAFE, RETENTION, OPERATIONS
-  category       String    @default("NEW_REVENUE")
-  startDate      DateTime
-  endDate        DateTime?
-  sourceReportId String?
+  category            String      @default("NEW_REVENUE")
+  startDate           DateTime
+  endDate             DateTime?
+  sourceReportId      String?
   /// Title of the advice this action answers (links advice → follow-up)
   recommendationTitle String?
   /// Figure to watch: revenuePerDay, visitsPerDay, revenueCafe, cafeAttachRatePct, avgStayHours, newMembers, revenueSubscriptions, avgOccupancyPct
-  metric         String?
+  metric              String?
   /// Expected change of the metric, in % (e.g. 20 = +20 %)
-  targetPct      Float?
+  targetPct           Float?
   /// What the action cost (DT): material, discounts, ads…
-  cost           Float?
+  cost                Float?
   /// Owner's own conclusion: WORKING | MIXED | NOT_WORKING
-  ownerVerdict   String?
+  ownerVerdict        String?
   /// What happened, written by the owner: [{ date: "yyyy-MM-dd", text }]
-  notes          Json      @default("[]")
+  notes               Json        @default("[]")
   /// Who the action aims at — only that is measured: ALL | SLOT (days + hours) | LIST (clients)
-  targetKind     String    @default("ALL")
+  targetKind          String      @default("ALL")
   /// SLOT: 0 = Sunday … 6 = Saturday; empty = every day
-  targetDays     Int[]     @default([])
+  targetDays          Int[]       @default([])
   /// SLOT: hours [from, to); to ≤ from wraps past midnight; null = all day
-  targetFromHour Int?
-  targetToHour   Int?
+  targetFromHour      Int?
+  targetToHour        Int?
   /// LIST: the list chosen (campaign segment code) and its clients, frozen at start
-  targetSegment  String?
-  targetMemberIds String[] @default([])
+  targetSegment       String?
+  targetMemberIds     String[]    @default([])
   /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION | EVENT
-  linkedKind     String?
-  linkedId       String?
+  linkedKind          String?
+  linkedId            String?
   /// TICKETS | SUBSCRIBERS | CAFE | QUIET_HOURS | OTHER
-  objective      String?
+  objective           String?
   /// Why it should work, one line
-  hypothesis     String?
+  hypothesis          String?
   /// INSTAGRAM_POST | INSTAGRAM_STORY | WHATSAPP | APP | PARTNER | WALK_IN
-  channels       String[]  @default([])
+  channels            String[]    @default([])
   /// Planned steps: [{ text, done, doneAt?: "yyyy-MM-dd" }]
-  steps          Json      @default("[]")
+  steps               Json        @default("[]")
   /// Figures typed from Instagram: [{ date: "yyyy-MM-dd", channel?, reach }]
-  manualFunnel   Json      @default("[]")
-  shareLinks     ShareLink[]
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  manualFunnel        Json        @default("[]")
+  shareLinks          ShareLink[]
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
@@ -1636,4 +1638,45 @@ model SurveyResponse {
   @@index([memberId])
   @@index([contactPhone])
   @@map("survey_responses")
+}
+
+/// Conseiller: the owner's answers to the manager's questions (bank balance, charges, reserve…)
+model BusinessAnswer {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  /// bank | safe | charges | payroll | taxes | promised | reserve
+  key        String
+  /// DT (reserve: months); null when the owner does not know
+  value      Float?
+  /// What the owner picked, e.g. "3 000 – 8 000 DT"
+  label      String
+  /// How the value was counted, e.g. "bas de la fourchette"
+  note       String?
+  unknown    Boolean  @default(false)
+  answeredAt DateTime @default(now())
+  answeredBy String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([facilityId, key])
+  @@map("business_answers")
+}
+
+/// Conseiller: a tool the manager asks for; the owner approves before anything is built
+model FeatureProposal {
+  id            String    @id @default(uuid())
+  facilityId    String
+  facility      Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  key           String
+  title         String
+  /// SUGGESTED | APPROVED | TICKET_READY | DEFERRED | REJECTED
+  stage         String    @default("SUGGESTED")
+  deferredUntil DateTime?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([facilityId, key])
+  @@map("feature_proposals")
 }
