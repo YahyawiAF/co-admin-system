@@ -15,11 +15,13 @@ import {
   ProductOrderStatus,
   Subscription,
   LedgerKind,
+  MemberProfileType,
 } from '@prisma/client';
 import { PaginatedResult } from 'common/dtos/PaginatedOutputDto';
 import { createPaginator } from 'prisma-pagination';
 import { ErrorCode, GeneralException } from '@/exceptions';
 import { MemberEntity } from './entities/member.entity';
+import { localDayKey } from '../../../common/parse-local-day';
 import {
   startOfWeek,
   startOfDay,
@@ -217,6 +219,9 @@ export class MemberService {
     status,
     memberIds,
     organizationId,
+    profileType,
+    returnStatus,
+    offer,
   }: {
     where?: Prisma.MemberWhereInput;
     orderBy?: Prisma.MemberOrderByWithRelationInput;
@@ -227,6 +232,12 @@ export class MemberService {
     status?: string;
     memberIds?: string[];
     organizationId?: string;
+    /** STUDENT | PUPIL | PRO | none */
+    profileType?: string;
+    /** BACK | ONCE | AWAY */
+    returnStatus?: string;
+    /** with | without (personal or group discount) */
+    offer?: string;
   }): Promise<PaginatedResult<MemberEntity>> {
     const pageNum = Math.max(1, Number(page) || 1);
     const perPageNum = Math.min(100, Math.max(1, Number(perPage) || 20));
@@ -239,6 +250,34 @@ export class MemberService {
 
     if (groupId === 'none') base.groupId = null;
     else if (groupId && groupId !== 'all') base.groupId = groupId;
+
+    const and: Prisma.MemberWhereInput[] = [];
+    if (profileType === 'none') base.profileType = null;
+    else if (profileType && (Object.values(MemberProfileType) as string[]).includes(profileType)) {
+      base.profileType = profileType as MemberProfileType;
+    }
+    if (offer === 'with' || offer === 'without') {
+      const has: Prisma.MemberWhereInput = {
+        OR: [
+          { discountForfait: { gt: 0 } },
+          { discountOpenSpace: { gt: 0 } },
+          { discountSalle: { gt: 0 } },
+          { discountAbonnement: { gt: 0 } },
+          {
+            group: {
+              OR: [
+                { discountForfait: { gt: 0 } },
+                { discountOpenSpace: { gt: 0 } },
+                { discountSalle: { gt: 0 } },
+                { discountAbonnement: { gt: 0 } },
+              ],
+            },
+          },
+        ],
+      };
+      and.push(offer === 'with' ? has : { NOT: has });
+    }
+    if (and.length) base.AND = and;
 
     const q = search?.trim();
     if (q) {
@@ -320,6 +359,11 @@ export class MemberService {
       }
     }
 
+    if (returnStatus && ['BACK', 'ONCE', 'AWAY'].includes(returnStatus)) {
+      const stats = await this.visitStats(organizationId);
+      intersectIds([...stats].filter(([, v]) => v.status === returnStatus).map(([id]) => id));
+    }
+
     const paginate = createPaginator({ perPage: perPageNum });
     const paginatedResult = await paginate(
       this.prisma.member,
@@ -330,20 +374,59 @@ export class MemberService {
       },
       { page: pageNum },
     );
-    const newToday = await firstVisitTodayIds(
-      this.prisma,
-      paginatedResult.data.map((m: { id: string }) => m.id),
-    );
+    const pageIds = paginatedResult.data.map((m: { id: string }) => m.id);
+    const [newToday, stats] = await Promise.all([
+      firstVisitTodayIds(this.prisma, pageIds),
+      this.visitStats(organizationId, pageIds),
+    ]);
     return {
-      data: paginatedResult.data.map(
-        (member: { id: string }) =>
-          new MemberEntity({
-            ...member,
-            isFirstVisitToday: newToday.has(member.id),
-          } as Partial<MemberEntity>),
-      ),
+      data: paginatedResult.data.map((member: { id: string }) => {
+        const st = stats.get(member.id);
+        return new MemberEntity({
+          ...member,
+          isFirstVisitToday: newToday.has(member.id),
+          visitDays: st?.days ?? 0,
+          lastVisitAt: st?.last ?? null,
+          returnStatus: st?.status ?? 'NONE',
+        } as Partial<MemberEntity>);
+      }),
       meta: paginatedResult.meta,
     };
+  }
+
+  /**
+   * Visit days, last visit and return status per member:
+   * ONCE = one visit day, AWAY = several days but none in the last 14, BACK = otherwise.
+   */
+  private async visitStats(organizationId?: string, ids?: string[]) {
+    const rows = await this.prisma.journal.findMany({
+      where: {
+        isReservation: false,
+        hiddenAt: null,
+        registredTime: { lte: new Date() },
+        memberID: ids ? { in: ids } : { not: null },
+        ...(organizationId ? { members: { organizationId } } : {}),
+      },
+      select: { memberID: true, registredTime: true },
+    });
+    const quiet = Date.now() - 14 * 86_400_000;
+    const acc = new Map<string, { daySet: Set<string>; last: Date }>();
+    for (const r of rows) {
+      const a = acc.get(r.memberID!) ?? { daySet: new Set<string>(), last: r.registredTime };
+      a.daySet.add(localDayKey(r.registredTime));
+      if (r.registredTime > a.last) a.last = r.registredTime;
+      acc.set(r.memberID!, a);
+    }
+    const out = new Map<string, { days: number; last: Date; status: 'BACK' | 'ONCE' | 'AWAY' }>();
+    for (const [id, a] of acc) {
+      const days = a.daySet.size;
+      out.set(id, {
+        days,
+        last: a.last,
+        status: days <= 1 ? 'ONCE' : a.last.getTime() < quiet ? 'AWAY' : 'BACK',
+      });
+    }
+    return out;
   }
 
   /**
@@ -666,7 +749,11 @@ export class MemberService {
       }
       const member = await this.prisma.member.update({
         where: { id },
-        data: updateMemberDto,
+        data: {
+          ...updateMemberDto,
+          ...(updateMemberDto.profileType ? { profileTypeAt: new Date() } : {}),
+          ...(updateMemberDto.heardFrom ? { heardFromAskedAt: new Date() } : {}),
+        },
         include: { group: true },
       });
       await this.syncOutbox.enqueue('member', member.id, 'UPDATE');

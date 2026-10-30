@@ -29,6 +29,7 @@ const schema = z.object({
   phone: z.string().min(4, "Téléphone requis"),
   email: z.string().email().optional().or(z.literal("")),
   groupId: z.string().optional(),
+  profileType: z.string().optional(),
   discountForfait: z.string().optional(),
   discountAbonnement: z.string().optional(),
   discountSalle: z.string().optional(),
@@ -73,6 +74,7 @@ export function MemberFormModal({
       phone: "",
       email: "",
       groupId: "",
+      profileType: "",
       discountForfait: "",
       discountAbonnement: "",
       discountSalle: "",
@@ -88,6 +90,7 @@ export function MemberFormModal({
       phone: member?.phone || "",
       email: member?.email || "",
       groupId: member?.groupId || "",
+      profileType: member?.profileType || "",
       discountForfait:
         member?.discountForfait != null ? String(member.discountForfait) : "",
       discountAbonnement:
@@ -113,6 +116,9 @@ export function MemberFormModal({
         phone: values.phone,
         email: values.email || undefined,
         groupId: values.groupId || null,
+        ...(values.profileType
+          ? { profileType: values.profileType as "STUDENT" | "PUPIL" | "PRO" }
+          : {}),
         discountForfait: num(values.discountForfait),
         discountAbonnement: num(values.discountAbonnement),
         discountSalle: num(values.discountSalle),
@@ -173,6 +179,18 @@ export function MemberFormModal({
           <div className="space-y-2">
             <Label>Email (optionnel)</Label>
             <Input type="email" {...form.register("email")} />
+          </div>
+          <div className="space-y-2">
+            <Label>Profil</Label>
+            <select
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              {...form.register("profileType")}
+            >
+              <option value="">À demander (au prochain check-in)</option>
+              <option value="STUDENT">Étudiant(e)</option>
+              <option value="PUPIL">Élève (lycée, bac)</option>
+              <option value="PRO">Professionnel(le)</option>
+            </select>
           </div>
           <div className="space-y-2">
             <Label>Groupe</Label>

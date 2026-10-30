@@ -511,7 +511,7 @@ export class MobileService {
       if (scopes.length) {
         const price = await this.prisma.price.findUnique({
           where: { id: priceId },
-          select: { category: true, categories: true, type: true },
+          select: { category: true, categories: true, type: true, billingUnit: true },
         });
         if (!price || !priceCategoriesFor(price).some((c) => scopes.includes(c))) {
           return null;

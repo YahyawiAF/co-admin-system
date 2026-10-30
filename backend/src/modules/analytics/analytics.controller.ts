@@ -3,6 +3,7 @@ import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
+import { NewcomersService } from './newcomers.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -11,6 +12,7 @@ export class AnalyticsController {
     private readonly performance: PerformanceService,
     private readonly outreach: OutreachService,
     private readonly campaigns: CampaignService,
+    private readonly newcomers: NewcomersService,
   ) {}
 
   @Get('performance/settings')
@@ -79,6 +81,18 @@ export class AnalyticsController {
   @Get('outreach')
   outreachList(@Query('facilityId') facilityId?: string) {
     return this.outreach.list(facilityId);
+  }
+
+  /** Finance → Nouveaux: first visits, returns within 14 days, what goes with coming back. */
+  @Get('newcomers')
+  newcomersOverview(@Query('weeks') weeks?: string) {
+    return this.newcomers.overview({ weeks: Number(weeks) || undefined });
+  }
+
+  /** Relances: why the member stopped coming (+ recall date). */
+  @Post('outreach/away-reason')
+  outreachAwayReason(@Body() body: { memberId?: string; reason?: string | null; recallAt?: string | null }) {
+    return this.outreach.setAwayReason(body);
   }
 
   @Post('outreach/log')

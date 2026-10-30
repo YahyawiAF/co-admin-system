@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { isSameDay } from 'date-fns';
 import { PriceCategory, Prisma, PromoValueKind, PromotionVoucherStatus } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
 import { round1 } from '../analytics/traffic';
@@ -6,7 +7,7 @@ import { priceCategoriesFor } from '../mobile/space-occupy';
 
 export const PROMOTION_TARGETS = ['PRODUCT', 'PRICE', 'BUNDLE', 'OTHER'] as const;
 const PRICE_CATEGORIES = Object.values(PriceCategory) as string[];
-export const PROMOTION_AUDIENCES = ['ALL', 'IN_SESSION'] as const;
+export const PROMOTION_AUDIENCES = ['ALL', 'IN_SESSION', 'FIRST_VISIT'] as const;
 export const PROMOTION_STYLES = ['GOLD', 'VIOLET', 'GREEN'] as const;
 
 type PromotionBody = {
@@ -24,6 +25,7 @@ type PromotionBody = {
   fromHour?: number | null;
   toHour?: number | null;
   audience?: string;
+  requiresApp?: boolean;
   maxUsesPerMember?: number | null;
   maxUses?: number | null;
   style?: string;
@@ -49,7 +51,8 @@ export function applyDiscount(original: number, kind: PromoValueKind, value: num
 }
 
 export function promotionLabel(p: { valueKind: PromoValueKind; value: number }) {
-  return p.valueKind === PromoValueKind.PERCENT ? `−${p.value} %` : `−${p.value} DT`;
+  const v = String(p.value).replace('.', ',');
+  return p.valueKind === PromoValueKind.PERCENT ? `−${v} %` : `−${v} DT`;
 }
 
 /** Is the offer live at `at` (dates, weekdays, happy hour)? */
@@ -73,6 +76,7 @@ type CoverPrice = {
   category: PriceCategory | null;
   categories: PriceCategory[];
   type: string | null;
+  billingUnit: string | null;
 };
 
 /** Tarif promo (PRICE / BUNDLE) rows that cover this tarif: linked to it or to one of its categories. */
@@ -81,6 +85,7 @@ function priceMatchWhere(price: {
   category?: PriceCategory | null;
   categories?: PriceCategory[] | null;
   type?: string | null;
+  billingUnit?: string | null;
 }): Prisma.PromotionWhereInput {
   return {
     OR: [{ priceId: price.id }, { priceId: null, priceCategory: { in: priceCategoriesFor(price) } }],
@@ -192,7 +197,7 @@ export class PromotionService {
     });
     return this.prisma.price.findMany({
       where: { isActive: true, ...(f?.organizationId ? { organizationId: f.organizationId } : {}) },
-      select: { id: true, category: true, categories: true, type: true },
+      select: { id: true, category: true, categories: true, type: true, billingUnit: true },
     });
   }
 
@@ -234,6 +239,7 @@ export class PromotionService {
       fromHour: r.fromHour,
       toHour: r.toHour,
       audience: r.audience,
+      requiresApp: r.requiresApp,
       maxUsesPerMember: r.maxUsesPerMember,
       maxUses: r.maxUses,
       style: r.style,
@@ -296,6 +302,7 @@ export class PromotionService {
       d[k] = v ?? null;
     }
     if (body.audience !== undefined) d.audience = oneOf(body.audience, PROMOTION_AUDIENCES, 'Public');
+    if (body.requiresApp !== undefined) d.requiresApp = !!body.requiresApp;
     for (const k of ['maxUsesPerMember', 'maxUses'] as const) {
       if (body[k] === undefined) continue;
       const v = body[k];
@@ -394,7 +401,13 @@ export class PromotionService {
           select: { id: true },
         }))
       : false;
+    const who = await this.memberFacts(memberId, {
+      first: live.some((r) => r.audience === 'FIRST_VISIT'),
+      app: live.some((r) => r.requiresApp),
+    }, at);
     return live.filter((r) => {
+      if (r.audience === 'FIRST_VISIT' && !who.firstVisit) return false;
+      if (r.requiresApp && !who.hasApp) return false;
       if (r.maxUses != null && (total.get(r.id) ?? 0) >= r.maxUses) return false;
       if (r.maxUsesPerMember != null) {
         if (!memberId) return false;
@@ -403,6 +416,33 @@ export class PromotionService {
       if (r.audience === 'IN_SESSION' && !inSession) return false;
       return true;
     });
+  }
+
+  /** First visit (never came, or first visit is today) and app installed — only queried when a promo needs it. */
+  private async memberFacts(
+    memberId: string | null | undefined,
+    need: { first: boolean; app: boolean },
+    at: Date,
+  ) {
+    const needFirst = need.first;
+    const needApp = need.app;
+    if (!memberId || (!needFirst && !needApp)) return { firstVisit: false, hasApp: false };
+    const [first, member] = await Promise.all([
+      needFirst
+        ? this.prisma.journal.findFirst({
+            where: { memberID: memberId, isReservation: false },
+            orderBy: { registredTime: 'asc' },
+            select: { registredTime: true },
+          })
+        : null,
+      needApp
+        ? this.prisma.member.findUnique({ where: { id: memberId }, select: { pwaInstalledAt: true } })
+        : null,
+    ]);
+    return {
+      firstVisit: needFirst && (!first || isSameDay(first.registredTime, at)),
+      hasApp: !!member?.pwaInstalledAt,
+    };
   }
 
   private best<T extends { valueKind: PromoValueKind; value: number }>(rows: T[], base: number) {
@@ -486,7 +526,7 @@ export class PromotionService {
     if (!priceId) return null;
     const price = await this.prisma.price.findUnique({
       where: { id: priceId },
-      select: { id: true, category: true, categories: true, type: true },
+      select: { id: true, category: true, categories: true, type: true, billingUnit: true },
     });
     if (!price) return null;
     const facilityId = memberId ? await this.facilityOfMember(memberId) : await this.facilityId();
@@ -506,7 +546,7 @@ export class PromotionService {
   async bundlesFor(priceId: string, memberId?: string | null) {
     const price = await this.prisma.price.findUnique({
       where: { id: priceId },
-      select: { id: true, category: true, categories: true, type: true },
+      select: { id: true, category: true, categories: true, type: true, billingUnit: true },
     });
     if (!price) return [];
     const facilityId = memberId ? await this.facilityOfMember(memberId) : await this.facilityId();
@@ -631,6 +671,42 @@ export class PromotionService {
     return rows
       .map((r) => this.serialize(r, now, tarifs))
       .sort((a, b) => (a.liveUntil?.getTime() ?? Infinity) - (b.liveUntil?.getTime() ?? Infinity));
+  }
+
+  /**
+   * Member app « Mes offres »: every running promo this member can get, live now or later
+   * (days / happy hours), with what is missing to use it (app, already used).
+   */
+  async offersForMember(orgSlug: string, memberId?: string | null) {
+    const facilityId = await this.facilityOfOrg(orgSlug);
+    if (!facilityId) return [];
+    const now = new Date();
+    const rows = await this.prisma.promotion.findMany({
+      where: {
+        facilityId,
+        isActive: true,
+        startsAt: { lte: now },
+        OR: [{ endsAt: null }, { endsAt: { gte: now } }],
+      },
+      include: INCLUDE,
+    });
+    if (!rows.length) return [];
+    const [{ total, mine }, who, tarifs] = await Promise.all([
+      this.usage(
+        rows.map((r) => r.id),
+        memberId,
+      ),
+      this.memberFacts(memberId, { first: true, app: true }, now),
+      rows.some((r) => r.priceCategory) ? this.tarifsOf(facilityId) : Promise.resolve([]),
+    ]);
+    return rows
+      .filter((r) => !(r.maxUses != null && (total.get(r.id) ?? 0) >= r.maxUses))
+      .filter((r) => r.audience !== 'FIRST_VISIT' || who.firstVisit)
+      .map((r) => ({
+        ...this.serialize(r, now, tarifs),
+        usedUp: r.maxUsesPerMember != null && (mine.get(r.id) ?? 0) >= r.maxUsesPerMember,
+        needsApp: r.requiresApp && !who.hasApp,
+      }));
   }
 
   async track(id: string, kind: 'view' | 'click') {

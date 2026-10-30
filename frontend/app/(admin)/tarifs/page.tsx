@@ -750,6 +750,17 @@ export default function TarifsPage() {
       prices: groups.get(c)!,
     }));
   }, [prices]);
+  /** Active tarifs the global install promo reaches with the draft scopes. */
+  const scopedPromoPrices = useMemo(
+    () =>
+      prices.filter(
+        (p) =>
+          p.isActive !== false &&
+          (!globalDraft.scopes.length ||
+            promoCategoriesOf(p).some((c) => globalDraft.scopes.includes(c)))
+      ),
+    [prices, globalDraft.scopes]
+  );
   const promoPriceCount = promoPriceGroups.reduce(
     (n, g) => n + g.prices.length,
     0
@@ -1182,6 +1193,22 @@ export default function TarifsPage() {
                     : "Promo valable sur tous les tarifs (journal, salles, abonnements…)."}{" "}
                   Pensez à enregistrer.
                 </p>
+                {globalDraft.active ? (
+                  scopedPromoPrices.length ? (
+                    <p className="text-xs text-muted-foreground">
+                      Touche {scopedPromoPrices.length} tarif
+                      {scopedPromoPrices.length > 1 ? "s" : ""} actif
+                      {scopedPromoPrices.length > 1 ? "s" : ""} :{" "}
+                      {scopedPromoPrices.slice(0, 6).map((p) => p.name).join(", ")}
+                      {scopedPromoPrices.length > 6 ? "…" : ""}
+                    </p>
+                  ) : (
+                    <p className="animate-in fade-in-0 motion-reduce:animate-none rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive duration-300">
+                      Cette promo ne touche aucun tarif actif : personne ne la reçoit.
+                      Ajoutez une catégorie ou choisissez « Tous les tarifs ».
+                    </p>
+                  )
+                ) : null}
               </div>
             </section>
 

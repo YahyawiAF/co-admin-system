@@ -15,12 +15,15 @@ import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
 import { PerformanceService } from './performance.service';
 import { computeOffers, computeTopUps, type AbonnementOffer, type TopUpOffer } from './offers';
 import { round1 } from './traffic';
+import { NewcomersService } from './newcomers.service';
 
 export const OUTREACH_REASONS = [
   'ABO_EXPIRING',
   'ABO_ENDED',
   'UNPAID',
+  'RECALL',
   'INACTIVE',
+  'NEW_NOT_BACK',
   'TOP_UP',
   'CONVERT',
   'REVIEW',
@@ -34,11 +37,22 @@ const SNOOZE_DAYS: Record<OutreachReason, number> = {
   ABO_EXPIRING: 3,
   ABO_ENDED: 7,
   UNPAID: 5,
+  RECALL: 7,
   INACTIVE: 10,
+  NEW_NOT_BACK: 30,
   TOP_UP: 7,
   CONVERT: 14,
   REVIEW: 30,
 };
+/** Why a member stopped coming (Relances, 1 click). */
+export const AWAY_REASONS = ['STUDY_HOME', 'PRICE', 'DISTANCE', 'NOISE', 'HOURS', 'OTHER'] as const;
+export type AwayReason = (typeof AWAY_REASONS)[number];
+/** Contacts whose result is "came back for a visit". */
+const VISIT_REASONS = new Set<string>(['INACTIVE', 'NEW_NOT_BACK', 'RECALL']);
+/** A newcomer who came once is listed from this many days after the visit, until 30 days. */
+const NEW_NOT_BACK_FROM_DAYS = 3;
+const NEW_NOT_BACK_TO_DAYS = 30;
+
 /** Days after a contact during which a renewal / visit / payment counts as a result. */
 const RESULT_WINDOW_DAYS = 14;
 
@@ -60,6 +74,9 @@ export type OutreachItem = {
   topUp?: TopUpOffer;
   lastContact: { at: string; channel: string; reason: string } | null;
   snoozed: boolean;
+  profileType: string | null;
+  awayReason: string | null;
+  recallAt: string | null;
 };
 
 function money(n: number) {
@@ -91,6 +108,7 @@ export class OutreachService {
     private readonly members: MemberService,
     private readonly performance: PerformanceService,
     private readonly push: PushService,
+    private readonly newcomers: NewcomersService,
   ) {}
 
   private async owedByMember(today: Date) {
@@ -130,7 +148,7 @@ export class OutreachService {
     const reviewUrl = settings.googleReviewUrl;
 
     const quietSince = subDays(today, settings.inactiveAlertDays);
-    const [abos, owed, offers, regularVisits, topUps] = await Promise.all([
+    const [abos, owed, offers, regularVisits, topUps, newcomers, waiting] = await Promise.all([
       this.prisma.abonnement.findMany({
         where: { isReservation: false, leaveDate: { gte: subDays(today, 14) } },
         select: {
@@ -154,9 +172,16 @@ export class OutreachService {
         select: { memberID: true, registredTime: true, payedAmount: true },
       }),
       computeTopUps(this.prisma, now),
+      this.newcomers.newcomers(now),
+      this.prisma.member.findMany({
+        where: { recallAt: { not: null, gte: subDays(today, 14) }, deletedAt: null },
+        select: { id: true, recallAt: true, awayReason: true },
+      }),
     ]);
+    /** Recall date still ahead: the member said why they are away, leave them alone until then. */
+    const recallLater = new Set(waiting.filter((w) => w.recallAt! > endOfDay(today)).map((w) => w.id));
 
-    const drafts = new Map<string, Omit<OutreachItem, 'name' | 'firstName' | 'phone' | 'whatsapp' | 'hasPush' | 'message' | 'lastContact' | 'snoozed'> & { ctx: Record<string, string> }>();
+    const drafts = new Map<string, Omit<OutreachItem, 'name' | 'firstName' | 'phone' | 'whatsapp' | 'hasPush' | 'message' | 'lastContact' | 'snoozed' | 'profileType' | 'awayReason' | 'recallAt'> & { ctx: Record<string, string> }>();
     const add = (d: Parameters<typeof drafts.set>[1]) => {
       const cur = drafts.get(d.memberId);
       if (!cur || OUTREACH_REASONS.indexOf(d.reason) < OUTREACH_REASONS.indexOf(cur.reason)) {
@@ -226,7 +251,7 @@ export class OutreachService {
     }
     const minDays = Math.max(4, Math.round(settings.regularVisitsPerWeek * 4 * 0.75));
     for (const [memberId, r] of regular) {
-      if (r.recent || r.days.size < minDays) continue;
+      if (r.recent || r.days.size < minDays || recallLater.has(memberId)) continue;
       const days = differenceInCalendarDays(today, r.last);
       add({
         memberId,
@@ -236,6 +261,34 @@ export class OutreachService {
         value: round1(r.spend),
         owed: 0,
         ctx: { days: String(days) },
+      });
+    }
+
+    for (const w of waiting) {
+      if (w.recallAt! > endOfDay(today)) continue;
+      add({
+        memberId: w.id,
+        reason: 'RECALL',
+        title: `À rappeler ${when(w.recallAt!, today)}`,
+        detail: w.awayReason === 'STUDY_HOME' ? 'Révisait à la maison' : 'Rappel prévu',
+        value: 0,
+        owed: 0,
+        ctx: { away: w.awayReason || '' },
+      });
+    }
+
+    for (const n of newcomers) {
+      const days = differenceInCalendarDays(today, n.first);
+      if (n.back || n.visitDays > 1 || days < NEW_NOT_BACK_FROM_DAYS || days > NEW_NOT_BACK_TO_DAYS) continue;
+      if (recallLater.has(n.memberId)) continue;
+      add({
+        memberId: n.memberId,
+        reason: 'NEW_NOT_BACK',
+        title: `Venu une fois · ${when(n.first, today)}`,
+        detail: n.appDay1 || n.hasApp ? "A l'app" : "Sans l'app",
+        value: 0,
+        owed: 0,
+        ctx: {},
       });
     }
 
@@ -283,7 +336,15 @@ export class OutreachService {
     const [people, pushRows, contacts] = await Promise.all([
       this.prisma.member.findMany({
         where: { id: { in: ids } },
-        select: { id: true, firstName: true, lastName: true, phone: true },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          profileType: true,
+          awayReason: true,
+          recallAt: true,
+        },
       }),
       this.prisma.pushSubscription.groupBy({
         by: ['memberId'],
@@ -325,6 +386,9 @@ export class OutreachService {
           ? { at: last.createdAt.toISOString(), channel: last.channel, reason: last.reason }
           : null,
         snoozed,
+        profileType: p.profileType,
+        awayReason: p.awayReason,
+        recallAt: p.recallAt ? p.recallAt.toISOString() : null,
       });
     }
     items.sort(
@@ -339,7 +403,55 @@ export class OutreachService {
       todo: items.filter((i) => !i.snoozed),
       contacted: items.filter((i) => i.snoozed),
       results: await this.results(today),
+      awayReasons: await this.awayStats(today),
     };
+  }
+
+  /** Answers to "pourquoi tu ne viens plus ?" over the last 90 days. */
+  private async awayStats(today: Date) {
+    const rows = await this.prisma.member.groupBy({
+      by: ['awayReason'],
+      where: { awayReason: { not: null }, awayReasonAt: { gte: subDays(today, 90) } },
+      _count: true,
+    });
+    return Object.fromEntries(rows.map((r) => [r.awayReason!, r._count])) as Record<string, number>;
+  }
+
+  /** Next exam period start (owner calendar) minus 2 weeks, else mid-December / +45 days. */
+  private async studyRecallDate(now: Date) {
+    const exams = await this.prisma.advisorFact.findFirst({
+      where: { kind: 'PERIOD', tag: 'exams', startDate: { gt: addDays(now, 7) } },
+      orderBy: { startDate: 'asc' },
+      select: { startDate: true },
+    });
+    if (exams?.startDate) return startOfDay(subDays(exams.startDate, 14));
+    return startOfDay(addDays(now, 45));
+  }
+
+  /** Save why the member stopped coming; "révise à la maison" schedules a recall before exams. */
+  async setAwayReason(body: { memberId?: string; reason?: string | null; recallAt?: string | null }) {
+    if (!body.memberId) throw new BadRequestException('memberId requis');
+    const now = new Date();
+    if (!body.reason) {
+      await this.prisma.member.update({
+        where: { id: body.memberId },
+        data: { awayReason: null, awayReasonAt: null, recallAt: null },
+      });
+      return { memberId: body.memberId, awayReason: null, recallAt: null };
+    }
+    if (!AWAY_REASONS.includes(body.reason as AwayReason)) throw new BadRequestException('Raison invalide');
+    let recallAt: Date | null = null;
+    if (body.recallAt) {
+      recallAt = parseLocalDay(body.recallAt.slice(0, 10));
+    } else if (body.reason === 'STUDY_HOME') {
+      recallAt = await this.studyRecallDate(now);
+    }
+    const m = await this.prisma.member.update({
+      where: { id: body.memberId },
+      data: { awayReason: body.reason, awayReasonAt: now, recallAt },
+      select: { id: true, awayReason: true, recallAt: true },
+    });
+    return { memberId: m.id, awayReason: m.awayReason, recallAt: m.recallAt?.toISOString() ?? null };
   }
 
   private message(
@@ -360,6 +472,12 @@ export class OutreachService {
         return `${hi}, votre ${c.plan} chez ${c.place} s'est terminé ${c.when}. On serait ravis de vous revoir ! Vous pouvez le renouveler à l'accueil quand vous voulez.${debt}`;
       case 'UNPAID':
         return `${hi}, petit rappel de ${c.place} : il reste ${c.amount} à régler. Vous pouvez payer lors de votre prochain passage. Merci !`;
+      case 'NEW_NOT_BACK':
+        return `${hi}, merci d'être passé(e) chez ${c.place} ! Ta place t'attend : reviens quand tu veux, on sera ravis de te revoir.${debt}`;
+      case 'RECALL':
+        return c.away === 'STUDY_HOME'
+          ? `${hi}, les révisions arrivent ! ${c.place} t'attend avec un espace calme pour bosser. On te garde ta place ?${debt}`
+          : `${hi}, ça fait un moment ! ${c.place} t'attend, on serait ravis de te revoir.${debt}`;
       case 'INACTIVE':
         return `${hi}, ça fait ${c.days} jours qu'on ne vous a pas vu chez ${c.place} ! Votre place vous attend, à bientôt.${debt}`;
       case 'TOP_UP': {
@@ -470,7 +588,7 @@ export class OutreachService {
       r.contacted += 1;
       let gain = 0;
       let ok = false;
-      if (c.reason === 'INACTIVE') {
+      if (VISIT_REASONS.has(c.reason)) {
         const back = visits.filter((v) => v.memberID === c.memberId && inWindow(v.registredTime, c.createdAt));
         ok = back.length > 0;
         gain = back.reduce((a, v) => a + (v.payedAmount || 0), 0);

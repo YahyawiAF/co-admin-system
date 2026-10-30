@@ -54,8 +54,79 @@ import {
   facilityApi,
 } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
-import type { Member, MemberGroup, Abonnement } from "@/lib/types";
+import type { Member, MemberGroup, Abonnement, NewcomersOverview } from "@/lib/types";
 import { Label } from "@/components/ui/label";
+
+const PROFILE_LABEL: Record<string, string> = { STUDENT: "Étudiant", PUPIL: "Élève", PRO: "Pro" };
+
+/** "−20 % open space, abo" lines from the member's own % (else the group's). */
+function discountLines(m: Member) {
+  const pick = (own?: number | null, grp?: number | null) => (own && own > 0 ? own : grp && grp > 0 ? grp : 0);
+  const g = m.group;
+  const items: [number, string][] = [
+    [pick(m.discountForfait, g?.discountForfait), "forfait"],
+    [pick(m.discountOpenSpace, g?.discountOpenSpace), "open space"],
+    [pick(m.discountSalle, g?.discountSalle), "salle"],
+    [pick(m.discountAbonnement, g?.discountAbonnement), "abo"],
+  ];
+  const byValue = new Map<number, string[]>();
+  for (const [v, l] of items) if (v > 0) byValue.set(v, [...(byValue.get(v) ?? []), l]);
+  return [...byValue.entries()].map(([v, ls]) => `−${v} % ${ls.join(", ")}`);
+}
+
+function ReturnCell({ member: m }: { member: Member }) {
+  const tone =
+    m.returnStatus === "BACK"
+      ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+      : m.returnStatus === "ONCE"
+        ? "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300"
+        : m.returnStatus === "AWAY"
+          ? "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300"
+          : "bg-muted text-muted-foreground";
+  const label =
+    m.returnStatus === "BACK"
+      ? "Revient"
+      : m.returnStatus === "ONCE"
+        ? "1 seule visite"
+        : m.returnStatus === "AWAY"
+          ? "Absent"
+          : "Jamais venu";
+  return (
+    <div className="space-y-0.5">
+      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tone}`}>{label}</span>
+      {m.visitDays ? (
+        <p className="text-xs text-muted-foreground">
+          {m.visitDays} jour{m.visitDays > 1 ? "s" : ""}
+          {m.lastVisitAt ? ` · ${format(new Date(m.lastVisitAt), "d MMM", { locale: fr })}` : ""}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Return within 14 days, overall and per profile. */
+function ReturnStrip({ data }: { data?: NewcomersOverview }) {
+  if (!data) return null;
+  const profile = data.factors.find((f) => f.title === "Profil");
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-4 py-2.5 text-sm animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+      <span className="text-muted-foreground">Nouveaux qui reviennent en 14 j :</span>
+      <b className="tabular-nums">{data.kpis.returnPct ?? "—"} %</b>
+      {profile?.rows.length ? (
+        profile.rows.map((r) => (
+          <span key={r.label} className="rounded-full bg-muted px-2.5 py-0.5 text-xs">
+            {r.label} <b className="tabular-nums">{r.pct} %</b>{" "}
+            <span className="text-muted-foreground">({r.count})</span>
+          </span>
+        ))
+      ) : (
+        <span className="text-xs text-muted-foreground">
+          · par profil dès que les visiteurs auront répondu (1 tap au check-in)
+        </span>
+      )}
+    </div>
+  );
+}
 
 export default function MembersPage() {
   const queryClient = useQueryClient();
@@ -72,6 +143,9 @@ export default function MembersPage() {
   const [detail, setDetail] = useState<Member | null>(null);
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [profileFilter, setProfileFilter] = useState(searchParams.get("profileType") || "all");
+  const [returnFilter, setReturnFilter] = useState(searchParams.get("returnStatus") || "all");
+  const [offerFilter, setOfferFilter] = useState(searchParams.get("offer") || "all");
   const [occupancyOpen, setOccupancyOpen] = useState(false);
   const [focusSeatLabel, setFocusSeatLabel] = useState<string | null>(null);
   const [focusSpaceId, setFocusSpaceId] = useState<string | null>(null);
@@ -83,7 +157,14 @@ export default function MembersPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, groupFilter, statusFilter, perPage, topServiceId, topSpaceId]);
+  }, [debouncedSearch, groupFilter, statusFilter, profileFilter, returnFilter, offerFilter, perPage, topServiceId, topSpaceId]);
+
+  /** Return rate per profile (Finance → Nouveaux data) for the strip above the list */
+  const { data: newcomers } = useQuery({
+    queryKey: ["analytics-newcomers"],
+    queryFn: () => analyticsApi.newcomers(12),
+    staleTime: 5 * 60_000,
+  });
 
   const analyticsRange = useMemo(() => {
     const to = new Date();
@@ -159,6 +240,9 @@ export default function MembersPage() {
       search: debouncedSearch.length >= 2 ? debouncedSearch : undefined,
       groupId: groupFilter,
       status: statusFilter,
+      profileType: profileFilter,
+      returnStatus: returnFilter,
+      offer: offerFilter,
       memberIds: demandActive ? demandMemberIds : undefined,
     }),
     [
@@ -167,6 +251,9 @@ export default function MembersPage() {
       debouncedSearch,
       groupFilter,
       statusFilter,
+      profileFilter,
+      returnFilter,
+      offerFilter,
       demandActive,
       demandMemberIds,
     ],
@@ -388,6 +475,39 @@ export default function MembersPage() {
                 <SelectItem value="visiteur">Forfait visiteur</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={profileFilter} onValueChange={setProfileFilter}>
+              <SelectTrigger className="w-[170px]">
+                <SelectValue placeholder="Profil" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous les profils</SelectItem>
+                <SelectItem value="STUDENT">Étudiants</SelectItem>
+                <SelectItem value="PUPIL">Élèves</SelectItem>
+                <SelectItem value="PRO">Pros</SelectItem>
+                <SelectItem value="none">Profil à demander</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={returnFilter} onValueChange={setReturnFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Retour" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tous (retour)</SelectItem>
+                <SelectItem value="BACK">Revient</SelectItem>
+                <SelectItem value="ONCE">Venu une seule fois</SelectItem>
+                <SelectItem value="AWAY">Absent depuis 14 j+</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={offerFilter} onValueChange={setOfferFilter}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Offre" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Toutes offres</SelectItem>
+                <SelectItem value="with">Avec une remise</SelectItem>
+                <SelectItem value="without">Sans remise</SelectItem>
+              </SelectContent>
+            </Select>
             <Select
               value={topServiceId || "all"}
               onValueChange={(v) => setDemandParam("topServiceId", v)}
@@ -440,6 +560,8 @@ export default function MembersPage() {
             />
           </div>
 
+      <ReturnStrip data={newcomers} />
+
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
@@ -454,9 +576,11 @@ export default function MembersPage() {
                   <TableHead>Nom</TableHead>
                   <TableHead>Téléphone</TableHead>
                   <TableHead>Plan</TableHead>
+                  <TableHead>Profil</TableHead>
+                  <TableHead>Retour</TableHead>
                   <TableHead>Points / promo</TableHead>
                   <TableHead>Place</TableHead>
-                  <TableHead>Groupe</TableHead>
+                  <TableHead>Groupe / remise</TableHead>
                   <TableHead>Créé</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -490,6 +614,16 @@ export default function MembersPage() {
                       <Badge variant="secondary">
                         {m.plan === "Membership" ? "Abonné" : "Visiteur"}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {m.profileType ? (
+                        <Badge variant="outline">{PROFILE_LABEL[m.profileType]}</Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">à demander</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <ReturnCell member={m} />
                     </TableCell>
                     <TableCell>
                       <MemberRewardsBadges member={m} />
@@ -537,16 +671,19 @@ export default function MembersPage() {
                       })()}
                     </TableCell>
                     <TableCell>
-                      {m.group?.name ? (
-                        <Badge>
-                          {m.group.name}
-                          {(m.discountForfait ?? m.group.discountForfait)
-                            ? ` −${m.discountForfait ?? m.group.discountForfait}%`
-                            : ""}
-                        </Badge>
-                      ) : (
-                        "—"
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {m.group?.name ? <Badge>{m.group.name}</Badge> : null}
+                        {discountLines(m).map((d) => (
+                          <Badge
+                            key={d}
+                            variant="outline"
+                            className="border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
+                          >
+                            {d}
+                          </Badge>
+                        ))}
+                        {!m.group?.name && !discountLines(m).length ? "—" : null}
+                      </div>
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {m.createdAt

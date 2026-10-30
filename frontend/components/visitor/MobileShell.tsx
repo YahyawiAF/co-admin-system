@@ -60,6 +60,7 @@ function isLightAllowed(rest: string) {
     rest.startsWith("/cafe") ||
     rest.startsWith("/events") ||
     rest.startsWith("/tarifs") ||
+    rest.startsWith("/offres") ||
     rest.startsWith("/history") ||
     rest.startsWith("/subscription") ||
     rest.startsWith("/session") ||

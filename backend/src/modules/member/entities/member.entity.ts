@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Member, MemberAvailability, Subscription } from '@prisma/client';
+import { Member, MemberAvailability, MemberProfileType, Subscription } from '@prisma/client';
 import { Expose } from 'class-transformer';
 
 export class MemberEntity implements Member {
@@ -13,6 +13,17 @@ export class MemberEntity implements Member {
   /** First visit ever is today ("Nouveau" badge in the admin). */
   @ApiProperty({ required: false })
   isFirstVisitToday?: boolean;
+
+  /** Days with at least one visit (members list) */
+  @ApiProperty({ required: false })
+  visitDays?: number;
+
+  @ApiProperty({ required: false, nullable: true })
+  lastVisitAt?: Date | null;
+
+  /** BACK = came again in the last 14 days · ONCE = one visit day · AWAY = regular gone quiet · NONE = never came */
+  @ApiProperty({ required: false })
+  returnStatus?: 'BACK' | 'ONCE' | 'AWAY' | 'NONE';
 
   @ApiProperty({ description: 'Organization this member belongs to' })
   organizationId: string;
@@ -126,6 +137,27 @@ export class MemberEntity implements Member {
     description: 'First time the member opened the installed PWA',
   })
   pwaInstalledAt: Date | null;
+
+  @ApiProperty({ enum: MemberProfileType, required: false, nullable: true })
+  profileType: MemberProfileType | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  profileTypeAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  heardFrom: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  heardFromAskedAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  awayReason: string | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  awayReasonAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  recallAt: Date | null;
 
   @ApiProperty({ required: false, nullable: true })
   referralCode: string | null;
