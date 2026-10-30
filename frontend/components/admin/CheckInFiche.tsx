@@ -22,6 +22,11 @@ export const SUB_TARIF = "__sub__";
 export type FicheLine = {
   key: string;
   name: string;
+  /** Tarif promo applied to this line ("−20 % aujourd’hui −20 %") and DT saved */
+  promoLabel?: string | null;
+  promoOff?: number;
+  /** Gift-with-pass voucher the client said yes to */
+  giftLabel?: string | null;
   subtitle?: string | null;
   debt?: number;
   /** "hours" = hours-pool abonnement, "period" = period abonnement, null = none */

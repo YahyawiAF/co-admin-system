@@ -33,6 +33,18 @@ export class PromotionController {
     return this.promotions.forMember(orgSlug, memberId || null);
   }
 
+  /** Member app: gift-with-pass vouchers of the open visit. */
+  @Get('mobile/promotions/vouchers')
+  vouchers(@Query('memberId') memberId?: string) {
+    return memberId ? this.promotions.vouchersForMember(memberId) : [];
+  }
+
+  /** Reception: vouchers of one visit. */
+  @Get('promotions/vouchers')
+  journalVouchers(@Query('journalId') journalId?: string) {
+    return journalId ? this.promotions.vouchersForJournal(journalId) : [];
+  }
+
   @Post('mobile/promotions/:id/track')
   track(@Param('id') id: string, @Body() body: { kind?: string }) {
     return this.promotions.track(id, body?.kind === 'click' ? 'click' : 'view');

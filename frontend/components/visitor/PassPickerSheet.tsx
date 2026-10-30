@@ -5,6 +5,14 @@ import { format } from "date-fns";
 import { Clock, Loader2, Timer } from "lucide-react";
 import { QuestLabel, QuestSheet } from "@/components/visitor/quest/QuestSheet";
 import { QuestOption } from "@/components/visitor/quest/QuestOption";
+import { GiftAnswerLine, GiftOfferPanel } from "@/components/visitor/quest/GiftOffer";
+import {
+  acceptedBundleIds,
+  bestDeal,
+  dealTag,
+  giftTag,
+  indexTarifPromos,
+} from "@/lib/tarif-promos";
 import { useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 import {
   formatDt,
@@ -26,14 +34,24 @@ function tierShort(hours: number) {
   return hours >= 7 ? "Jour" : `${hours}h`;
 }
 
-/** Live PRICE promotions → priceId (gift badge on that tarif). */
+/** Live tarif promos of the member: priceId → { deals, bundles } (category promos included). */
+export function useTarifPromos() {
+  const { data = [] } = useMemberPromotions();
+  return useMemo(() => indexTarifPromos(data), [data]);
+}
+
+/** Live PRICE / BUNDLE promotions → priceId (badge on that tarif); gifts first. */
 export function usePricePromos() {
   const { data = [] } = useMemberPromotions();
   return useMemo(() => {
     const m = new Map<string, Promotion>();
+    const get = indexTarifPromos(data);
     for (const p of data) {
-      if (p.liveNow && p.target === "PRICE" && p.priceId && !m.has(p.priceId)) {
-        m.set(p.priceId, p);
+      for (const id of p.priceIds?.length ? p.priceIds : p.priceId ? [p.priceId] : []) {
+        if (m.has(id)) continue;
+        const t = get(id);
+        const pick = t.bundles[0] ?? t.deals[0];
+        if (pick) m.set(id, pick);
       }
     }
     return m;
@@ -41,6 +59,8 @@ export function usePricePromos() {
 }
 
 export function promoBadgeText(p: Promotion) {
+  if (p.target === "BUNDLE") return giftTag(p);
+  if (p.target === "PRICE") return dealTag(p);
   return p.label && p.label.length <= 10 ? p.label : "Cadeau";
 }
 
@@ -73,15 +93,22 @@ export function PassPickerSheet({
   now: number;
   pending: boolean;
   error?: string | null;
-  onConfirm: (priceId: string) => void;
+  onConfirm: (priceId: string, bundleIds?: string[]) => void;
 }) {
   const isAuto = live.mode === "AUTO";
   const [pickedId, setPickedId] = useState<string | null>(isAuto ? AUTO : null);
   const [isPwa, setIsPwa] = useState(false);
-  const promos = usePricePromos();
+  const promosOf = useTarifPromos();
+  /** Gift answers (promo id → yes / no) and the pass whose gift panel is open */
+  const [answers, setAnswers] = useState<Record<string, boolean>>({});
+  const [giftOpenFor, setGiftOpenFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open) setPickedId(isAuto ? AUTO : null);
+    if (open) {
+      setPickedId(isAuto ? AUTO : null);
+      setAnswers({});
+      setGiftOpenFor(null);
+    }
   }, [open, isAuto]);
   useEffect(() => {
     setIsPwa(isStandalonePwa());
@@ -90,14 +117,22 @@ export function PassPickerSheet({
   const options = useMemo(
     () =>
       uniqueTiersByDuration(tiers)
-        .map((t) => ({
-          tier: t,
-          endsAt: sessionStart + t.durationHours * H,
-          amount: withDiscount(t.price, live.discountPercent),
-          isCurrent: live.mode === "FIXED" && live.fixedPriceId === t.priceId,
-        }))
+        .map((t) => {
+          const listAmount = withDiscount(t.price, live.discountPercent);
+          const promos = promosOf(t.priceId);
+          const deal = bestDeal(promos.deals, listAmount);
+          return {
+            tier: t,
+            endsAt: sessionStart + t.durationHours * H,
+            listAmount,
+            amount: deal ? deal.final : listAmount,
+            deal: deal?.promo ?? null,
+            bundles: promos.bundles,
+            isCurrent: live.mode === "FIXED" && live.fixedPriceId === t.priceId,
+          };
+        })
         .filter((o) => o.isCurrent || o.endsAt > now),
-    [tiers, sessionStart, now, live.discountPercent, live.mode, live.fixedPriceId]
+    [tiers, sessionStart, now, live.discountPercent, live.mode, live.fixedPriceId, promosOf]
   );
 
   const picked = options.find((o) => o.tier.priceId === pickedId) ?? null;
@@ -105,12 +140,24 @@ export function PassPickerSheet({
   const amount = picked ? picked.amount : live.amountDue;
   const delta = picked ? picked.amount - live.amountDue : 0;
 
+  const gift = picked?.bundles[0] ?? null;
+  const giftYes = !!gift && answers[gift.id] === true;
+
+  const pick = (o: (typeof options)[number]) => {
+    setPickedId(o.tier.priceId);
+    // First tap on a pass with a gift: show the offer
+    const g = o.bundles[0];
+    setGiftOpenFor(g && answers[g.id] === undefined ? o.tier.priceId : null);
+  };
+
   const confirm = () => {
     if (keepAuto) {
       onOpenChange(false);
       return;
     }
-    if (picked && !picked.isCurrent) onConfirm(picked.tier.priceId);
+    if (picked && !picked.isCurrent) {
+      onConfirm(picked.tier.priceId, acceptedBundleIds(picked.bundles, answers));
+    }
   };
 
   return (
@@ -141,6 +188,15 @@ export function PassPickerSheet({
         <>
           {error ? (
             <p className="mb-2 text-center text-xs font-medium text-rose-600">{error}</p>
+          ) : picked && !picked.isCurrent && (giftYes || picked.deal) ? (
+            <p
+              key={picked.tier.priceId}
+              className={`v-rise mb-2 text-center text-xs font-bold ${giftYes ? "text-amber-700" : "text-rose-700"}`}
+            >
+              {giftYes
+                ? `Pass ${picked.tier.name} + ${gift!.itemName ?? "cadeau"} ${gift!.label} pour cette visite`
+                : `Promo ${picked.deal!.label} · vous économisez ${formatDt(picked.listAmount - picked.amount)} DT`}
+            </p>
           ) : picked && !picked.isCurrent ? (
             <p className="mb-2 text-center text-[11px] text-slate-600">
               {Math.abs(delta) < 0.0005
@@ -196,7 +252,9 @@ export function PassPickerSheet({
           </p>
         ) : (
           options.map((o, i) => {
-            const promo = promos.get(o.tier.priceId) ?? null;
+            const g = o.bundles[0] ?? null;
+            const answer = g ? answers[g.id] : undefined;
+            const panelOpen = !!g && giftOpenFor === o.tier.priceId && !o.isCurrent;
             return (
               <div
                 key={o.tier.priceId}
@@ -206,17 +264,30 @@ export function PassPickerSheet({
                 <QuestOption
                   selected={pickedId === o.tier.priceId}
                   disabled={o.isCurrent || pending}
-                  onClick={() => setPickedId(o.tier.priceId)}
+                  onClick={() => pick(o)}
                   icon={tierShort(o.tier.durationHours)}
                   title={o.tier.name}
                   hint={
                     o.isCurrent
                       ? "Pass actuel"
-                      : `Prix bloqué · jusqu’à ${format(o.endsAt, "HH:mm")}`
+                      : o.deal
+                        ? `Promo · jusqu’à ${format(o.endsAt, "HH:mm")}`
+                        : `Prix bloqué · jusqu’à ${format(o.endsAt, "HH:mm")}`
                   }
-                  price={formatDt(o.amount)}
-                  gift={promo ? promoBadgeText(promo) : null}
-                  giftLine={promo ? `+ ${promo.title} avec ce pass` : null}
+                  price={
+                    o.deal ? (
+                      <span className="flex flex-col items-end">
+                        <span className="text-[11px] font-medium text-slate-500 line-through">
+                          {formatDt(o.listAmount)}
+                        </span>
+                        <span className="text-rose-700">{formatDt(o.amount)}</span>
+                      </span>
+                    ) : (
+                      formatDt(o.amount)
+                    )
+                  }
+                  gift={g ? giftTag(g) : null}
+                  deal={o.deal ? dealTag(o.deal) : null}
                   badge={
                     o.isCurrent ? (
                       <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
@@ -225,6 +296,27 @@ export function PassPickerSheet({
                     ) : null
                   }
                 />
+                {g && panelOpen ? (
+                  <GiftOfferPanel
+                    promo={g}
+                    answer={answer}
+                    disabled={pending}
+                    onAnswer={(yes) => {
+                      setAnswers((a) => ({ ...a, [g.id]: yes }));
+                      setGiftOpenFor(null);
+                      setPickedId(o.tier.priceId);
+                    }}
+                  />
+                ) : g && answer !== undefined && !o.isCurrent ? (
+                  <GiftAnswerLine
+                    promo={g}
+                    answer={answer}
+                    onChange={() => {
+                      setPickedId(o.tier.priceId);
+                      setGiftOpenFor(o.tier.priceId);
+                    }}
+                  />
+                ) : null}
               </div>
             );
           })

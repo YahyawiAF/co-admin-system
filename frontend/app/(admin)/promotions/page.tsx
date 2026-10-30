@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { endOfDay, endOfWeek, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
-import { BadgePercent, Coffee, Pencil, Plus, Tags, Ticket, Trash2 } from "lucide-react";
+import { BadgePercent, Coffee, Gift, Pencil, Plus, Tags, Ticket, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -24,12 +24,30 @@ import {
 import { cn } from "@/lib/utils";
 import { pricesApi, productsApi, promotionsApi } from "@/lib/api/resources";
 import { PromoGoldenCard } from "@/components/visitor/PromoGoldenCard";
-import type { Promotion, PromotionInput, PromotionTarget } from "@/lib/types";
+import { PriceCategory, type Promotion, type PromotionInput, type PromotionTarget } from "@/lib/types";
+import { promoCategoriesOf } from "@/lib/promo-price";
+import { DealBadge, GiftBadge } from "@/components/visitor/quest/QuestOption";
 
 const DAYS = ["Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"];
 const select = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 const toLocalInput = (d: Date) => format(d, "yyyy-MM-dd'T'HH:mm");
 const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
+
+const CATEGORY_LABEL: Record<PriceCategory, string> = {
+  [PriceCategory.JOURNEE]: "Journée",
+  [PriceCategory.OPEN_SPACE]: "Open space",
+  [PriceCategory.SALLE]: "Salle de réunion",
+  [PriceCategory.ABONNEMENT]: "Abonnement",
+};
+
+const KINDS: Array<{ target: PromotionTarget; title: string; hint: string }> = [
+  { target: "PRICE", title: "Remise sur un pass", hint: "Ex. Journée −20 % aujourd’hui" },
+  { target: "BUNDLE", title: "Cadeau avec un pass", hint: "Ex. 4h → café −50 %, le client choisit" },
+  { target: "PRODUCT", title: "Un produit du café", hint: "Promo directe sur un produit" },
+  { target: "OTHER", title: "Offre libre", hint: "Appliquée par l’accueil" },
+];
+
+const isTarifPromo = (t: PromotionTarget) => t === "PRICE" || t === "BUNDLE";
 
 type Form = {
   title: string;
@@ -37,6 +55,9 @@ type Form = {
   target: PromotionTarget;
   productId: string;
   priceId: string;
+  /** PRICE / BUNDLE: one tarif or a whole category */
+  priceScope: "one" | "category";
+  priceCategory: PriceCategory | "";
   valueKind: "PERCENT" | "FIXED_DT";
   value: string;
   startsAt: string;
@@ -56,6 +77,8 @@ const blank = (): Form => ({
   target: "PRODUCT",
   productId: "",
   priceId: "",
+  priceScope: "one",
+  priceCategory: "",
   valueKind: "PERCENT",
   value: "",
   startsAt: toLocalInput(new Date()),
@@ -103,6 +126,38 @@ const TEMPLATES: Array<{ label: string; icon: typeof Coffee; apply: (f: Form) =>
     }),
   },
   {
+    label: "Cadeau avec un pass",
+    icon: Gift,
+    apply: (f) => ({
+      ...f,
+      target: "BUNDLE",
+      title: "Café −50 % avec votre pass",
+      description: "1 café à moitié prix pendant votre visite.",
+      valueKind: "PERCENT",
+      value: "50",
+      audience: "ALL",
+      maxUsesPerMember: "",
+      style: "GOLD",
+    }),
+  },
+  {
+    label: "Pass −20 % aujourd’hui",
+    icon: BadgePercent,
+    apply: (f) => ({
+      ...f,
+      target: "PRICE",
+      title: "−20 % aujourd’hui",
+      description: "Promo du jour, appliquée automatiquement.",
+      valueKind: "PERCENT",
+      value: "20",
+      startsAt: toLocalInput(new Date()),
+      endsAt: toLocalInput(endOfDay(new Date())),
+      audience: "ALL",
+      maxUsesPerMember: "",
+      style: "VIOLET",
+    }),
+  },
+  {
     label: "Offre libre (accueil)",
     icon: Tags,
     apply: (f) => ({
@@ -123,8 +178,10 @@ function toInput(f: Form): PromotionInput {
     title: f.title,
     description: f.description || null,
     target: f.target,
-    productId: f.target === "PRODUCT" ? f.productId || null : null,
-    priceId: f.target === "PRICE" ? f.priceId || null : null,
+    productId: f.target === "PRODUCT" || f.target === "BUNDLE" ? f.productId || null : null,
+    priceId: isTarifPromo(f.target) && f.priceScope === "one" ? f.priceId || null : null,
+    priceCategory:
+      isTarifPromo(f.target) && f.priceScope === "category" ? f.priceCategory || null : null,
     valueKind: f.valueKind,
     value: Number(f.value),
     startsAt: new Date(f.startsAt).toISOString(),
@@ -146,6 +203,8 @@ function fromPromo(p: Promotion): Form {
     target: p.target,
     productId: p.productId ?? "",
     priceId: p.priceId ?? "",
+    priceScope: p.priceCategory && !p.priceId ? "category" : "one",
+    priceCategory: p.priceCategory ?? "",
     valueKind: p.valueKind,
     value: String(p.value),
     startsAt: toLocalInput(new Date(p.startsAt)),
@@ -188,17 +247,37 @@ function PromotionDialog({
   });
 
   const product = products.data?.find((p) => p.id === form.productId);
-  const price = prices.data?.find((p) => p.id === form.priceId);
-  const base = form.target === "PRODUCT" ? product?.sellingPrice : form.target === "PRICE" ? price?.price : null;
+  const activePrices = (prices.data ?? []).filter((p) => p.isActive !== false);
+  const byCategory = form.target === "PRICE" || form.target === "BUNDLE";
+  const scopePrices =
+    form.priceScope === "category" && form.priceCategory
+      ? activePrices.filter((p) => promoCategoriesOf(p).includes(form.priceCategory as PriceCategory))
+      : [];
+  const price =
+    form.priceScope === "one"
+      ? activePrices.find((p) => p.id === form.priceId)
+      : scopePrices[0];
+  const base =
+    form.target === "PRODUCT" || form.target === "BUNDLE"
+      ? product?.sellingPrice
+      : form.target === "PRICE"
+        ? price?.price
+        : null;
   const value = Number(form.value) || 0;
-  const after =
-    base != null && value > 0
-      ? Math.max(0, form.valueKind === "PERCENT" ? base * (1 - value / 100) : base - value)
-      : null;
+  const off = (n: number) =>
+    Math.max(0, form.valueKind === "PERCENT" ? n * (1 - value / 100) : n - value);
+  const after = base != null && value > 0 ? off(base) : null;
+  const label = value > 0 ? (form.valueKind === "PERCENT" ? `−${value} %` : `−${value} DT`) : "−?";
+  const scopeName =
+    form.priceScope === "category"
+      ? form.priceCategory
+        ? `Tous les pass ${CATEGORY_LABEL[form.priceCategory as PriceCategory]}`
+        : "Catégorie ?"
+      : price?.name ?? "Pass ?";
   const preview = {
     title: form.title || "Titre de l’offre",
     description: form.description || null,
-    label: value > 0 ? (form.valueKind === "PERCENT" ? `−${value} %` : `−${value} DT`) : "−?",
+    label,
     itemName: product?.name ?? price?.name ?? null,
     priceBefore: after != null ? base! : null,
     priceAfter: after,
@@ -211,8 +290,17 @@ function PromotionDialog({
   const valid =
     form.title.trim() &&
     value > 0 &&
-    (form.target !== "PRODUCT" || form.productId) &&
-    (form.target !== "PRICE" || form.priceId);
+    (!(form.target === "PRODUCT" || form.target === "BUNDLE") || form.productId) &&
+    (!byCategory || (form.priceScope === "one" ? form.priceId : form.priceCategory));
+  const today = endOfDay(new Date());
+  const week = endOfWeek(new Date(), { weekStartsOn: 1 });
+  const quick = [
+    { id: "today", label: "Aujourd’hui seulement", end: toLocalInput(today) },
+    { id: "week", label: "Cette semaine", end: toLocalInput(week) },
+  ];
+  const categories = Object.values(PriceCategory).filter((c) =>
+    activePrices.some((p) => promoCategoriesOf(p).includes(c))
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -220,8 +308,8 @@ function PromotionDialog({
         <DialogHeader>
           <DialogTitle>{editing ? "Modifier l’offre" : "Nouvelle offre"}</DialogTitle>
           <DialogDescription>
-            Elle s’affiche dans l’app en carte dorée. Café et pass : la remise s’applique toute seule
-            à la commande. Offre libre : l’accueil l’applique.
+            Elle s’affiche dans l’app en carte dorée. Café et pass : la remise s’applique toute seule.
+            Cadeau avec un pass : le client choisit Oui ou Non. Offre libre : l’accueil l’applique.
           </DialogDescription>
         </DialogHeader>
         {!editing ? (
@@ -236,47 +324,114 @@ function PromotionDialog({
         ) : null}
         <div className="grid gap-5 md:grid-cols-[1fr_280px]">
           <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label>Type de promo</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {KINDS.map((k) => {
+                  const on = form.target === k.target;
+                  return (
+                    <button
+                      key={k.target}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => set({ target: k.target })}
+                      className={cn(
+                        "rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-200 motion-reduce:transition-none",
+                        on ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-muted/60"
+                      )}
+                    >
+                      <div className="text-sm font-semibold">{k.title}</div>
+                      <div className="text-xs text-muted-foreground">{k.hint}</div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {byCategory ? (
+              <div key="tarif" className="animate-in fade-in-0 slide-in-from-top-1 space-y-2 duration-200 motion-reduce:animate-none">
+                <Label>{form.target === "BUNDLE" ? "Quel pass donne le cadeau ?" : "Sur quel pass ?"}</Label>
+                <div className="inline-flex rounded-lg bg-muted p-1">
+                  {(
+                    [
+                      ["one", "Un tarif"],
+                      ["category", "Toute une catégorie"],
+                    ] as const
+                  ).map(([id, text]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={form.priceScope === id}
+                      onClick={() => set({ priceScope: id })}
+                      className={cn(
+                        "h-8 rounded-md px-3 text-sm font-medium transition-[background-color,color,box-shadow] duration-200 motion-reduce:transition-none",
+                        form.priceScope === id ? "bg-background shadow-sm" : "text-muted-foreground"
+                      )}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {form.priceScope === "one" ? (
+                    <div className="space-y-1">
+                      <Label>Tarif</Label>
+                      <select className={select} value={form.priceId} onChange={(e) => set({ priceId: e.target.value })}>
+                        <option value="">Choisir…</option>
+                        {activePrices.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} · {dt(p.price)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label>Catégorie</Label>
+                      <select
+                        className={select}
+                        value={form.priceCategory}
+                        onChange={(e) => set({ priceCategory: e.target.value as PriceCategory })}
+                      >
+                        <option value="">Choisir…</option>
+                        {categories.map((c) => {
+                          const n = activePrices.filter((p) => promoCategoriesOf(p).includes(c)).length;
+                          return (
+                            <option key={c} value={c}>
+                              {CATEGORY_LABEL[c]} · {n} tarif{n > 1 ? "s" : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  )}
+                  {form.target === "BUNDLE" ? (
+                    <div className="space-y-1">
+                      <Label>Produit offert</Label>
+                      <select className={select} value={form.productId} onChange={(e) => set({ productId: e.target.value })}>
+                        <option value="">Choisir…</option>
+                        {(products.data ?? []).map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} · {dt(p.sellingPrice)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : form.target === "PRODUCT" ? (
               <div className="space-y-1">
-                <Label>Sur quoi ?</Label>
-                <select
-                  className={select}
-                  value={form.target}
-                  onChange={(e) => set({ target: e.target.value as PromotionTarget })}
-                >
-                  <option value="PRODUCT">Un produit du café</option>
-                  <option value="PRICE">Un pass / tarif</option>
-                  <option value="OTHER">Offre libre (appliquée par l’accueil)</option>
+                <Label>Produit</Label>
+                <select className={select} value={form.productId} onChange={(e) => set({ productId: e.target.value })}>
+                  <option value="">Choisir…</option>
+                  {(products.data ?? []).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {dt(p.sellingPrice)}
+                    </option>
+                  ))}
                 </select>
               </div>
-              {form.target === "PRODUCT" ? (
-                <div className="space-y-1">
-                  <Label>Produit</Label>
-                  <select className={select} value={form.productId} onChange={(e) => set({ productId: e.target.value })}>
-                    <option value="">Choisir…</option>
-                    {(products.data ?? []).map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} · {dt(p.sellingPrice)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ) : form.target === "PRICE" ? (
-                <div className="space-y-1">
-                  <Label>Pass / tarif</Label>
-                  <select className={select} value={form.priceId} onChange={(e) => set({ priceId: e.target.value })}>
-                    <option value="">Choisir…</option>
-                    {(prices.data ?? [])
-                      .filter((p) => p.isActive !== false)
-                      .map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} · {dt(p.price)}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              ) : null}
-            </div>
+            ) : null}
             <div className="space-y-1">
               <Label>Titre (gros, sur la carte)</Label>
               <Input value={form.title} maxLength={120} onChange={(e) => set({ title: e.target.value })} />
@@ -287,7 +442,7 @@ function PromotionDialog({
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1">
-                <Label>Remise</Label>
+                <Label>{form.target === "BUNDLE" ? "Remise sur le produit" : "Remise"}</Label>
                 <div className="flex gap-1">
                   <Input type="number" min={0} value={form.value} onChange={(e) => set({ value: e.target.value })} />
                   <select
@@ -308,6 +463,25 @@ function PromotionDialog({
                 <Label>Fin (optionnel)</Label>
                 <Input type="datetime-local" value={form.endsAt} onChange={(e) => set({ endsAt: e.target.value })} />
               </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {quick.map((q) => {
+                const on = form.endsAt === q.end;
+                return (
+                  <button
+                    key={q.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => set({ startsAt: toLocalInput(new Date()), endsAt: q.end })}
+                    className={cn(
+                      "h-8 rounded-full px-3 text-xs font-medium transition-colors duration-200 motion-reduce:transition-none",
+                      on ? "bg-primary text-primary-foreground" : "bg-muted hover:bg-muted/70"
+                    )}
+                  >
+                    {q.label}
+                  </button>
+                );
+              })}
             </div>
             <div className="space-y-1">
               <Label>Jours (aucun = tous les jours)</Label>
@@ -372,6 +546,62 @@ function PromotionDialog({
           </div>
           <div className="space-y-2">
             <Label>Aperçu dans l’app</Label>
+            {byCategory ? (
+              <div className="rounded-2xl bg-slate-50 p-3 pt-5">
+                <div
+                  key={form.target}
+                  className={cn(
+                    "v-rise relative flex items-center gap-3 rounded-[18px] px-3 py-2.5 ring-1",
+                    form.target === "BUNDLE" ? "bg-amber-50 ring-amber-300" : "bg-rose-50 ring-rose-300"
+                  )}
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[13px] bg-indigo-50 text-[11px] font-black text-indigo-700">
+                    {price?.durationHours ? (price.durationHours >= 7 ? "Jour" : `${price.durationHours}h`) : "Pass"}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-extrabold text-slate-900">{scopeName}</span>
+                    <span
+                      className={cn(
+                        "block text-xs",
+                        form.target === "BUNDLE" ? "font-extrabold text-amber-700" : "text-slate-600"
+                      )}
+                    >
+                      {form.target === "BUNDLE"
+                        ? product
+                          ? `+ ${product.name} ${label}${after != null ? ` · ${dt(after)} au lieu de ${dt(product.sellingPrice)}` : ""}`
+                          : "+ produit offert ?"
+                        : form.priceScope === "category" && scopePrices.length
+                          ? `${scopePrices.length} tarifs : ${label}`
+                          : "Promo"}
+                    </span>
+                  </span>
+                  {price ? (
+                    <span className="flex shrink-0 flex-col items-end text-sm font-black tabular-nums">
+                      {form.target === "PRICE" && value > 0 ? (
+                        <>
+                          <span className="text-[11px] font-medium text-slate-500 line-through">{dt(price.price)}</span>
+                          <span className="text-rose-700">{dt(off(price.price))}</span>
+                        </>
+                      ) : (
+                        <span className="text-indigo-800">{dt(price.price)}</span>
+                      )}
+                    </span>
+                  ) : null}
+                  {form.target === "BUNDLE" ? (
+                    <GiftBadge label={product ? `${product.name} ${label}`.slice(0, 16) : "Cadeau"} />
+                  ) : (
+                    <DealBadge
+                      label={form.endsAt === toLocalInput(today) ? `${label} aujourd’hui` : label}
+                    />
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {form.target === "BUNDLE"
+                    ? "Le client touche le pass, voit le cadeau et répond Oui ou Non. Oui = un bon pour sa visite."
+                    : "Prix barré dans l’app et à l’accueil. La remise s’applique dès que le pass est choisi."}
+                </p>
+              </div>
+            ) : null}
             <PromoGoldenCard
               promo={preview}
               action={
@@ -515,8 +745,29 @@ export default function PromotionsPage() {
                     </div>
                   </div>
                   <PromoGoldenCard promo={p} compact />
+                  {isTarifPromo(p.target) ? (
+                    <p className="text-xs font-medium">
+                      {p.target === "BUNDLE" ? "Avec " : "Sur "}
+                      {p.priceName ??
+                        (p.priceCategory ? `tous les pass ${CATEGORY_LABEL[p.priceCategory]}` : "—")}
+                      {p.target === "BUNDLE" && p.itemName ? ` → ${p.itemName} ${p.label}` : ""}
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">{scheduleText(p)}</p>
-                  {p.stats ? (
+                  {p.stats && p.target === "BUNDLE" ? (
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      {[
+                        ["Proposé", p.stats.offered ?? 0],
+                        ["Accepté", p.stats.accepted ?? 0],
+                        [`${p.itemName ?? "Cadeau"} commandé`, p.stats.redeemed ?? 0],
+                      ].map(([k, v]) => (
+                        <div key={k} className="rounded-md bg-muted/50 px-1 py-1.5">
+                          <div className="font-semibold tabular-nums">{v}</div>
+                          <div className="truncate text-muted-foreground">{k}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : p.stats ? (
                     <div className="grid grid-cols-3 gap-2 text-center text-xs sm:grid-cols-6">
                       {[
                         ["Vues", p.stats.views],

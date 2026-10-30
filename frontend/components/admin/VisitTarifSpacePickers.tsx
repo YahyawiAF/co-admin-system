@@ -17,6 +17,7 @@ import {
 } from "@/lib/tarif-labels";
 import { spacesForPrice } from "@/lib/space-occupy";
 import { PriceCategory, type Price, type Space } from "@/lib/types";
+import { bestDeal, dealTag, giftPriceLine, giftTag, type TarifPromos } from "@/lib/tarif-promos";
 
 export type ReserveKind = "none" | "open" | "salle" | "all" | "space";
 export type OccupyMode = "bureau" | "group" | "whole";
@@ -38,6 +39,10 @@ type Props = {
   /** Member/group remise % applied to displayed prices */
   discountPercent?: number;
   discountLabel?: string;
+  /** Live tarif promos: a corner tag, struck price for discounts, gift question for the selected pass */
+  tarifPromos?: (priceId: string) => TarifPromos;
+  giftAnswers?: Record<string, boolean>;
+  onGiftAnswer?: (promotionId: string, yes: boolean) => void;
 };
 
 export function VisitTarifSpacePickers({
@@ -56,6 +61,9 @@ export function VisitTarifSpacePickers({
   showSpace = true,
   discountPercent = 0,
   discountLabel,
+  tarifPromos,
+  giftAnswers = {},
+  onGiftAnswer,
 }: Props) {
   const presentCats = useMemo(
     () => categoriesPresentInSpaces(spaces),
@@ -179,10 +187,17 @@ export function VisitTarifSpacePickers({
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {list.map((p) => {
                       const isSelected = effectiveId === p.id;
-                      const remised =
+                      const afterMember =
                         discountPercent > 0
                           ? Math.round(p.price * (1 - discountPercent / 100) * 100) /
                             100
+                          : p.price;
+                      const promos = tarifPromos?.(p.id);
+                      const deal = promos ? bestDeal(promos.deals, afterMember) : null;
+                      const gift = promos?.bundles[0] ?? null;
+                      const remised =
+                        deal || discountPercent > 0
+                          ? Math.round((deal ? deal.final : afterMember) * 100) / 100
                           : null;
                       return (
                         <button
@@ -194,17 +209,38 @@ export function VisitTarifSpacePickers({
                             )
                           }
                           className={cn(
-                            "rounded-xl border px-3 py-3 text-left transition-colors",
+                            "relative rounded-xl border px-3 py-3 text-left transition-colors",
                             isSelected
                               ? "border-primary bg-primary/5 ring-2 ring-primary/30"
-                              : "hover:border-primary/50"
+                              : gift
+                                ? "border-amber-300 bg-amber-50 hover:border-amber-400"
+                                : deal
+                                  ? "border-rose-300 bg-rose-50 hover:border-rose-400"
+                                  : "hover:border-primary/50"
                           )}
                         >
+                          {gift || deal ? (
+                            <span
+                              className={cn(
+                                "absolute -right-1.5 -top-2.5 rounded-full px-2 py-0.5 text-[10px] font-black shadow-sm",
+                                gift
+                                  ? "bg-gradient-to-r from-amber-500 via-amber-200 to-amber-500 text-amber-950"
+                                  : "bg-rose-600 text-white"
+                              )}
+                            >
+                              {gift ? giftTag(gift) : dealTag(deal!.promo)}
+                            </span>
+                          ) : null}
                           <div className="font-semibold">{p.name}</div>
                           <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-sm text-muted-foreground">
                             <span>{tarifSubtitle(p)}</span>
                             {remised != null ? (
-                              <span className="text-right font-bold text-primary">
+                              <span
+                                className={cn(
+                                  "text-right font-bold",
+                                  deal ? "text-rose-700" : "text-primary"
+                                )}
+                              >
                                 <span className="mr-1 text-xs font-normal line-through opacity-60">
                                   {formatTarifPrice(p)}
                                 </span>
@@ -218,9 +254,14 @@ export function VisitTarifSpacePickers({
                               </span>
                             )}
                           </div>
-                          {remised != null && discountLabel ? (
+                          {discountPercent > 0 && discountLabel ? (
                             <p className="mt-1 text-[10px] text-amber-800">
                               {discountLabel} −{discountPercent}%
+                            </p>
+                          ) : null}
+                          {deal ? (
+                            <p className="mt-1 text-[10px] font-semibold text-rose-700">
+                              {deal.promo.title}
                             </p>
                           ) : null}
                           {p.spaceName ? (
@@ -235,6 +276,51 @@ export function VisitTarifSpacePickers({
                 </div>
               ))
           )}
+          {selected && tarifPromos
+            ? tarifPromos(selected.id).bundles.map((g) => {
+                const answer = giftAnswers[g.id];
+                return (
+                  <div
+                    key={`${selected.id}-${g.id}`}
+                    className="animate-in fade-in-0 slide-in-from-top-1 flex flex-wrap items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 duration-200 motion-reduce:animate-none"
+                  >
+                    <div className="min-w-[220px] flex-1">
+                      <p className="text-sm font-semibold text-amber-950">
+                        Cadeau avec ce pass : {g.itemName ?? "produit"} {g.label} ({giftPriceLine(g)})
+                      </p>
+                      <p className="text-xs text-amber-800">
+                        Proposez-le au client. Oui = un bon pour sa visite.
+                      </p>
+                    </div>
+                    <div className="flex gap-1 rounded-lg bg-white p-1 ring-1 ring-amber-200">
+                      {(
+                        [
+                          [false, "Non"],
+                          [true, "Oui"],
+                        ] as const
+                      ).map(([yes, text]) => (
+                        <button
+                          key={text}
+                          type="button"
+                          aria-pressed={answer === yes}
+                          onClick={() => onGiftAnswer?.(g.id, yes)}
+                          className={cn(
+                            "h-8 min-w-14 rounded-md px-3 text-sm font-semibold transition-colors duration-200 motion-reduce:transition-none",
+                            answer === yes
+                              ? yes
+                                ? "bg-amber-600 text-white"
+                                : "bg-slate-600 text-white"
+                              : "text-slate-700 hover:bg-amber-50"
+                          )}
+                        >
+                          {text}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })
+            : null}
           {selected && isHourlyVisitTarif(selected) ? (
             <div className="max-w-xs space-y-1">
               {openMeter ? (

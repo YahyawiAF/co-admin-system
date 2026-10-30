@@ -39,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
+import { VisitVouchers } from "@/components/visitor/VisitVouchers";
 import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
 import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
@@ -333,8 +334,8 @@ export function ActiveSessionPanel({
     tiers.length > 0;
 
   const fixTariff = useMutation({
-    mutationFn: (vars: { priceId: string; upgrade?: boolean }) =>
-      mobileApi.fixMySessionTariff(session.id, vars.priceId, memberId),
+    mutationFn: (vars: { priceId: string; upgrade?: boolean; bundleIds?: string[] }) =>
+      mobileApi.fixMySessionTariff(session.id, vars.priceId, memberId, vars.bundleIds),
     onSuccess: (_res, vars) => {
       const name = tiers.find((t) => t.priceId === vars.priceId)?.name;
       if (vars.upgrade) {
@@ -344,6 +345,7 @@ export function ActiveSessionPanel({
       }
       onPassOpenChange(false);
       queryClient.invalidateQueries({ queryKey: ["mobile-status"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-vouchers"] });
     },
   });
   const fixError = fixTariff.isError
@@ -761,6 +763,17 @@ export function ActiveSessionPanel({
         ) : null}
       </div>
 
+      <VisitVouchers
+        until={
+          session.expectedLeaveTime
+            ? new Date(session.expectedLeaveTime).toLocaleTimeString("fr-FR", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : null
+        }
+      />
+
       <div className="space-y-2">
         {checkout.isError && !checkoutOpen ? (
           <p className="text-center text-xs font-medium text-rose-600">
@@ -825,7 +838,7 @@ export function ActiveSessionPanel({
           now={now}
           pending={fixTariff.isPending}
           error={fixError}
-          onConfirm={(id) => fixTariff.mutate({ priceId: id })}
+          onConfirm={(id, bundleIds) => fixTariff.mutate({ priceId: id, bundleIds })}
         />
       ) : null}
 

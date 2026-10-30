@@ -83,8 +83,15 @@ function usePromoAction() {
   return (p: Promotion) => {
     void promotionsApi.track(p.id, "click").catch(() => null);
     if (p.target === "PRODUCT") router.push(href(`/cafe?promo=${p.id}`));
-    else if (p.target === "PRICE" && p.priceId) {
-      router.push(href(`/choose?mode=day&priceId=${encodeURIComponent(p.priceId)}`));
+    else if (p.target === "PRICE" || p.target === "BUNDLE") {
+      // One tarif: preselect it; a whole category: show the pass list
+      router.push(
+        href(
+          p.priceId
+            ? `/choose?mode=day&priceId=${encodeURIComponent(p.priceId)}`
+            : "/choose?mode=day"
+        )
+      );
     }
   };
 }

@@ -1,11 +1,26 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Gift } from "lucide-react";
+import { Gift, Percent } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STAR =
   "polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%)";
+
+/** Red "−20 %" badge of a discounted option, top-right corner of its (relative) parent. */
+export function DealBadge({ label, className }: { label: string; className?: string }) {
+  return (
+    <span
+      className={cn(
+        "absolute -right-1 -top-2.5 z-[1] flex h-6 items-center gap-1 rounded-full bg-rose-600 pl-2 pr-2.5 text-[11px] font-black text-white shadow-md shadow-rose-600/30",
+        className
+      )}
+    >
+      <Percent className="h-3 w-3" strokeWidth={3} />
+      <span>{label}</span>
+    </span>
+  );
+}
 
 /** Glowing "Cadeau" badge pinned to the top-right corner of its (relative) parent. */
 export function GiftBadge({
@@ -58,6 +73,7 @@ export function QuestOption({
   price,
   gift,
   giftLine,
+  deal,
   badge,
   tone = "indigo",
 }: {
@@ -72,6 +88,8 @@ export function QuestOption({
   gift?: string | null;
   /** Shown under the hint once selected (e.g. "+ Café offert avec ce pass") */
   giftLine?: ReactNode;
+  /** Discount tag ("−20 % aujourd’hui") when the option itself is on promo */
+  deal?: string | null;
   /** Small tag next to the title ("Actuel", "Promo"…) */
   badge?: ReactNode;
   tone?: "indigo" | "violet";
@@ -91,7 +109,9 @@ export function QuestOption({
             : "bg-indigo-50 ring-2 ring-indigo-600"
           : gift
             ? "bg-amber-50 ring-amber-300"
-            : "bg-white ring-slate-200"
+            : deal
+              ? "bg-rose-50 ring-rose-300"
+              : "bg-white ring-slate-200"
       )}
     >
       <span
@@ -130,7 +150,7 @@ export function QuestOption({
           {price}
         </span>
       ) : null}
-      {gift ? <GiftBadge label={gift} /> : null}
+      {gift ? <GiftBadge label={gift} /> : deal ? <DealBadge label={deal} /> : null}
     </button>
   );
 }
