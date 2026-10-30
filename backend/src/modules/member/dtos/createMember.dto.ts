@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Subscription } from '@prisma/client';
-import { IsString, IsOptional, IsNumber, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsIn } from 'class-validator';
 
 export class AddMemberDto {
   // @IsNotEmpty()
@@ -32,6 +32,16 @@ export class AddMemberDto {
   @IsString()
   @ApiProperty({ description: 'Functionality of the member', required: false })
   public functionality?: string;
+
+  @IsOptional()
+  @IsIn(['STUDENT', 'PUPIL', 'PRO'])
+  @ApiProperty({ enum: ['STUDENT', 'PUPIL', 'PRO'], required: false })
+  public profileType?: 'STUDENT' | 'PUPIL' | 'PRO';
+
+  @IsOptional()
+  @IsIn(['INSTAGRAM', 'FRIEND', 'SCHOOL', 'WALK_BY', 'OTHER'])
+  @ApiProperty({ required: false })
+  public heardFrom?: string;
 
   @IsOptional()
   @IsString()

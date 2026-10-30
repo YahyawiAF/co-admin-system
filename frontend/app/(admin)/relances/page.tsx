@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { Suspense, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, format, formatDistanceToNow, parse, startOfDay } from "date-fns";
@@ -18,9 +18,11 @@ import {
   Sparkles,
   Star,
   UserMinus,
+  UserPlus,
   UserX,
   X,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +42,7 @@ import { CampaignsSection } from "@/components/admin/OutreachCampaigns";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
+  AwayReason,
   AbonnementOffer,
   OutreachChannel,
   OutreachItem,
@@ -68,6 +71,18 @@ const REASON_UI: Record<
     icon: HandCoins,
     tone: "bg-red-100 text-red-700",
     why: "L'argent déjà gagné : le plus rapide à récupérer.",
+  },
+  RECALL: {
+    label: "À rappeler",
+    icon: BellRing,
+    tone: "bg-indigo-100 text-indigo-800",
+    why: "Il avait dit pourquoi il ne venait plus : c'est le moment prévu pour le relancer (ex. révisions d'examens).",
+  },
+  NEW_NOT_BACK: {
+    label: "Venu une fois",
+    icon: UserPlus,
+    tone: "bg-orange-100 text-orange-800",
+    why: "Plus de la moitié des nouveaux ne reviennent pas. Un message dans les jours qui suivent la 1ʳᵉ visite les fait revenir.",
   },
   INACTIVE: {
     label: "Habitué absent",
@@ -432,6 +447,101 @@ function MessageDialog({
   );
 }
 
+const AWAY_LABEL: Record<AwayReason, string> = {
+  STUDY_HOME: "Révise à la maison",
+  PRICE: "Prix",
+  DISTANCE: "Trop loin",
+  NOISE: "Bruit",
+  HOURS: "Horaires",
+  OTHER: "Autre",
+};
+/** Reasons where asking "pourquoi ?" makes sense */
+const ASK_WHY = new Set<OutreachReason>(["INACTIVE", "NEW_NOT_BACK", "ABO_ENDED", "RECALL"]);
+
+/** 1 click: why the member stopped coming. Saved on the member; "révise" sets a recall date. */
+function AwayReasonChips({ item }: { item: OutreachItem }) {
+  const queryClient = useQueryClient();
+  const [saved, setSaved] = useState<{ reason: AwayReason | null; recallAt: string | null }>({
+    reason: item.awayReason ?? null,
+    recallAt: item.recallAt ?? null,
+  });
+  const save = useMutation({
+    mutationFn: (reason: AwayReason | null) => outreachApi.awayReason({ memberId: item.memberId, reason }),
+    onSuccess: (res) => {
+      setSaved({ reason: res.awayReason, recallAt: res.recallAt });
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">Pourquoi ?</span>
+      {(Object.keys(AWAY_LABEL) as AwayReason[]).map((r) => {
+        const on = saved.reason === r;
+        return (
+          <button
+            key={r}
+            type="button"
+            aria-pressed={on}
+            disabled={save.isPending}
+            onClick={() => save.mutate(on ? null : r)}
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-xs transition-colors duration-200",
+              on ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted",
+            )}
+          >
+            {AWAY_LABEL[r]}
+          </button>
+        );
+      })}
+      {saved.reason ? (
+        <span className="animate-in fade-in-0 text-xs font-medium text-emerald-700 duration-300 motion-reduce:animate-none dark:text-emerald-400">
+          {saved.recallAt
+            ? `Noté · rappel le ${format(new Date(saved.recallAt), "d MMM", { locale: fr })}`
+            : "Noté sur sa fiche"}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/** Answers collected over 90 days. */
+function AwayReasonsCard({ counts }: { counts?: Partial<Record<AwayReason, number>> }) {
+  const rows = (Object.keys(AWAY_LABEL) as AwayReason[]).map((r) => [r, counts?.[r] ?? 0] as const);
+  const total = rows.reduce((a, [, n]) => a + n, 0);
+  return (
+    <Card className="shadow-none">
+      <CardContent className="space-y-2 p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold">Pourquoi ils ne viennent plus</p>
+          <span className="text-xs text-muted-foreground">
+            {total ? `${total} réponse${total > 1 ? "s" : ""} (90 jours)` : "Cliquez « Pourquoi ? » sur une relance"}
+          </span>
+        </div>
+        {total ? (
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {rows
+              .filter(([, n]) => n > 0)
+              .sort((a, b) => b[1] - a[1])
+              .map(([r, n]) => (
+                <div key={r} className="grid grid-cols-[130px_minmax(0,1fr)_28px] items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">{AWAY_LABEL[r]}</span>
+                  <span className="h-2 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none"
+                      style={{ width: `${(n / total) * 100}%` }}
+                    />
+                  </span>
+                  <b className="text-right tabular-nums">{n}</b>
+                </div>
+              ))}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 function OutreachRow({
   item,
   onMessage,
@@ -482,6 +592,7 @@ function OutreachRow({
             .filter(Boolean)
             .join(" · ")}
         </div>
+        {ASK_WHY.has(item.reason) ? <AwayReasonChips item={item} /> : null}
       </div>
       <div className="flex items-center gap-1.5">
         {link ? (
@@ -515,7 +626,19 @@ function OutreachRow({
 }
 
 export default function RelancesPage() {
-  const [filter, setFilter] = useState<OutreachReason | "ALL">("ALL");
+  return (
+    <Suspense fallback={<Skeleton className="h-64" />}>
+      <RelancesInner />
+    </Suspense>
+  );
+}
+
+function RelancesInner() {
+  const searchParams = useSearchParams();
+  const initialReason = searchParams.get("reason") as OutreachReason | null;
+  const [filter, setFilter] = useState<OutreachReason | "ALL">(
+    initialReason && initialReason in REASON_UI ? initialReason : "ALL",
+  );
   const [messaging, setMessaging] = useState<OutreachItem | null>(null);
   const [showDone, setShowDone] = useState(false);
   const { data, isLoading } = useQuery({
@@ -574,6 +697,8 @@ export default function RelancesPage() {
               </CardContent>
             </Card>
           </div>
+
+          <AwayReasonsCard counts={data.awayReasons} />
 
           <CampaignsSection />
 

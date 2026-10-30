@@ -47,23 +47,37 @@ type PromoOpts = {
   categories?: PriceCategory[] | null;
 };
 
-/** Categories used for promo scopes: uncategorised tarifs fall back on their type. */
+/**
+ * Categories used for promo scopes: uncategorised tarifs fall back on their type.
+ * A time pack outside Salle / Abonnement also counts as "Forfait / journée"
+ * (mirrors backend priceCategoriesFor).
+ */
 export function promoCategoriesOf(
   price:
     | {
         category?: string | null;
         categories?: (string | null)[] | null;
         type?: string | null;
+        billingUnit?: string | null;
       }
     | null
     | undefined
 ): PriceCategory[] {
   if (!price) return [];
   const cats = priceCategoriesOf(price);
-  if (cats.length) return cats;
-  return [
-    price.type === "abonnement" ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
-  ];
+  if (!cats.length) {
+    return [
+      price.type === "abonnement" ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
+    ];
+  }
+  const dayPack =
+    price.billingUnit === "PACK" &&
+    price.type !== "abonnement" &&
+    !cats.includes(PriceCategory.SALLE) &&
+    !cats.includes(PriceCategory.ABONNEMENT);
+  return dayPack && !cats.includes(PriceCategory.JOURNEE)
+    ? [...cats, PriceCategory.JOURNEE]
+    : cats;
 }
 
 /** Resolve best promo for a tarif: price-linked first, else global (if in scope). */

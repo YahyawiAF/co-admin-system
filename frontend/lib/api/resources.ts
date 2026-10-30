@@ -14,6 +14,14 @@ import type {
   SurveySummary,
   SurveyVolunteer,
 } from "@/lib/surveys";
+import type {
+  AwayReason,
+  HeardFrom,
+  NewcomersOverview,
+  MemberOffer,
+  MemberProfileType,
+  OnboardingStatus,
+} from "@/lib/types";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
@@ -273,8 +281,15 @@ export const membersApi = {
     groupId?: string;
     status?: string;
     memberIds?: string[];
+    profileType?: string;
+    returnStatus?: string;
+    offer?: string;
   } = {}) {
     const q = new URLSearchParams();
+    for (const k of ["profileType", "returnStatus", "offer"] as const) {
+      const v = params[k];
+      if (v && v !== "all") q.set(k, v);
+    }
     q.set("page", String(params.page ?? 1));
     q.set("perPage", String(params.perPage ?? 20));
     if (params.search?.trim()) q.set("search", params.search.trim());
@@ -398,6 +413,10 @@ export const pricesApi = {
 };
 
 export const analyticsApi = {
+  /** Finance → Nouveaux: first visits and returns within 14 days */
+  newcomers(weeks = 12) {
+    return http.get<NewcomersOverview>(`/analytics/newcomers?weeks=${weeks}`);
+  },
   financeMonthly(year: number) {
     return http.get<{ year: number; months: FinanceYearMonthRow[] }>(
       `/analytics/finance/monthly?year=${year}`,
@@ -572,6 +591,13 @@ export const outreachApi = {
   },
   push(data: { memberId: string; reason: OutreachReason; message: string }) {
     return http.post("/analytics/outreach/push", data);
+  },
+  /** Why the member stopped coming; "révise à la maison" schedules a recall before exams */
+  awayReason(data: { memberId: string; reason: AwayReason | null; recallAt?: string | null }) {
+    return http.post<{ memberId: string; awayReason: AwayReason | null; recallAt: string | null }>(
+      "/analytics/outreach/away-reason",
+      data,
+    );
   },
   campaigns() {
     return http.get<OutreachCampaign[]>("/analytics/outreach/campaigns");
@@ -2072,6 +2098,28 @@ export const promotionsApi = {
     return http.get<PromotionVoucher[]>(
       `/promotions/vouchers?journalId=${encodeURIComponent(journalId)}`
     );
+  },
+};
+
+/** Member app: check-in questions (profile, source) and « Mes offres ». */
+export const memberOnboardingApi = {
+  status(memberId: string) {
+    return http.get<OnboardingStatus>(
+      `/mobile/onboarding?memberId=${encodeURIComponent(memberId)}`,
+      { skipAuth: true }
+    );
+  },
+  save(data: {
+    memberId: string;
+    profileType?: MemberProfileType;
+    heardFrom?: HeardFrom;
+    skipSource?: boolean;
+  }) {
+    return http.post<OnboardingStatus>("/mobile/onboarding", data, { skipAuth: true });
+  },
+  offers(orgSlug: string, memberId: string) {
+    const q = new URLSearchParams({ orgSlug, memberId });
+    return http.get<MemberOffer[]>(`/mobile/offers?${q}`, { skipAuth: true });
   },
 };
 

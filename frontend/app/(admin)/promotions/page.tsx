@@ -65,7 +65,8 @@ type Form = {
   daysOfWeek: number[];
   fromHour: string;
   toHour: string;
-  audience: "ALL" | "IN_SESSION";
+  audience: "ALL" | "IN_SESSION" | "FIRST_VISIT";
+  requiresApp: boolean;
   maxUsesPerMember: string;
   maxUses: string;
   style: Promotion["style"];
@@ -87,12 +88,30 @@ const blank = (): Form => ({
   fromHour: "",
   toHour: "",
   audience: "ALL",
+  requiresApp: false,
   maxUsesPerMember: "1",
   maxUses: "",
   style: "GOLD",
 });
 
 const TEMPLATES: Array<{ label: string; icon: typeof Coffee; apply: (f: Form) => Form }> = [
+  {
+    label: "Bienvenue : 2 h au prix d’1 h",
+    icon: Gift,
+    apply: (f) => ({
+      ...f,
+      target: "PRICE",
+      priceScope: "one",
+      title: "2 h au prix d’1 h",
+      description: "Cadeau de bienvenue pour ta 1ʳᵉ visite, avec l’app installée. Choisissez le tarif « 2h ».",
+      valueKind: "FIXED_DT",
+      value: "1.5",
+      audience: "FIRST_VISIT",
+      requiresApp: true,
+      maxUsesPerMember: "1",
+      style: "GOLD",
+    }),
+  },
   {
     label: "Café −50 % l’après-midi",
     icon: Coffee,
@@ -190,6 +209,7 @@ function toInput(f: Form): PromotionInput {
     fromHour: num(f.fromHour),
     toHour: num(f.toHour),
     audience: f.audience,
+    requiresApp: f.requiresApp,
     maxUsesPerMember: num(f.maxUsesPerMember),
     maxUses: num(f.maxUses),
     style: f.style,
@@ -213,6 +233,7 @@ function fromPromo(p: Promotion): Form {
     fromHour: p.fromHour != null ? String(p.fromHour) : "",
     toHour: p.toHour != null ? String(p.toHour) : "",
     audience: p.audience,
+    requiresApp: !!p.requiresApp,
     maxUsesPerMember: p.maxUsesPerMember != null ? String(p.maxUsesPerMember) : "",
     maxUses: p.maxUses != null ? String(p.maxUses) : "",
     style: p.style,
@@ -532,7 +553,18 @@ function PromotionDialog({
                 <select className={select} value={form.audience} onChange={(e) => set({ audience: e.target.value as Form["audience"] })}>
                   <option value="ALL">Tous les membres</option>
                   <option value="IN_SESSION">Seulement ceux sur place</option>
+                  <option value="FIRST_VISIT">Nouveaux (1ʳᵉ visite)</option>
                 </select>
+                <label className="flex items-center gap-2 pt-1 text-sm">
+                  <input
+                    id="promo-requires-app"
+                    type="checkbox"
+                    className="h-4 w-4 accent-primary"
+                    checked={form.requiresApp}
+                    onChange={(e) => set({ requiresApp: e.target.checked })}
+                  />
+                  Seulement avec l’app installée
+                </label>
               </div>
               <div className="space-y-1">
                 <Label>Couleur</Label>
@@ -643,6 +675,8 @@ function scheduleText(p: Promotion) {
   if (p.fromHour != null && p.toHour != null) parts.push(`${p.fromHour}h–${p.toHour}h`);
   if (p.maxUsesPerMember) parts.push(`${p.maxUsesPerMember}× par client`);
   if (p.audience === "IN_SESSION") parts.push("clients sur place");
+  if (p.audience === "FIRST_VISIT") parts.push("1ʳᵉ visite");
+  if (p.requiresApp) parts.push("avec l’app");
   return parts.join(" · ");
 }
 

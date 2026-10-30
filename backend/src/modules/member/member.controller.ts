@@ -55,6 +55,9 @@ export class MemberController {
     @Query('groupId') groupId?: string,
     @Query('status') status?: string,
     @Query('memberIds') memberIds?: string,
+    @Query('profileType') profileType?: string,
+    @Query('returnStatus') returnStatus?: string,
+    @Query('offer') offer?: string,
   ): Promise<PaginatedResult<MemberEntity>> {
     const ids = memberIds
       ? memberIds
@@ -70,6 +73,9 @@ export class MemberController {
       groupId,
       status,
       memberIds: ids,
+      profileType,
+      returnStatus,
+      offer,
     });
   }
 

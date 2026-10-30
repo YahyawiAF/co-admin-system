@@ -44,6 +44,7 @@ import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
 import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
 import { FirstVisitWelcome } from "@/components/visitor/FirstVisitWelcome";
+import { CheckinQuestions } from "@/components/visitor/CheckinQuestions";
 import {
   clearCheckinReward,
   clearTarifPrompt,
@@ -168,9 +169,14 @@ export function ActiveSessionPanel({
     setIsPwa(isStandalonePwa());
   }, []);
 
+  /** Set when the check-in welcome / reward closes: then the check-in questions may show. */
+  const [rewardDone, setRewardDone] = useState(false);
   const onRewardOpenChange = (open: boolean) => {
     setRewardOpen(open);
-    if (!open) clearCheckinReward(slug);
+    if (!open) {
+      clearCheckinReward(slug);
+      setRewardDone(true);
+    }
   };
 
   useEffect(() => {
@@ -843,6 +849,10 @@ export function ActiveSessionPanel({
       ) : null}
 
       <MemberQrSheet open={qrOpen} onOpenChange={setQrOpen} memberId={memberId} />
+
+      {memberId ? (
+        <CheckinQuestions memberId={memberId} active={rewardDone && !rewardOpen && !passOpen} />
+      ) : null}
 
       <FirstVisitWelcome
         open={rewardOpen && firstVisit}

@@ -129,6 +129,15 @@ export interface Member {
   id: string;
   /** First visit ever is today ("Nouveau" badge). Members list only. */
   isFirstVisitToday?: boolean;
+  /** Étudiant / Élève / Pro, asked in 1 tap at check-in */
+  profileType?: "STUDENT" | "PUPIL" | "PRO" | null;
+  heardFrom?: string | null;
+  awayReason?: string | null;
+  recallAt?: string | null;
+  /** Members list: visit days, last visit, BACK | ONCE | AWAY | NONE */
+  visitDays?: number;
+  lastVisitAt?: string | null;
+  returnStatus?: "BACK" | "ONCE" | "AWAY" | "NONE";
   organizationId?: string;
   email?: string | null;
   firstName?: string | null;
@@ -1007,7 +1016,9 @@ export type OutreachReason =
   | "ABO_EXPIRING"
   | "ABO_ENDED"
   | "UNPAID"
+  | "RECALL"
   | "INACTIVE"
+  | "NEW_NOT_BACK"
   | "TOP_UP"
   | "CONVERT"
   | "REVIEW";
@@ -1030,7 +1041,13 @@ export interface OutreachItem {
   topUp?: TopUpOffer;
   lastContact: { at: string; channel: OutreachChannel; reason: OutreachReason } | null;
   snoozed: boolean;
+  profileType?: "STUDENT" | "PUPIL" | "PRO" | null;
+  /** Why the member stopped coming (1 click in Relances) */
+  awayReason?: AwayReason | null;
+  recallAt?: string | null;
 }
+
+export type AwayReason = "STUDY_HOME" | "PRICE" | "DISTANCE" | "NOISE" | "HOURS" | "OTHER";
 
 export interface OutreachResults {
   contacted: number;
@@ -1045,6 +1062,8 @@ export interface OutreachList {
   todo: OutreachItem[];
   contacted: OutreachItem[];
   results: OutreachResults;
+  /** Answers to "pourquoi tu ne viens plus ?" (90 days) */
+  awayReasons?: Partial<Record<AwayReason, number>>;
 }
 
 export type InsightSeverity =
@@ -1770,7 +1789,9 @@ export interface Promotion {
   daysOfWeek: number[];
   fromHour: number | null;
   toHour: number | null;
-  audience: "ALL" | "IN_SESSION";
+  audience: "ALL" | "IN_SESSION" | "FIRST_VISIT";
+  /** Only members who installed the app */
+  requiresApp?: boolean;
   maxUsesPerMember: number | null;
   maxUses: number | null;
   style: "GOLD" | "VIOLET" | "GREEN";
@@ -1824,6 +1845,7 @@ export type PromotionInput = Partial<
     | "fromHour"
     | "toHour"
     | "audience"
+    | "requiresApp"
     | "maxUsesPerMember"
     | "maxUses"
     | "style"
@@ -1889,3 +1911,62 @@ export interface CampaignInput {
   trackAsInitiative?: boolean;
   category?: AdvisorCategory;
 }
+
+/** Member profile asked in 1 tap at check-in. */
+export type MemberProfileType = "STUDENT" | "PUPIL" | "PRO";
+export type HeardFrom = "INSTAGRAM" | "FRIEND" | "SCHOOL" | "WALK_BY" | "OTHER";
+
+export type OnboardingStatus = {
+  firstVisit: boolean;
+  visitDays: number;
+  hasApp: boolean;
+  askProfile: boolean;
+  askSource: boolean;
+  profileType: MemberProfileType | null;
+};
+
+/** One line of « Mes offres » in the member app. */
+export type MemberOffer = {
+  id: string;
+  kind: "PERSONAL" | "GROUP" | "APP" | "PROMO";
+  label: string;
+  title: string;
+  detail: string;
+  daysOfWeek?: number[];
+  fromHour?: number | null;
+  toHour?: number | null;
+  endsAt?: string | null;
+  firstVisitOnly?: boolean;
+  status: "ACTIVE" | "LIVE" | "LATER" | "TO_USE" | "NEEDS_APP" | "USED";
+  style: "VIOLET" | "GOLD" | "GREEN";
+};
+
+/** Finance → Nouveaux */
+export type NewcomersOverview = {
+  kpis: {
+    thisMonth: number;
+    prevMonthSamePoint: number;
+    prevMonth: number;
+    thisWeek: number;
+    returnPct: number | null;
+    returnBase: number;
+    appDay1Pct: number | null;
+    notBack: number;
+  };
+  cohorts: {
+    weekStart: string;
+    count: number;
+    back: number;
+    pct: number | null;
+    early: boolean;
+    avgVisitDays: number | null;
+    appDay1: number;
+    total: number;
+  }[];
+  daily: { day: string; count: number }[];
+  factors: {
+    title: string;
+    answered: number;
+    rows: { label: string; count: number; back: number; pct: number | null }[];
+  }[];
+};

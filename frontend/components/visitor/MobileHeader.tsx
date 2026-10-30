@@ -39,6 +39,7 @@ const TITLE_BY_SUFFIX: Record<string, string> = {
   "/community": "Communauté",
   "/events": "Événements",
   "/tarifs": "Tarifs",
+  "/offres": "Mes offres",
   "/subscription": "Abonnement",
   "/choose": "Pass",
   "/staff": "Accueil",

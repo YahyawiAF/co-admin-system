@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Camera,
@@ -14,6 +14,7 @@ import {
   Palette,
   Pencil,
   Tags,
+  Gift,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { saveVisitorCache } from "@/lib/visitorCache";
-import { mobileApi } from "@/lib/api/resources";
+import { mobileApi, memberOnboardingApi } from "@/lib/api/resources";
 import { readImageAsDataUrl } from "@/components/admin/ImageUpload";
 import { VisitorAvatar } from "@/components/visitor/MobileHeader";
 import { TagInput } from "@/components/visitor/TagInput";
@@ -72,6 +73,16 @@ function ProfileInner() {
   const queryClient = useQueryClient();
   const { href, slug } = useOrg();
   const { memberId, onboarded, logout, ready } = useVisitorSession();
+  const { data: myOffers } = useQuery({
+    queryKey: ["member-offers", slug, memberId],
+    queryFn: () => memberOnboardingApi.offers(slug, memberId!),
+    enabled: !!memberId,
+    staleTime: 60_000,
+  });
+  const offerCount = (myOffers ?? []).filter((o) => o.status !== "USED").length;
+  const offersHint = offerCount
+    ? `${offerCount} offre${offerCount > 1 ? "s" : ""} pour toi`
+    : "Remises et promos";
   const fileRef = useRef<HTMLInputElement>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
@@ -354,6 +365,16 @@ function ProfileInner() {
 
       <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
         {[
+          ...(memberId
+            ? [
+                {
+                  href: href("/offres"),
+                  label: "Mes offres",
+                  hint: offersHint,
+                  icon: Gift,
+                },
+              ]
+            : []),
           {
             href: href("/tarifs"),
             label: "Tarifs",

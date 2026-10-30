@@ -84,17 +84,30 @@ export function priceCategoriesOf(price: {
   return [];
 }
 
-/** Categories used for promo scopes: uncategorised tarifs fall back on their type. */
+/**
+ * Categories used for promo scopes: uncategorised tarifs fall back on their type.
+ * A time pack (1h, 4h, journée…) outside Salle / Abonnement also counts as
+ * "Forfait / journée", the same rule as the member discounts — so a promo
+ * scoped to Journée still reaches packs tagged Open space.
+ */
 export function priceCategoriesFor(price: {
   category?: PriceCategory | string | null;
   categories?: (PriceCategory | string | null)[] | null;
   type?: string | null;
+  billingUnit?: string | null;
 }): PriceCategory[] {
   const cats = priceCategoriesOf(price);
-  if (cats.length) return cats;
-  return [
-    price.type === 'abonnement' ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
-  ];
+  if (!cats.length) {
+    return [
+      price.type === 'abonnement' ? PriceCategory.ABONNEMENT : PriceCategory.JOURNEE,
+    ];
+  }
+  const dayPack =
+    price.billingUnit === 'PACK' &&
+    price.type !== 'abonnement' &&
+    !cats.includes(PriceCategory.SALLE) &&
+    !cats.includes(PriceCategory.ABONNEMENT);
+  return dayPack && !cats.includes(PriceCategory.JOURNEE) ? [...cats, PriceCategory.JOURNEE] : cats;
 }
 
 export function priceMatchesSpaceCategories(

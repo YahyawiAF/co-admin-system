@@ -8,6 +8,8 @@ import { PriceModule } from '../price/price.module';
 import { EventsModule } from '../webSocket/events.module';
 import { PushModule } from '../push/push.module';
 import { PromotionModule } from '../promotion/promotion.module';
+import { MemberOnboardingController } from './member-onboarding.controller';
+import { MemberOnboardingService } from './member-onboarding.service';
 
 @Module({
   imports: [
@@ -21,8 +23,8 @@ import { PromotionModule } from '../promotion/promotion.module';
     PushModule,
     PromotionModule,
   ],
-  controllers: [MobileController],
-  providers: [MobileService, PrismaService],
+  controllers: [MobileController, MemberOnboardingController],
+  providers: [MobileService, MemberOnboardingService, PrismaService],
   exports: [MobileService],
 })
 export class MobileModule {}
