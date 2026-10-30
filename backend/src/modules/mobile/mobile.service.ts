@@ -541,10 +541,13 @@ export class MobileService {
       promoDiscount: number | null;
       promoLabel: string | null;
     };
+    /** PromotionUse of a flash tarif promo — link it to the visit once created */
+    useId?: string | null;
   }> {
     const none = {
       amount: amountAfterGroupDiscount,
       snapshot: { priceBeforePromo: null, promoDiscount: null, promoLabel: null },
+      useId: null,
     };
     const promo = await this.resolveAppInstallPromo(memberId, priceId);
     const next = promo
@@ -555,13 +558,14 @@ export class MobileService {
       const deal = await this.promotions.priceDeal(priceId, amountAfterGroupDiscount, memberId);
       if (!deal) return none;
       const off = Math.round((amountAfterGroupDiscount - deal.amount) * 1000) / 1000;
-      await this.promotions.recordUse({
+      const use = await this.promotions.recordUse({
         promotionId: deal.promotionId,
         memberId,
         amount: deal.amount,
         discount: off,
       });
       return {
+        useId: use.id,
         amount: deal.amount,
         snapshot: {
           priceBeforePromo: amountAfterGroupDiscount,
@@ -2041,8 +2045,11 @@ export class MobileService {
       : price.price;
     const discount = await this.resolveVisitDiscount(dto.memberId, price);
     const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
-    const { amount: payedAmount, snapshot: promoSnapshot } =
-      await this.applyAppPromo(dto.memberId, dto.priceId, afterGroup);
+    const {
+      amount: payedAmount,
+      snapshot: promoSnapshot,
+      useId: promoUseId,
+    } = await this.applyAppPromo(dto.memberId, dto.priceId, afterGroup);
 
     const snap = saleSnapshotFromPrice(price, {
       id: dto.spaceId || price.spaceId,
@@ -2097,6 +2104,7 @@ export class MobileService {
       await this.prisma.journal.delete({ where: { id: journal.id } });
       throw err;
     }
+    await this.linkVisitPromos(journal.id, dto.memberId, dto.priceId, promoUseId, dto.bundleIds);
 
     const firstVisit = await this.announceFirstVisit(dto.memberId, journal.id);
     return {
@@ -2567,6 +2575,24 @@ export class MobileService {
    * Very first journal row of this member: tell reception (live "Nouveau
    * client" pop-up) and let the app play its welcome. False on any later visit.
    */
+  /** New visit: tie its tarif promo use to it and record the gift-with-pass answers. */
+  private async linkVisitPromos(
+    journalId: string,
+    memberId: string | null | undefined,
+    priceId: string,
+    promoUseId: string | null | undefined,
+    bundleIds: string[] | undefined,
+  ) {
+    if (promoUseId) {
+      await this.prisma.promotionUse
+        .update({ where: { id: promoUseId }, data: { journalId } })
+        .catch(() => null);
+    }
+    if (bundleIds !== undefined) {
+      await this.promotions.offerBundles({ journalId, memberId, priceId, acceptedIds: bundleIds });
+    }
+  }
+
   private async announceFirstVisit(memberId: string, journalId: string) {
     try {
       const visits = await this.prisma.journal.count({
@@ -2602,7 +2628,7 @@ export class MobileService {
   async fixSessionTariff(
     journalId: string,
     priceId: string,
-    opts: { byAdmin?: boolean; memberId?: string } = {},
+    opts: { byAdmin?: boolean; memberId?: string; bundleIds?: string[] } = {},
   ) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
@@ -2650,7 +2676,34 @@ export class MobileService {
       }
     }
     const percent = memberDiscountPercent(journal.members, price);
-    const amount = this.applyPercentOff(price.price, percent);
+    const listAmount = this.applyPercentOff(price.price, percent);
+
+    // Tarif promo (golden card / promo du jour) on the new pass; the previous pass's one is dropped
+    const hadFlash = await this.prisma.promotionUse.count({
+      where: { journalId, dailyProductId: null },
+    });
+    await this.promotions.clearJournalPriceUses(journalId);
+    const deal = await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
+    let amount = listAmount;
+    let promoData: {
+      priceBeforePromo?: number | null;
+      promoDiscount?: number | null;
+      promoLabel?: string | null;
+    } = {};
+    if (deal) {
+      const off = Math.round((listAmount - deal.amount) * 1000) / 1000;
+      amount = deal.amount;
+      promoData = { priceBeforePromo: listAmount, promoDiscount: off, promoLabel: deal.label };
+      await this.promotions.recordUse({
+        promotionId: deal.promotionId,
+        memberId: journal.memberID,
+        journalId,
+        amount: deal.amount,
+        discount: off,
+      });
+    } else if (hadFlash) {
+      promoData = { priceBeforePromo: null, promoDiscount: null, promoLabel: null };
+    }
 
     let updated = await this.prisma.journal.update({
       where: { id: journalId },
@@ -2658,6 +2711,7 @@ export class MobileService {
         pricingMode: 'FIXED',
         priceId: price.id,
         payedAmount: amount,
+        ...promoData,
         fixedPriceId: price.id,
         fixedServiceName: price.name,
         fixedDurationHours: price.durationHours,
@@ -2680,12 +2734,24 @@ export class MobileService {
         ctx,
         updated.leaveTime,
       );
+      // A tarif promo is already in fixedAmount; an older install promo is not
       const billed =
-        Math.round(Math.max(0, (due ?? amount) - (updated.promoDiscount || 0)) * 1000) / 1000;
+        Math.round(
+          Math.max(0, (due ?? amount) - (deal ? 0 : updated.promoDiscount || 0)) * 1000,
+        ) / 1000;
       updated = await this.prisma.journal.update({
         where: { id: journalId },
         data: { payedAmount: billed, amountAtCheckout: billed },
         include: { prices: true, members: { include: { group: true } } },
+      });
+    }
+
+    if (opts.bundleIds !== undefined) {
+      await this.promotions.offerBundles({
+        journalId,
+        memberId: journal.memberID,
+        priceId: price.id,
+        acceptedIds: opts.bundleIds,
       });
     }
 
@@ -2928,6 +2994,7 @@ export class MobileService {
       seatLabel: dto.seatLabel || unique[0],
       seatLabels: dto.seatLabels,
       groupVisitId: dto.groupVisitId,
+      bundleIds: dto.bundleIds,
     });
   }
 
@@ -3096,12 +3163,15 @@ export class MobileService {
       price,
     );
     const afterGroup = this.applyPercentOff(payedAmountRaw, discount.percent);
-    const { amount: payedAmount, snapshot: promoSnapshot } =
-      await this.applyAppPromo(
-        dto.bookForMemberId || dto.memberId,
-        dto.priceId,
-        afterGroup,
-      );
+    const {
+      amount: payedAmount,
+      snapshot: promoSnapshot,
+      useId: promoUseId,
+    } = await this.applyAppPromo(
+      dto.bookForMemberId || dto.memberId,
+      dto.priceId,
+      afterGroup,
+    );
 
     const guestName =
       (dto.guestName || dto.firstName || '').trim() ||
@@ -3140,6 +3210,7 @@ export class MobileService {
       },
       include: { prices: true, members: true },
     });
+    await this.linkVisitPromos(journal.id, null, dto.priceId, promoUseId, dto.bundleIds);
 
     try {
       const seat = dto.seatLabel || dto.seatLabels?.[0];
@@ -4068,6 +4139,8 @@ export class MobileService {
           seatLabel: occupyWhole ? null : dto.seatLabel?.trim() || null,
           spaceId: dto.spaceId || null,
           occupyWhole,
+          bundleIds: dto.bundleIds ?? [],
+          bundleAnswered: dto.bundleIds !== undefined,
         },
       include: {
         member: true,
@@ -4245,6 +4318,7 @@ export class MobileService {
         // (often "salle de réunion") for every forfait.
         spaceId: assignedSpaceId,
         reserveKind: 'none',
+        bundleIds: request.bundleAnswered ? request.bundleIds : undefined,
       });
     } else {
       result = await this.startSubscription({
@@ -5087,7 +5161,10 @@ export class MobileService {
       throw new BadRequestException('Stock insuffisant');
     }
     const open = await this.getOpenSession(dto.memberId);
-    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, dto.memberId);
+    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, dto.memberId, {
+      qty,
+      journalId: open?.id ?? null,
+    });
     const [order] = await this.prisma.$transaction([
       this.prisma.dailyProduct.create({
         data: {
@@ -5190,7 +5267,10 @@ export class MobileService {
         ? journal.registredTime
         : now;
 
-    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, memberId);
+    const deal = await this.promotions.productDeal(product.id, product.sellingPrice, memberId, {
+      qty,
+      journalId: journal?.id ?? open?.id ?? null,
+    });
     // Same product, same day, same payment state, same price → one line with a bigger quantity
     const existing = deal
       ? null
@@ -5259,13 +5339,14 @@ export class MobileService {
     return this.mapOrder(order);
   }
 
-  private recordProductDeal(
-    deal: { promotionId: string; unitPrice: number },
+  private async recordProductDeal(
+    deal: { promotionId: string; unitPrice: number; voucherId?: string | null },
     orderId: string,
     memberId: string | null,
     listPrice: number,
     qty: number,
   ) {
+    if (deal.voucherId) await this.promotions.markVoucherUsed(deal.voucherId, orderId);
     return this.promotions.recordUse({
       promotionId: deal.promotionId,
       memberId,
@@ -5413,6 +5494,7 @@ export class MobileService {
     if (order.isPayed) {
       await revokeProductPaidPoints(this.prisma, id);
     }
+    await this.promotions.releaseVoucher(id);
     const productName = updated.product?.name || order.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_cancelled',

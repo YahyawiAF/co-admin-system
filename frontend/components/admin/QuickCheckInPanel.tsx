@@ -27,7 +27,9 @@ import {
   mobileApi,
   pricesApi,
   abonnementsApi,
+  promotionsApi,
 } from "@/lib/api/resources";
+import { acceptedBundleIds, bestDeal, indexTarifPromos } from "@/lib/tarif-promos";
 import { queryKeys } from "@/lib/query-client";
 import {
   type Member,
@@ -147,6 +149,15 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
     queryKey: queryKeys.debtors,
     queryFn: () => membersApi.debtors(false),
   });
+  /** Live tarif promos (discount on the pass, gift offered with it) */
+  const { data: promotions = [] } = useQuery({
+    queryKey: ["promotions"],
+    queryFn: () => promotionsApi.list(),
+    staleTime: 60_000,
+  });
+  const promosOf = useMemo(() => indexTarifPromos(promotions), [promotions]);
+  /** Gift answers given by the client at the desk (promo id → yes / no) */
+  const [giftAnswers, setGiftAnswers] = useState<Record<string, boolean>>({});
   const debtByMember = useMemo(() => {
     const map = new Map<string, number>();
     for (const m of debtorsData?.members || []) {
@@ -254,9 +265,16 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
           ? pack.price * lineHours
           : pack.price
         : 0;
-      const amount =
+      const afterMember =
         Math.round(listAmount * (1 - discountPercent / 100) * 100) / 100;
+      // Same rule as the server: the best live tarif promo on top of the member discount
+      const deal = pack ? bestDeal(promosOf(pack.id).deals, afterMember) : null;
+      const amount = deal ? Math.round(deal.final * 100) / 100 : afterMember;
+      const gift = pack ? promosOf(pack.id).bundles.find((b) => giftAnswers[b.id]) ?? null : null;
       return {
+        promoLabel: deal ? `${deal.promo.title} ${deal.promo.label}` : null,
+        promoOff: deal ? Math.round((afterMember - deal.final) * 100) / 100 : 0,
+        giftLabel: gift ? `Bon ${gift.itemName ?? "cadeau"} ${gift.label} (à la commande)` : null,
         key,
         member,
         name: member ? memberDisplayName(member) : singleLabel || "Visiteur",
@@ -298,6 +316,8 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
     singleLabel,
     newPhone,
     arrivedAt,
+    promosOf,
+    giftAnswers,
   ]);
 
   const total = lines.reduce((s, l) => s + (l.usesSub ? 0 : l.amount), 0);
@@ -341,6 +361,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
   const reset = () => {
     setPicked([]);
     setLineOpts({});
+    setGiftAnswers({});
     setPaidAll(false);
     setSearch("");
     setNewPhone("");
@@ -418,6 +439,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
               priceId: line.pack!.id,
               ...occupyFor(i),
               hours: line.hourly && line.hours > 0 ? line.hours : undefined,
+              bundleIds: acceptedBundleIds(promosOf(line.pack!.id).bundles, giftAnswers),
             };
             res = (await (mode === "anonymous"
               ? mobileApi.quickCheckIn({
@@ -908,6 +930,9 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
                       ? primary?.group?.name || "Remise"
                       : undefined
                   }
+                  tarifPromos={promosOf}
+                  giftAnswers={giftAnswers}
+                  onGiftAnswer={(id, yes) => setGiftAnswers((a) => ({ ...a, [id]: yes }))}
                 />
               </TabsContent>
 
@@ -1000,6 +1025,20 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
             </div>
             {lines.length ? (
               <div className="space-y-1 border-t px-4 py-3 text-sm">
+                {lines.some((l) => l.promoLabel) ? (
+                  <div className="animate-in fade-in-0 flex justify-between text-xs text-rose-700 duration-200 motion-reduce:animate-none">
+                    <span>{lines.find((l) => l.promoLabel)!.promoLabel}</span>
+                    <span className="tabular-nums">
+                      −{lines.reduce((s, l) => s + (l.promoOff ?? 0), 0).toFixed(1)} DT
+                    </span>
+                  </div>
+                ) : null}
+                {lines.some((l) => l.giftLabel) ? (
+                  <div className="animate-in fade-in-0 flex justify-between text-xs text-amber-700 duration-200 motion-reduce:animate-none">
+                    <span>{lines.find((l) => l.giftLabel)!.giftLabel}</span>
+                    <span>inclus</span>
+                  </div>
+                ) : null}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total</span>
                   <span className="text-lg font-bold tabular-nums">

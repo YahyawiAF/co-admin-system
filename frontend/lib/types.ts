@@ -1740,15 +1740,24 @@ export interface AdvisorQuestion {
 }
 
 // ---- Promotions (golden card) ----
-export type PromotionTarget = "PRODUCT" | "PRICE" | "OTHER";
+export type PromotionTarget = "PRODUCT" | "PRICE" | "BUNDLE" | "OTHER";
 
 export interface Promotion {
   id: string;
   title: string;
   description: string | null;
   target: PromotionTarget;
+  /** PRODUCT: discounted product · BUNDLE: the gift offered with the pass */
   productId: string | null;
+  /** PRICE / BUNDLE: one tarif… */
   priceId: string | null;
+  /** …or every tarif of this category */
+  priceCategory: PriceCategory | null;
+  /** PRICE / BUNDLE: every tarif id covered */
+  priceIds?: string[];
+  /** Tarif name when the promo targets one tarif */
+  priceName?: string | null;
+  /** BUNDLE: the gift · PRICE: the tarif · PRODUCT: the product */
   itemName: string | null;
   itemImg: string | null;
   valueKind: "PERCENT" | "FIXED_DT";
@@ -1775,7 +1784,27 @@ export interface Promotion {
     members: number;
     revenue: number;
     discount: number;
+    /** BUNDLE: offers answered / yes / gift ordered */
+    offered?: number;
+    accepted?: number;
+    redeemed?: number;
   };
+}
+
+/** Gift-with-pass voucher of a visit */
+export interface PromotionVoucher {
+  id: string;
+  promotionId: string;
+  journalId: string;
+  productId: string;
+  status: "ACCEPTED" | "USED";
+  title: string;
+  label: string;
+  productName: string | null;
+  productImg: string | null;
+  priceBefore: number | null;
+  priceAfter: number | null;
+  usedAt: string | null;
 }
 
 export type PromotionInput = Partial<
@@ -1786,6 +1815,7 @@ export type PromotionInput = Partial<
     | "target"
     | "productId"
     | "priceId"
+    | "priceCategory"
     | "valueKind"
     | "value"
     | "startsAt"

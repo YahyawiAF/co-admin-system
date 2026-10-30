@@ -46,6 +46,7 @@ import type {
   OutreachCampaignDetail,
   Promotion,
   PromotionInput,
+  PromotionVoucher,
   Journal,
   Member,
   PaginatedResponse,
@@ -1067,6 +1068,8 @@ export const mobileApi = {
     seatLabel?: string;
     seatLabels?: string[];
     groupVisitId?: string;
+    /** Gift-with-pass promos the client said yes to */
+    bundleIds?: string[];
   }) {
     return http.post("/mobile/admin/quick-checkin", data);
   },
@@ -1119,17 +1122,19 @@ export const mobileApi = {
     );
   },
   /** Reception: any pack on any open session. */
-  fixSessionTariff(id: string, priceId: string) {
+  fixSessionTariff(id: string, priceId: string, bundleIds?: string[]) {
     return http.patch<MobileSession>(`/mobile/session/${id}/fix-tariff`, {
       priceId,
       byAdmin: true,
+      bundleIds,
     });
   },
   /** Member: packs still covering the elapsed time, unpaid session only. */
-  fixMySessionTariff(id: string, priceId: string, memberId: string) {
+  fixMySessionTariff(id: string, priceId: string, memberId: string, bundleIds?: string[]) {
     return http.patch<MobileSession>(`/mobile/session/${id}/fix-tariff`, {
       priceId,
       memberId,
+      bundleIds,
     });
   },
   getPricingContext(opts?: { orgSlug?: string; organizationId?: string | null }) {
@@ -1263,6 +1268,8 @@ export const mobileApi = {
     seatLabel?: string;
     spaceId?: string;
     occupyWhole?: boolean;
+    /** Gift-with-pass promos the client said yes to */
+    bundleIds?: string[];
   }) {
     return http.post<
       VisitRequest & {
@@ -2048,6 +2055,18 @@ export const promotionsApi = {
   },
   track(id: string, kind: "view" | "click") {
     return http.post(`/mobile/promotions/${id}/track`, { kind }, { skipAuth: true });
+  },
+  /** Member app: gift-with-pass vouchers of the open visit */
+  myVouchers(memberId: string) {
+    return http.get<PromotionVoucher[]>(
+      `/mobile/promotions/vouchers?memberId=${encodeURIComponent(memberId)}`,
+      { skipAuth: true }
+    );
+  },
+  journalVouchers(journalId: string) {
+    return http.get<PromotionVoucher[]>(
+      `/promotions/vouchers?journalId=${encodeURIComponent(journalId)}`
+    );
   },
 };
 

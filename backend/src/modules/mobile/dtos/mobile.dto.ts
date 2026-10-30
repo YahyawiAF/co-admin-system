@@ -132,6 +132,12 @@ export class StartDaySessionDto {
   @IsOptional()
   @IsString()
   groupVisitId?: string;
+  /** Gift-with-pass promos the client said yes to (others offered = declined) */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  bundleIds?: string[];
 }
 
 export class StartSubscriptionDto {
@@ -198,6 +204,12 @@ export class FixSessionTariffDto {
   @IsOptional()
   @IsString()
   memberId?: string;
+  /** Gift-with-pass promos the client said yes to (others offered = declined) */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  bundleIds?: string[];
 }
 
 export class QuickCheckInDto {
@@ -286,6 +298,12 @@ export class QuickCheckInDto {
   @IsOptional()
   @IsString()
   bookForMemberId?: string;
+  /** Gift-with-pass promos the client said yes to (others offered = declined) */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  bundleIds?: string[];
 }
 
 export class BookSpaceDto {
@@ -339,6 +357,13 @@ export class CreateVisitRequestDto {
   @IsOptional()
   @IsBoolean()
   occupyWhole?: boolean;
+
+  /** Gift-with-pass promos the client said yes to (others offered = declined) */
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  bundleIds?: string[];
 }
 
 export class ClaimSeatDto {

@@ -353,6 +353,7 @@ export class MobileController {
     return this.mobileService.fixSessionTariff(id, dto.priceId, {
       byAdmin: !!dto.byAdmin,
       memberId: dto.memberId,
+      bundleIds: dto.bundleIds,
     });
   }
 

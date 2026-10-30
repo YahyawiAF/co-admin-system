@@ -37,12 +37,13 @@ import {
 import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { QuestBanner, QuestLabel } from "@/components/visitor/quest/QuestSheet";
 import { QuestOption } from "@/components/visitor/quest/QuestOption";
-import { promoBadgeText, usePricePromos } from "@/components/visitor/PassPickerSheet";
+import { useTarifPromos } from "@/components/visitor/PassPickerSheet";
+import { GiftAnswerLine, GiftOfferPanel } from "@/components/visitor/quest/GiftOffer";
+import { acceptedBundleIds, bestDeal, dealTag, giftTag } from "@/lib/tarif-promos";
 import { usePlayer } from "@/lib/hooks/use-player";
 import { dtToPoints } from "@/lib/points-catalog";
 import { formatDt } from "@/lib/session-pricing";
 import { toast } from "sonner";
-import { useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
 
 function ChooseInner() {
   const router = useRouter();
@@ -117,8 +118,10 @@ function ChooseInner() {
   const promoOpts = promoActive
     ? { promos: appPromos.promos, globalPromo: appPromos.globalPromo }
     : { promos: null, globalPromo: null };
-  const { data: flashPromos = [] } = useMemberPromotions();
-  const pricePromos = usePricePromos();
+  const promosOf = useTarifPromos();
+  /** Gift-with-pass answers (promo id → yes / no) and the pass whose offer is open */
+  const [giftAnswers, setGiftAnswers] = useState<Record<string, boolean>>({});
+  const [giftOpenFor, setGiftOpenFor] = useState<string | null>(null);
   const { player, isPwa } = usePlayer(memberId);
   /** Install promo or live golden-card offer, whichever is cheaper (the server applies the same rule). */
   const priceFor = (o: Price) => {
@@ -127,12 +130,8 @@ function ChooseInner() {
       categories: promoCategoriesOf(o),
     });
     if (priced.hasPromo) return priced;
-    const flash = flashPromos.find(
-      (p) => p.liveNow && p.target === "PRICE" && p.priceId === o.id && p.priceAfter != null
-    );
-    return flash && flash.priceAfter! < o.price - 0.001
-      ? { original: o.price, final: flash.priceAfter!, hasPromo: true }
-      : priced;
+    const flash = bestDeal(promosOf(o.id).deals, o.price);
+    return flash ? { original: o.price, final: flash.final, hasPromo: true } : priced;
   };
 
   const { data: pendingRequest } = useQuery({
@@ -227,6 +226,10 @@ function ChooseInner() {
         seatLabel: opts.seatLabel,
         spaceId: opts.spaceId,
         occupyWhole: opts.occupyWhole,
+        bundleIds:
+          mode === "day"
+            ? acceptedBundleIds(promosOf(opts.priceId).bundles, giftAnswers)
+            : undefined,
       }),
     onSuccess: (req) => {
       if (req.status === "APPROVED" || req.autoApproved) {
@@ -802,7 +805,10 @@ function ChooseInner() {
               <QuestLabel className="mb-0 mt-1">{isSub ? "Durée" : "Durée du pass"}</QuestLabel>
               {listed.map((o, i) => {
                 const priced = priceFor(o);
-                const promo = pricePromos.get(o.id) ?? null;
+                const tp = promosOf(o.id);
+                const giftPromo = !isSub ? (tp.bundles[0] ?? null) : null;
+                const dealPromo = bestDeal(tp.deals, o.price)?.promo ?? null;
+                const answer = giftPromo ? giftAnswers[giftPromo.id] : undefined;
                 const pts = dtToPoints(priced.final);
                 return (
                   <div
@@ -814,7 +820,10 @@ function ChooseInner() {
                       tone={isSub ? "violet" : "indigo"}
                       selected={selectedOption?.id === o.id}
                       disabled={create.isPending}
-                      onClick={() => setSelectedId(o.id)}
+                      onClick={() => {
+                        setSelectedId(o.id);
+                        setGiftOpenFor(giftPromo && answer === undefined ? o.id : null);
+                      }}
                       icon={
                         isSub ? (
                           <CalendarDays className="h-5 w-5" />
@@ -839,15 +848,32 @@ function ChooseInner() {
                         ) : null
                       }
                       price={<PromoPrice {...priced} size="sm" align="end" />}
-                      gift={
-                        promo
-                          ? promoBadgeText(promo)
-                          : priced.hasPromo
-                            ? "Promo"
-                            : null
+                      gift={giftPromo ? giftTag(giftPromo) : null}
+                      deal={
+                        dealPromo ? dealTag(dealPromo) : priced.hasPromo ? "Promo" : null
                       }
-                      giftLine={promo ? `+ ${promo.title}` : null}
                     />
+                    {giftPromo && giftOpenFor === o.id ? (
+                      <GiftOfferPanel
+                        promo={giftPromo}
+                        answer={answer}
+                        disabled={create.isPending}
+                        onAnswer={(yes) => {
+                          setGiftAnswers((a) => ({ ...a, [giftPromo.id]: yes }));
+                          setGiftOpenFor(null);
+                          setSelectedId(o.id);
+                        }}
+                      />
+                    ) : giftPromo && answer !== undefined ? (
+                      <GiftAnswerLine
+                        promo={giftPromo}
+                        answer={answer}
+                        onChange={() => {
+                          setSelectedId(o.id);
+                          setGiftOpenFor(o.id);
+                        }}
+                      />
+                    ) : null}
                   </div>
                 );
               })}

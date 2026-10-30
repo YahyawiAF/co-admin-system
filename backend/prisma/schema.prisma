@@ -952,6 +952,9 @@ model VisitRequest {
   autoApproved     Boolean            @default(false)
   /// When set, reception has acknowledged seeing this (auto-)arrival
   receptionAckedAt DateTime?
+  /// Gift-with-pass promos the client said yes to (bundleAnswered = the offers were shown)
+  bundleIds        String[]           @default([])
+  bundleAnswered   Boolean            @default(false)
   member           Member             @relation(fields: [memberId], references: [id])
   price            Price              @relation(fields: [priceId], references: [id])
   createdAt        DateTime           @default(now())
@@ -1380,41 +1383,70 @@ model AdvisorQuestion {
 
 /// Flash offer shown to members as a "golden card" popup; the discount applies automatically
 model Promotion {
-  id               String         @id @default(uuid())
+  id               String             @id @default(uuid())
   facilityId       String
-  facility         Facility       @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility         Facility           @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   title            String
   description      String?
-  /// PRODUCT (café…) | PRICE (pass / tarif) | OTHER (free offer, reception applies it)
+  /// PRODUCT (café…) | PRICE (pass / tarif) | BUNDLE (gift with a pass) | OTHER (free offer, reception applies it)
   target           String
+  /// PRODUCT: the discounted product · BUNDLE: the gift offered with the pass
   productId        String?
-  product          Product?       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product?           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// PRICE / BUNDLE: one tarif, or every tarif of priceCategory
   priceId          String?
-  price            Price?         @relation(fields: [priceId], references: [id], onDelete: Cascade)
-  valueKind        PromoValueKind @default(PERCENT)
+  price            Price?             @relation(fields: [priceId], references: [id], onDelete: Cascade)
+  priceCategory    PriceCategory?
+  valueKind        PromoValueKind     @default(PERCENT)
   value            Float
   startsAt         DateTime
   endsAt           DateTime?
   /// 0 = Sunday … 6 = Saturday; empty = every day
-  daysOfWeek       Int[]          @default([])
+  daysOfWeek       Int[]              @default([])
   /// Happy hour, e.g. 14 → 17; null = all day
   fromHour         Int?
   toHour           Int?
   /// ALL | IN_SESSION (only members currently on site)
-  audience         String         @default("ALL")
+  audience         String             @default("ALL")
   maxUsesPerMember Int?
   maxUses          Int?
   /// GOLD | VIOLET | GREEN
-  style            String         @default("GOLD")
-  isActive         Boolean        @default(true)
-  views            Int            @default(0)
-  clicks           Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  style            String             @default("GOLD")
+  isActive         Boolean            @default(true)
+  views            Int                @default(0)
+  clicks           Int                @default(0)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
   uses             PromotionUse[]
+  vouchers         PromotionVoucher[]
 
   @@index([facilityId, isActive])
   @@map("promotions")
+}
+
+enum PromotionVoucherStatus {
+  ACCEPTED
+  DECLINED
+  USED
+}
+
+/// Gift-with-pass offer answered at pass choice: one per visit and promo
+model PromotionVoucher {
+  id             String                 @id @default(uuid())
+  promotionId    String
+  promotion      Promotion              @relation(fields: [promotionId], references: [id], onDelete: Cascade)
+  journalId      String
+  memberId       String?
+  productId      String
+  status         PromotionVoucherStatus
+  /// Café order that used the voucher
+  dailyProductId String?
+  createdAt      DateTime               @default(now())
+  usedAt         DateTime?
+
+  @@unique([journalId, promotionId])
+  @@index([memberId, status])
+  @@map("promotion_vouchers")
 }
 
 model PromotionUse {

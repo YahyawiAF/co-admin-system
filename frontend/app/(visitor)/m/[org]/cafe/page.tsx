@@ -20,6 +20,7 @@ import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import Link from "next/link";
 import { OffersStrip, useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
+import { useMyVouchers } from "@/components/visitor/VisitVouchers";
 import { readLocalCache, writeLocalCache } from "@/lib/visitor-local-cache";
 import { isDrink } from "@/lib/drinks";
 import { dtToPoints } from "@/lib/points-catalog";
@@ -125,18 +126,36 @@ export default function CafePage() {
     }
     return m;
   }, [promotions]);
+  /** productId → gift-with-pass voucher of the visit (first unit at the voucher price) */
+  const { data: vouchers = [] } = useMyVouchers();
+  const voucherOf = useMemo(() => {
+    const m = new Map<string, (typeof vouchers)[number]>();
+    for (const v of vouchers) {
+      if (v.status === "ACCEPTED" && v.priceAfter != null && !m.has(v.productId)) m.set(v.productId, v);
+    }
+    return m;
+  }, [vouchers]);
   const [focusPromo, setFocusPromo] = useState<string | null>(null);
+  const [focusVoucher, setFocusVoucher] = useState<string | null>(null);
   useEffect(() => {
-    setFocusPromo(new URLSearchParams(window.location.search).get("promo"));
+    const q = new URLSearchParams(window.location.search);
+    setFocusPromo(q.get("promo"));
+    setFocusVoucher(q.get("voucher"));
   }, []);
-  const focusProductId = promotions.find((p) => p.id === focusPromo)?.productId ?? null;
+  const focusProductId =
+    focusVoucher ?? promotions.find((p) => p.id === focusPromo)?.productId ?? null;
   useEffect(() => {
     if (!focusProductId) return;
     document.getElementById(`product-${focusProductId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [focusProductId]);
 
-  const priceOf = (p: { id: string; sellingPrice: number }) =>
+  const unitPrice = (p: { id: string; sellingPrice: number }) =>
     deals.get(p.id)?.priceAfter ?? p.sellingPrice;
+  const priceOf = (p: { id: string; sellingPrice: number }) =>
+    voucherOf.get(p.id)?.priceAfter ?? unitPrice(p);
+  /** Voucher covers one unit, the rest at the usual (or promo) price */
+  const lineTotal = (p: { id: string; sellingPrice: number }, qty: number) =>
+    voucherOf.has(p.id) ? priceOf(p) + (qty - 1) * unitPrice(p) : qty * priceOf(p);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -146,8 +165,12 @@ export default function CafePage() {
         if (needle && !textOf(p.name, p.description).includes(needle)) return false;
         return true;
       })
-      .sort((a, b) => Number(deals.has(b.id)) - Number(deals.has(a.id)));
-  }, [products, q, tab, deals]);
+      .sort(
+        (a, b) =>
+          Number(voucherOf.has(b.id)) - Number(voucherOf.has(a.id)) ||
+          Number(deals.has(b.id)) - Number(deals.has(a.id))
+      );
+  }, [products, q, tab, deals, voucherOf]);
 
   /** Cart lines, clamped to the live stock. */
   const lines = useMemo(
@@ -158,7 +181,7 @@ export default function CafePage() {
     [products, cart]
   );
   const itemCount = lines.reduce((n, l) => n + l.qty, 0);
-  const total = lines.reduce((s, l) => s + l.qty * priceOf(l.product), 0);
+  const total = lines.reduce((s, l) => s + lineTotal(l.product, l.qty), 0);
 
   const setQty = (id: string, next: number, stock: number) => {
     setCart((s) => {
@@ -219,6 +242,7 @@ export default function CafePage() {
       queryClient.invalidateQueries({ queryKey: ["mobile-orders"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-products"] });
       queryClient.invalidateQueries({ queryKey: ["mobile-promotions"] });
+      queryClient.invalidateQueries({ queryKey: ["mobile-vouchers"] });
       queryClient.invalidateQueries({ queryKey: ["member-points"] });
     },
   });
@@ -291,7 +315,10 @@ export default function CafePage() {
         // keyed by tab so switching category replays the rise-in
         <div key={tab} className="grid grid-cols-2 gap-2.5">
           {filtered.map((p, i) => {
-            const deal = deals.get(p.id);
+            const voucher = voucherOf.get(p.id);
+            const deal = voucher
+              ? { label: `Votre bon ${voucher.label}` }
+              : deals.get(p.id);
             const price = priceOf(p);
             const kind = kindOf(p.name, p.description);
             const hot = kind === "drink" && HOT_RE.test(textOf(p.name, p.description));
