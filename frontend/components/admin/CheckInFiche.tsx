@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { Clock, LogIn, LogOut, Minus, Plus, X } from "lucide-react";
+import { Clock, LogIn, LogOut, Minus, Plus, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -18,6 +18,8 @@ import { formatTarifPrice } from "@/lib/tarif-labels";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
 
 export const SUB_TARIF = "__sub__";
+/** Tarif auto: the price follows the time spent (2h → 4h → …) */
+export const AUTO_TARIF = "__auto__";
 
 export type FicheLine = {
   key: string;
@@ -35,6 +37,8 @@ export type FicheLine = {
   /** Price id shown in the tarif select ("" = none, SUB_TARIF = abonnement pointage) */
   tarifValue: string;
   pack: Price | null;
+  /** Tarif auto: `pack` is the first pass of the ladder, the price is set at departure */
+  auto?: boolean;
   hourly: boolean;
   hours: number;
   discountPercent: number;
@@ -62,7 +66,7 @@ export function CheckInFicheCard({
   onRemove?: () => void;
 }) {
   return (
-    <div className="rounded-xl border bg-card p-3 shadow-sm">
+    <div className="animate-in fade-in-0 slide-in-from-right-2 rounded-xl border bg-card p-3 shadow-sm transition-shadow duration-200 hover:shadow-md motion-reduce:animate-none">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="truncate font-semibold">{line.name}</p>
@@ -111,6 +115,7 @@ export function CheckInFicheCard({
               {line.subKind === "period" ? (
                 <SelectItem value={SUB_TARIF}>Abonnement (pointage)</SelectItem>
               ) : null}
+              <SelectItem value={AUTO_TARIF}>Auto · suit le temps passé</SelectItem>
               {packs.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
                   {p.name} · {formatTarifPrice(p)}
@@ -132,10 +137,23 @@ export function CheckInFicheCard({
               <LogOut className="h-3 w-3" /> Départ prévu
             </p>
             <p className="font-semibold tabular-nums">
-              {line.leaveAt ? format(line.leaveAt, "HH:mm") : line.usesSub ? "—" : "Ouvert"}
+              {line.leaveAt
+                ? format(line.leaveAt, "HH:mm")
+                : line.usesSub
+                  ? "—"
+                  : line.auto
+                    ? "Libre"
+                    : "Ouvert"}
             </p>
           </div>
         </div>
+
+        {line.auto && !line.usesSub ? (
+          <p className="flex items-center gap-1.5 rounded-md bg-indigo-50 px-2 py-1.5 text-xs text-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-100">
+            <Sparkles className="h-3 w-3 shrink-0" />
+            Commence au {line.pack?.name ?? "1er pass"}, passe au suivant selon le temps.
+          </p>
+        ) : null}
 
         {line.hourly && !line.usesSub ? (
           <div className="flex items-center justify-between rounded-md border px-2 py-1">
@@ -173,11 +191,17 @@ export function CheckInFicheCard({
           <label className="flex items-center gap-2 text-xs">
             <Switch
               checked={line.paid}
-              disabled={line.usesSub}
+              disabled={line.usesSub || line.auto}
               onCheckedChange={onPaid}
             />
             <span className={cn(line.paid ? "font-semibold text-emerald-700" : "text-muted-foreground")}>
-              {line.usesSub ? "Couvert par l'abonnement" : line.paid ? "Payé" : "Non payé"}
+              {line.usesSub
+                ? "Couvert par l'abonnement"
+                : line.auto
+                  ? "Réglé au départ"
+                  : line.paid
+                    ? "Payé"
+                    : "Non payé"}
             </span>
           </label>
           {!line.usesSub && line.pack ? (
@@ -188,7 +212,11 @@ export function CheckInFicheCard({
                 </span>
               ) : null}
               <span className="font-bold">
-                {line.hourly && line.hours <= 0 ? "au compteur" : `${line.amount.toFixed(1)} DT`}
+                {line.auto
+                  ? `dès ${line.amount.toFixed(1)} DT`
+                  : line.hourly && line.hours <= 0
+                    ? "au compteur"
+                    : `${line.amount.toFixed(1)} DT`}
               </span>
             </span>
           ) : null}

@@ -1054,7 +1054,12 @@ export type MobileStatusResponse = {
 
 export const mobileApi = {
   quickCheckIn(data: {
-    priceId: string;
+    /** Required unless `auto` */
+    priceId?: string;
+    /** Auto tarif: the price follows the time spent (pass ladder) */
+    auto?: boolean;
+    /** Real arrival time (ISO) when the visitor came earlier */
+    startedAt?: string;
     memberId?: string;
     phone?: string;
     firstName?: string;

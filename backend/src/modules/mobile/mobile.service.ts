@@ -2914,7 +2914,82 @@ export class MobileService {
     return { ...abonnement, switchedJournalId };
   }
 
+  /**
+   * Reception check-in. `auto` starts the visit on the pass ladder (price
+   * follows the time spent, like a QR scan); `startedAt` backdates the arrival.
+   */
   async quickCheckIn(dto: QuickCheckInDto) {
+    let priceId = dto.priceId;
+    if (dto.auto && !priceId) {
+      const facility = await this.prisma.facility.findFirst({
+        orderBy: { createdAt: 'asc' },
+        select: { organizationId: true },
+      });
+      const member = dto.memberId
+        ? await this.prisma.member.findUnique({
+            where: { id: dto.memberId },
+            select: { organizationId: true },
+          })
+        : null;
+      const orgId = member?.organizationId || facility?.organizationId;
+      if (!orgId) throw new BadRequestException('Aucune organisation configurée');
+      const ctx = await loadPricingContext(this.prisma, orgId);
+      priceId = ladderFor(ctx.ladder, PriceCategory.JOURNEE)[0]?.priceId;
+      if (!priceId) {
+        throw new BadRequestException(
+          'Aucun pass (2h, 4h…) configuré pour le tarif auto',
+        );
+      }
+    }
+    if (!priceId) throw new BadRequestException('Tarif requis');
+
+    let startedAt: Date | null = null;
+    if (dto.startedAt) {
+      const d = new Date(dto.startedAt);
+      if (Number.isNaN(d.getTime())) throw new BadRequestException('Heure invalide');
+      if (d.getTime() > Date.now() + 60_000) {
+        throw new BadRequestException("L'heure d'arrivée est dans le futur");
+      }
+      // Only backdate when it is really earlier than now
+      if (Date.now() - d.getTime() > 60_000) startedAt = d;
+    }
+
+    const res = (await this.quickCheckInPriced({ ...dto, priceId })) as {
+      id?: string;
+      journals?: { id: string }[];
+    };
+    const ids = res?.journals?.length
+      ? res.journals.map((j) => j.id)
+      : res?.id
+        ? [res.id]
+        : [];
+    if (ids.length && (dto.auto || startedAt)) {
+      if (startedAt) {
+        await this.prisma.journal.updateMany({
+          where: { id: { in: ids } },
+          data: { registredTime: startedAt },
+        });
+      }
+      if (dto.auto) {
+        // Only the visit rows on the auto pass (not a subscription session)
+        await this.prisma.journal.updateMany({
+          where: { id: { in: ids }, priceId },
+          data: {
+            pricingMode: 'AUTO',
+            fixedPriceId: null,
+            fixedServiceName: null,
+            fixedDurationHours: null,
+            fixedAmount: null,
+            fixedAt: null,
+          },
+        });
+      }
+      this.eventsGateway.sendTableUpdates({ type: 'quick_checkin_adjusted' });
+    }
+    return res;
+  }
+
+  private async quickCheckInPriced(dto: QuickCheckInDto & { priceId: string }) {
     const labels = [
       ...(dto.seatLabels || []),
       ...(dto.seatLabel ? [dto.seatLabel] : []),
@@ -3083,17 +3158,17 @@ export class MobileService {
     return `Anonyme ${today + 1}`;
   }
 
-  async groupVisitCheckIn(dto: QuickCheckInDto) {
+  async groupVisitCheckIn(dto: QuickCheckInDto & { priceId: string }) {
     const labels = [...new Set((dto.seatLabels || []).map((s) => s.trim()))];
     if (labels.length < 2) {
-      return this.quickCheckIn({
+      return this.quickCheckInPriced({
         ...dto,
         seatLabels: undefined,
         seatLabel: labels[0],
       });
     }
     const groupVisitId = dto.groupVisitId || randomUUID();
-    const hostDto: QuickCheckInDto = {
+    const hostDto: QuickCheckInDto & { priceId: string } = {
       ...dto,
       seatLabel: labels[0],
       seatLabels: undefined,
@@ -3104,7 +3179,7 @@ export class MobileService {
     };
     const host = dto.anonymous
       ? await this.startAnonymousDaySession(hostDto)
-      : await this.quickCheckIn({ ...hostDto, anonymous: false });
+      : await this.quickCheckInPriced({ ...hostDto, anonymous: false });
     const baseName =
       (dto.guestName || dto.firstName || '').trim() ||
       (host as { members?: { firstName?: string | null } | null }).members
@@ -3136,7 +3211,7 @@ export class MobileService {
   }
 
   /** Walk-in journal with no Member row — counts in finance/journal. */
-  async startAnonymousDaySession(dto: QuickCheckInDto) {
+  async startAnonymousDaySession(dto: QuickCheckInDto & { priceId: string }) {
     const price = await this.prisma.price.findUnique({
       where: { id: dto.priceId },
     });
