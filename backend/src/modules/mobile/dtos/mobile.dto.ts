@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEnum,
   IsIn,
   IsNotEmpty,
@@ -218,10 +219,23 @@ export class QuickCheckInDto {
   @IsString()
   memberId?: string;
 
-  @ApiProperty()
+  /** Required unless `auto` (then the first pass of the ladder is used) */
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  priceId: string;
+  priceId?: string;
+
+  /** Auto tarif: the price follows the pass ladder (2h → 4h → …) at checkout */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  auto?: boolean;
+
+  /** Real arrival time when the visitor came earlier (ISO, not in the future) */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  startedAt?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
