@@ -88,4 +88,8 @@ export class JournalEntity {
   /** The member's first visit ever is on this row's day. */
   @ApiProperty({ required: false })
   isFirstVisit?: boolean;
+
+  /** Nth visit day of this member, counted up to this row's day (1 = first visit). */
+  @ApiProperty({ required: false })
+  visitNumber?: number;
 }

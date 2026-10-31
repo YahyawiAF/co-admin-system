@@ -1,5 +1,6 @@
 import { endOfDay, isSameDay, startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
+import { localDayKey } from '../../../common/parse-local-day';
 
 /**
  * "Nouveau client" = a member on the day of their very first visit
@@ -69,4 +70,35 @@ export async function newClientsTodayCount(
   return rows.filter(
     (r) => r._min.registredTime && r._min.registredTime <= endOfDay(now),
   ).length;
+}
+
+/** Sorted visit days ("yyyy-MM-dd") per member — for "Nᵉ visite" badges. */
+export async function visitDaysByMember(
+  prisma: PrismaService,
+  memberIds: string[],
+): Promise<Map<string, string[]>> {
+  const ids = [...new Set(memberIds.filter(Boolean))];
+  const out = new Map<string, string[]>();
+  if (!ids.length) return out;
+  const rows = await prisma.journal.findMany({
+    where: { memberID: { in: ids }, isReservation: false, hiddenAt: null },
+    select: { memberID: true, registredTime: true },
+  });
+  const sets = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const set = sets.get(r.memberID!) ?? new Set<string>();
+    set.add(localDayKey(r.registredTime));
+    sets.set(r.memberID!, set);
+  }
+  for (const [id, set] of sets) out.set(id, [...set].sort());
+  return out;
+}
+
+/** How many visit days the member had up to (and including) `at`'s day. */
+export function visitNumberAt(days: string[] | undefined, at: Date | string): number {
+  if (!days?.length) return 0;
+  const key = localDayKey(new Date(at));
+  let n = 0;
+  for (const d of days) if (d <= key) n++;
+  return n;
 }

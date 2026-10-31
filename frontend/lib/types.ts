@@ -268,6 +268,8 @@ export interface Journal {
   isPayed: boolean;
   /** The member's first visit ever is on this row's day ("Nouveau" badge). */
   isFirstVisit?: boolean;
+  /** Nth visit day of the member up to this row (1 = first visit) */
+  visitNumber?: number;
   /** Hidden by a staff member — waiting for the admin's decision (admin only sees it) */
   hiddenAt?: string | null;
   hiddenByUserId?: string | null;
@@ -1969,4 +1971,31 @@ export type NewcomersOverview = {
     answered: number;
     rows: { label: string; count: number; back: number; pct: number | null }[];
   }[];
+};
+
+/** Finance → Nouveaux list row */
+export type NewcomerRow = {
+  memberId: string;
+  name: string;
+  phone: string | null;
+  whatsapp: string | null;
+  first: string;
+  firstService: string | null;
+  stayHours: number | null;
+  visitDays: number;
+  last: string;
+  status: "NOT_BACK" | "NEW" | "BACK";
+  hasApp: boolean;
+  profileType: "STUDENT" | "PUPIL" | "PRO" | null;
+  heardFrom: string | null;
+  awayReason: AwayReason | null;
+  recallAt: string | null;
+  lastContact: { at: string; channel: string } | null;
+  message: string;
+};
+
+export type NewcomersListResponse = {
+  rows: NewcomerRow[];
+  counts: { ALL: number; NOT_BACK: number; NEW: number; BACK: number };
+  meta: { currentPage: number; lastPage: number; perPage: number; total: number };
 };

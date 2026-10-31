@@ -18,6 +18,7 @@ import type {
   AwayReason,
   HeardFrom,
   NewcomersOverview,
+  NewcomersListResponse,
   MemberOffer,
   MemberProfileType,
   OnboardingStatus,
@@ -416,6 +417,16 @@ export const analyticsApi = {
   /** Finance → Nouveaux: first visits and returns within 14 days */
   newcomers(weeks = 12) {
     return http.get<NewcomersOverview>(`/analytics/newcomers?weeks=${weeks}`);
+  },
+  /** Finance → Nouveaux list (NOT_BACK | NEW | BACK | ALL), paginated */
+  newcomersList(params: { status: string; days: number; page: number; perPage?: number }) {
+    const q = new URLSearchParams({
+      status: params.status,
+      days: String(params.days),
+      page: String(params.page),
+      perPage: String(params.perPage ?? 20),
+    });
+    return http.get<NewcomersListResponse>(`/analytics/newcomers/list?${q}`);
   },
   financeMonthly(year: number) {
     return http.get<{ year: number; months: FinanceYearMonthRow[] }>(

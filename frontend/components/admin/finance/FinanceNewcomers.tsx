@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -20,6 +19,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { analyticsApi } from "@/lib/api/resources";
+import { ListPager, usePaged } from "@/components/ui/list-pager";
+import { NewcomersList } from "@/components/admin/finance/NewcomersList";
 import { cn } from "@/lib/utils";
 
 const GOOD = "hsl(152 60% 38%)";
@@ -52,6 +53,8 @@ export function FinanceNewcomers() {
     queryKey: ["analytics-newcomers"],
     queryFn: () => analyticsApi.newcomers(12),
   });
+  const cohortsNewestFirst = useMemo(() => [...(data?.cohorts ?? [])].reverse(), [data]);
+  const cohortPage = usePaged(cohortsNewestFirst, 6);
 
   const weekChart = useMemo(
     () =>
@@ -220,11 +223,16 @@ export function FinanceNewcomers() {
               {k.notBack} nouveaux venus une seule fois à relancer
             </p>
           </div>
-          <Button asChild size="sm" variant="outline" className="gap-1">
-            <Link href="/relances?reason=NEW_NOT_BACK">
-              Relancer les « pas revenus »
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1"
+            onClick={() =>
+              document.getElementById("nouveaux-liste")?.scrollIntoView({ behavior: "smooth" })
+            }
+          >
+            Relancer les « pas revenus »
+            <ArrowRight className="h-4 w-4" />
           </Button>
         </CardHeader>
         <CardContent className="overflow-x-auto">
@@ -240,7 +248,7 @@ export function FinanceNewcomers() {
               </tr>
             </thead>
             <tbody>
-              {[...data.cohorts].reverse().map((c) => (
+              {cohortPage.pageItems.map((c) => (
                 <tr key={c.weekStart} className="border-b last:border-0 transition-colors hover:bg-muted/50">
                   <td className="py-2 pr-2">
                     {format(parseISO(c.weekStart), "d MMM", { locale: fr })}
@@ -268,7 +276,15 @@ export function FinanceNewcomers() {
             </tbody>
           </table>
         </CardContent>
+        <ListPager
+          page={cohortPage.page}
+          lastPage={cohortPage.lastPage}
+          total={cohortPage.total}
+          onPage={cohortPage.setPage}
+        />
       </Card>
+
+      <NewcomersList />
     </div>
   );
 }
