@@ -13,7 +13,7 @@ import { EventsGateway } from '../webSocket/events.gateway';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
 import { syncAbonnementPayments } from './abonnement-revenue';
-import { endOfDay } from 'date-fns';
+import { endOfDay, startOfDay } from 'date-fns';
 import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 const PAYMENTS_INCLUDE = {
@@ -341,6 +341,12 @@ export class AbonnementService {
       // passCredit only applies when the abonnement is created
       const { reservedSeatLabel, reservedSeatSpaceId, passCredit: _credit, ...rest } =
         updateAbonnementDto;
+      // Moving the end date back to today or later undoes a termination
+      const reopened =
+        rest.terminatedAt === undefined &&
+        rest.leaveDate != null &&
+        current.terminatedAt != null &&
+        new Date(rest.leaveDate) >= startOfDay(new Date());
       const updated = await this.prisma.abonnement.update({
         where: { id },
         data: {
@@ -356,6 +362,7 @@ export class AbonnementService {
                     : new Date(),
               }
             : {}),
+          ...(reopened ? { terminatedAt: null } : {}),
           ...(reservedSeatLabel !== undefined
             ? { reservedSeatLabel: reservedSeatLabel?.trim() || null }
             : {}),

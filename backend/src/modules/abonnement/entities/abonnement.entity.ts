@@ -22,6 +22,10 @@ export class AbonnementEntity {
   @ApiProperty({ required: false, nullable: true })
   paidAt?: Date | null;
 
+  /** Ended early by staff ("Terminer maintenant") */
+  @ApiProperty({ required: false, nullable: true })
+  terminatedAt?: Date | null;
+
   @ApiProperty()
   registredDate: Date;
 

@@ -84,6 +84,11 @@ export function isActiveSub(a: Abonnement) {
   return new Date(a.leaveDate) >= new Date(new Date().toDateString());
 }
 
+/** Ended early by staff, before its period was over. */
+export function isTerminatedSub(a: Abonnement) {
+  return !!a.terminatedAt && !isActiveSub(a);
+}
+
 export function hoursLeft(a: Abonnement) {
   if (a.price?.billingUnit !== "HOURLY") return null;
   return Math.max(
