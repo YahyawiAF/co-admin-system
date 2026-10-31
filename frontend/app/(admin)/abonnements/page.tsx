@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -96,6 +96,7 @@ import {
   daysLeft,
   hoursLeft,
   isActiveSub,
+  isTerminatedSub,
   isPaymentRemindDue,
   leaveDateFromPeriodStart,
   paidSubscriptionRevenueOnDay,
@@ -152,6 +153,7 @@ type AboQuickFilter =
   | "all"
   | "active"
   | "expired"
+  | "terminated"
   | "expiring"
   | "unpaid"
   | "remind"
@@ -183,7 +185,8 @@ function AbonnementsInner() {
     focusFilter === "remind" ||
       focusFilter === "unpaid" ||
       focusFilter === "expiring" ||
-      focusFilter === "expired"
+      focusFilter === "expired" ||
+      focusFilter === "terminated"
       ? focusFilter
       : "active",
   );
@@ -301,7 +304,9 @@ function AbonnementsInner() {
 
   const kpis = useMemo(() => {
     const active = rows.filter(isActiveSub).length;
-    const expired = rows.filter((a) => !isActiveSub(a)).length;
+    const terminated = rows.filter(isTerminatedSub).length;
+    const expired =
+      rows.filter((a) => !isActiveSub(a)).length - terminated;
     const expiring = rows.filter((a) => {
       const d = daysLeft(a);
       return isActiveSub(a) && d != null && d <= 3;
@@ -317,6 +322,7 @@ function AbonnementsInner() {
       total: rows.length,
       active,
       expired,
+      terminated,
       expiring,
       unpaid,
       remind,
@@ -375,6 +381,11 @@ function AbonnementsInner() {
       label: "Expirés",
       tone: "border-slate-200 bg-slate-50 text-slate-700 data-[active=true]:bg-slate-700 data-[active=true]:text-white",
     },
+    {
+      id: "terminated",
+      label: "Terminés",
+      tone: "border-stone-300 bg-stone-50 text-stone-700 data-[active=true]:bg-stone-700 data-[active=true]:text-white",
+    },
   ];
 
   const filtered = useMemo(() => {
@@ -390,7 +401,8 @@ function AbonnementsInner() {
     }
     if (quickFilter === "active") list = list.filter(isActiveSub);
     else if (quickFilter === "expired")
-      list = list.filter((a) => !isActiveSub(a));
+      list = list.filter((a) => !isActiveSub(a) && !isTerminatedSub(a));
+    else if (quickFilter === "terminated") list = list.filter(isTerminatedSub);
     else if (quickFilter === "expiring") {
       list = list.filter((a) => {
         const d = daysLeft(a);
@@ -664,6 +676,7 @@ function AbonnementsInner() {
       // leaveDate is the last valid day (inclusive), so "now" would keep access until midnight.
       abonnementsApi.update(a.id, {
         leaveDate: subMilliseconds(startOfDay(new Date()), 1).toISOString(),
+        terminatedAt: new Date().toISOString(),
       }),
     onSuccess: () => {
       toast.success("Abonnement terminé — place libérée");
@@ -1051,7 +1064,10 @@ function AbonnementsInner() {
           { label: "Impayés", value: String(kpis.unpaid) },
           { label: "À relancer", value: String(kpis.remind) },
           { label: "Heures faibles", value: String(kpis.hoursLow) },
-          { label: "Expirés", value: String(kpis.expired) },
+          {
+            label: "Expirés / Terminés",
+            value: `${kpis.expired} / ${kpis.terminated}`,
+          },
         ].map((k) => (
           <Card key={k.label}>
             <CardHeader className="pb-2">
@@ -1121,7 +1137,7 @@ function AbonnementsInner() {
                 <TableHead />
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody key={quickFilter}>
               {!filtered.length ? (
                 <TableRow>
                   <TableCell
@@ -1133,7 +1149,7 @@ function AbonnementsInner() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((a) => {
+                filtered.map((a, i) => {
                   const left = daysLeft(a);
                   const hLeft = hoursLeft(a);
                   const active = isActiveSub(a);
@@ -1150,7 +1166,9 @@ function AbonnementsInner() {
                   return (
                     <TableRow
                       key={a.id}
+                      style={{ "--i": i } as CSSProperties}
                       className={cn(
+                        "abo-row-in",
                         focusMember === a.memberID && "bg-primary/5",
                         !a.isPayed && "bg-rose-50/80",
                         !active && "text-muted-foreground opacity-70",
@@ -1225,7 +1243,15 @@ function AbonnementsInner() {
                           : "—"}
                       </TableCell>
                       <TableCell>
-                        {startsIn > 0 ? (
+                        {isTerminatedSub(a) ? (
+                          <Badge
+                            variant="outline"
+                            className="border-stone-300 text-stone-700"
+                            title={`Terminé le ${format(new Date(a.terminatedAt!), "dd/MM/yyyy")}`}
+                          >
+                            Terminé
+                          </Badge>
+                        ) : startsIn > 0 ? (
                           <Badge
                             variant="outline"
                             className="border-indigo-200 text-indigo-700"

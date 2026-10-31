@@ -448,3 +448,20 @@
   .ls-enter, .ls-stagger > *, .ls-in-right, .ls-in-left, .ls-bar { animation: none !important; }
   .ls-check path { animation: none; stroke-dashoffset: 0; }
 }
+
+/* Abonnements table: rows fade in when the quick filter changes */
+@keyframes abo-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+.abo-row-in {
+  animation: abo-row-in 220ms ease-out both;
+  animation-delay: calc(min(var(--i, 0), 10) * 25ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .abo-row-in {
+    animation: none;
+  }
+}

@@ -376,6 +376,8 @@ export interface Abonnement {
   isPayed: boolean;
   /** When the abonnement was paid — revenue is counted on this day */
   paidAt?: string | null;
+  /** Ended early by staff ("Terminer maintenant") */
+  terminatedAt?: string | null;
   registredDate: string;
   leaveDate?: string | null;
   paymentRemindAt?: string | null;

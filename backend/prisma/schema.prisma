@@ -437,6 +437,8 @@ model Abonnement {
   /// Hidden by a staff member (delete in "hide" mode) — invisible to staff, waits for admin review
   hiddenAt            DateTime?
   hiddenByUserId      String?
+  /// Ended early by staff ("Terminer maintenant"), before its period was over
+  terminatedAt        DateTime?
   members             Member              @relation(fields: [memberID], references: [id])
   price               Price               @relation(fields: [priceId], references: [id])
   payments            AbonnementPayment[]
