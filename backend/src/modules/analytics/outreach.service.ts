@@ -407,6 +407,94 @@ export class OutreachService {
     };
   }
 
+  /**
+   * Finance → Nouveaux list: newcomers of the last `days` days, newest first, paginated.
+   * NOT_BACK = one visit day, 3+ days ago (to relance) · NEW = first visit < 3 days ago · BACK = came again.
+   */
+  async newcomersList(opts: { status?: string; days?: number; page?: number; perPage?: number }) {
+    const now = new Date();
+    const today = startOfDay(now);
+    const days = Math.min(180, Math.max(7, opts.days || 30));
+    const perPage = Math.min(100, Math.max(5, opts.perPage || 20));
+    const all = (await this.newcomers.newcomers(now))
+      .filter((n) => n.first >= subDays(today, days - 1))
+      .sort((a, b) => b.first.getTime() - a.first.getTime());
+    const statusOf = (n: (typeof all)[number]) =>
+      n.visitDays > 1 || n.back
+        ? 'BACK'
+        : differenceInCalendarDays(today, n.first) >= NEW_NOT_BACK_FROM_DAYS
+          ? 'NOT_BACK'
+          : 'NEW';
+    const counts = { ALL: all.length, NOT_BACK: 0, NEW: 0, BACK: 0 } as Record<string, number>;
+    for (const n of all) counts[statusOf(n)]++;
+    const status = ['NOT_BACK', 'NEW', 'BACK'].includes(opts.status || '') ? opts.status! : 'ALL';
+    const filtered = status === 'ALL' ? all : all.filter((n) => statusOf(n) === status);
+    const lastPage = Math.max(1, Math.ceil(filtered.length / perPage));
+    const page = Math.min(lastPage, Math.max(1, opts.page || 1));
+    const slice = filtered.slice((page - 1) * perPage, page * perPage);
+    const ids = slice.map((n) => n.memberId);
+
+    const settings = await this.performance.settings();
+    const facility = await this.prisma.facility.findUnique({
+      where: { id: settings.facilityId },
+      select: { name: true },
+    });
+    const place = facility?.name || 'notre espace';
+    const [people, contacts] = await Promise.all([
+      this.prisma.member.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          profileType: true,
+          heardFrom: true,
+          awayReason: true,
+          recallAt: true,
+        },
+      }),
+      this.prisma.memberOutreach.findMany({
+        where: { memberId: { in: ids }, channel: { not: 'SKIP' } },
+        orderBy: { createdAt: 'desc' },
+        select: { memberId: true, createdAt: true, channel: true, reason: true },
+      }),
+    ]);
+    const person = new Map(people.map((p) => [p.id, p]));
+    const rows = slice.map((n) => {
+      const p = person.get(n.memberId);
+      const firstName = p?.firstName?.trim() || '';
+      const last = contacts.find((c) => c.memberId === n.memberId);
+      const stayHours = n.firstLeave
+        ? Math.round(((n.firstLeave.getTime() - n.first.getTime()) / 3_600_000) * 10) / 10
+        : null;
+      return {
+        memberId: n.memberId,
+        name: [p?.firstName, p?.lastName].filter(Boolean).join(' ') || 'Client',
+        phone: p?.phone ?? null,
+        whatsapp: whatsappNumber(p?.phone),
+        first: n.first.toISOString(),
+        firstService: n.firstService,
+        stayHours,
+        visitDays: n.visitDays,
+        last: n.last.toISOString(),
+        status: statusOf(n),
+        hasApp: n.hasApp,
+        profileType: p?.profileType ?? null,
+        heardFrom: p?.heardFrom ?? null,
+        awayReason: p?.awayReason ?? null,
+        recallAt: p?.recallAt ? p.recallAt.toISOString() : null,
+        lastContact: last ? { at: last.createdAt.toISOString(), channel: last.channel } : null,
+        message: this.message('NEW_NOT_BACK', { firstName, place, owed: 0 }),
+      };
+    });
+    return {
+      rows,
+      counts,
+      meta: { currentPage: page, lastPage, perPage, total: filtered.length },
+    };
+  }
+
   /** Answers to "pourquoi tu ne viens plus ?" over the last 90 days. */
   private async awayStats(today: Date) {
     const rows = await this.prisma.member.groupBy({

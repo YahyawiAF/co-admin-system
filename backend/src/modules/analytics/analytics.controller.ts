@@ -89,6 +89,22 @@ export class AnalyticsController {
     return this.newcomers.overview({ weeks: Number(weeks) || undefined });
   }
 
+  /** Finance → Nouveaux: newcomers list (NOT_BACK | NEW | BACK), paginated, with relance message. */
+  @Get('newcomers/list')
+  newcomersList(
+    @Query('status') status?: string,
+    @Query('days') days?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.outreach.newcomersList({
+      status,
+      days: Number(days) || undefined,
+      page: Number(page) || undefined,
+      perPage: Number(perPage) || undefined,
+    });
+  }
+
   /** Relances: why the member stopped coming (+ recall date). */
   @Post('outreach/away-reason')
   outreachAwayReason(@Body() body: { memberId?: string; reason?: string | null; recallAt?: string | null }) {

@@ -1752,6 +1752,10 @@ export default function JournalClient() {
                   const firstVisit =
                     !!row.isFirstVisit ||
                     !!row.passages?.some((x) => x.isFirstVisit);
+                  const visitNumber = Math.max(
+                    row.visitNumber ?? 0,
+                    ...(row.passages ?? []).map((x) => x.visitNumber ?? 0)
+                  );
                   return (
                     <TableRow
                       key={row.id}
@@ -1810,7 +1814,23 @@ export default function JournalClient() {
                               >
                                 {visitorLabel(row)}
                               </button>
-                              {firstVisit ? <NewClientBadge /> : null}
+                              {firstVisit ? (
+                                <NewClientBadge />
+                              ) : visitNumber > 1 ? (
+                                <span
+                                  title={`${visitNumber} jours de visite au total`}
+                                  className={cn(
+                                    "inline-flex h-5 items-center rounded-full px-2 text-[10px] font-semibold tabular-nums",
+                                    visitNumber === 2
+                                      ? "bg-orange-100 text-orange-800 dark:bg-orange-500/15 dark:text-orange-300"
+                                      : visitNumber < 8
+                                        ? "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300"
+                                        : "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                  )}
+                                >
+                                  {visitNumber}ᵉ visite
+                                </span>
+                              ) : null}
                               {staffHidden ? (
                                 <Link
                                   href="/activite"

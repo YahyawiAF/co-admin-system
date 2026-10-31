@@ -39,6 +39,8 @@ import { cn } from "@/lib/utils";
 import { outreachApi, pricesApi } from "@/lib/api/resources";
 import { leaveDateFromPeriodStart } from "@/lib/subscription-utils";
 import { CampaignsSection } from "@/components/admin/OutreachCampaigns";
+import { AWAY_LABEL, AwayReasonChips } from "@/components/admin/AwayReasonChips";
+import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type {
@@ -447,63 +449,8 @@ function MessageDialog({
   );
 }
 
-const AWAY_LABEL: Record<AwayReason, string> = {
-  STUDY_HOME: "Révise à la maison",
-  PRICE: "Prix",
-  DISTANCE: "Trop loin",
-  NOISE: "Bruit",
-  HOURS: "Horaires",
-  OTHER: "Autre",
-};
 /** Reasons where asking "pourquoi ?" makes sense */
 const ASK_WHY = new Set<OutreachReason>(["INACTIVE", "NEW_NOT_BACK", "ABO_ENDED", "RECALL"]);
-
-/** 1 click: why the member stopped coming. Saved on the member; "révise" sets a recall date. */
-function AwayReasonChips({ item }: { item: OutreachItem }) {
-  const queryClient = useQueryClient();
-  const [saved, setSaved] = useState<{ reason: AwayReason | null; recallAt: string | null }>({
-    reason: item.awayReason ?? null,
-    recallAt: item.recallAt ?? null,
-  });
-  const save = useMutation({
-    mutationFn: (reason: AwayReason | null) => outreachApi.awayReason({ memberId: item.memberId, reason }),
-    onSuccess: (res) => {
-      setSaved({ reason: res.awayReason, recallAt: res.recallAt });
-      queryClient.invalidateQueries({ queryKey: ["outreach"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-      <span className="text-xs text-muted-foreground">Pourquoi ?</span>
-      {(Object.keys(AWAY_LABEL) as AwayReason[]).map((r) => {
-        const on = saved.reason === r;
-        return (
-          <button
-            key={r}
-            type="button"
-            aria-pressed={on}
-            disabled={save.isPending}
-            onClick={() => save.mutate(on ? null : r)}
-            className={cn(
-              "rounded-full border px-2.5 py-0.5 text-xs transition-colors duration-200",
-              on ? "border-primary bg-primary/10 font-medium text-primary" : "hover:bg-muted",
-            )}
-          >
-            {AWAY_LABEL[r]}
-          </button>
-        );
-      })}
-      {saved.reason ? (
-        <span className="animate-in fade-in-0 text-xs font-medium text-emerald-700 duration-300 motion-reduce:animate-none dark:text-emerald-400">
-          {saved.recallAt
-            ? `Noté · rappel le ${format(new Date(saved.recallAt), "d MMM", { locale: fr })}`
-            : "Noté sur sa fiche"}
-        </span>
-      ) : null}
-    </div>
-  );
-}
 
 /** Answers collected over 90 days. */
 function AwayReasonsCard({ counts }: { counts?: Partial<Record<AwayReason, number>> }) {
@@ -592,7 +539,9 @@ function OutreachRow({
             .filter(Boolean)
             .join(" · ")}
         </div>
-        {ASK_WHY.has(item.reason) ? <AwayReasonChips item={item} /> : null}
+        {ASK_WHY.has(item.reason) ? (
+          <AwayReasonChips memberId={item.memberId} awayReason={item.awayReason} recallAt={item.recallAt} />
+        ) : null}
       </div>
       <div className="flex items-center gap-1.5">
         {link ? (
@@ -651,7 +600,12 @@ function RelancesInner() {
     for (const i of data?.todo ?? []) c[i.reason] = (c[i.reason] ?? 0) + 1;
     return c;
   }, [data]);
-  const todo = (data?.todo ?? []).filter((i) => filter === "ALL" || i.reason === filter);
+  const todo = useMemo(
+    () => (data?.todo ?? []).filter((i) => filter === "ALL" || i.reason === filter),
+    [data, filter],
+  );
+  const todoPaged = usePaged(todo, undefined, filter);
+  const donePaged = usePaged(data?.contacted ?? []);
   const atStake = (data?.todo ?? []).reduce((a, i) => a + i.value, 0);
   const results = data?.results;
 
@@ -723,15 +677,30 @@ function RelancesInner() {
                 <p className="border-b py-2 text-xs text-muted-foreground">{REASON_UI[filter].why}</p>
               ) : null}
               {todo.length ? (
-                <ul className="divide-y">
-                  {todo.map((item) => (
-                    <OutreachRow
-                      key={`${item.memberId}:${item.reason}`}
-                      item={item}
-                      onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
-                    />
-                  ))}
-                </ul>
+                <>
+                  <ul
+                    key={`${filter}:${todoPaged.page}`}
+                    className="divide-y animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+                  >
+                    {todoPaged.pageItems.map((item) => (
+                      <OutreachRow
+                        key={`${item.memberId}:${item.reason}`}
+                        item={item}
+                        onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
+                      />
+                    ))}
+                  </ul>
+                  <ListPager
+                    className="-mx-4"
+                    page={todoPaged.page}
+                    lastPage={todoPaged.lastPage}
+                    total={todoPaged.total}
+                    onPage={(p) => {
+                      todoPaged.setPage(p);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
+                </>
               ) : (
                 <p className="py-10 text-center text-sm text-muted-foreground">
                   Personne à relancer pour le moment. Revenez demain.
@@ -754,7 +723,7 @@ function RelancesInner() {
                 <Card className="mt-2 shadow-none">
                   <CardContent className="px-4 py-1">
                     <ul className="divide-y opacity-80">
-                      {data.contacted.map((item) => (
+                      {donePaged.pageItems.map((item) => (
                         <OutreachRow
                           key={`${item.memberId}:${item.reason}`}
                           item={item}
@@ -762,6 +731,13 @@ function RelancesInner() {
                         />
                       ))}
                     </ul>
+                    <ListPager
+                      className="-mx-4"
+                      page={donePaged.page}
+                      lastPage={donePaged.lastPage}
+                      total={donePaged.total}
+                      onPage={donePaged.setPage}
+                    />
                   </CardContent>
                 </Card>
               ) : null}

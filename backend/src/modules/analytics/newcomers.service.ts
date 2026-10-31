@@ -26,6 +26,8 @@ export type Newcomer = {
   memberId: string;
   first: Date;
   firstLeave: Date | null;
+  /** Tarif / service of the first visit */
+  firstService: string | null;
   visitDays: number;
   last: Date;
   /** Came back within 14 days of the first visit */
@@ -54,7 +56,7 @@ export class NewcomersService {
     const [visits, members] = await Promise.all([
       this.prisma.journal.findMany({
         where: { memberID: { not: null }, isReservation: false, hiddenAt: null, registredTime: { lte: now } },
-        select: { memberID: true, registredTime: true, leaveTime: true },
+        select: { memberID: true, registredTime: true, leaveTime: true, serviceName: true },
         orderBy: { registredTime: 'asc' },
       }),
       this.prisma.member.findMany({
@@ -63,7 +65,7 @@ export class NewcomersService {
       }),
     ]);
     const info = new Map(members.map((m) => [m.id, m]));
-    const byMember = new Map<string, { registredTime: Date; leaveTime: Date | null }[]>();
+    const byMember = new Map<string, { registredTime: Date; leaveTime: Date | null; serviceName: string | null }[]>();
     for (const v of visits) {
       const list = byMember.get(v.memberID!) ?? [];
       list.push(v);
@@ -82,6 +84,7 @@ export class NewcomersService {
         memberId,
         first,
         firstLeave: list[0].leaveTime,
+        firstService: list[0].serviceName,
         visitDays: new Set(list.map((v) => localDayKey(v.registredTime))).size,
         last: list[list.length - 1].registredTime,
         back,
