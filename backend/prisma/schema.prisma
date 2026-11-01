@@ -224,19 +224,30 @@ model PushSubscription {
 
 /// Staff follow-up of a member (renewal, win-back, conversion, unpaid reminder).
 model MemberOutreach {
-  id         String   @id @default(uuid())
-  memberId   String
-  member     Member   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  id           String    @id @default(uuid())
+  memberId     String
+  member       Member    @relation(fields: [memberId], references: [id], onDelete: Cascade)
   /// ABO_EXPIRING | ABO_ENDED | INACTIVE | CONVERT | UNPAID
-  reason     String
+  reason       String
   /// WHATSAPP | PUSH | CALL | SKIP
-  channel    String
-  message    String?
+  channel      String
+  message      String?
   /// Set when the contact belongs to a relance campaign (e.g. from an AI suggestion)
-  campaignId String?
-  createdAt  DateTime @default(now())
+  campaignId   String?
+  /// Member's answer — INTERESTED | OTHER_OFFER | KEEP_TARIF | AWAY | NO_ANSWER | NOT_INTERESTED
+  outcome      String?
+  note         String?
+  /// Back in the to-do list from this day (null with an outcome = stays in Suivi until closed)
+  followUpAt   DateTime?
+  /// Suivi closed: WON | LOST | REPLACED (a newer contact took over)
+  closedAt     DateTime?
+  closedResult String?
+  /// Closed by itself (abonnement taken, debt paid)
+  closedAuto   Boolean   @default(false)
+  createdAt    DateTime  @default(now())
 
   @@index([memberId, createdAt])
+  @@index([closedAt])
   @@index([createdAt])
   @@map("member_outreach")
 }
