@@ -309,6 +309,8 @@ export interface Journal {
   priceBeforePromo?: number | null;
   promoDiscount?: number | null;
   promoLabel?: string | null;
+  /** Part of the price given away by staff ("Offert"); payedAmount is already reduced by it */
+  offeredAmount?: number | null;
   /** Amount owed at checkout, kept after a late payment re-billed `payedAmount` */
   amountAtCheckout?: number | null;
   /** Server-computed re-billing for visitors who checked out without paying */
@@ -401,6 +403,8 @@ export interface Abonnement {
   discountPercent?: number | null;
   /** Price owed after discounts (payedAmount = collected so far) */
   amountDue?: number | null;
+  /** Part of the price given away by staff ("Offert"); amountDue is already reduced by it */
+  offeredAmount?: number | null;
   /** Each amount collected (advance, remainder…) — revenue is counted on its paidAt */
   payments?: { id: string; amount: number; paidAt: string }[];
 }

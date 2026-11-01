@@ -58,6 +58,12 @@ export class AddJournalDto {
   @ApiProperty({ required: false })
   public paidAmount?: number;
 
+  /** Part of the price given away ("Offert"): payedAmount is the amount after it, no debt. */
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false, nullable: true })
+  public offeredAmount?: number | null;
+
   @IsOptional()
   @IsBoolean()
   @ApiProperty({ required: false })

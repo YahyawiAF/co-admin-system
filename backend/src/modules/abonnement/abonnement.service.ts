@@ -104,6 +104,11 @@ export class AbonnementService {
       if (credit > 0.009) {
         discount.amountDue = Math.round((discount.amountDue - credit) * 100) / 100;
       }
+      // "Offert": staff gives part of the price away — lowers what is owed, no debt
+      const offered = this.clampOffered(createAbonnementDto.offeredAmount, discount.amountDue);
+      if (offered) {
+        discount.amountDue = Math.round((discount.amountDue - offered) * 100) / 100;
+      }
       const payment = this.settlePayment(
         createAbonnementDto.isPayed,
         createAbonnementDto.payedAmount,
@@ -121,6 +126,7 @@ export class AbonnementService {
           payedAmount: payment.payedAmount,
           discountPercent: discount.discountPercent,
           amountDue: discount.amountDue,
+          offeredAmount: offered,
           ...creditSnapshot,
           stayedPeriode: createAbonnementDto.stayedPeriode, // fornt end calculate leave time
           priceId: priceId,
@@ -319,7 +325,24 @@ export class AbonnementService {
           }
         }
       }
-      const amountDue = discount?.amountDue ?? current.amountDue;
+      // Price before any gift: freshly computed, or the stored one plus the old gift
+      const baseDue =
+        discount?.amountDue ??
+        (current.amountDue != null
+          ? Math.round((current.amountDue + (current.offeredAmount || 0)) * 100) / 100
+          : null);
+      const offerSent = updateAbonnementDto.offeredAmount !== undefined;
+      const offered =
+        baseDue == null
+          ? current.offeredAmount
+          : this.clampOffered(
+              offerSent ? updateAbonnementDto.offeredAmount : current.offeredAmount,
+              baseDue,
+            );
+      const amountDue =
+        baseDue == null
+          ? current.amountDue
+          : Math.round((baseDue - (offered || 0)) * 100) / 100;
       // "Marquer payé" without an amount means the remainder was collected now.
       const markedPaid =
         updateAbonnementDto.isPayed === true &&
@@ -328,7 +351,8 @@ export class AbonnementService {
       const payment =
         amountDue != null &&
         (updateAbonnementDto.isPayed !== undefined ||
-          updateAbonnementDto.payedAmount !== undefined)
+          updateAbonnementDto.payedAmount !== undefined ||
+          offerSent)
           ? this.settlePayment(
               updateAbonnementDto.isPayed ?? current.isPayed,
               markedPaid
@@ -339,8 +363,13 @@ export class AbonnementService {
           : null;
 
       // passCredit only applies when the abonnement is created
-      const { reservedSeatLabel, reservedSeatSpaceId, passCredit: _credit, ...rest } =
-        updateAbonnementDto;
+      const {
+        reservedSeatLabel,
+        reservedSeatSpaceId,
+        passCredit: _credit,
+        offeredAmount: _offered,
+        ...rest
+      } = updateAbonnementDto;
       // Moving the end date back to today or later undoes a termination
       const reopened =
         rest.terminatedAt === undefined &&
@@ -352,6 +381,7 @@ export class AbonnementService {
         data: {
           ...rest,
           ...(discount ?? {}),
+          ...(amountDue != null ? { amountDue, offeredAmount: offered ?? null } : {}),
           ...(payment
             ? {
                 ...payment,
@@ -464,6 +494,12 @@ export class AbonnementService {
     const amountDue =
       Math.round((price.price || 0) * (1 - (percent || 0) / 100) * 100) / 100;
     return { discountPercent: percent > 0 ? percent : null, amountDue };
+  }
+
+  /** Gift amount kept between 0 and the price; null when nothing is given away. */
+  private clampOffered(value: number | null | undefined, max: number): number | null {
+    const n = Math.round(Math.min(Math.max(0, Number(value) || 0), Math.max(0, max)) * 100) / 100;
+    return n > 0.009 ? n : null;
   }
 
   /** A full payment is snapped to the discounted price; a partial one stays unpaid. */
