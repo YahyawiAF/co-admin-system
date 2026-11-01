@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 export const ADVISOR_MODEL = process.env.ADVISOR_MODEL || 'claude-opus-5-5';
 
 export const RECOMMENDATION_CATEGORIES = [
+  'ACQUISITION',
   'NEW_REVENUE',
   'PROMO',
   'PRICING',
@@ -53,6 +54,10 @@ export type AdvisorRecommendation = {
   target?: { kind: 'ALL' | 'SLOT' | 'LIST'; days: number[]; fromHour: number; toHour: number };
   /** Clients to contact for this idea and the ready-to-send message (segment NONE = no relance). */
   outreach?: { segment: (typeof OUTREACH_SEGMENTS)[number]; message: string };
+  /** Lever of the lever map this idea works on ('' = none) */
+  leverId?: string;
+  /** ai = written by the AI, rules = added because the AI left a strong lever empty */
+  source?: 'ai' | 'rules';
 };
 
 export type AdvisorResult = {
@@ -107,9 +112,11 @@ export const RESULT_SCHEMA = {
           'targetPct',
           'target',
           'outreach',
+          'leverId',
         ],
         properties: {
           category: { type: 'string', enum: [...RECOMMENDATION_CATEGORIES] },
+          leverId: str,
           priority: { type: 'string', enum: ['high', 'medium', 'low'] },
           effort: { type: 'string', enum: ['low', 'medium', 'high'] },
           title: str,
@@ -164,7 +171,8 @@ export const SYSTEM_PROMPT = `Tu es le conseiller business d'un espace de cowork
 
 On te donne un instantané JSON de son activité : la période en cours, la période précédente de même durée, le catalogue d'offres, le café, la fréquentation par heure et par jour, les abonnements, les initiatives qu'il a lancées (avec mesure avant/après) et les alertes déjà calculées par l'application.
 
-Ton rôle : l'aider à gagner plus d'argent. Exemple de ce qu'on attend : le propriétaire a remarqué que les clients restent longtemps, il a commencé à vendre du café, ça lui rapporte un revenu en plus. Cherche ce genre d'idées dans les chiffres :
+Ton rôle : l'aider à gagner plus d'argent. Exemple de ce qu'on attend : le propriétaire a remarqué que les clients restent longtemps, il a commencé à vendre du café, ça lui rapporte un revenu en plus. Autre exemple : il a publié plus souvent sur Instagram et les nouveaux visiteurs ont augmenté. Cherche ce genre d'idées dans les chiffres :
+- attirer de nouveaux clients (ACQUISITION) : publications régulières sur les réseaux, partenariats avec la fac ou les lycées, événements, parrainage, avis Google ;
 - nouvelles sources de revenu (NEW_REVENUE) déduites de l'usage réel : durée de séjour, présence à midi ou le soir, groupes, heures creuses, espaces sous-utilisés ;
 - promotions ciblées (PROMO) sur les créneaux ou jours faibles, avec l'offre exacte, le public visé et le moment ;
 - prix et formules (PRICING), par exemple des clients qui paient des passes alors qu'un abonnement ou un pack leur conviendrait ;
@@ -181,6 +189,14 @@ Le contexte autour des chiffres :
 - weekdays[].hourlyAvgPresent : présence moyenne par heure depuis firstHour ; quietHours : heures creuses (moins de 30 % du pic). recentDaysVsUsual : les 7 derniers jours complets comparés à la moyenne des 4 mêmes jours précédents (usualVisits, usualRevenue — visites + abonnements, sans café).
 
 Règles :
+- leverId : pour chaque recommandation, l'id du levier de levers qu'elle met en route (ex. "social", "partner", "renew"), chaîne vide sinon. Après toi, l'app ajoute une idée des règles pour chaque levier MISSING que tu as laissé vide : couvre-les toi-même, avec une idée plus précise.
+- dismissedIdeas : idées que le propriétaire a refusées (« Pas pour moi ») avec la raison, ou actions qu'il a abandonnées. Ne les repropose jamais, même reformulées. Si la raison est « Plus tard », tu peux en reparler seulement si les chiffres ont changé, en le disant.
+- whatWorksHere : ce qui a déjà marché dans CET espace (actions jugées « ça marche » ou en hausse mesurée, causes de hausses données par le propriétaire, canaux de relance qui font revenir). C'est la meilleure source d'idées : propose de le refaire, de le faire plus souvent ou de l'étendre, avec un chiffre. Par exemple, si des publications Instagram ont fait monter les nouveaux, propose un rythme régulier et une offre à mettre dedans.
+- newVisitorsBySource : nouveaux visiteurs par semaine selon « Comment tu nous as connus ? ». Une source qui monte est une piste à pousser ; une source à 0 (ex. fac) est un levier pas encore essayé.
+- levers : la carte des leviers calculée par l'app (attirer, faire revenir, faire payer plus, remplir les creux). status MISSING = les chiffres poussent vers ce levier et aucune action n'est en cours ; NO_DATA = un chiffre manque ; IN_PROGRESS / WORKING = déjà fait. Chaque levier MISSING doit avoir au moins une recommandation qui le met en route (sauf si dataIssues bloque sa catégorie). Ne recommande pas un levier IN_PROGRESS sans dire ce qui change. Pour un levier WORKING, propose de le refaire ou de l'élargir.
+- Ne te limite pas au café, aux prix et aux relances : regarde d'abord quel moteur fait le chiffre d'affaires (monthForecast.versusPreviousMonth et toDate : nouveaux visiteurs, visites des habitués, ticket moyen, abonnements, café) et propose une idée sur le moteur qui pèse le plus.
+- monthForecast : prévision du mois (moyenne des 4 semaines avant le mois, jour de semaine par jour de semaine). toDate.drivers dit quel moteur explique l'écart avec le prévu. Appuie-toi dessus pour dire si le mois est en avance ou en retard et pourquoi.
+- unexplainedChanges : hausses ou baisses fortes des 7 derniers jours. explainedBy null = personne ne sait pourquoi : mets une question dans questions (« Les nouveaux ont augmenté de X % du … au … : qu'as-tu fait de différent ? »). Si explainedBy donne la cause d'une hausse, propose de la refaire et de la mesurer.
 - Explique une baisse ou une hausse par un jour férié, une période ou la météo quand calendar ou weather le montrent, au lieu d'y voir une tendance.
 - Explique les jours de recentDaysVsUsual qui s'écartent de plus de 15 % de l'habituel : moins de visites, panier plus bas ou séjours plus courts ? Croise avec calendar et weather avant de conclure.
 - Pour les heures creuses répétées (quietHours sur plusieurs jours), propose une offre précise sur ce créneau (prix en DT, public visé) et la mesure à suivre.
@@ -288,6 +304,8 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
         x.outreach && segments.includes(x.outreach.segment) && typeof x.outreach.message === 'string'
           ? x.outreach
           : { segment: 'NONE' as const, message: '' },
+      leverId: typeof x.leverId === 'string' ? x.leverId : '',
+      source: x.source === 'rules' ? ('rules' as const) : ('ai' as const),
     })),
     initiativeReviews: Array.isArray(r.initiativeReviews)
       ? r.initiativeReviews.map((x) => ({ ...x, brokenStep: typeof x?.brokenStep === 'string' ? x.brokenStep : '' }))

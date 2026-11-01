@@ -21,9 +21,11 @@ import { expenseAmount } from '../expense/expense-amount';
 import { ContextService } from './context.service';
 import { OutreachService } from '../analytics/outreach.service';
 import { CampaignService } from '../analytics/campaign.service';
+import { ForecastService } from '../analytics/forecast.service';
 import { dataIssues } from './data-check';
 import { InitiativeMeasure, RATE_METRICS, slotLabel } from './initiative-measure';
 import { buildFunnel, diagnose, parseManualFunnel, parseSteps } from './funnel';
+import { activeWindow, openPause, parsePauses } from './pauses';
 
 const WEEKDAYS = [
   'dimanche',
@@ -86,6 +88,7 @@ export class SnapshotService {
     private readonly outreach: OutreachService,
     private readonly campaigns: CampaignService,
     private readonly measure: InitiativeMeasure,
+    private readonly forecasts: ForecastService,
   ) {}
 
   /** Data problems over the last 30 days (shown before any advice). */
@@ -134,6 +137,13 @@ export class SnapshotService {
       outreachLists,
       campaigns,
       recentDaysVsUsual,
+      levers,
+      monthForecast,
+      unexplained,
+      bySource,
+      dismissals,
+      changeAnswers,
+      relanceResults,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -154,6 +164,17 @@ export class SnapshotService {
       this.outreachLists(facilityId),
       this.campaigns.list(facilityId).catch(() => []),
       this.recentDays(now),
+      this.forecasts.levers(facilityId).catch(() => null),
+      this.forecasts.forecast({}).catch(() => null),
+      this.forecasts.changes(facilityId).catch(() => ({ changes: [] })),
+      this.forecasts.newcomersBySource(8).catch(() => []),
+      this.prisma.advisorDismissal.findMany({ where: { facilityId }, orderBy: { createdAt: 'desc' }, take: 50 }),
+      this.prisma.businessAnswer.findMany({
+        where: { facilityId, key: { startsWith: 'change:' }, unknown: false },
+        orderBy: { answeredAt: 'desc' },
+        take: 20,
+      }),
+      this.outreach.list(facilityId).then((l) => l.results).catch(() => null),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
@@ -266,6 +287,76 @@ export class SnapshotService {
         status: c.status,
         ...c.progress,
       })),
+      levers: levers
+        ? {
+            groups: levers.groups.map((g) => ({
+              group: g.label,
+              levers: g.levers.map((l) => ({
+                id: l.id,
+                title: l.title,
+                status: l.status,
+                signal: l.signal,
+                note: l.note,
+                estimatedGainPerMonth: l.gain,
+              })),
+            })),
+            missing: levers.missing.map((m) => ({
+              leverId: m.leverId,
+              title: m.title,
+              why: m.why,
+              steps: m.steps,
+              estimatedGainPerMonth: m.gain,
+              plan: m.plan,
+            })),
+          }
+        : null,
+      monthForecast: monthForecast
+        ? {
+            month: monthForecast.period.label,
+            expected: monthForecast.expected,
+            basedOn: monthForecast.period.base,
+            subscriptionsOutlook: monthForecast.subscriptions,
+            versusPreviousMonth: monthForecast.versusPrevious,
+            toDate: monthForecast.toDate,
+          }
+        : null,
+      dismissedIdeas: [
+        ...dismissals.map((d) => ({ title: d.title, leverId: d.leverId, reason: d.reason, on: localDayKey(d.createdAt) })),
+        ...initiatives
+          .filter((i) => i.dropped)
+          .map((i) => ({ title: i.title, leverId: null, reason: i.dropped!.reason, on: i.dropped!.at, wasStarted: true })),
+      ],
+      whatWorksHere: {
+        actions: initiatives
+          .filter(
+            (i) =>
+              !i.dropped &&
+              (i.ownerVerdict === 'WORKING' || (i.result && ['up', 'goal_reached'].includes(i.result.status as string))),
+          )
+          .map((i) => ({
+            title: i.title,
+            channels: i.channels,
+            since: i.startDate,
+            effect: i.result?.effect ?? null,
+            gain: i.result?.gain ?? null,
+            ownerSays: i.ownerVerdict,
+          })),
+        ownerExplainedRises: changeAnswers
+          .filter((a) => a.key.includes(':up:'))
+          .map((a) => ({ metric: a.key.split(':')[1], weekOf: a.key.split(':')[3], cause: a.label, note: a.note })),
+        relanceByChannel: relanceResults?.byChannel ?? {},
+      },
+      newVisitorsBySource: bySource,
+      unexplainedChanges: unexplained.changes.map((c) => ({
+        metric: c.metric,
+        direction: c.direction,
+        from: c.from,
+        to: c.to,
+        actual: c.actual,
+        expected: c.expected,
+        changePct: c.changePct,
+        explainedBy: c.explainedBy,
+      })),
       ...ownerContext,
     };
   }
@@ -340,12 +431,14 @@ export class SnapshotService {
   }
 
   /** Visits, stays, occupancy and money for one window. */
-  async periodMetrics(start: Date, end: Date, seats: number) {
+  async periodMetrics(start: Date, end: Date, seats: number, skip?: (d: Date) => boolean) {
     const now = new Date();
     const effectiveEnd = minDate([end, now]);
-    const days = Math.max(1, differenceInCalendarDays(effectiveEnd, start) + 1);
+    let skipped = 0;
+    if (skip) for (let d = startOfDay(start); d <= effectiveEnd; d = addDays(d, 1)) if (skip(d)) skipped += 1;
+    const days = Math.max(1, differenceInCalendarDays(effectiveEnd, start) + 1 - skipped);
 
-    const [journals, products, aboPayments, expenses, newMembers] =
+    const [allJournals, allProducts, allAboPayments, allExpenses, newMemberRows] =
       await Promise.all([
         this.prisma.journal.findMany({
           where: {
@@ -381,16 +474,24 @@ export class SnapshotService {
         }),
         this.prisma.abonnementPayment.findMany({
           where: abonnementPaymentsInRange(start, end),
-          select: { amount: true },
+          select: { amount: true, paidAt: true },
         }),
         this.prisma.dailyExpense.findMany({
           where: { date: { gte: start, lte: end } },
           include: { expense: { select: { amount: true } } },
         }),
-        this.prisma.member.count({
+        this.prisma.member.findMany({
           where: { createdAt: { gte: start, lte: end } },
+          select: { createdAt: true },
         }),
       ]);
+    // Paused days of an action are left out of its measure
+    const keep = (d: Date | null | undefined) => !skip || !d || !skip(d);
+    const journals = allJournals.filter((j) => keep(j.registredTime));
+    const products = allProducts.filter((p) => keep(p.date || p.createdAt));
+    const aboPayments = allAboPayments.filter((p) => keep(p.paidAt));
+    const expenses = allExpenses.filter((e) => keep(e.date));
+    const newMembers = newMemberRows.filter((m) => keep(m.createdAt)).length;
 
     const visits = journals.length;
     const revenueVisits = journals.reduce(
@@ -790,6 +891,10 @@ export class SnapshotService {
       channels?: string[] | null;
       steps?: unknown;
       manualFunnel?: unknown;
+      interested?: number | null;
+      pauses?: unknown;
+      droppedAt?: Date | null;
+      dropReason?: string | null;
     },
     seats: number,
     campaigns: Campaigns = [],
@@ -821,13 +926,13 @@ export class SnapshotService {
       daysSinceStart: Math.max(0, differenceInCalendarDays(now, start)),
       price,
     });
-    const afterEnd = endOfDay(
-      minDate([addDays(start, IMPACT_WINDOW_DAYS - 1), i.endDate || now, now]),
-    );
-    const daysAfter = Math.max(
-      0,
-      differenceInCalendarDays(afterEnd, start) + 1,
-    );
+    // Paused days are skipped: the window runs IMPACT_WINDOW_DAYS active days
+    const pauses = parsePauses(i.pauses);
+    const paused = openPause(pauses);
+    const win = activeWindow(start, IMPACT_WINDOW_DAYS, minDate([i.endDate ? endOfDay(i.endDate) : now, now]), pauses, localDayKey(now));
+    const afterEnd = win.end ?? endOfDay(start);
+    const daysAfter = win.activeDays;
+    const skip = pauses.length ? win.skip : undefined;
     const base = {
       id: i.id,
       title: i.title,
@@ -867,7 +972,14 @@ export class SnapshotService {
       links: links.map((l) => ({ id: l.id, code: l.code, channel: l.channel, opens: l.opens })),
       funnel,
       diagnosis,
-      finished: !!i.endDate || differenceInCalendarDays(now, start) + 1 >= IMPACT_WINDOW_DAYS,
+      finished: !!i.endDate || daysAfter >= IMPACT_WINDOW_DAYS,
+      interested: i.interested ?? null,
+      pauses,
+      paused: !!paused,
+      pausedSince: paused?.from ?? null,
+      pausedDays: win.pausedDays,
+      activeDays: daysAfter,
+      dropped: i.droppedAt ? { at: localDayKey(i.droppedAt), reason: i.dropReason ?? null } : null,
       campaign: campaign
         ? {
             id: campaign.id,
@@ -886,13 +998,13 @@ export class SnapshotService {
     const metric = i.metric || 'revenuePerDay';
     const [before, after, disturbances, targeted, sale] = await Promise.all([
       this.periodMetrics(beforeStart, beforeEnd, seats),
-      this.periodMetrics(start, afterEnd, seats),
+      this.periodMetrics(start, afterEnd, seats, skip),
       this.disturbances(i.facilityId, beforeStart, afterEnd),
       this.measure.measure(
         i,
         metric,
         { from: beforeStart, to: beforeEnd },
-        { from: start, to: afterEnd },
+        { from: start, to: afterEnd, skip },
       ),
       i.linkedKind && i.linkedId
         ? this.measure.linkedSale(i.linkedKind, i.linkedId, start, afterEnd)

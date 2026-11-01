@@ -716,6 +716,7 @@ model Facility {
   advisorReports              AdvisorReport[]
   initiatives                 BusinessInitiative[]
   advisorFacts                AdvisorFact[]
+  advisorDismissals           AdvisorDismissal[]
   advisorQuestions            AdvisorQuestion[]
   promotions                  Promotion[]
   shareLinks                  ShareLink[]
@@ -1329,12 +1330,36 @@ model BusinessInitiative {
   steps               Json        @default("[]")
   /// Figures typed from Instagram: [{ date: "yyyy-MM-dd", channel?, reach }]
   manualFunnel        Json        @default("[]")
+  /// People who said they are interested (typed by the owner): funnel step between "seen" and "registered"
+  interested          Int?
+  /// Pauses: [{ from: "yyyy-MM-dd", to: "yyyy-MM-dd" | null }]; paused days are left out of the measure
+  pauses              Json        @default("[]")
+  /// "Pas pour moi": the owner stopped it and does not want it proposed again
+  droppedAt           DateTime?
+  dropReason          String?
   shareLinks          ShareLink[]
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
+}
+
+/// Conseiller: an idea the owner does not want ("Pas pour moi"); the AI must not propose it again
+model AdvisorDismissal {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title      String
+  category   String?
+  /// Lever of the lever map the idea came from, when any
+  leverId    String?
+  /// Trop cher, Pas le temps, Déjà essayé, Ne colle pas à mon espace, Plus tard…
+  reason     String
+  createdAt  DateTime @default(now())
+
+  @@index([facilityId, createdAt])
+  @@map("advisor_dismissals")
 }
 
 /// A tracked link shared on one channel; the app counts who opens it

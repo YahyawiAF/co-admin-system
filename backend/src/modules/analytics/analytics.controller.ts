@@ -4,6 +4,7 @@ import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
 import { NewcomersService } from './newcomers.service';
+import { ForecastService } from './forecast.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -13,6 +14,7 @@ export class AnalyticsController {
     private readonly outreach: OutreachService,
     private readonly campaigns: CampaignService,
     private readonly newcomers: NewcomersService,
+    private readonly forecasts: ForecastService,
   ) {}
 
   @Get('performance/settings')
@@ -64,6 +66,29 @@ export class AnalyticsController {
       year: Number(year) || undefined,
       month: Number(month) || undefined,
     });
+  }
+
+  @Get('performance/forecast')
+  performanceForecast(@Query('year') year?: string, @Query('month') month?: string) {
+    return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined });
+  }
+
+  @Get('performance/changes')
+  performanceChanges(@Query('facilityId') facilityId?: string) {
+    return this.forecasts.changes(facilityId);
+  }
+
+  @Post('performance/changes/answer')
+  answerPerformanceChange(
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: { metric?: string; direction?: string; from?: string; to?: string; cause?: string; note?: string },
+  ) {
+    return this.forecasts.answerChange(facilityId, body);
+  }
+
+  @Get('performance/levers')
+  performanceLevers(@Query('facilityId') facilityId?: string) {
+    return this.forecasts.levers(facilityId);
   }
 
   @Get('performance/insights')
@@ -118,6 +143,20 @@ export class AnalyticsController {
     return this.outreach.log(body);
   }
 
+  /** Relances: several people reached the same way (WhatsApp group, at the desk…). */
+  @Post('outreach/log-many')
+  outreachLogMany(
+    @Body() body: { items?: Array<{ memberId?: string; reason?: string }>; channel?: string; message?: string },
+  ) {
+    return this.outreach.logMany(body);
+  }
+
+  /** Check-in: the relance to do with this member, if any. */
+  @Get('outreach/member/:memberId')
+  outreachForMember(@Param('memberId') memberId: string, @Query('facilityId') facilityId?: string) {
+    return this.outreach.forMember(memberId, facilityId);
+  }
+
   /** Relances: staff mark a member as contacted — answer, note, follow-up date. */
   @Post('outreach/answer')
   outreachAnswer(
@@ -129,6 +168,7 @@ export class AnalyticsController {
       outcome?: string;
       note?: string | null;
       followUpAt?: string | null;
+      channel?: string | null;
     },
   ) {
     return this.outreach.answer(body);

@@ -348,6 +348,7 @@ export function QuickCheckInPanel({ presentMemberIds, onDone, hotkey }: Props) {
         giftLabel: gift ? `Bon ${gift.itemName ?? "cadeau"} ${gift.label} (à la commande)` : null,
         key,
         member,
+        memberId: member?.id ?? null,
         name: member
           ? memberDisplayName(member)
           : mode === "anonymous"

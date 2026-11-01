@@ -81,11 +81,14 @@ function CompareChart({
 
 /** One action the owner did: effect vs a comparison group, net gain, linked sale, notes and verdict. */
 export function FollowUpCard({
+  defaultOpen,
   item,
   review,
   index,
   highlight,
 }: {
+  /** Open the detail right away (side panel) */
+  defaultOpen?: boolean;
   item: BusinessInitiative;
   review?: AdvisorResult["initiativeReviews"][number];
   index: number;
@@ -93,7 +96,7 @@ export function FollowUpCard({
 }) {
   const qc = useQueryClient();
   const [note, setNote] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const refresh = () => qc.invalidateQueries({ queryKey: ["advisor", "initiatives"] });
   const update = useMutation({
     mutationFn: (data: Parameters<typeof advisorApi.updateInitiative>[1]) => advisorApi.updateInitiative(item.id, data),

@@ -7,7 +7,7 @@
 
 export type InitiativeStep = { text: string; done: boolean; doneAt?: string | null };
 
-export type FunnelStageKey = 'seen' | 'opened' | 'registered' | 'paid' | 'came' | 'contacted' | 'won';
+export type FunnelStageKey = 'seen' | 'interested' | 'opened' | 'registered' | 'paid' | 'came' | 'contacted' | 'won';
 
 export type FunnelStage = {
   key: FunnelStageKey;
@@ -47,6 +47,8 @@ export type EventFunnelInput = {
   channels: string[];
   /** Sum of the reach typed from Instagram; null = never typed */
   reach: number | null;
+  /** People who said they are interested (typed by the owner); null = never typed */
+  interested?: number | null;
   /** Number of share links made for the action */
   links: number;
   opens: number;
@@ -98,6 +100,9 @@ export function buildFunnel(input: FunnelInput | null): FunnelStage[] | null {
   if (social || input.reach != null) {
     stages.push({ key: 'seen', label: 'Ont vu', source: 'Instagram, saisi', value: input.reach });
   }
+  if (input.interested != null) {
+    stages.push({ key: 'interested', label: 'Intéressés', source: 'saisi par toi', value: input.interested });
+  }
   stages.push({
     key: 'opened',
     label: 'Ont ouvert le lien',
@@ -123,6 +128,7 @@ const fr = (n: number) => n.toLocaleString('fr-FR');
 /** What a block at each stage leaves unproven: what to look at next. */
 const UNPROVEN: Record<FunnelStageKey, string[]> = {
   seen: ['Si assez de monde a vu les posts'],
+  interested: ["Si l'idée plaît", 'Le message'],
   opened: ["Le message et l'appel à l'action", "L'envie de venir"],
   registered: ['Le prix', 'La date et l’heure', "L'inscription dans l'app"],
   paid: ['Le paiement à l’accueil', "L'engagement des inscrits"],
@@ -133,6 +139,7 @@ const UNPROVEN: Record<FunnelStageKey, string[]> = {
 
 const NEXT: Record<FunnelStageKey, string> = {
   seen: 'Publie plus ou plus souvent, puis recopie les vues.',
+  interested: 'Demande à quelques personnes si ça les intéresse, et note le nombre.',
   opened: 'Change le message ou l’appel à l’action, une seule chose.',
   registered: 'Demande à 3 personnes ce qui les retient avant de changer le prix.',
   paid: 'Rappelle le prix et encaisse à l’inscription.',
@@ -144,6 +151,7 @@ const NEXT: Record<FunnelStageKey, string> = {
 function stageLine(s: FunnelStage) {
   if (s.value == null) return null;
   if (s.key === 'seen') return `${fr(s.value)} vues`;
+  if (s.key === 'interested') return `${fr(s.value)} intéressé${s.value > 1 ? 's' : ''}`;
   if (s.key === 'opened') return s.value ? `${fr(s.value)} ouvertures du lien` : '0 ouverture du lien';
   return `${s.label} : ${fr(s.value)}`;
 }

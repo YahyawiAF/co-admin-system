@@ -1031,7 +1031,7 @@ export type OutreachReason =
   | "CONVERT"
   | "REVIEW"
   | "FOLLOW_UP";
-export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "SKIP";
+export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "PERSON" | "INSTAGRAM" | "GROUP" | "SKIP";
 /** Member's answer when a relance is marked as contacted */
 export type OutreachOutcome =
   | "INTERESTED"
@@ -1111,6 +1111,8 @@ export interface OutreachResults {
   won: number;
   revenue: number;
   byReason: Partial<Record<OutreachReason, { contacted: number; won: number; revenue: number }>>;
+  /** Same figures by way of contact (WhatsApp, en personne…) */
+  byChannel?: Partial<Record<OutreachChannel, { contacted: number; won: number; revenue: number }>>;
 }
 
 export interface OutreachList {
@@ -1490,6 +1492,7 @@ export interface OpenBookingFees {
 
 // ---- Conseiller IA ----
 export type AdvisorCategory =
+  | "ACQUISITION"
   | "NEW_REVENUE"
   | "PROMO"
   | "PRICING"
@@ -1514,6 +1517,10 @@ export interface AdvisorRecommendation {
   target?: { kind: TargetKind; days: number[]; fromHour: number; toHour: number };
   /** Clients to contact and the ready-to-send message (segment NONE = no relance) */
   outreach?: { segment: CampaignSegment | "NONE"; message: string };
+  /** Lever of the lever map it works on ("" = none) */
+  leverId?: string;
+  /** rules = added by the app because the AI left a strong lever empty */
+  source?: "ai" | "rules";
 }
 
 export interface AdvisorResult {
@@ -1612,7 +1619,7 @@ export interface InitiativeStep {
   doneAt?: string | null;
 }
 
-export type FunnelStageKey = "seen" | "opened" | "registered" | "paid" | "came" | "contacted" | "won";
+export type FunnelStageKey = "seen" | "interested" | "opened" | "registered" | "paid" | "came" | "contacted" | "won";
 
 export interface FunnelStage {
   key: FunnelStageKey;
@@ -1711,6 +1718,18 @@ export interface BusinessInitiative {
   diagnosis: InitiativeDiagnosis;
   /** Stopped, or measured over the full window */
   finished: boolean;
+  /** People who said they are interested (typed by the owner) */
+  interested: number | null;
+  pauses: Array<{ from: string; to: string | null }>;
+  /** Paused now: the measure is on hold */
+  paused: boolean;
+  pausedSince: string | null;
+  /** Days left out of the measure */
+  pausedDays: number;
+  /** Measured days (pauses left out) */
+  activeDays: number;
+  /** « Pas pour moi » / abandoned, with the reason */
+  dropped: { at: string; reason: string | null } | null;
   result: {
     metric: AdviceMetric;
     /** "pts" for rate figures (effect in points), "%" otherwise */
@@ -2057,3 +2076,102 @@ export type NewcomersListResponse = {
   counts: { ALL: number; NOT_BACK: number; NEW: number; BACK: number };
   meta: { currentPage: number; lastPage: number; perPage: number; total: number };
 };
+
+// ---- Finance: prévision du mois, leviers ----
+export type ForecastDriverKey = "newVisitors" | "otherVisits" | "ticket" | "subscriptions" | "products";
+export interface ForecastDriver {
+  key: ForecastDriverKey;
+  from: number;
+  to: number;
+  effect: number;
+}
+export interface ForecastDay {
+  key: string;
+  weekday: number;
+  expected: number;
+  expectedCum: number;
+  lowCum: number;
+  highCum: number;
+  actual: number | null;
+  actualCum: number | null;
+  complete: boolean;
+}
+export interface MonthForecast {
+  period: {
+    year: number;
+    month: number;
+    label: string;
+    previousLabel: string;
+    isCurrent: boolean;
+    isFuture: boolean;
+    base: { from: string; to: string };
+  };
+  subscriptions: {
+    expected: number;
+    endingCount: number;
+    endingValue: number;
+    renewalRatePct: number | null;
+    renewalRateAssumed: boolean;
+    renewals: number;
+    newPace: number;
+    newCount: number;
+  };
+  baseDays: number;
+  perWeekday: Array<{ weekday: number; samples: number; revenueVisits: number; visits: number; newVisitors: number; products: number }>;
+  days: ForecastDay[];
+  expected: { total: number; low: number; high: number; visits: number; subscriptions: number; products: number; visitCount: number; newVisitors: number };
+  band: { low: number; high: number };
+  toDate: null | { days: number; expected: number; actual: number; gap: number; gapPct: number | null; projected: number; drivers: ForecastDriver[] };
+  versusPrevious: null | { previousTotal: number; drivers: ForecastDriver[] };
+  checkpoints: Array<{ day: number; key: string; expectedCum: number; actualCum: number | null }>;
+}
+export interface PerformanceChange {
+  metric: "newVisitors" | "visits";
+  direction: "up" | "down";
+  from: string;
+  to: string;
+  actual: number;
+  expected: number;
+  changePct: number;
+  key: string;
+  label: string;
+  explainedBy: string | null;
+  causes: ReadonlyArray<{ code: string; label: string }>;
+}
+export type LeverGroup = "ATTRACT" | "RETURN" | "SPEND" | "FILL";
+export type LeverStatus = "WORKING" | "IN_PROGRESS" | "MISSING" | "NO_DATA" | "OK";
+export interface LeverResult {
+  id: string;
+  group: LeverGroup;
+  title: string;
+  signal: string;
+  status: LeverStatus;
+  note: string | null;
+  gain: number;
+  strength: number;
+  actionId: string | null;
+}
+export interface MissingIdea {
+  leverId: string;
+  group: LeverGroup;
+  gain: number;
+  title: string;
+  why: string;
+  steps: string[];
+  plan: Record<string, unknown>;
+}
+export interface LeverMap {
+  generatedAt: string;
+  groups: Array<{ group: LeverGroup; label: string; levers: LeverResult[] }>;
+  missing: MissingIdea[];
+  counts: Record<LeverStatus, number>;
+}
+
+export interface AdvisorDismissal {
+  id: string;
+  title: string;
+  category: string | null;
+  leverId: string | null;
+  reason: string;
+  createdAt: string;
+}
