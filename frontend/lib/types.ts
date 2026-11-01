@@ -1029,8 +1029,17 @@ export type OutreachReason =
   | "NEW_NOT_BACK"
   | "TOP_UP"
   | "CONVERT"
-  | "REVIEW";
+  | "REVIEW"
+  | "FOLLOW_UP";
 export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "SKIP";
+/** Member's answer when a relance is marked as contacted */
+export type OutreachOutcome =
+  | "INTERESTED"
+  | "OTHER_OFFER"
+  | "KEEP_TARIF"
+  | "AWAY"
+  | "NO_ANSWER"
+  | "NOT_INTERESTED";
 
 export interface OutreachItem {
   memberId: string;
@@ -1053,6 +1062,46 @@ export interface OutreachItem {
   /** Why the member stopped coming (1 click in Relances) */
   awayReason?: AwayReason | null;
   recallAt?: string | null;
+  /** Follow-up date reached: what the member answered last time */
+  followUp?: {
+    outreachId: string;
+    outcome: OutreachOutcome;
+    note: string | null;
+    contactedAt: string;
+    at: string;
+  } | null;
+}
+
+/** Relances → Suivi: a contacted member and what happened since */
+export interface SuiviRow {
+  id: string;
+  memberId: string;
+  name: string;
+  firstName: string;
+  phone: string | null;
+  whatsapp: string | null;
+  reason: OutreachReason;
+  channel: OutreachChannel;
+  outcome: OutreachOutcome | null;
+  note: string | null;
+  contactedAt: string;
+  followUpAt: string | null;
+  due: boolean;
+  closedAt: string | null;
+  closedResult: "WON" | "LOST" | null;
+  closedAuto: boolean;
+  since: {
+    abonnement: { name: string; at: string } | null;
+    visits: number;
+    spent: number;
+    lastVisit: string | null;
+  };
+}
+
+export interface SuiviList {
+  rows: SuiviRow[];
+  counts: { OPEN: number; CLOSED: number; due: number; won: number };
+  meta: { currentPage: number; lastPage: number; perPage: number; total: number };
 }
 
 export type AwayReason = "STUDY_HOME" | "PRICE" | "DISTANCE" | "NOISE" | "HOURS" | "OTHER";

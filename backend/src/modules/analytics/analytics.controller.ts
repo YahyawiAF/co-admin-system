@@ -118,6 +118,38 @@ export class AnalyticsController {
     return this.outreach.log(body);
   }
 
+  /** Relances: staff mark a member as contacted — answer, note, follow-up date. */
+  @Post('outreach/answer')
+  outreachAnswer(
+    @Body()
+    body: {
+      memberId?: string;
+      reason?: string;
+      outreachId?: string;
+      outcome?: string;
+      note?: string | null;
+      followUpAt?: string | null;
+    },
+  ) {
+    return this.outreach.answer(body);
+  }
+
+  /** Relances → Suivi: contacted members and whether they converted (OPEN | CLOSED, paginated). */
+  @Get('outreach/suivi')
+  outreachSuivi(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.outreach.suivi({ status, page: Number(page) || undefined, perPage: Number(perPage) || undefined });
+  }
+
+  /** Relances → Suivi: close by hand (WON | LOST). */
+  @Post('outreach/:id/close')
+  outreachClose(@Param('id') id: string, @Body() body: { result?: string }) {
+    return this.outreach.close(id, body.result);
+  }
+
   /** Saved relances (e.g. from an AI suggestion) with their progress. */
   @Get('outreach/campaigns')
   campaignList(@Query('facilityId') facilityId?: string) {

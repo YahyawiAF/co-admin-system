@@ -119,6 +119,8 @@ import type {
   OutreachList,
   OutreachReason,
   OutreachChannel,
+  OutreachOutcome,
+  SuiviList,
 } from "@/lib/types";
 import { format } from "date-fns";
 
@@ -607,6 +609,23 @@ export const outreachApi = {
   },
   push(data: { memberId: string; reason: OutreachReason; message: string }) {
     return http.post("/analytics/outreach/push", data);
+  },
+  /** Mark a relance as contacted: the member's answer, a note, the day to call back (yyyy-MM-dd) */
+  answer(data: {
+    memberId: string;
+    reason: OutreachReason;
+    outreachId?: string;
+    outcome: OutreachOutcome;
+    note?: string | null;
+    followUpAt?: string | null;
+  }) {
+    return http.post("/analytics/outreach/answer", data);
+  },
+  suivi(params: { status: "OPEN" | "CLOSED"; page: number }) {
+    return http.get<SuiviList>(`/analytics/outreach/suivi?status=${params.status}&page=${params.page}`);
+  },
+  close(id: string, result: "WON" | "LOST") {
+    return http.post(`/analytics/outreach/${id}/close`, { result });
   },
   /** Why the member stopped coming; "révise à la maison" schedules a recall before exams */
   awayReason(data: { memberId: string; reason: AwayReason | null; recallAt?: string | null }) {

@@ -3,13 +3,15 @@
 import { Suspense, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { differenceInCalendarDays, format, formatDistanceToNow, parse, startOfDay } from "date-fns";
+import { addDays, differenceInCalendarDays, format, formatDistanceToNow, parse, startOfDay } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
 import {
   BellRing,
   Calculator,
+  CalendarCheck,
   CalendarClock,
+  Check,
   ChevronDown,
   Copy,
   HandCoins,
@@ -48,7 +50,9 @@ import type {
   AbonnementOffer,
   OutreachChannel,
   OutreachItem,
+  OutreachOutcome,
   OutreachReason,
+  SuiviRow,
   TopUpOffer,
 } from "@/lib/types";
 
@@ -110,7 +114,57 @@ const REASON_UI: Record<
     tone: "bg-yellow-100 text-yellow-800",
     why: "Un client fidèle et content : chaque avis aide les nouveaux à vous trouver sur Google Maps.",
   },
+  FOLLOW_UP: {
+    label: "Rappel prévu",
+    icon: CalendarCheck,
+    tone: "bg-teal-100 text-teal-800",
+    why: "Vous aviez promis de le recontacter à cette date.",
+  },
 };
+
+/** Member's answer: label, colour, default days before calling back (null = closed), hint. */
+const OUTCOME_UI: Record<
+  OutreachOutcome,
+  { label: string; tone: string; days: number | null; hint: string }
+> = {
+  INTERESTED: {
+    label: "Intéressé",
+    tone: "border-emerald-600 bg-emerald-50 text-emerald-800",
+    days: 3,
+    hint: "Clôturé tout seul s'il prend un abonnement.",
+  },
+  OTHER_OFFER: {
+    label: "Veut une autre offre",
+    tone: "border-violet-600 bg-violet-50 text-violet-800",
+    days: 2,
+    hint: "Préparez l'offre : il revient dans « À contacter » à la date.",
+  },
+  KEEP_TARIF: {
+    label: "Garde le tarif",
+    tone: "border-slate-600 bg-slate-100 text-slate-800",
+    days: 30,
+    hint: "On regarde s'il continue de venir au tarif.",
+  },
+  AWAY: {
+    label: "Parti / en voyage",
+    tone: "border-blue-600 bg-blue-50 text-blue-800",
+    days: 30,
+    hint: "Mettez sa date de retour.",
+  },
+  NO_ANSWER: {
+    label: "Pas de réponse",
+    tone: "border-amber-600 bg-amber-50 text-amber-800",
+    days: 3,
+    hint: "Il revient dans « À contacter » à la date.",
+  },
+  NOT_INTERESTED: {
+    label: "Pas intéressé",
+    tone: "border-red-600 bg-red-50 text-red-800",
+    days: null,
+    hint: "Clôturé directement (non converti).",
+  },
+};
+const OUTCOMES = Object.keys(OUTCOME_UI) as OutreachOutcome[];
 
 const CHANNEL_LABEL: Record<OutreachChannel, string> = {
   WHATSAPP: "WhatsApp",
@@ -120,6 +174,8 @@ const CHANNEL_LABEL: Record<OutreachChannel, string> = {
 };
 
 const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
+const ago = (iso: string) => formatDistanceToNow(new Date(iso), { locale: fr, addSuffix: true });
+const ymd = (d: Date) => format(d, "yyyy-MM-dd");
 const dayLabel = (d: Date) => format(d, "d MMM", { locale: fr });
 const localDay = (s: string) => parse(s, "yyyy-MM-dd", new Date());
 
@@ -489,15 +545,118 @@ function AwayReasonsCard({ counts }: { counts?: Partial<Record<AwayReason, numbe
   );
 }
 
+/** "Marquer contacté": the member's answer, a note, the day to call back. */
+function AnswerPanel({
+  memberId,
+  reason,
+  outreachId,
+  name,
+  onDone,
+}: {
+  memberId: string;
+  reason: OutreachReason;
+  outreachId?: string;
+  name: string;
+  onDone: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [outcome, setOutcome] = useState<OutreachOutcome>("INTERESTED");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState(ymd(addDays(new Date(), 3)));
+  const ui = OUTCOME_UI[outcome];
+  const save = useMutation({
+    mutationFn: () =>
+      outreachApi.answer({
+        memberId,
+        reason,
+        outreachId,
+        outcome,
+        note: note.trim() || null,
+        followUpAt: ui.days === null ? null : date || null,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+      toast.success(
+        ui.days === null
+          ? `${name} : clôturé (pas intéressé)`
+          : date
+            ? `${name} → Suivi, rappel le ${dayLabel(localDay(date))}`
+            : `${name} → Suivi`,
+      );
+      onDone();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <div className="mt-3 space-y-3 rounded-lg border bg-muted/30 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      <div className="text-sm font-medium">Sa réponse</div>
+      <div className="flex flex-wrap gap-1.5">
+        {OUTCOMES.map((o) => (
+          <button
+            key={o}
+            type="button"
+            onClick={() => {
+              setOutcome(o);
+              const days = OUTCOME_UI[o].days;
+              setDate(days === null ? "" : ymd(addDays(new Date(), days)));
+            }}
+            className={cn(
+              "rounded-full border px-3 py-1 text-sm transition-colors duration-200 motion-reduce:transition-none",
+              outcome === o ? cn(OUTCOME_UI[o].tone, "font-medium") : "bg-background hover:bg-muted",
+            )}
+          >
+            {OUTCOME_UI[o].label}
+          </button>
+        ))}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="space-y-1">
+          <Label className="text-xs">Note (optionnel)</Label>
+          <Input
+            value={note}
+            maxLength={500}
+            placeholder="ex. demande le tarif semaine"
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+        {ui.days !== null ? (
+          <div className="space-y-1">
+            <Label className="text-xs">{outcome === "AWAY" ? "Date de retour" : "Rappeler le"}</Label>
+            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span key={outcome} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+          {ui.days !== null && !date ? "Sans date : il reste dans Suivi jusqu'à ce que vous le clôturiez." : ui.hint}
+        </span>
+        <div className="flex gap-1.5">
+          <Button size="sm" variant="ghost" onClick={onDone}>
+            Annuler
+          </Button>
+          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
+            Enregistrer
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OutreachRow({
   item,
+  index = 0,
   onMessage,
 }: {
   item: OutreachItem;
+  /** Position on the page, for the light stagger */
+  index?: number;
   /** Optional custom text (e.g. top-up with the chosen start date) */
   onMessage: (text?: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const [answering, setAnswering] = useState(false);
   const ui = REASON_UI[item.reason];
   const Icon = ui.icon;
   const link = actionLink(item);
@@ -508,71 +667,235 @@ function OutreachRow({
     onError: (e: Error) => toast.error(e.message),
   });
   return (
-    <li className="flex flex-wrap items-center gap-3 py-3">
-      <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", ui.tone)}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{item.name}</span>
-          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", ui.tone)}>
-            {ui.label}
-          </span>
-          {item.owed > 0 && item.reason !== "UNPAID" ? (
-            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700">
-              doit {dt(item.owed)}
+    <li
+      className={cn(
+        "py-3 transition-colors duration-200 animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both motion-reduce:animate-none",
+        answering && "bg-muted/20",
+      )}
+      style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", ui.tone)}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{item.name}</span>
+            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", ui.tone)}>
+              {ui.label}
             </span>
+            {item.followUp && item.reason !== "FOLLOW_UP" ? (
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", REASON_UI.FOLLOW_UP.tone)}>
+                Rappel prévu
+              </span>
+            ) : null}
+            {item.owed > 0 && item.reason !== "UNPAID" ? (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700">
+                doit {dt(item.owed)}
+              </span>
+            ) : null}
+          </div>
+          <div className="text-sm">{item.title}</div>
+          {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
+          {item.reason === "TOP_UP" && item.topUp ? (
+            <TopUpCalculator item={item} topUp={item.topUp} onMessage={onMessage} />
+          ) : null}
+          <div className="text-xs text-muted-foreground">
+            {[
+              item.reason === "CONVERT" && item.offer ? null : item.detail,
+              item.lastContact
+                ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${CHANNEL_LABEL[item.lastContact.channel]})`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </div>
+          {item.followUp && item.reason !== "FOLLOW_UP" ? (
+            <div className="text-xs text-teal-800">
+              Contacté {ago(item.followUp.contactedAt)} · avait dit « {OUTCOME_UI[item.followUp.outcome]?.label ?? item.followUp.outcome} »
+              {item.followUp.note ? ` · ${item.followUp.note}` : ""}
+            </div>
+          ) : null}
+          {ASK_WHY.has(item.reason) ? (
+            <AwayReasonChips memberId={item.memberId} awayReason={item.awayReason} recallAt={item.recallAt} />
           ) : null}
         </div>
-        <div className="text-sm">{item.title}</div>
-        {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
-        {item.reason === "TOP_UP" && item.topUp ? (
-          <TopUpCalculator item={item} topUp={item.topUp} onMessage={onMessage} />
-        ) : null}
-        <div className="text-xs text-muted-foreground">
-          {[
-            item.reason === "CONVERT" && item.offer ? null : item.detail,
-            item.lastContact
-              ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${CHANNEL_LABEL[item.lastContact.channel]})`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </div>
-        {ASK_WHY.has(item.reason) ? (
-          <AwayReasonChips memberId={item.memberId} awayReason={item.awayReason} recallAt={item.recallAt} />
-        ) : null}
-      </div>
-      <div className="flex items-center gap-1.5">
-        {link ? (
-          <Button asChild size="sm" variant="outline">
-            <Link href={link.href}>{link.label}</Link>
-          </Button>
-        ) : null}
-        <Button
-          size="sm"
-          className={item.whatsapp ? "bg-emerald-600 hover:bg-emerald-700" : undefined}
-          onClick={() => onMessage()}
-        >
-          <MessageCircle className="mr-1.5 h-4 w-4" />
-          Contacter
-        </Button>
-        {!item.snoozed ? (
+        <div className="flex items-center gap-1.5">
+          {link ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={link.href}>{link.label}</Link>
+            </Button>
+          ) : null}
           <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8 text-muted-foreground"
-            title="Ignorer pour l'instant"
-            disabled={skip.isPending}
-            onClick={() => skip.mutate()}
+            size="sm"
+            className={item.whatsapp ? "bg-emerald-600 hover:bg-emerald-700" : undefined}
+            onClick={() => onMessage()}
           >
-            <X className="h-4 w-4" />
+            <MessageCircle className="mr-1.5 h-4 w-4" />
+            Contacter
           </Button>
-        ) : null}
+          <Button
+            size="sm"
+            variant={answering ? "default" : "outline"}
+            onClick={() => setAnswering((v) => !v)}
+          >
+            <Check className="mr-1.5 h-4 w-4" />
+            {answering ? "Fermer" : "Marquer contacté"}
+          </Button>
+          {!item.snoozed ? (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground"
+              title="Ignorer pour l'instant"
+              disabled={skip.isPending}
+              onClick={() => skip.mutate()}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          ) : null}
+        </div>
       </div>
+      {answering ? (
+        <div className="sm:pl-12">
+          <AnswerPanel
+            memberId={item.memberId}
+            reason={item.reason}
+            name={item.name}
+            onDone={() => setAnswering(false)}
+          />
+        </div>
+      ) : null}
     </li>
   );
 }
+
+/** What happened since the contact: abonnement taken, visits at the tarif, nothing. */
+function suiviSignal(r: SuiviRow) {
+  if (r.since.abonnement) {
+    return {
+      text: `A pris ${r.since.abonnement.name} · ${dayLabel(new Date(r.since.abonnement.at))}`,
+      tone: "font-semibold text-emerald-700",
+    };
+  }
+  if (r.reason === "UNPAID" && r.closedResult === "WON" && r.closedAuto) {
+    return { text: "A payé", tone: "font-semibold text-emerald-700" };
+  }
+  if (r.since.visits) {
+    return {
+      text: `Venu ${r.since.visits} fois depuis${r.since.spent ? ` au tarif (${dt(r.since.spent)})` : ""}`,
+      tone: "font-medium text-amber-700",
+    };
+  }
+  return { text: "Pas revenu depuis", tone: "text-muted-foreground" };
+}
+
+function suiviFollow(r: SuiviRow) {
+  if (r.closedAt) {
+    if (r.closedResult === "WON") return r.closedAuto ? "Clôturé tout seul : converti" : "Clôturé : converti";
+    return "Clôturé : non converti";
+  }
+  if (r.due && r.followUpAt) {
+    const late = differenceInCalendarDays(startOfDay(new Date()), new Date(r.followUpAt));
+    return late > 0 ? `Rappel prévu le ${dayLabel(new Date(r.followUpAt))} (en retard)` : "Rappel aujourd'hui";
+  }
+  if (r.followUpAt) return `Rappel le ${dayLabel(new Date(r.followUpAt))}`;
+  return r.outcome ? "Sans date de rappel" : "En attente de sa réponse";
+}
+
+function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
+  const queryClient = useQueryClient();
+  const [answering, setAnswering] = useState(false);
+  const close = useMutation({
+    mutationFn: (result: "WON" | "LOST") => outreachApi.close(row.id, result),
+    onSuccess: (_, result) => {
+      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+      toast.success(result === "WON" ? "Relance clôturée : converti" : "Relance clôturée");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const outcome = row.outcome ? OUTCOME_UI[row.outcome] : null;
+  const signal = suiviSignal(row);
+  return (
+    <li
+      className={cn(
+        "py-3 transition-colors duration-200 animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both motion-reduce:animate-none",
+        row.due && "bg-teal-50/50",
+      )}
+      style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-[1_1_300px]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{row.name}</span>
+            {outcome ? (
+              <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", outcome.tone)}>
+                {outcome.label}
+              </span>
+            ) : (
+              <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
+                Message envoyé
+              </span>
+            )}
+            <span className="text-xs text-muted-foreground">{REASON_UI[row.reason]?.label ?? row.reason}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Contacté {ago(row.contactedAt)} ({CHANNEL_LABEL[row.channel] ?? row.channel})
+            {row.note ? ` · « ${row.note} »` : ""}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-[1_1_240px] flex-col">
+          <span className={cn("text-sm", signal.tone)}>{signal.text}</span>
+          <span className={cn("text-xs", row.due ? "font-medium text-teal-800" : "text-muted-foreground")}>
+            {suiviFollow(row)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {row.closedAt ? (
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-0.5 text-xs font-medium",
+                row.closedResult === "WON" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground",
+              )}
+            >
+              {row.closedResult === "WON" ? (row.closedAuto ? "Converti (auto)" : "Converti") : "Non converti"}
+            </span>
+          ) : (
+            <>
+              <Button size="sm" variant={answering ? "default" : "ghost"} onClick={() => setAnswering((v) => !v)}>
+                {answering ? "Fermer" : row.outcome ? "Changer la réponse" : "Sa réponse"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                disabled={close.isPending}
+                onClick={() => close.mutate("WON")}
+              >
+                Converti
+              </Button>
+              <Button size="sm" variant="outline" disabled={close.isPending} onClick={() => close.mutate("LOST")}>
+                Non converti
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      {answering ? (
+        <AnswerPanel
+          memberId={row.memberId}
+          reason={row.reason}
+          outreachId={row.id}
+          name={row.name}
+          onDone={() => setAnswering(false)}
+        />
+      ) : null}
+    </li>
+  );
+}
+
+type Tab = "todo" | "suivi";
 
 export default function RelancesPage() {
   return (
@@ -589,11 +912,19 @@ function RelancesInner() {
     initialReason && initialReason in REASON_UI ? initialReason : "ALL",
   );
   const [messaging, setMessaging] = useState<OutreachItem | null>(null);
-  const [showDone, setShowDone] = useState(false);
+  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "suivi" ? "suivi" : "todo");
+  const [suiviStatus, setSuiviStatus] = useState<"OPEN" | "CLOSED">("OPEN");
+  const [suiviPage, setSuiviPage] = useState(1);
   const { data, isLoading } = useQuery({
     queryKey: ["outreach"],
     queryFn: () => outreachApi.list(),
   });
+  const suivi = useQuery({
+    queryKey: ["outreach-suivi", suiviStatus, suiviPage],
+    queryFn: () => outreachApi.suivi({ status: suiviStatus, page: suiviPage }),
+    placeholderData: (prev) => prev,
+  });
+  const suiviCounts = suivi.data?.counts;
 
   const counts = useMemo(() => {
     const c: Partial<Record<OutreachReason, number>> = {};
@@ -605,7 +936,6 @@ function RelancesInner() {
     [data, filter],
   );
   const todoPaged = usePaged(todo, undefined, filter);
-  const donePaged = usePaged(data?.contacted ?? []);
   const atStake = (data?.todo ?? []).reduce((a, i) => a + i.value, 0);
   const results = data?.results;
 
@@ -622,12 +952,25 @@ function RelancesInner() {
         <Skeleton className="h-64" />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card className="shadow-none">
               <CardContent className="p-4">
                 <div className="text-xs text-muted-foreground">À contacter</div>
                 <div className="text-2xl font-semibold tabular-nums">{data.todo.length}</div>
                 <div className="text-xs text-muted-foreground">~{dt(atStake)} en jeu</div>
+              </CardContent>
+            </Card>
+            <Card className="shadow-none">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground">En suivi</div>
+                <div className="text-2xl font-semibold tabular-nums">{suiviCounts?.OPEN ?? "–"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {suiviCounts?.due
+                    ? `${suiviCounts.due} rappel${suiviCounts.due > 1 ? "s" : ""} à faire`
+                    : suiviCounts?.CLOSED
+                      ? `${suiviCounts.won} converti${suiviCounts.won > 1 ? "s" : ""} sur ${suiviCounts.CLOSED} clôturés`
+                      : "Contactés, en attente du résultat"}
+                </div>
               </CardContent>
             </Card>
             <Card className="shadow-none">
@@ -658,91 +1001,129 @@ function RelancesInner() {
 
           <QuickCalculator />
 
-          <div className="flex flex-wrap gap-2">
-            <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
-              Tous · {data.todo.length}
-            </FilterChip>
-            {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
-              counts[r] ? (
-                <FilterChip key={r} active={filter === r} onClick={() => setFilter(r)}>
-                  {REASON_UI[r].label} · {counts[r]}
-                </FilterChip>
-              ) : null,
-            )}
+          <div role="tablist" className="flex gap-1 border-b">
+            <TabButton active={tab === "todo"} onClick={() => setTab("todo")}>
+              À contacter · {data.todo.length}
+            </TabButton>
+            <TabButton active={tab === "suivi"} onClick={() => setTab("suivi")}>
+              Suivi · {suiviCounts?.OPEN ?? "…"}
+              {suiviCounts?.due ? (
+                <span className="ml-1.5 rounded-full bg-teal-600 px-1.5 text-[11px] font-semibold text-white">
+                  {suiviCounts.due}
+                </span>
+              ) : null}
+            </TabButton>
           </div>
 
-          <Card className="shadow-none">
-            <CardContent className="px-4 py-1">
-              {filter !== "ALL" ? (
-                <p className="border-b py-2 text-xs text-muted-foreground">{REASON_UI[filter].why}</p>
-              ) : null}
-              {todo.length ? (
-                <>
-                  <ul
-                    key={`${filter}:${todoPaged.page}`}
-                    className="divide-y animate-in fade-in-0 duration-200 motion-reduce:animate-none"
-                  >
-                    {todoPaged.pageItems.map((item) => (
-                      <OutreachRow
-                        key={`${item.memberId}:${item.reason}`}
-                        item={item}
-                        onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
-                      />
-                    ))}
-                  </ul>
-                  <ListPager
-                    className="-mx-4"
-                    page={todoPaged.page}
-                    lastPage={todoPaged.lastPage}
-                    total={todoPaged.total}
-                    onPage={(p) => {
-                      todoPaged.setPage(p);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                  />
-                </>
-              ) : (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  Personne à relancer pour le moment. Revenez demain.
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          {tab === "todo" ? (
+            <div key="todo" className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+              <div className="flex flex-wrap gap-2">
+                <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+                  Tous · {data.todo.length}
+                </FilterChip>
+                {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
+                  counts[r] ? (
+                    <FilterChip key={r} active={filter === r} onClick={() => setFilter(r)}>
+                      {REASON_UI[r].label} · {counts[r]}
+                    </FilterChip>
+                  ) : null,
+                )}
+              </div>
 
-          {data.contacted.length ? (
-            <div>
-              <button
-                type="button"
-                className="flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground"
-                onClick={() => setShowDone((v) => !v)}
-              >
-                <ChevronDown className={cn("h-4 w-4 transition-transform", showDone && "rotate-180")} />
-                Déjà contactés récemment ({data.contacted.length})
-              </button>
-              {showDone ? (
-                <Card className="mt-2 shadow-none">
-                  <CardContent className="px-4 py-1">
-                    <ul className="divide-y opacity-80">
-                      {donePaged.pageItems.map((item) => (
-                        <OutreachRow
-                          key={`${item.memberId}:${item.reason}`}
-                          item={item}
-                          onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
-                        />
-                      ))}
-                    </ul>
-                    <ListPager
-                      className="-mx-4"
-                      page={donePaged.page}
-                      lastPage={donePaged.lastPage}
-                      total={donePaged.total}
-                      onPage={donePaged.setPage}
-                    />
-                  </CardContent>
-                </Card>
-              ) : null}
+              <Card className="shadow-none">
+                <CardContent className="px-4 py-1">
+                  {filter !== "ALL" ? (
+                    <p className="border-b py-2 text-xs text-muted-foreground">{REASON_UI[filter].why}</p>
+                  ) : null}
+                  {todo.length ? (
+                    <>
+                      <ul
+                        key={`${filter}:${todoPaged.page}`}
+                        className="divide-y"
+                      >
+                        {todoPaged.pageItems.map((item, i) => (
+                          <OutreachRow
+                            key={`${item.memberId}:${item.reason}`}
+                            item={item}
+                            index={i}
+                            onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
+                          />
+                        ))}
+                      </ul>
+                      <ListPager
+                        className="-mx-4"
+                        page={todoPaged.page}
+                        lastPage={todoPaged.lastPage}
+                        total={todoPaged.total}
+                        onPage={(p) => {
+                          todoPaged.setPage(p);
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <p className="py-10 text-center text-sm text-muted-foreground">
+                      Personne à relancer pour le moment. Les clients déjà contactés sont dans « Suivi ».
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
-          ) : null}
+          ) : (
+            <div key="suivi" className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+              <div className="flex flex-wrap gap-2">
+                <FilterChip
+                  active={suiviStatus === "OPEN"}
+                  onClick={() => {
+                    setSuiviStatus("OPEN");
+                    setSuiviPage(1);
+                  }}
+                >
+                  En cours · {suiviCounts?.OPEN ?? 0}
+                </FilterChip>
+                <FilterChip
+                  active={suiviStatus === "CLOSED"}
+                  onClick={() => {
+                    setSuiviStatus("CLOSED");
+                    setSuiviPage(1);
+                  }}
+                >
+                  Clôturés · {suiviCounts?.CLOSED ?? 0}
+                </FilterChip>
+              </div>
+              <Card className="shadow-none">
+                <CardContent className="px-4 py-1">
+                  {!suivi.data ? (
+                    <Skeleton className="my-3 h-40" />
+                  ) : suivi.data.rows.length ? (
+                    <>
+                      <ul key={`${suiviStatus}:${suiviPage}`} className="divide-y">
+                        {suivi.data.rows.map((row, i) => (
+                          <SuiviItem key={row.id} row={row} index={i} />
+                        ))}
+                      </ul>
+                      <ListPager
+                        className="-mx-4"
+                        page={suivi.data.meta.currentPage}
+                        lastPage={suivi.data.meta.lastPage}
+                        total={suivi.data.meta.total}
+                        onPage={(p) => {
+                          setSuiviPage(p);
+                          window.scrollTo({ top: 0, behavior: "smooth" });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <p className="py-10 text-center text-sm text-muted-foreground">
+                      {suiviStatus === "OPEN"
+                        ? "Personne en suivi. Cliquez « Marquer contacté » sur une relance."
+                        : "Aucune relance clôturée ces 90 derniers jours."}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {!data.pushEnabled ? (
             <p className="text-xs text-muted-foreground">
@@ -754,6 +1135,31 @@ function RelancesInner() {
 
       <MessageDialog item={messaging} onClose={() => setMessaging(null)} />
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "-mb-px flex items-center border-b-2 px-4 py-2 text-sm font-semibold transition-colors duration-200 motion-reduce:transition-none",
+        active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

@@ -27,6 +27,7 @@ export const OUTREACH_REASONS = [
   'TOP_UP',
   'CONVERT',
   'REVIEW',
+  'FOLLOW_UP',
 ] as const;
 export type OutreachReason = (typeof OUTREACH_REASONS)[number];
 export const OUTREACH_CHANNELS = ['WHATSAPP', 'PUSH', 'CALL', 'SKIP'] as const;
@@ -43,7 +44,30 @@ const SNOOZE_DAYS: Record<OutreachReason, number> = {
   TOP_UP: 7,
   CONVERT: 14,
   REVIEW: 30,
+  FOLLOW_UP: 3,
 };
+/** Member's answer when staff mark a relance as contacted. */
+export const OUTREACH_OUTCOMES = [
+  'INTERESTED',
+  'OTHER_OFFER',
+  'KEEP_TARIF',
+  'AWAY',
+  'NO_ANSWER',
+  'NOT_INTERESTED',
+] as const;
+export type OutreachOutcome = (typeof OUTREACH_OUTCOMES)[number];
+const OUTCOME_LABEL: Record<OutreachOutcome, string> = {
+  INTERESTED: 'Intéressé',
+  OTHER_OFFER: 'Veut une autre offre',
+  KEEP_TARIF: 'Garde le tarif',
+  AWAY: 'Parti / en voyage',
+  NO_ANSWER: 'Pas de réponse',
+  NOT_INTERESTED: 'Pas intéressé',
+};
+/** "Pas intéressé" keeps the member out of the to-do list this long. */
+const NOT_INTERESTED_DAYS = 60;
+/** Suivi looks back this far (open relances, auto-closing). */
+const SUIVI_DAYS = 90;
 /** Why a member stopped coming (Relances, 1 click). */
 export const AWAY_REASONS = ['STUDY_HOME', 'PRICE', 'DISTANCE', 'NOISE', 'HOURS', 'OTHER'] as const;
 export type AwayReason = (typeof AWAY_REASONS)[number];
@@ -77,6 +101,8 @@ export type OutreachItem = {
   profileType: string | null;
   awayReason: string | null;
   recallAt: string | null;
+  /** Follow-up date reached: what the member answered last time. */
+  followUp: { outreachId: string; outcome: string; note: string | null; contactedAt: string; at: string } | null;
 };
 
 function money(n: number) {
@@ -139,6 +165,7 @@ export class OutreachService {
   async list(facilityId?: string) {
     const now = new Date();
     const today = startOfDay(now);
+    await this.autoClose(today);
     const settings = await this.performance.settings(facilityId);
     const facility = await this.prisma.facility.findUnique({
       where: { id: settings.facilityId },
@@ -181,7 +208,7 @@ export class OutreachService {
     /** Recall date still ahead: the member said why they are away, leave them alone until then. */
     const recallLater = new Set(waiting.filter((w) => w.recallAt! > endOfDay(today)).map((w) => w.id));
 
-    const drafts = new Map<string, Omit<OutreachItem, 'name' | 'firstName' | 'phone' | 'whatsapp' | 'hasPush' | 'message' | 'lastContact' | 'snoozed' | 'profileType' | 'awayReason' | 'recallAt'> & { ctx: Record<string, string> }>();
+    const drafts = new Map<string, Omit<OutreachItem, 'name' | 'firstName' | 'phone' | 'whatsapp' | 'hasPush' | 'message' | 'lastContact' | 'snoozed' | 'profileType' | 'awayReason' | 'recallAt' | 'followUp'> & { ctx: Record<string, string> }>();
     const add = (d: Parameters<typeof drafts.set>[1]) => {
       const cur = drafts.get(d.memberId);
       if (!cur || OUTREACH_REASONS.indexOf(d.reason) < OUTREACH_REASONS.indexOf(cur.reason)) {
@@ -332,6 +359,42 @@ export class OutreachService {
       }
     }
 
+    /** Answers recorded on relances: due ones come back, the others wait in Suivi. */
+    const answers = await this.prisma.memberOutreach.findMany({
+      where: {
+        outcome: { not: null },
+        campaignId: null,
+        createdAt: { gte: subDays(today, SUIVI_DAYS) },
+        OR: [{ closedAt: null }, { closedResult: 'LOST', outcome: 'NOT_INTERESTED' }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const held = new Set<string>();
+    const due = new Map<string, (typeof answers)[number]>();
+    for (const a of answers) {
+      if (held.has(a.memberId) || due.has(a.memberId)) continue;
+      if (a.closedAt) {
+        if (differenceInCalendarDays(today, a.createdAt) < NOT_INTERESTED_DAYS) held.add(a.memberId);
+      } else if (!a.followUpAt || a.followUpAt > endOfDay(today)) {
+        held.add(a.memberId);
+      } else {
+        due.set(a.memberId, a);
+      }
+    }
+    for (const [memberId, a] of due) {
+      if (drafts.has(memberId)) continue;
+      const said = OUTCOME_LABEL[a.outcome as OutreachOutcome] ?? a.outcome;
+      add({
+        memberId,
+        reason: 'FOLLOW_UP',
+        title: `Rappel prévu ${when(a.followUpAt!, today)}`,
+        detail: `A dit « ${said} »${a.note ? ` · ${a.note}` : ''}`,
+        value: 0,
+        owed: 0,
+        ctx: {},
+      });
+    }
+
     const ids = [...drafts.keys()];
     const [people, pushRows, contacts] = await Promise.all([
       this.prisma.member.findMany({
@@ -369,9 +432,12 @@ export class OutreachService {
       const mine = contacts.filter((c) => c.memberId === d.memberId);
       const last = mine[0];
       const sameReason = mine.find((c) => c.reason === d.reason);
+      const answer = due.get(d.memberId);
       const snoozed =
-        !!sameReason &&
-        differenceInCalendarDays(today, sameReason.createdAt) < SNOOZE_DAYS[d.reason];
+        held.has(d.memberId) ||
+        (!answer &&
+          !!sameReason &&
+          differenceInCalendarDays(today, sameReason.createdAt) < SNOOZE_DAYS[d.reason]);
       const { ctx, ...rest } = d;
       items.push({
         ...rest,
@@ -389,10 +455,21 @@ export class OutreachService {
         profileType: p.profileType,
         awayReason: p.awayReason,
         recallAt: p.recallAt ? p.recallAt.toISOString() : null,
+        followUp: answer
+          ? {
+              outreachId: answer.id,
+              outcome: answer.outcome!,
+              note: answer.note,
+              contactedAt: answer.createdAt.toISOString(),
+              at: answer.followUpAt!.toISOString(),
+            }
+          : null,
       });
     }
+    // Promised call-backs first, then by reason and money at stake
     items.sort(
       (a, b) =>
+        Number(!!b.followUp) - Number(!!a.followUp) ||
         OUTREACH_REASONS.indexOf(a.reason) - OUTREACH_REASONS.indexOf(b.reason) ||
         b.value - a.value,
     );
@@ -574,6 +651,8 @@ export class OutreachService {
           ? `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}, c'est autant que l'${topUp.plan.name} (${money(topUp.plan.price)}). On vous le passe en abonnement sans rien payer de plus ?${debt}`
           : `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}. Pour seulement ${money(topUp.remaining)} de plus, vous passez à l'${topUp.plan.name} (${money(topUp.plan.price)}) : vos passes sont déduits. On vous le prépare ?${debt}`;
       }
+      case 'FOLLOW_UP':
+        return `${hi}, je reviens vers vous comme convenu de la part de ${c.place}. Vous avez pu y réfléchir ?${debt}`;
       case 'REVIEW':
         return `${hi}, merci pour vos ${c.visits} visites chez ${c.place} ! Si vous aimez l'espace, un petit avis Google nous aiderait énormément (30 secondes) : ${c.url}`;
       case 'CONVERT': {
@@ -715,7 +794,7 @@ export class OutreachService {
     if (!body.memberId) throw new BadRequestException('memberId requis');
     if (!OUTREACH_REASONS.includes(reason)) throw new BadRequestException('Motif invalide');
     if (!OUTREACH_CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
-    return this.prisma.memberOutreach.create({
+    const row = await this.prisma.memberOutreach.create({
       data: {
         memberId: body.memberId,
         reason,
@@ -723,6 +802,228 @@ export class OutreachService {
         message: body.message?.slice(0, 2000) || null,
       },
     });
+    if (channel !== 'SKIP') await this.replaceOpen(body.memberId, row.id);
+    return row;
+  }
+
+  /** One open Suivi per member: a newer contact takes over the older ones. */
+  private replaceOpen(memberId: string, keepId: string) {
+    return this.prisma.memberOutreach.updateMany({
+      where: { memberId, id: { not: keepId }, closedAt: null, channel: { not: 'SKIP' }, campaignId: null },
+      data: { closedAt: new Date(), closedResult: 'REPLACED' },
+    });
+  }
+
+  /**
+   * Staff mark a relance as handled: the member's answer, a note, the day to call back.
+   * Fills the contact just logged (WhatsApp, push…) when there is one, else records a call.
+   */
+  async answer(body: {
+    memberId?: string;
+    reason?: string;
+    outreachId?: string;
+    outcome?: string;
+    note?: string | null;
+    followUpAt?: string | null;
+  }) {
+    if (!body.memberId) throw new BadRequestException('memberId requis');
+    const outcome = body.outcome as OutreachOutcome;
+    if (!OUTREACH_OUTCOMES.includes(outcome)) throw new BadRequestException('Réponse invalide');
+    const now = new Date();
+    const lost = outcome === 'NOT_INTERESTED';
+    const data = {
+      outcome,
+      note: body.note?.trim().slice(0, 500) || null,
+      followUpAt: !lost && body.followUpAt ? parseLocalDay(body.followUpAt.slice(0, 10)) : null,
+      closedAt: lost ? now : null,
+      closedResult: lost ? 'LOST' : null,
+      closedAuto: false,
+    };
+    const target = body.outreachId
+      ? await this.prisma.memberOutreach.findFirst({ where: { id: body.outreachId, memberId: body.memberId } })
+      : await this.prisma.memberOutreach.findFirst({
+          where: {
+            memberId: body.memberId,
+            outcome: null,
+            closedAt: null,
+            campaignId: null,
+            channel: { not: 'SKIP' },
+            createdAt: { gte: subDays(startOfDay(now), 30) },
+          },
+          orderBy: { createdAt: 'desc' },
+        });
+    let row;
+    if (target) {
+      row = await this.prisma.memberOutreach.update({ where: { id: target.id }, data });
+    } else {
+      const reason = body.reason as OutreachReason;
+      if (!OUTREACH_REASONS.includes(reason)) throw new BadRequestException('Motif invalide');
+      row = await this.prisma.memberOutreach.create({
+        data: { memberId: body.memberId, reason, channel: 'CALL', ...data },
+      });
+    }
+    await this.replaceOpen(body.memberId, row.id);
+    return row;
+  }
+
+  /** Close a Suivi by hand: converted or not. */
+  async close(id: string, result?: string) {
+    if (result !== 'WON' && result !== 'LOST') throw new BadRequestException('Résultat invalide');
+    return this.prisma.memberOutreach.update({
+      where: { id },
+      data: { closedAt: new Date(), closedResult: result, closedAuto: false },
+    });
+  }
+
+  /** Open relances close themselves when the member takes an abonnement (or pays, for impayés). */
+  private async autoClose(today: Date) {
+    const open = await this.prisma.memberOutreach.findMany({
+      where: {
+        closedAt: null,
+        campaignId: null,
+        channel: { not: 'SKIP' },
+        createdAt: { gte: subDays(today, SUIVI_DAYS) },
+      },
+      select: { id: true, memberId: true, reason: true, createdAt: true },
+    });
+    if (!open.length) return;
+    const ids = [...new Set(open.map((o) => o.memberId))];
+    const since = open.reduce((a, o) => (o.createdAt < a ? o.createdAt : a), open[0].createdAt);
+    const [abos, aboPayments, paidVisits] = await Promise.all([
+      this.prisma.abonnement.findMany({
+        where: { memberID: { in: ids }, isReservation: false, createdAt: { gt: since } },
+        select: { memberID: true, createdAt: true },
+      }),
+      this.prisma.abonnementPayment.findMany({
+        where: { abonnement: { memberID: { in: ids } }, paidAt: { gt: since } },
+        select: { paidAt: true, abonnement: { select: { memberID: true } } },
+      }),
+      this.prisma.journal.findMany({
+        where: { memberID: { in: ids }, isPayed: true, paidAt: { gt: since } },
+        select: { memberID: true, paidAt: true, registredTime: true },
+      }),
+    ]);
+    const won = open.filter((o) => {
+      if (abos.some((a) => a.memberID === o.memberId && a.createdAt > o.createdAt)) return true;
+      if (o.reason !== 'UNPAID') return false;
+      return (
+        aboPayments.some((p) => p.abonnement.memberID === o.memberId && p.paidAt > o.createdAt) ||
+        paidVisits.some(
+          (v) => v.memberID === o.memberId && v.paidAt! > o.createdAt && v.registredTime < o.createdAt,
+        )
+      );
+    });
+    if (won.length) {
+      await this.prisma.memberOutreach.updateMany({
+        where: { id: { in: won.map((w) => w.id) } },
+        data: { closedAt: new Date(), closedResult: 'WON', closedAuto: true },
+      });
+    }
+  }
+
+  /**
+   * Suivi tab: one row per contacted member (latest contact), with what happened since —
+   * abonnement taken, visits at the tarif, payment. OPEN = waiting, CLOSED = converted or not.
+   */
+  async suivi(opts: { status?: string; page?: number; perPage?: number }) {
+    const now = new Date();
+    const today = startOfDay(now);
+    await this.autoClose(today);
+    const rows = await this.prisma.memberOutreach.findMany({
+      where: {
+        campaignId: null,
+        channel: { not: 'SKIP' },
+        createdAt: { gte: subDays(today, SUIVI_DAYS) },
+        OR: [{ closedResult: null }, { closedResult: { not: 'REPLACED' } }],
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const latest = new Map<string, (typeof rows)[number]>();
+    for (const r of rows) if (!latest.has(r.memberId)) latest.set(r.memberId, r);
+    const isOpen = (r: (typeof rows)[number]) =>
+      !r.closedAt &&
+      (!!r.outcome ||
+        differenceInCalendarDays(today, r.createdAt) < (SNOOZE_DAYS[r.reason as OutreachReason] ?? 7));
+    const isDue = (r: (typeof rows)[number]) => !!r.followUpAt && r.followUpAt <= endOfDay(today);
+    const open = [...latest.values()]
+      .filter(isOpen)
+      .sort(
+        (a, b) =>
+          Number(isDue(b)) - Number(isDue(a)) ||
+          (a.followUpAt?.getTime() ?? Infinity) - (b.followUpAt?.getTime() ?? Infinity) ||
+          b.createdAt.getTime() - a.createdAt.getTime(),
+      );
+    const closed = [...latest.values()]
+      .filter((r) => r.closedAt && (r.closedResult === 'WON' || r.closedResult === 'LOST'))
+      .sort((a, b) => b.closedAt!.getTime() - a.closedAt!.getTime());
+    const status = opts.status === 'CLOSED' ? 'CLOSED' : 'OPEN';
+    const list = status === 'OPEN' ? open : closed;
+    const perPage = Math.min(100, Math.max(5, opts.perPage || 20));
+    const lastPage = Math.max(1, Math.ceil(list.length / perPage));
+    const page = Math.min(lastPage, Math.max(1, opts.page || 1));
+    const slice = list.slice((page - 1) * perPage, page * perPage);
+    const ids = slice.map((r) => r.memberId);
+    const since = slice.reduce<Date>((a, r) => (r.createdAt < a ? r.createdAt : a), now);
+
+    const [people, abos, visits] = await Promise.all([
+      this.prisma.member.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      }),
+      this.prisma.abonnement.findMany({
+        where: { memberID: { in: ids }, isReservation: false, createdAt: { gt: since } },
+        select: { memberID: true, createdAt: true, serviceName: true, price: { select: { name: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.journal.findMany({
+        where: { memberID: { in: ids }, isReservation: false, registredTime: { gt: since } },
+        select: { memberID: true, registredTime: true, payedAmount: true },
+      }),
+    ]);
+    const person = new Map(people.map((p) => [p.id, p]));
+    const won = closed.filter((r) => r.closedResult === 'WON').length;
+    return {
+      rows: slice.map((r) => {
+        const p = person.get(r.memberId);
+        const until = r.closedAt ?? now;
+        const abo = abos.find((a) => a.memberID === r.memberId && a.createdAt > r.createdAt && a.createdAt <= until);
+        const mine = visits.filter(
+          (v) => v.memberID === r.memberId && v.registredTime > r.createdAt && v.registredTime <= until,
+        );
+        const lastVisit = mine.reduce<Date | null>((a, v) => (!a || v.registredTime > a ? v.registredTime : a), null);
+        return {
+          id: r.id,
+          memberId: r.memberId,
+          name: [p?.firstName, p?.lastName].filter(Boolean).join(' ') || 'Client',
+          firstName: p?.firstName?.trim() || '',
+          phone: p?.phone ?? null,
+          whatsapp: whatsappNumber(p?.phone),
+          reason: r.reason,
+          channel: r.channel,
+          outcome: r.outcome,
+          note: r.note,
+          contactedAt: r.createdAt.toISOString(),
+          followUpAt: r.followUpAt?.toISOString() ?? null,
+          due: !r.closedAt && isDue(r),
+          closedAt: r.closedAt?.toISOString() ?? null,
+          closedResult: r.closedResult,
+          closedAuto: r.closedAuto,
+          since: {
+            abonnement: abo ? { name: abo.serviceName || abo.price?.name || 'Abonnement', at: abo.createdAt.toISOString() } : null,
+            visits: mine.length,
+            spent: round1(mine.reduce((a, v) => a + (v.payedAmount || 0), 0)),
+            lastVisit: lastVisit?.toISOString() ?? null,
+          },
+        };
+      }),
+      counts: {
+        OPEN: open.length,
+        CLOSED: closed.length,
+        due: open.filter(isDue).length,
+        won,
+      },
+      meta: { currentPage: page, lastPage, perPage, total: list.length },
+    };
   }
 
   async sendPush(body: { memberId?: string; reason?: string; message?: string; title?: string }) {
