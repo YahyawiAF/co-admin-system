@@ -29,9 +29,11 @@ import type { Journal } from "@/lib/types";
 import {
   isActiveVisit,
   isJournalPack,
+  memberOf,
   visitAmountDue,
   visitPaidAmount,
 } from "@/lib/journal-utils";
+import { memberDiscountPercent } from "@/lib/member-discount";
 import { JournalPricingTimeline } from "@/components/admin/JournalPricingCells";
 
 const schema = z.object({
@@ -405,13 +407,16 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
             <div className="space-y-2">
               <Label>Forfait</Label>
               <div className="grid max-h-40 gap-2 overflow-y-auto sm:grid-cols-2">
-                {journalPacks.slice(0, 12).map((p) => (
+                {journalPacks.slice(0, 12).map((p) => {
+                  const pct = memberDiscountPercent(journal ? memberOf(journal) : null, p);
+                  const amount = Math.round((p.price || 0) * (1 - pct / 100) * 1000) / 1000;
+                  return (
                     <button
                       key={p.id}
                       type="button"
                       onClick={() => {
                         form.setValue("priceId", p.id, { shouldDirty: true });
-                        setDue(p.price);
+                        setDue(amount);
                       }}
                       className={cn(
                         "flex items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors duration-150 hover:bg-muted/60",
@@ -426,9 +431,17 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
                           </span>
                         ) : null}
                       </span>
-                      <span className="font-semibold">{p.price} DT</span>
+                      <span className="text-right font-semibold tabular-nums">
+                        {pct > 0 ? (
+                          <span className="mr-1 text-xs font-normal text-muted-foreground line-through">
+                            {p.price}
+                          </span>
+                        ) : null}
+                        {amount} DT
+                      </span>
                     </button>
-                  ))}
+                  );
+                })}
               </div>
             </div>
 

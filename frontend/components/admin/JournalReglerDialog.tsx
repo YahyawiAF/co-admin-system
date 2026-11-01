@@ -333,7 +333,9 @@ export function JournalReglerDialog({
                       compact
                     >
                       <span className="font-semibold">{t.name}</span>{" "}
-                      <span className="tabular-nums opacity-75">{formatDt(t.price)}</span>
+                      <span className="tabular-nums opacity-75">
+                        {formatDt(round3(t.price * (1 - (row.pricing?.discountPercent || 0) / 100)))}
+                      </span>
                     </Choice>
                   ))}
                 </div>
@@ -444,6 +446,13 @@ export function JournalReglerDialog({
               ) : (
                 <>
                   <Line label={visitLine} value={formatDt(visitAmount)} />
+                  {row.pricing?.discountPercent ? (
+                    <Line
+                      label={`Remise membre −${row.pricing.discountPercent}% incluse`}
+                      value=""
+                      muted
+                    />
+                  ) : null}
                   {alreadyPaid > 0.0005 ? (
                     <Line label="Déjà payé" value={`− ${formatDt(alreadyPaid)}`} muted />
                   ) : null}
