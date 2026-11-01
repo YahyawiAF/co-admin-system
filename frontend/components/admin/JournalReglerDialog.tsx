@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Check, Receipt, Wallet } from "lucide-react";
+import { Check, Gift, Receipt, Wallet } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -70,6 +70,9 @@ export function JournalReglerDialog({
   const [tierId, setTierId] = useState<string | null>(null);
   const [lateMode, setLateMode] = useState<LateBillingMode>("now");
   const [skipDebt, setSkipDebt] = useState<Set<string>>(new Set());
+  /** "Offert": staff gives part of the visit away — collected less, no debt */
+  const [offerOn, setOfferOn] = useState(false);
+  const [received, setReceived] = useState("");
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -82,6 +85,8 @@ export function JournalReglerDialog({
     setTierId(null);
     setLateMode("now");
     setSkipDebt(new Set());
+    setOfferOn(false);
+    setReceived("");
   }, [row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: ledger } = useQuery({
@@ -165,6 +170,13 @@ export function JournalReglerDialog({
     debts.filter((d) => !skipDebt.has(d.id)).reduce((s, d) => s + d.amount, 0)
   );
   const total = round3(visitDue + debtTotal);
+  const receivedNum = Number(String(received).replace(",", "."));
+  /** Given away: only the visit, never older debts. */
+  const offered =
+    offerOn && received.trim() !== "" && Number.isFinite(receivedNum)
+      ? round3(Math.min(visitDue, Math.max(0, total - receivedNum)))
+      : 0;
+  const toCollect = round3(total - offered);
 
   const done = (msg: string) => {
     toast.success(msg);
@@ -187,21 +199,30 @@ export function JournalReglerDialog({
     mutationFn: async () => {
       await applyTier();
       if (present) {
-        if (leaveAtMs == null) await mobileApi.setPayment(row!.id, true);
+        if (leaveAtMs == null) await mobileApi.setPayment(row!.id, true, undefined, offered);
         else
           await mobileApi.checkout(row!.id, {
             leaveAt: new Date(leaveAtMs).toISOString(),
             isPayed: true,
+            ...(offered > 0 ? { offeredAmount: offered } : {}),
           });
       } else {
         // New pass on a finished visit is billed at the departure time
-        await mobileApi.setPayment(row!.id, true, pickedTier ? "checkout" : lateMode);
+        await mobileApi.setPayment(
+          row!.id,
+          true,
+          pickedTier ? "checkout" : lateMode,
+          offered,
+        );
       }
       for (const d of debts) {
         if (!skipDebt.has(d.id)) await membersApi.settleLedger(d.id, true);
       }
     },
-    onSuccess: () => done(`Encaissé · ${formatDt(total)}`),
+    onSuccess: () =>
+      done(
+        `Encaissé · ${formatDt(toCollect)}${offered > 0 ? ` · offert ${formatDt(offered)}` : ""}`
+      ),
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -361,9 +382,65 @@ export function JournalReglerDialog({
               </Section>
             ) : null}
 
+            {!paid && visitDue > 0.0005 ? (
+              <Section title="Remise offerte" icon={<Gift className="h-3.5 w-3.5" />}>
+                <div className="flex flex-wrap gap-1.5">
+                  <Choice active={!offerOn} onClick={() => setOfferOn(false)} compact>
+                    <span className="font-semibold">Prix complet</span>
+                  </Choice>
+                  <Choice
+                    active={offerOn}
+                    onClick={() => {
+                      setOfferOn(true);
+                      if (!received) setReceived(String(Math.floor(total)));
+                    }}
+                    compact
+                  >
+                    <span className="font-semibold">Offrir une partie</span>{" "}
+                    <span className="opacity-75">· sans dette</span>
+                  </Choice>
+                </div>
+                <Reveal show={offerOn}>
+                  <div className="flex flex-wrap items-end gap-2 pt-2">
+                    <div className="space-y-1">
+                      <label htmlFor="regler-received" className="text-[11px] text-muted-foreground">
+                        Montant reçu (DT)
+                      </label>
+                      <Input
+                        id="regler-received"
+                        inputMode="decimal"
+                        value={received}
+                        onChange={(e) => setReceived(e.target.value)}
+                        className="h-9 w-28"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      onClick={() => setReceived(String(debtTotal))}
+                    >
+                      Visite gratuite
+                    </Button>
+                    <p className="pb-2 text-[11px] text-muted-foreground">
+                      {offered > 0
+                        ? `${formatDt(offered)} offert par vous · pas de reste à payer`
+                        : "Tapez ce que le client a donné"}
+                    </p>
+                  </div>
+                </Reveal>
+              </Section>
+            ) : null}
+
             <div className="space-y-1 rounded-xl bg-muted/60 px-3 py-2.5 text-sm">
               {paid ? (
-                <Line label="Payé" value={formatDt(visitAmount)} strong />
+                <>
+                  <Line label="Payé" value={formatDt(visitAmount)} strong />
+                  {row.offeredAmount ? (
+                    <Line label="Offert" value={formatDt(row.offeredAmount)} muted />
+                  ) : null}
+                </>
               ) : (
                 <>
                   <Line label={visitLine} value={formatDt(visitAmount)} />
@@ -371,8 +448,11 @@ export function JournalReglerDialog({
                     <Line label="Déjà payé" value={`− ${formatDt(alreadyPaid)}`} muted />
                   ) : null}
                   {debtTotal > 0.0005 ? <Line label="Dettes" value={`+ ${formatDt(debtTotal)}`} /> : null}
+                  {offered > 0 ? (
+                    <Line label="Offert" value={`− ${formatDt(offered)}`} tone="gift" />
+                  ) : null}
                   <div className="my-1 border-t" />
-                  <Line label="À encaisser" value={formatDt(total)} strong />
+                  <Line label="À encaisser" value={formatDt(toCollect)} strong />
                 </>
               )}
             </div>
@@ -423,7 +503,7 @@ export function JournalReglerDialog({
                 onClick={() => collect.mutate()}
               >
                 <Check className="h-4 w-4" />
-                Encaisser {formatDt(total)}
+                Encaisser {formatDt(toCollect)}
               </Button>
             </>
           )}
@@ -510,18 +590,22 @@ function Line({
   value,
   strong,
   muted,
+  tone,
 }: {
   label: string;
   value: string;
   strong?: boolean;
   muted?: boolean;
+  tone?: "gift";
 }) {
   return (
     <div
       className={cn(
         "flex justify-between gap-3",
         strong && "text-base font-bold",
-        muted && "text-xs text-muted-foreground"
+        muted && "text-xs text-muted-foreground",
+        tone === "gift" &&
+          "font-medium text-emerald-700 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:text-emerald-400"
       )}
     >
       <span>{label}</span>

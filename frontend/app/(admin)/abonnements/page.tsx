@@ -464,6 +464,28 @@ function AbonnementsInner() {
     return remised == null ? null : Math.max(0, Math.round((remised - credit) * 100) / 100);
   };
 
+  /**
+   * Price owed before any gift. Editing with the same tarif and member: the
+   * stored price (keeps a top-up credit), plus the gift already given.
+   */
+  const formCatalog = (priceId: string, memberId: string) => {
+    if (
+      editing &&
+      editing.amountDue != null &&
+      editing.priceId === priceId &&
+      editing.memberID === memberId
+    ) {
+      return Math.round((editing.amountDue + (editing.offeredAmount || 0)) * 100) / 100;
+    }
+    return amountDueFor(priceId, memberId, editing ? 0 : passCredit);
+  };
+
+  /** Paid less than the price: the rest is still owed, or given away by staff ("Offert"). */
+  const [restMode, setRestMode] = useState<"debt" | "gift">("debt");
+  useEffect(() => {
+    if (open) setRestMode((editing?.offeredAmount || 0) > 0 ? "gift" : "debt");
+  }, [open, editing]);
+
   const syncPaidAmount = () => {
     const due = amountDueFor(form.getValues("priceId"), form.getValues("memberID"));
     if (due == null) return;
@@ -596,11 +618,16 @@ function AbonnementsInner() {
           ? parseLocalDay(v.leaveDate)
           : leaveDateFromPeriodStart(start, price?.periodDays || 30),
       );
-      const catalog = amountDueFor(v.priceId, v.memberID, editing ? 0 : passCredit) ?? 0;
+      const catalog = formCatalog(v.priceId, v.memberID) ?? 0;
       let payedAmount = Number(v.payedAmount || 0);
       let isPayed = v.isPayed;
+      const short = Math.round((catalog - payedAmount) * 100) / 100;
+      // "Offert": the missing part is a gift → paid, nothing left to collect
+      const gift = restMode === "gift" && short > 0.009 ? short : 0;
       // payedAmount = already received. Remaining = catalog − payedAmount.
-      if (isPayed) {
+      if (gift > 0) {
+        isPayed = true;
+      } else if (isPayed) {
         if (payedAmount < catalog - 0.009) {
           isPayed = false;
         } else {
@@ -625,6 +652,7 @@ function AbonnementsInner() {
         reservedSeatLabel: v.reservedSeatLabel?.trim() || null,
         reservedSeatSpaceId: v.reservedSeatSpaceId?.trim() || null,
         ...(!editing && passCredit > 0 ? { passCredit } : {}),
+        ...(gift > 0 || (editing?.offeredAmount || 0) > 0 ? { offeredAmount: gift } : {}),
       };
       return editing
         ? abonnementsApi.update(editing.id, payload)
@@ -958,7 +986,9 @@ function AbonnementsInner() {
                         ? Math.round(listPrice * (1 - pct / 100) * 100) / 100
                         : listPrice;
                     const credit = editing ? 0 : Math.min(passCredit, remisedCatalog);
-                    const catalog = Math.round((remisedCatalog - credit) * 100) / 100;
+                    const catalog =
+                      formCatalog(form.watch("priceId"), form.watch("memberID")) ??
+                      Math.round((remisedCatalog - credit) * 100) / 100;
                     const received = Number(form.watch("payedAmount") || 0);
                     const remaining = Math.max(0, catalog - received);
                     if (!listPrice) return null;
@@ -981,7 +1011,12 @@ function AbonnementsInner() {
                         ) : (
                           <>Tarif : {catalog} DT</>
                         )}
-                        {remaining > 0.009 ? (
+                        {remaining > 0.009 && restMode === "gift" ? (
+                          <span className="font-medium text-emerald-700">
+                            {" "}
+                            · {remaining.toFixed(1)} DT offert · soldé
+                          </span>
+                        ) : remaining > 0.009 ? (
                           <span className="font-medium text-rose-700">
                             {" "}
                             · reste à payer {remaining.toFixed(1)} DT
@@ -989,6 +1024,42 @@ function AbonnementsInner() {
                         ) : (
                           <span className="text-emerald-700"> · soldé</span>
                         )}
+                        <span
+                          className={cn(
+                            "grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none",
+                            remaining > 0.009 ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                          )}
+                          aria-hidden={remaining <= 0.009}
+                        >
+                          <span className="block overflow-hidden">
+                            <span className="mt-2 grid grid-cols-2 gap-1.5">
+                              {(
+                                [
+                                  { id: "debt", label: "Reste à payer", hint: "le client doit encore" },
+                                  { id: "gift", label: "Offert", hint: "par moi, pas de dette" },
+                                ] as const
+                              ).map((o) => (
+                                <button
+                                  key={o.id}
+                                  type="button"
+                                  aria-pressed={restMode === o.id}
+                                  onClick={() => setRestMode(o.id)}
+                                  className={cn(
+                                    "rounded-md border px-2 py-1.5 text-left text-xs text-foreground transition-[background-color,border-color,box-shadow] duration-150 motion-reduce:transition-none",
+                                    restMode === o.id
+                                      ? o.id === "gift"
+                                        ? "border-emerald-500 bg-emerald-50 shadow-[inset_0_0_0_1px_theme(colors.emerald.500)] dark:bg-emerald-950/40"
+                                        : "border-rose-400 bg-rose-50 shadow-[inset_0_0_0_1px_theme(colors.rose.400)] dark:bg-rose-950/40"
+                                      : "bg-background hover:bg-muted/70",
+                                  )}
+                                >
+                                  <span className="block font-semibold">{o.label}</span>
+                                  <span className="block text-[10px] opacity-75">{o.hint}</span>
+                                </button>
+                              ))}
+                            </span>
+                          </span>
+                        </span>
                       </p>
                     );
                   })()}
@@ -1311,7 +1382,17 @@ function AbonnementsInner() {
                           return (
                             <div className="flex flex-wrap items-center gap-1">
                               {a.isPayed ? (
-                                <Badge variant="default">Payé</Badge>
+                                <>
+                                  <Badge variant="default">Payé</Badge>
+                                  {(a.offeredAmount || 0) > 0 ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-emerald-400 text-emerald-800 dark:text-emerald-300"
+                                    >
+                                      Offert {Number(a.offeredAmount).toFixed(1)} DT
+                                    </Badge>
+                                  ) : null}
+                                </>
                               ) : remaining > 0.009 && received > 0.009 ? (
                                 <Badge
                                   variant="secondary"

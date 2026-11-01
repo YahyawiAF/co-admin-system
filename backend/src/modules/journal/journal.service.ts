@@ -438,8 +438,34 @@ export class JournalService {
 
       const existing = await this.prisma.journal.findUnique({ where: { id } });
       const data: Prisma.JournalUncheckedUpdateInput = { ...updateJournalDto };
+      // "Offert": payedAmount is sent after the gift; the tarif itself stays the full price
+      const offered =
+        updateJournalDto.offeredAmount === undefined
+          ? undefined
+          : Math.round(Math.max(0, Number(updateJournalDto.offeredAmount) || 0) * 1000) / 1000;
+      const fullBefore = existing
+        ? (existing.payedAmount || 0) + (existing.offeredAmount || 0)
+        : 0;
+      const fullDue =
+        offered === undefined
+          ? undefined
+          : updateJournalDto.payedAmount != null
+            ? Number(updateJournalDto.payedAmount) + offered
+            : fullBefore;
       if (existing) {
-        Object.assign(data, await this.tariffEditSnapshot(existing, updateJournalDto));
+        Object.assign(
+          data,
+          await this.tariffEditSnapshot(
+            { ...existing, payedAmount: fullBefore },
+            fullDue === undefined
+              ? updateJournalDto
+              : { ...updateJournalDto, payedAmount: fullDue },
+          ),
+        );
+      }
+      if (fullDue !== undefined && offered !== undefined) {
+        data.payedAmount = Math.round(Math.max(0, fullDue - offered) * 1000) / 1000;
+        data.offeredAmount = offered > 0.0005 ? offered : null;
       }
       if (updateJournalDto.isPayed === false) {
         data.paidAmount = 0;
@@ -447,10 +473,14 @@ export class JournalService {
       } else if (
         updateJournalDto.isPayed === true &&
         updateJournalDto.paidAmount === undefined &&
-        (!existing?.isPayed || updateJournalDto.payedAmount !== undefined)
+        (!existing?.isPayed ||
+          updateJournalDto.payedAmount !== undefined ||
+          offered !== undefined)
       ) {
         data.paidAmount =
-          updateJournalDto.payedAmount ?? existing?.payedAmount ?? 0;
+          offered !== undefined
+            ? (data.payedAmount as number)
+            : updateJournalDto.payedAmount ?? existing?.payedAmount ?? 0;
         if (!existing?.isPayed) data.paidAt = new Date();
       } else if (updateJournalDto.isPayed === true && !existing?.isPayed) {
         data.paidAt = new Date();

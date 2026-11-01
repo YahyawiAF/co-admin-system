@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -74,6 +74,10 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
     enabled: open && !!memberId,
   });
 
+  /** Paid less than the tarif: the rest is a debt, or a gift from staff ("Offert"). */
+  const [restMode, setRestMode] = useState<"debt" | "gift">("debt");
+  const [restModeDirty, setRestModeDirty] = useState(false);
+
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -90,7 +94,11 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
   useEffect(() => {
     if (!journal) return;
     // Show the live amount owed (auto / pass pricing), not a stale stored one
-    const due = Math.round(visitAmountDue(journal) * 1000) / 1000;
+    const gift = journal.isPayed ? journal.offeredAmount || 0 : 0;
+    // A past gift is shown as: full tarif, paid less, rest "Offert"
+    const due = Math.round((visitAmountDue(journal) + gift) * 1000) / 1000;
+    setRestMode(gift > 0 || !memberId ? "gift" : "debt");
+    setRestModeDirty(false);
     form.reset({
       priceId: journal.priceId || journal.prices?.id || journal.price?.id || "",
       registredTime: toLocalInput(journal.registredTime),
@@ -100,7 +108,7 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
       paidAmount: journal.isPayed ? visitPaidAmount(journal) || due : due,
       isReservation: journal.isReservation,
     });
-  }, [journal, form]);
+  }, [journal, form]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const leaveTime = form.watch("leaveTime");
   const priceId = form.watch("priceId");
@@ -138,6 +146,10 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
       const tariffEdited = !!dirty.priceId || !!dirty.payedAmount;
       const due = Number(values.payedAmount) || 0;
       const paid = Number(values.paidAmount) || 0;
+      const short = Math.round((due - paid) * 1000) / 1000;
+      const gift = values.isPayed && restMode === "gift" && short > 0.009 ? short : 0;
+      const hadGift = (journal!.offeredAmount || 0) > 0;
+      const giftChanged = gift > 0 || hadGift;
 
       await journalApi.update(journal!.id, {
         registredTime: new Date(values.registredTime).toISOString(),
@@ -146,15 +158,19 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
           : null,
         isPayed: values.isPayed,
         isReservation: values.isReservation,
-        ...(tariffEdited
-          ? { priceId: values.priceId, payedAmount: due }
-          : {}),
+        ...(tariffEdited ? { priceId: values.priceId } : {}),
+        // With a gift, payedAmount is sent after it (the server keeps the full tarif)
+        ...(giftChanged
+          ? { payedAmount: due - gift, offeredAmount: gift }
+          : tariffEdited
+            ? { payedAmount: due }
+            : {}),
         ...(values.isPayed ? { paidAmount: paid } : {}),
       });
 
       const paymentEdited =
-        tariffEdited || !!dirty.isPayed || !!dirty.paidAmount;
-      if (values.isPayed && paymentEdited && mid && due > 0) {
+        tariffEdited || !!dirty.isPayed || !!dirty.paidAmount || restModeDirty;
+      if (values.isPayed && paymentEdited && mid && due > 0 && !gift) {
         const diff = Math.round((paid - due) * 100) / 100;
         if (diff > 0.009) {
           await membersApi.addLedger(mid, {
@@ -528,9 +544,56 @@ export function JournalEditSheet({ journal, open, onOpenChange }: Props) {
                     />
                     <p className="pt-1 text-[11px] text-muted-foreground">
                       Encaissé.
-                      {payDiff < -0.009 ? ` Moins → ${Math.abs(payDiff).toFixed(1)} DT en dette.` : ""}
                       {payDiff > 0.009 ? ` Plus → ${payDiff.toFixed(1)} DT d’avoir.` : ""}
                     </p>
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-200 motion-reduce:transition-none",
+                        payDiff < -0.009 ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                      )}
+                      aria-hidden={!(payDiff < -0.009)}
+                    >
+                      <div className="overflow-hidden">
+                        <p className="pt-2 text-[11px] font-medium">
+                          Les {Math.abs(payDiff).toFixed(1)} DT manquants :
+                        </p>
+                        <div className="mt-1 grid grid-cols-2 gap-1.5">
+                          {(
+                            [
+                              { id: "gift", label: "Offert", hint: "par moi, pas de dette" },
+                              { id: "debt", label: "Dette", hint: "à payer plus tard" },
+                            ] as const
+                          ).map((o) => {
+                            const disabled = o.id === "debt" && !memberId;
+                            return (
+                              <button
+                                key={o.id}
+                                type="button"
+                                disabled={disabled}
+                                aria-pressed={restMode === o.id}
+                                onClick={() => {
+                                  setRestMode(o.id);
+                                  setRestModeDirty(true);
+                                }}
+                                className={cn(
+                                  "rounded-md border px-2 py-1.5 text-left text-xs transition-[background-color,border-color,box-shadow] duration-150 motion-reduce:transition-none disabled:cursor-not-allowed disabled:opacity-40",
+                                  restMode === o.id
+                                    ? o.id === "gift"
+                                      ? "border-emerald-500 bg-emerald-50 shadow-[inset_0_0_0_1px_theme(colors.emerald.500)] dark:bg-emerald-950/40"
+                                      : "border-rose-400 bg-rose-50 shadow-[inset_0_0_0_1px_theme(colors.rose.400)] dark:bg-rose-950/40"
+                                    : "bg-background hover:bg-muted/70"
+                                )}
+                              >
+                                <span className="block font-semibold">{o.label}</span>
+                                <span className="block text-[10px] opacity-75">
+                                  {disabled ? "visiteur anonyme" : o.hint}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 {!isPayed ? (

@@ -1147,7 +1147,10 @@ export const mobileApi = {
   }) {
     return http.post("/mobile/admin/move-seat", data);
   },
-  checkout(id: string, opts?: { leaveAt?: string; isPayed?: boolean }) {
+  checkout(
+    id: string,
+    opts?: { leaveAt?: string; isPayed?: boolean; offeredAmount?: number },
+  ) {
     return http.patch<{
       id: string;
       payedAmount?: number;
@@ -1188,13 +1191,18 @@ export const mobileApi = {
       skipAuth: true,
     });
   },
-  setPayment(id: string, isPayed: boolean, billing?: LateBillingMode) {
+  /** offeredAmount: part of the price given away ("Offert"), not a debt. */
+  setPayment(id: string, isPayed: boolean, billing?: LateBillingMode, offeredAmount?: number) {
     return http.patch<{
       id: string;
       pointsAwarded?: number;
       newTrophies?: string[];
       memberPoints?: number;
-    }>(`/mobile/session/${id}/payment`, { isPayed, billing });
+    }>(`/mobile/session/${id}/payment`, {
+      isPayed,
+      billing,
+      ...(offeredAmount ? { offeredAmount } : {}),
+    });
   },
   register(data: {
     phone: string;

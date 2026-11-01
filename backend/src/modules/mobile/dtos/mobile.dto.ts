@@ -179,6 +179,12 @@ export class CheckoutSessionDto {
   @IsOptional()
   @IsString()
   leaveAt?: string;
+
+  /** Part of the visit price given away ("Offert", DT) when paying now. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  offeredAmount?: number;
 }
 
 export class StartAutoSessionDto {

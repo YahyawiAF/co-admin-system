@@ -385,6 +385,8 @@ model Journal {
   priceBeforePromo   Float?
   promoDiscount      Float?
   promoLabel         String?
+  /// Part of the price given away by staff ("Offert"): payedAmount is already reduced by it, not a debt
+  offeredAmount      Float?
   /// Per check-in code (QR on the visitor session screen); not unique — lookups prefer today's open visit
   checkInCode        String             @default(dbgenerated("gen_checkin_code()"))
   /// Hidden by a staff member (delete in "hide" mode) — invisible to staff, waits for admin review
@@ -428,6 +430,8 @@ model Abonnement {
   discountPercent     Float?
   /// Price owed after discounts (payedAmount = collected so far)
   amountDue           Float?
+  /// Part of the price given away by staff ("Offert"): amountDue is already reduced by it, not a debt
+  offeredAmount       Float?
   hoursQuota          Float?
   hoursUsed           Float               @default(0)
   reservedSeatLabel   String?

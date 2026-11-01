@@ -386,13 +386,19 @@ export class MobileController {
   @Patch('session/:id/payment')
   setPayment(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { isPayed: boolean; billing?: string },
+    @Body() body: { isPayed: boolean; billing?: string; offeredAmount?: number },
   ) {
     const billing =
       body.billing === 'checkout' || body.billing === 'fixed'
         ? body.billing
         : 'now';
-    return this.mobileService.setPaymentStatus(id, !!body.isPayed, billing);
+    const offered = Number(body.offeredAmount);
+    return this.mobileService.setPaymentStatus(
+      id,
+      !!body.isPayed,
+      billing,
+      Number.isFinite(offered) && offered > 0 ? offered : 0,
+    );
   }
 
   @Post('subscription/start')

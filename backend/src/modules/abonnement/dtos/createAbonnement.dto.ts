@@ -83,4 +83,10 @@ export class AddAbonnementDto {
   @IsNumber()
   @ApiProperty({ required: false })
   public passCredit?: number;
+
+  /** Part of the price given away by staff ("Offert", DT): lowers amountDue instead of leaving a debt. */
+  @IsOptional()
+  @IsNumber()
+  @ApiProperty({ required: false, nullable: true })
+  public offeredAmount?: number | null;
 }

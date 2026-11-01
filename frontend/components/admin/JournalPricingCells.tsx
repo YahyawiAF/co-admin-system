@@ -420,6 +420,11 @@ export function JournalPricingAmountCell({
           dont café {formatDt(addon)}
         </span>
       ) : null}
+      {row.isPayed && (row.offeredAmount || 0) > 0 ? (
+        <span className="text-[11px] tabular-nums text-emerald-700 dark:text-emerald-400">
+          + {formatDt(row.offeredAmount || 0)} offert
+        </span>
+      ) : null}
       {promoPrice != null && !promoIsTotal ? (
         <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
           Forfait <PromoPriceTag row={row} compact />

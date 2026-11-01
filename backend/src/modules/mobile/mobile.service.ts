@@ -2180,6 +2180,7 @@ export class MobileService {
       !!kind && !!activeSub && journal.priceId === activeSub.priceId;
 
     let payedAmount = journal.payedAmount;
+    let recomputed = false;
     let promoSnapshot: Awaited<
       ReturnType<MobileService['applyAppPromo']>
     >['snapshot'] | null = null;
@@ -2194,6 +2195,7 @@ export class MobileService {
       const due = visitAmountAt(row, ctx, now);
       if (due != null) {
         payedAmount = due;
+        recomputed = true;
         if (
           journal.memberID &&
           !journal.promoDiscount &&
@@ -2212,10 +2214,24 @@ export class MobileService {
       }
     }
 
+    // "Offert": part of the price given away by staff, kept apart from the amount owed
+    let offered = journal.offeredAmount ?? 0;
+    const newGift =
+      dto.isPayed === true && dto.offeredAmount !== undefined && !isSubscriptionVisit;
+    if (newGift) offered = Math.max(0, Number(dto.offeredAmount) || 0);
+    if (!isSubscriptionVisit && offered > 0 && (recomputed || newGift)) {
+      const base = recomputed
+        ? payedAmount
+        : (journal.payedAmount || 0) + (journal.offeredAmount || 0);
+      offered = Math.round(Math.min(offered, base) * 1000) / 1000;
+      payedAmount = Math.round((base - offered) * 1000) / 1000;
+    }
+
     const updated = await this.prisma.journal.update({
       where: { id: journalId },
       data: {
         leaveTime: now,
+        ...(newGift || recomputed ? { offeredAmount: offered > 0 ? offered : null } : {}),
         // Keep existing payment status unless explicitly sent
         ...(dto.isPayed !== undefined
           ? {
@@ -2331,6 +2347,7 @@ export class MobileService {
     journalId: string,
     isPayed: boolean,
     billing: LateBillingMode = 'now',
+    offeredAmount = 0,
   ) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
@@ -2369,6 +2386,20 @@ export class MobileService {
       }
     }
 
+    // "Offert": the owed amount drops to what was collected, the gift is kept apart
+    let gift: { payedAmount: number; offeredAmount: number | null } | null = null;
+    if (isPayed && offeredAmount > 0) {
+      const offered = Math.round(Math.min(offeredAmount, paidAmount) * 1000) / 1000;
+      paidAmount = Math.round((paidAmount - offered) * 1000) / 1000;
+      gift = { payedAmount: paidAmount, offeredAmount: offered > 0 ? offered : null };
+    } else if (!isPayed && journal.offeredAmount) {
+      // Unpaid again: the gift is cancelled, the full price is owed
+      gift = {
+        payedAmount: (journal.payedAmount || 0) + journal.offeredAmount,
+        offeredAmount: null,
+      };
+    }
+
     const updated = await this.prisma.journal.update({
       where: { id: journalId },
       data: {
@@ -2376,6 +2407,7 @@ export class MobileService {
         paidAmount,
         paidAt: isPayed ? new Date() : null,
         ...(lateBilling ?? {}),
+        ...(gift ?? {}),
       },
       include: { prices: true, members: true },
     });
