@@ -2,6 +2,7 @@ import { BillingUnit, PriceCategory } from '@prisma/client';
 import { endOfDay } from 'date-fns';
 import {
   computeRowPricing,
+  fixedPackAmount,
   memberDiscountPercent,
   PricedJournalRow,
   PricingContext,
@@ -82,17 +83,14 @@ export function latePaymentBillAt(row: LatePaymentRow, now = new Date()): Date {
 /** Forfait amount chosen for the visit (fixed pack / non-hourly tariff), member discount and promo applied. */
 function fixedForfaitAmount(row: LatePaymentRow): number | null {
   const p = row.prices;
-  let base: number | null = null;
+  let discounted: number | null = null;
   if (row.pricingMode !== 'AUTO' && row.fixedAmount != null) {
-    base = row.fixedAmount;
-  } else if (p && !isHourlyVisitPrice(p) && row.pricingMode !== 'AUTO') {
-    base = p.price ?? null;
+    // Stored pack price already carries the discount
+    discounted = fixedPackAmount(row);
+  } else if (p && !isHourlyVisitPrice(p) && row.pricingMode !== 'AUTO' && p.price != null) {
+    discounted = percentOff(p.price, memberDiscountPercent(row.members, p));
   }
-  if (base == null) return null;
-  const discounted = percentOff(
-    base,
-    memberDiscountPercent(row.members, p),
-  );
+  if (discounted == null) return null;
   return Math.round(Math.max(0, discounted - (row.promoDiscount || 0)) * 1000) / 1000;
 }
 

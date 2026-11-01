@@ -173,6 +173,7 @@ export type PricedJournalRow = {
   fixedAmount?: number | null;
   fixedAt?: Date | string | null;
   paidAmount?: number | null;
+  promoDiscount?: number | null;
   prices?: {
     id?: string;
     name?: string | null;
@@ -231,10 +232,27 @@ export function computeRowPricing(
       priceId: row.fixedPriceId ?? row.priceId ?? null,
       name: row.fixedServiceName ?? row.serviceName ?? p?.name ?? null,
       durationHours,
-      amount: row.fixedAmount ?? row.payedAmount ?? p?.price ?? 0,
+      amount: fixedPackAmount(row),
       category: p?.category ?? null,
     },
   });
+}
+
+/**
+ * Price of the visit's fixed pack, member / group discount included.
+ * A pack stored at the full list price (discount given after check-in, tarif
+ * changed by hand…) gets the member's current discount applied.
+ */
+export function fixedPackAmount(row: PricedJournalRow): number {
+  const p = row.prices;
+  const stored = row.fixedAmount ?? row.payedAmount ?? p?.price ?? 0;
+  const list = p?.price;
+  const samePack = !p?.id || (row.fixedPriceId ?? row.priceId ?? p.id) === p.id;
+  if (list == null || !samePack || (row.promoDiscount ?? 0) > 0.0005) return stored;
+  if (Math.abs(stored - list) > 0.0005) return stored;
+  const percent = memberDiscountPercent(row.members, p);
+  if (!percent) return stored;
+  return Math.round(list * (1 - percent / 100) * 1000) / 1000;
 }
 
 /** API payload attached to sessions / journal rows (`pricing`). */
