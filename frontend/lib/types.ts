@@ -1355,6 +1355,9 @@ export interface DebtorItem {
   journalId?: string | null;
   abonnementId?: string | null;
   ledgerId?: string | null;
+  /** Abonnement only: already received / already offered. */
+  paid?: number;
+  offered?: number;
   memberId: string;
   memberName: string;
   visitorNumber: number | null;

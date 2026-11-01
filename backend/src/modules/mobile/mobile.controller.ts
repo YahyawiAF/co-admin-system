@@ -386,18 +386,29 @@ export class MobileController {
   @Patch('session/:id/payment')
   setPayment(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { isPayed: boolean; billing?: string; offeredAmount?: number },
+    @Body()
+    body: {
+      isPayed: boolean;
+      billing?: string;
+      offeredAmount?: number;
+      /** Money really collected: the rest of the price is offered. */
+      receivedAmount?: number;
+    },
   ) {
     const billing =
       body.billing === 'checkout' || body.billing === 'fixed'
         ? body.billing
         : 'now';
     const offered = Number(body.offeredAmount);
+    const received = Number(body.receivedAmount);
     return this.mobileService.setPaymentStatus(
       id,
       !!body.isPayed,
       billing,
       Number.isFinite(offered) && offered > 0 ? offered : 0,
+      body.receivedAmount != null && Number.isFinite(received) && received >= 0
+        ? received
+        : undefined,
     );
   }
 

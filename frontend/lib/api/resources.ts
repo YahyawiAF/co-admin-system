@@ -354,6 +354,11 @@ export const membersApi = {
       settled,
     });
   },
+  offerLedger(entryId: string, received = 0) {
+    return http.patch<MemberLedgerEntry>(`/members/ledger/${entryId}/offer`, {
+      received,
+    });
+  },
   removeLedger(entryId: string) {
     return http.delete<void>(`/members/ledger/${entryId}`);
   },
@@ -1192,9 +1197,16 @@ export const mobileApi = {
     });
   },
   /** offeredAmount: part of the price given away ("Offert"), not a debt. */
-  setPayment(id: string, isPayed: boolean, billing?: LateBillingMode, offeredAmount?: number) {
+  setPayment(
+    id: string,
+    isPayed: boolean,
+    billing?: LateBillingMode,
+    offeredAmount?: number,
+    receivedAmount?: number,
+  ) {
     return http.patch<{
       id: string;
+      offeredAmount?: number | null;
       pointsAwarded?: number;
       newTrophies?: string[];
       memberPoints?: number;
@@ -1202,6 +1214,7 @@ export const mobileApi = {
       isPayed,
       billing,
       ...(offeredAmount ? { offeredAmount } : {}),
+      ...(receivedAmount != null ? { receivedAmount } : {}),
     });
   },
   register(data: {
