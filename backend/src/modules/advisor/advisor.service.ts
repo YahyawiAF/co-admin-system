@@ -10,7 +10,8 @@ import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { subMinutes } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
-import { parseLocalDay } from '../../../common/parse-local-day';
+import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
+import { parsePauses, pause, resume } from './pauses';
 import { CampaignService, type CampaignSegment } from '../analytics/campaign.service';
 import { PerformanceService } from '../analytics/performance.service';
 import {
@@ -28,6 +29,7 @@ import {
 import { ContextService } from './context.service';
 import { parseManualFunnel, parseSteps } from './funnel';
 import { SnapshotService } from './snapshot.service';
+import { ensureCoverage, type DismissedIdea, type MissingLever } from './coverage';
 
 const CREDIT_MESSAGE =
   "Crédit Anthropic épuisé : rechargez le compte (Plans & Billing), ou utilisez le copier-coller dans « Mon contexte ».";
@@ -60,6 +62,12 @@ type InitiativeBody = {
   channels?: string[];
   steps?: Array<{ text?: string; done?: boolean; doneAt?: string | null }>;
   manualFunnel?: Array<{ date?: string; channel?: string | null; reach?: number }>;
+  /** People who said they are interested (typed); null clears it */
+  interested?: number | null;
+  /** true = pause the action (and its measure), false = resume */
+  paused?: boolean;
+  /** "Pas pour moi" with a reason; null = put the action back */
+  drop?: { reason?: string } | null;
 };
 
 const TARGET_KINDS = ['ALL', 'SLOT', 'LIST'];
@@ -219,6 +227,7 @@ export class AdvisorService {
     }
     const id = await this.facilityId(facilityId);
     const snapshot = await this.snapshots.build(id, this.days(body?.days));
+    result = this.covered(result, snapshot);
     const report = await this.prisma.advisorReport.create({
       data: {
         facilityId: id,
@@ -233,6 +242,12 @@ export class AdvisorService {
     });
     await this.keepQuestions(report.id, result.questions);
     return this.summary(report);
+  }
+
+  /** Rules guarantee: dismissed ideas removed, every strong empty lever gets an idea. */
+  private covered<T extends Parameters<typeof ensureCoverage>[0]>(result: T, snapshot: unknown): T {
+    const snap = snapshot as { levers?: { missing?: MissingLever[] } | null; dismissedIdeas?: DismissedIdea[] };
+    return ensureCoverage(result, { missing: snap.levers?.missing, dismissed: snap.dismissedIdeas }) as T;
   }
 
   private days(days?: number) {
@@ -275,6 +290,7 @@ export class AdvisorService {
   private async complete(client: Anthropic, reportId: string, snapshot: unknown) {
     try {
       const out = await runAdvisor(client, snapshot);
+      out.result = this.covered(out.result, snapshot);
       await this.prisma.advisorReport.update({
         where: { id: reportId },
         data: {
@@ -473,6 +489,11 @@ export class AdvisorService {
       // A step ticked now gets today's date; one already done keeps its date
       data.steps = parseSteps(body.steps).map((s) => ({ ...s, doneAt: s.done ? s.doneAt || today : null }));
     }
+    if (body.interested !== undefined) {
+      const n = body.interested == null || (body.interested as unknown) === '' ? null : Math.round(Number(body.interested));
+      if (n != null && (!Number.isFinite(n) || n < 0 || n > 100000)) throw new BadRequestException('Nombre invalide');
+      data.interested = n;
+    }
     if (body.manualFunnel !== undefined) {
       if (!Array.isArray(body.manualFunnel) || body.manualFunnel.length > 50) {
         throw new BadRequestException('Chiffres invalides');
@@ -502,15 +523,68 @@ export class AdvisorService {
   }
 
   async updateInitiative(id: string, body: InitiativeBody) {
-    const row = await this.prisma.businessInitiative.findUnique({ where: { id }, select: { facilityId: true } });
+    const row = await this.prisma.businessInitiative.findUnique({
+      where: { id },
+      select: { facilityId: true, pauses: true, endDate: true, droppedAt: true },
+    });
     if (!row) throw new NotFoundException('Initiative introuvable');
-    const data = { ...this.initiativeData(body), ...(await this.targetData(row.facilityId, body)) };
+    const data: Prisma.BusinessInitiativeUncheckedUpdateInput = {
+      ...this.initiativeData(body),
+      ...(await this.targetData(row.facilityId, body)),
+    };
+    const today = localDayKey(new Date());
+    if (body.paused !== undefined) {
+      const list = parsePauses(row.pauses);
+      data.pauses = body.paused ? pause(list, today) : resume(list, today);
+    }
+    if (body.drop !== undefined) {
+      if (body.drop) {
+        const reason = body.drop.reason?.trim().slice(0, 120);
+        if (!reason) throw new BadRequestException('Dites pourquoi');
+        data.droppedAt = new Date();
+        data.dropReason = reason;
+        if (!row.endDate) data.endDate = parseLocalDay(today);
+        // A dropped action is not paused any more
+        const list = parsePauses(row.pauses);
+        if (list.some((p) => p.to == null)) data.pauses = resume(list, today);
+      } else {
+        data.droppedAt = null;
+        data.dropReason = null;
+        // Back to "en cours": the end set when it was dropped goes away
+        if (row.droppedAt && row.endDate && localDayKey(row.endDate) === localDayKey(row.droppedAt)) data.endDate = null;
+      }
+    }
     await this.prisma.businessInitiative
       .update({ where: { id }, data })
       .catch(() => {
         throw new NotFoundException('Initiative introuvable');
       });
     return this.withImpact(id);
+  }
+
+  // ---------- ideas the owner does not want ("Pas pour moi") ----------
+
+  async dismissals(facilityId?: string) {
+    const id = await this.facilityId(facilityId);
+    return this.prisma.advisorDismissal.findMany({ where: { facilityId: id }, orderBy: { createdAt: 'desc' }, take: 100 });
+  }
+
+  async dismiss(facilityId: string | undefined, body: { title?: string; category?: string | null; leverId?: string | null; reason?: string }) {
+    const id = await this.facilityId(facilityId);
+    const title = body.title?.trim().slice(0, 300);
+    const reason = body.reason?.trim().slice(0, 120);
+    if (!title) throw new BadRequestException('Titre requis');
+    if (!reason) throw new BadRequestException('Dites pourquoi');
+    return this.prisma.advisorDismissal.create({
+      data: { facilityId: id, title, reason, category: body.category || null, leverId: body.leverId?.slice(0, 40) || null },
+    });
+  }
+
+  async undismiss(dismissalId: string) {
+    await this.prisma.advisorDismissal.delete({ where: { id: dismissalId } }).catch(() => {
+      throw new NotFoundException('Idée introuvable');
+    });
+    return { ok: true };
   }
 
   async deleteInitiative(id: string) {

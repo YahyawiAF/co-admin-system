@@ -113,12 +113,17 @@ import type {
   LateBillingMode,
   PerformanceSettings,
   PerformanceOverview,
+  MonthForecast,
+  AdvisorDismissal,
+  PerformanceChange,
+  LeverMap,
   PerformanceInsight,
   MonthlyTarget,
   AbonnementOffer,
   OutreachList,
   OutreachReason,
   OutreachChannel,
+  OutreachItem,
   OutreachOutcome,
   SuiviList,
 } from "@/lib/types";
@@ -582,6 +587,24 @@ export const analyticsApi = {
       `/analytics/performance/overview?${q.toString()}`,
     );
   },
+  performanceForecast(year: number, month: number) {
+    const q = new URLSearchParams({ year: String(year), month: String(month) });
+    return http.get<MonthForecast>(`/analytics/performance/forecast?${q.toString()}`);
+  },
+  performanceChanges(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<{ changes: PerformanceChange[] }>(`/analytics/performance/changes${q}`);
+  },
+  answerPerformanceChange(data: { metric: string; direction: string; from: string; to: string; cause: string; note?: string }) {
+    return http.post<{ ok: boolean; key: string; initiativeId: string | null }>(
+      "/analytics/performance/changes/answer",
+      data,
+    );
+  },
+  performanceLevers(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<LeverMap>(`/analytics/performance/levers${q}`);
+  },
   performanceInsights(facilityId?: string) {
     const q = facilityId ? `?facilityId=${facilityId}` : "";
     return http.get<{ generatedAt: string; insights: PerformanceInsight[] }>(
@@ -618,11 +641,23 @@ export const outreachApi = {
     outcome: OutreachOutcome;
     note?: string | null;
     followUpAt?: string | null;
+    /** Given = a new contact made this way (e.g. PERSON at check-in) */
+    channel?: OutreachChannel;
   }) {
     return http.post("/analytics/outreach/answer", data);
   },
-  suivi(params: { status: "OPEN" | "CLOSED"; page: number }) {
-    return http.get<SuiviList>(`/analytics/outreach/suivi?status=${params.status}&page=${params.page}`);
+  /** Several people reached the same way (WhatsApp group, at the desk…) */
+  logMany(data: { items: Array<{ memberId: string; reason: OutreachReason }>; channel: OutreachChannel; message?: string }) {
+    return http.post<{ count: number }>("/analytics/outreach/log-many", data);
+  },
+  /** Check-in: the relance to do with this member, if any */
+  forMember(memberId: string) {
+    return http.get<{ items: OutreachItem[] }>(`/analytics/outreach/member/${memberId}`);
+  },
+  suivi(params: { status: "OPEN" | "CLOSED"; page: number; perPage?: number }) {
+    return http.get<SuiviList>(
+      `/analytics/outreach/suivi?status=${params.status}&page=${params.page}${params.perPage ? `&perPage=${params.perPage}` : ""}`,
+    );
   },
   close(id: string, result: "WON" | "LOST") {
     return http.post(`/analytics/outreach/${id}/close`, { result });
@@ -2068,6 +2103,9 @@ export const advisorApi = {
       notes: InitiativeNote[];
       steps: InitiativeStep[];
       manualFunnel: Array<{ date: string; channel?: string | null; reach: number }>;
+      interested: number | null;
+      paused: boolean;
+      drop: { reason: string } | null;
     }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
@@ -2080,6 +2118,15 @@ export const advisorApi = {
   },
   deleteInitiative(id: string) {
     return http.delete(`/advisor/initiatives/${id}`);
+  },
+  dismissals() {
+    return http.get<AdvisorDismissal[]>("/advisor/dismissals");
+  },
+  dismiss(data: { title: string; category?: string | null; leverId?: string | null; reason: string }) {
+    return http.post<AdvisorDismissal>("/advisor/dismissals", data);
+  },
+  undismiss(id: string) {
+    return http.delete(`/advisor/dismissals/${id}`);
   },
   missing() {
     return http.get<AdvisorMissing>("/advisor/missing");

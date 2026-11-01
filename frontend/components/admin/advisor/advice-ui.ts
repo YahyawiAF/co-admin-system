@@ -2,6 +2,7 @@ import {
   Coffee,
   Megaphone,
   Rocket,
+  UserPlus,
   Settings2,
   Sparkles,
   Tags,
@@ -22,6 +23,7 @@ export const CATEGORY_UI: Record<
   AdvisorCategory,
   { label: string; icon: typeof Sparkles; tone: string }
 > = {
+  ACQUISITION: { label: "Attirer", icon: UserPlus, tone: "bg-indigo-100 text-indigo-800" },
   NEW_REVENUE: { label: "Nouveau revenu", icon: Rocket, tone: "bg-emerald-100 text-emerald-800" },
   PROMO: { label: "Promo", icon: Megaphone, tone: "bg-violet-100 text-violet-800" },
   PRICING: { label: "Prix & formules", icon: Tags, tone: "bg-sky-100 text-sky-800" },

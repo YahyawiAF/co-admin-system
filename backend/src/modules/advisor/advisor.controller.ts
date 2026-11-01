@@ -124,9 +124,30 @@ export class AdvisorController {
       channels?: string[];
       steps?: Array<{ text?: string; done?: boolean; doneAt?: string | null }>;
       manualFunnel?: Array<{ date?: string; channel?: string | null; reach?: number }>;
+      interested?: number | null;
+      paused?: boolean;
+      drop?: { reason?: string } | null;
     },
   ) {
     return this.advisor.updateInitiative(id, body);
+  }
+
+  @Get('dismissals')
+  dismissals(@Query('facilityId') facilityId?: string) {
+    return this.advisor.dismissals(facilityId);
+  }
+
+  @Post('dismissals')
+  dismiss(
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: { title?: string; category?: string | null; leverId?: string | null; reason?: string },
+  ) {
+    return this.advisor.dismiss(facilityId, body);
+  }
+
+  @Delete('dismissals/:id')
+  undismiss(@Param('id') id: string) {
+    return this.advisor.undismiss(id);
   }
 
   /** Tracked share link for one channel (Story, WhatsApp…). */

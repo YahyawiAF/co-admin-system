@@ -30,7 +30,8 @@ export const OUTREACH_REASONS = [
   'FOLLOW_UP',
 ] as const;
 export type OutreachReason = (typeof OUTREACH_REASONS)[number];
-export const OUTREACH_CHANNELS = ['WHATSAPP', 'PUSH', 'CALL', 'SKIP'] as const;
+/** How the member was reached. PERSON = at the desk, GROUP = WhatsApp group or status (one post, many people). */
+export const OUTREACH_CHANNELS = ['WHATSAPP', 'PUSH', 'CALL', 'PERSON', 'INSTAGRAM', 'GROUP', 'SKIP'] as const;
 export type OutreachChannel = (typeof OUTREACH_CHANNELS)[number];
 
 /** Days a contact keeps the member out of the to-do list for the same reason. */
@@ -723,7 +724,13 @@ export class OutreachService {
     const contacts = [...first.values()];
     const ids = [...new Set(contacts.map((c) => c.memberId))];
     if (!ids.length) {
-      return { contacted: 0, won: 0, revenue: 0, byReason: {} as Record<string, { contacted: number; won: number; revenue: number }> };
+      return {
+        contacted: 0,
+        won: 0,
+        revenue: 0,
+        byReason: {} as Record<string, { contacted: number; won: number; revenue: number }>,
+        byChannel: {} as Record<string, { contacted: number; won: number; revenue: number }>,
+      };
     }
     const clickedRows = await this.prisma.member.findMany({
       where: { id: { in: ids }, reviewClickedAt: { not: null } },
@@ -748,11 +755,14 @@ export class OutreachService {
       !!d && d > from && d <= addDays(from, RESULT_WINDOW_DAYS);
 
     const byReason: Record<string, { contacted: number; won: number; revenue: number }> = {};
+    const byChannel: Record<string, { contacted: number; won: number; revenue: number }> = {};
     let won = 0;
     let revenue = 0;
     for (const c of contacts) {
       const r = (byReason[c.reason] ??= { contacted: 0, won: 0, revenue: 0 });
+      const ch = (byChannel[c.channel] ??= { contacted: 0, won: 0, revenue: 0 });
       r.contacted += 1;
+      ch.contacted += 1;
       let gain = 0;
       let ok = false;
       if (VISIT_REASONS.has(c.reason)) {
@@ -781,11 +791,13 @@ export class OutreachService {
       if (ok) {
         r.won += 1;
         r.revenue = round1(r.revenue + gain);
+        ch.won += 1;
+        ch.revenue = round1(ch.revenue + gain);
         won += 1;
         revenue += gain;
       }
     }
-    return { contacted: contacts.length, won, revenue: round1(revenue), byReason };
+    return { contacted: contacts.length, won, revenue: round1(revenue), byReason, byChannel };
   }
 
   async log(body: { memberId?: string; reason?: string; channel?: string; message?: string }) {
@@ -804,6 +816,23 @@ export class OutreachService {
     });
     if (channel !== 'SKIP') await this.replaceOpen(body.memberId, row.id);
     return row;
+  }
+
+  /** One channel for several people at once (a WhatsApp status, a word to everyone at the desk…). */
+  async logMany(body: { items?: Array<{ memberId?: string; reason?: string }>; channel?: string; message?: string }) {
+    const items = Array.isArray(body.items) ? body.items.slice(0, 200) : [];
+    if (!items.length) throw new BadRequestException('Choisissez au moins une personne');
+    if (body.channel === 'SKIP') throw new BadRequestException('Canal invalide');
+    const rows = [];
+    for (const i of items) rows.push(await this.log({ ...i, channel: body.channel, message: body.message }));
+    return { count: rows.length };
+  }
+
+  /** What to tell this member when they check in (empty when nothing is due). */
+  async forMember(memberId: string, facilityId?: string) {
+    const list = await this.list(facilityId);
+    const items = list.todo.filter((i) => i.memberId === memberId && !i.snoozed);
+    return { items };
   }
 
   /** One open Suivi per member: a newer contact takes over the older ones. */
@@ -825,8 +854,13 @@ export class OutreachService {
     outcome?: string;
     note?: string | null;
     followUpAt?: string | null;
+    /** How they were reached; given = a new contact (e.g. in person at check-in) */
+    channel?: string | null;
   }) {
     if (!body.memberId) throw new BadRequestException('memberId requis');
+    if (body.channel && (!OUTREACH_CHANNELS.includes(body.channel as OutreachChannel) || body.channel === 'SKIP')) {
+      throw new BadRequestException('Canal invalide');
+    }
     const outcome = body.outcome as OutreachOutcome;
     if (!OUTREACH_OUTCOMES.includes(outcome)) throw new BadRequestException('Réponse invalide');
     const now = new Date();
@@ -839,7 +873,9 @@ export class OutreachService {
       closedResult: lost ? 'LOST' : null,
       closedAuto: false,
     };
-    const target = body.outreachId
+    const target = body.channel && !body.outreachId
+      ? null
+      : body.outreachId
       ? await this.prisma.memberOutreach.findFirst({ where: { id: body.outreachId, memberId: body.memberId } })
       : await this.prisma.memberOutreach.findFirst({
           where: {
@@ -859,7 +895,7 @@ export class OutreachService {
       const reason = body.reason as OutreachReason;
       if (!OUTREACH_REASONS.includes(reason)) throw new BadRequestException('Motif invalide');
       row = await this.prisma.memberOutreach.create({
-        data: { memberId: body.memberId, reason, channel: 'CALL', ...data },
+        data: { memberId: body.memberId, reason, channel: body.channel || 'CALL', ...data },
       });
     }
     await this.replaceOpen(body.memberId, row.id);

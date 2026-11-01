@@ -45,6 +45,8 @@ import { AWAY_LABEL, AwayReasonChips } from "@/components/admin/AwayReasonChips"
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { CHANNEL_UI, MANUAL_CHANNELS, channelLabel } from "@/lib/outreach-ui";
 import type {
   AwayReason,
   AbonnementOffer,
@@ -52,6 +54,7 @@ import type {
   OutreachItem,
   OutreachOutcome,
   OutreachReason,
+  OutreachResults,
   SuiviRow,
   TopUpOffer,
 } from "@/lib/types";
@@ -166,12 +169,6 @@ const OUTCOME_UI: Record<
 };
 const OUTCOMES = Object.keys(OUTCOME_UI) as OutreachOutcome[];
 
-const CHANNEL_LABEL: Record<OutreachChannel, string> = {
-  WHATSAPP: "WhatsApp",
-  PUSH: "notification",
-  CALL: "appel",
-  SKIP: "ignoré",
-};
 
 const dt = (n: number) => `${Math.round(n * 10) / 10} DT`;
 const ago = (iso: string) => formatDistanceToNow(new Date(iso), { locale: fr, addSuffix: true });
@@ -484,20 +481,23 @@ function MessageDialog({
               Envoyer une notification dans l&apos;app
             </Button>
           ) : null}
-          <div className="flex w-full gap-2">
-            <Button variant="ghost" className="flex-1" onClick={copy}>
-              <Copy className="mr-2 h-4 w-4" />
-              Copier
-            </Button>
-            <Button
-              variant="ghost"
-              className="flex-1"
-              disabled={log.isPending}
-              onClick={() => log.mutate("CALL")}
-            >
-              <Phone className="mr-2 h-4 w-4" />
-              Contacté autrement
-            </Button>
+          <Button variant="ghost" className="w-full" onClick={copy}>
+            <Copy className="mr-2 h-4 w-4" />
+            Copier le message
+          </Button>
+          <div className="w-full space-y-1.5 border-t pt-3">
+            <p className="text-xs text-muted-foreground">Déjà contacté autrement ? Dis comment :</p>
+            <div className="flex flex-wrap gap-1.5">
+              {MANUAL_CHANNELS.filter((c) => c !== "WHATSAPP" || !item.whatsapp).map((c) => {
+                const Icon = CHANNEL_UI[c].icon;
+                return (
+                  <Button key={c} size="sm" variant="outline" disabled={log.isPending} onClick={() => log.mutate(c)}>
+                    <Icon className="mr-1.5 h-3.5 w-3.5" />
+                    {CHANNEL_UI[c].button}
+                  </Button>
+                );
+              })}
+            </div>
           </div>
         </DialogFooter>
       </DialogContent>
@@ -561,6 +561,7 @@ function AnswerPanel({
 }) {
   const queryClient = useQueryClient();
   const [outcome, setOutcome] = useState<OutreachOutcome>("INTERESTED");
+  const [channel, setChannel] = useState<OutreachChannel>("PERSON");
   const [note, setNote] = useState("");
   const [date, setDate] = useState(ymd(addDays(new Date(), 3)));
   const ui = OUTCOME_UI[outcome];
@@ -573,6 +574,7 @@ function AnswerPanel({
         outcome,
         note: note.trim() || null,
         followUpAt: ui.days === null ? null : date || null,
+        channel: outreachId ? undefined : channel,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["outreach"] });
@@ -590,6 +592,30 @@ function AnswerPanel({
   });
   return (
     <div className="mt-3 space-y-3 rounded-lg border bg-muted/30 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
+      {!outreachId ? (
+        <>
+          <div className="text-sm font-medium">Comment tu l&apos;as contacté</div>
+          <div className="flex flex-wrap gap-1.5">
+            {MANUAL_CHANNELS.map((c) => {
+              const Icon = CHANNEL_UI[c].icon;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setChannel(c)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors duration-200 motion-reduce:transition-none",
+                    channel === c ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  {CHANNEL_UI[c].label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : null}
       <div className="text-sm font-medium">Sa réponse</div>
       <div className="flex flex-wrap gap-1.5">
         {OUTCOMES.map((o) => (
@@ -704,7 +730,7 @@ function OutreachRow({
             {[
               item.reason === "CONVERT" && item.offer ? null : item.detail,
               item.lastContact
-                ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${CHANNEL_LABEL[item.lastContact.channel]})`
+                ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${channelLabel(item.lastContact.channel)})`
                 : null,
             ]
               .filter(Boolean)
@@ -841,7 +867,7 @@ function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
             <span className="text-xs text-muted-foreground">{REASON_UI[row.reason]?.label ?? row.reason}</span>
           </div>
           <div className="text-xs text-muted-foreground">
-            Contacté {ago(row.contactedAt)} ({CHANNEL_LABEL[row.channel] ?? row.channel})
+            Contacté {ago(row.contactedAt)} ({channelLabel(row.channel)})
             {row.note ? ` · « ${row.note} »` : ""}
           </div>
         </div>
@@ -892,6 +918,377 @@ function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
         />
       ) : null}
     </li>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// Board: À contacter → Contacté → A répondu → Résultat
+// ---------------------------------------------------------------------------
+
+const PAGE = 20;
+const itemKey = (i: { memberId: string; reason: string }) => `${i.memberId}:${i.reason}`;
+
+/** Contacted → won, per way of contact (last 30 days). */
+function ChannelsCard({ results }: { results?: OutreachResults }) {
+  const rows = Object.entries(results?.byChannel ?? {})
+    .filter(([, v]) => v && v.contacted > 0)
+    .map(([k, v]) => ({ channel: k as OutreachChannel, ...v! }))
+    .sort((a, b) => b.won / b.contacted - a.won / a.contacted || b.contacted - a.contacted);
+  const max = Math.max(1, ...rows.map((r) => r.contacted));
+  return (
+    <Card className="shadow-none">
+      <CardContent className="space-y-3 p-4">
+        <div>
+          <div className="text-sm font-semibold">Quel canal marche</div>
+          <p className="text-xs text-muted-foreground">Contactés → gagnés en 14 jours, par façon de contacter (30 derniers jours).</p>
+        </div>
+        {rows.length ? (
+          <div className="space-y-1.5">
+            {rows.map((r) => {
+              const Icon = CHANNEL_UI[r.channel]?.icon ?? Phone;
+              return (
+                <div key={r.channel} className="grid grid-cols-[130px_minmax(0,1fr)_96px] items-center gap-2 text-sm">
+                  <span className="flex items-center gap-1.5 capitalize">
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    {channelLabel(r.channel)}
+                  </span>
+                  <span className="relative h-4 overflow-hidden rounded bg-muted">
+                    <span className="absolute inset-y-0 left-0 rounded bg-primary/15" style={{ width: `${(r.contacted / max) * 100}%` }} />
+                    <span
+                      className="absolute inset-y-0 left-0 rounded bg-emerald-500 transition-[width] duration-500 motion-reduce:transition-none"
+                      style={{ width: `${(r.won / max) * 100}%` }}
+                    />
+                  </span>
+                  <span className="text-right text-xs tabular-nums text-muted-foreground">
+                    <b className="text-foreground">{Math.round((r.won / r.contacted) * 100)} %</b> · {r.won}/{r.contacted}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Pas encore de contacts notés. Chaque contact compte, même en personne ou par un groupe WhatsApp.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+type Shown = { kind: "todo"; key: string } | { kind: "suivi"; id: string };
+
+function BoardColumn({
+  title,
+  hint,
+  count,
+  action,
+  children,
+}: {
+  title: string;
+  hint: string;
+  count: number;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="flex min-h-36 min-w-0 flex-col gap-2 rounded-xl bg-muted/50 p-2.5" aria-label={title}>
+      <header className="flex items-baseline justify-between gap-2 px-1">
+        <div>
+          <h3 className="text-sm font-semibold">{title}</h3>
+          <p className="text-[11px] text-muted-foreground">{hint}</p>
+        </div>
+        {action ?? <span className="text-xs font-semibold text-muted-foreground">{count}</span>}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function MoreButton({ shown, total, onMore }: { shown: number; total: number; onMore: () => void }) {
+  if (shown >= total) return null;
+  return (
+    <button type="button" onClick={onMore} className="rounded-lg py-1.5 text-xs font-medium text-primary hover:bg-background">
+      Afficher plus ({total - shown})
+    </button>
+  );
+}
+
+const cardClass =
+  "w-full rounded-lg border bg-background px-3 py-2 text-left transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-primary hover:shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-both motion-reduce:transition-none";
+
+function RelancesBoard({
+  todo,
+  onMessage,
+}: {
+  todo: OutreachItem[];
+  onMessage: (item: OutreachItem, text?: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const openQ = useQuery({
+    queryKey: ["outreach-suivi", "OPEN", "board"],
+    queryFn: () => outreachApi.suivi({ status: "OPEN", page: 1, perPage: 100 }),
+  });
+  const closedQ = useQuery({
+    queryKey: ["outreach-suivi", "CLOSED", "board"],
+    queryFn: () => outreachApi.suivi({ status: "CLOSED", page: 1, perPage: 100 }),
+  });
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [limit, setLimit] = useState<Record<string, number>>({});
+  const more = (col: string) => setLimit((l) => ({ ...l, [col]: (l[col] ?? PAGE) + PAGE }));
+  const lim = (col: string) => limit[col] ?? PAGE;
+
+  const open = openQ.data?.rows ?? [];
+  const contacted = open.filter((r) => !r.outcome);
+  const answered = open.filter((r) => r.outcome);
+  const since30 = Date.now() - 30 * 86_400_000;
+  const closed = (closedQ.data?.rows ?? []).filter((r) => r.closedAt && new Date(r.closedAt).getTime() >= since30);
+  const won = closed.filter((r) => r.closedResult === "WON");
+  const lost = closed.filter((r) => r.closedResult !== "WON");
+
+  const logMany = useMutation({
+    mutationFn: (channel: OutreachChannel) =>
+      outreachApi.logMany({
+        channel,
+        items: todo.filter((i) => selected.has(itemKey(i))).map((i) => ({ memberId: i.memberId, reason: i.reason })),
+      }),
+    onSuccess: (r, channel) => {
+      toast.success(`${r.count} contact${r.count > 1 ? "s" : ""} noté${r.count > 1 ? "s" : ""} : ${channelLabel(channel)}`);
+      setSelected(new Set());
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggle = (k: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(k)) n.delete(k);
+      else n.add(k);
+      return n;
+    });
+  const allTodo = todo.length > 0 && todo.every((i) => selected.has(itemKey(i)));
+
+  // The panel follows the data: once the person moved column, show their new card
+  const shownTodo = shown?.kind === "todo" ? todo.find((i) => itemKey(i) === shown.key) ?? null : null;
+  const shownRow =
+    shown?.kind === "suivi" ? [...open, ...(closedQ.data?.rows ?? [])].find((r) => r.id === shown.id) ?? null : null;
+  const todoMember = shown?.kind === "todo" ? shown.key.split(":")[0] : null;
+  const movedRow = !shownTodo && todoMember ? open.find((r) => r.memberId === todoMember) ?? null : null;
+  const panelRow = shownRow ?? movedRow;
+  const panelOpen = !!(shownTodo || panelRow);
+
+  const suiviCard = (r: SuiviRow, i: number) => {
+    const outcome = r.outcome ? OUTCOME_UI[r.outcome] : null;
+    const Icon = CHANNEL_UI[r.channel as OutreachChannel]?.icon ?? Phone;
+    return (
+      <button
+        key={r.id}
+        type="button"
+        onClick={() => setShown({ kind: "suivi", id: r.id })}
+        className={cn(cardClass, r.due && "border-teal-400")}
+        style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="truncate text-sm font-medium">{r.name}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">{REASON_UI[r.reason]?.label ?? r.reason}</span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Icon className="h-3 w-3" />
+          {channelLabel(r.channel)} · {ago(r.closedAt ?? r.contactedAt)}
+        </div>
+        {r.closedAt ? (
+          <div className={cn("mt-1 text-xs font-medium", r.closedResult === "WON" ? "text-emerald-700" : "text-muted-foreground")}>
+            {r.closedResult === "WON"
+              ? `Gagné${r.since.spent ? ` · ${dt(r.since.spent)}` : r.since.abonnement ? ` · ${r.since.abonnement.name}` : ""}${r.closedAuto ? " (auto)" : ""}`
+              : `Perdu${outcome ? ` · ${outcome.label}` : ""}`}
+          </div>
+        ) : outcome ? (
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className={cn("rounded-full border px-1.5 py-px font-medium", outcome.tone)}>{outcome.label}</span>
+            {r.followUpAt ? (
+              <span className={cn(r.due ? "font-medium text-teal-800" : "text-muted-foreground")}>
+                {r.due ? "à rappeler aujourd'hui" : `rappel ${format(new Date(r.followUpAt), "d MMM", { locale: fr })}`}
+              </span>
+            ) : null}
+          </div>
+        ) : (
+          <div className="mt-1 text-xs font-medium text-primary">Sa réponse ?</div>
+        )}
+      </button>
+    );
+  };
+
+  return (
+    <>
+      <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <BoardColumn
+          title="À contacter"
+          hint="coche pour agir sur plusieurs"
+          count={todo.length}
+          action={
+            todo.length ? (
+              <button
+                type="button"
+                className="text-xs font-semibold text-primary"
+                onClick={() => setSelected(allTodo ? new Set() : new Set(todo.map(itemKey)))}
+              >
+                {allTodo ? "Aucun" : `Tout cocher (${todo.length})`}
+              </button>
+            ) : undefined
+          }
+        >
+          {todo.length ? (
+            todo.slice(0, lim("todo")).map((item, i) => {
+              const k = itemKey(item);
+              const ui = REASON_UI[item.reason];
+              return (
+                <div
+                  key={k}
+                  className={cn(cardClass, "flex cursor-pointer items-start gap-2.5", selected.has(k) && "border-primary bg-primary/5")}
+                  style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                  onClick={() => setShown({ kind: "todo", key: k })}
+                >
+                  <input
+                    type="checkbox"
+                    aria-label={`Sélectionner ${item.name}`}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                    checked={selected.has(k)}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={() => toggle(k)}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{item.name}</div>
+                    <div className="line-clamp-2 text-xs text-muted-foreground">{item.title}</div>
+                    <span className={cn("mt-1 inline-block rounded-full px-1.5 py-px text-[10.5px] font-medium", ui.tone)}>{ui.label}</span>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">Personne à contacter.</p>
+          )}
+          <MoreButton shown={lim("todo")} total={todo.length} onMore={() => more("todo")} />
+        </BoardColumn>
+
+        <BoardColumn title="Contacté" hint="en attente de sa réponse" count={contacted.length}>
+          {openQ.isLoading ? <Skeleton className="h-20" /> : contacted.length ? contacted.slice(0, lim("contacted")).map(suiviCard) : (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
+          )}
+          <MoreButton shown={lim("contacted")} total={contacted.length} onMore={() => more("contacted")} />
+        </BoardColumn>
+
+        <BoardColumn title="A répondu" hint="intéressé, à rappeler…" count={answered.length}>
+          {openQ.isLoading ? <Skeleton className="h-20" /> : answered.length ? answered.slice(0, lim("answered")).map(suiviCard) : (
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
+          )}
+          <MoreButton shown={lim("answered")} total={answered.length} onMore={() => more("answered")} />
+        </BoardColumn>
+
+        <BoardColumn title="Résultat" hint="30 derniers jours" count={closed.length}>
+          <h4 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Gagnés · {won.length}</h4>
+          {won.slice(0, lim("won")).map(suiviCard)}
+          <MoreButton shown={lim("won")} total={won.length} onMore={() => more("won")} />
+          <h4 className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Perdus · {lost.length}</h4>
+          {lost.slice(0, lim("lost")).map(suiviCard)}
+          <MoreButton shown={lim("lost")} total={lost.length} onMore={() => more("lost")} />
+        </BoardColumn>
+      </div>
+
+      <div
+        role="region"
+        aria-label="Action groupée"
+        className={cn(
+          "fixed bottom-4 left-1/2 z-40 flex max-w-[calc(100%-2rem)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-2xl bg-foreground px-3 py-2.5 text-background shadow-xl transition-[transform,opacity] duration-300 motion-reduce:transition-none",
+          selected.size ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-24 opacity-0",
+        )}
+      >
+        <span className="px-1 text-sm font-semibold">
+          {selected.size} sélectionné{selected.size > 1 ? "s" : ""} · contactés par :
+        </span>
+        {MANUAL_CHANNELS.map((c) => {
+          const Icon = CHANNEL_UI[c].icon;
+          return (
+            <button
+              key={c}
+              type="button"
+              disabled={logMany.isPending}
+              onClick={() => logMany.mutate(c)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-background/25 px-2.5 py-1 text-sm transition-colors hover:bg-background/15 disabled:opacity-50"
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {CHANNEL_UI[c].label}
+            </button>
+          );
+        })}
+        <button type="button" aria-label="Annuler la sélection" className="rounded-lg p-1.5 hover:bg-background/15" onClick={() => setSelected(new Set())}>
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <Sheet open={panelOpen} onOpenChange={(o) => !o && setShown(null)}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
+          <SheetHeader className="text-left">
+            <SheetTitle>{shownTodo?.name ?? panelRow?.name}</SheetTitle>
+            <SheetDescription>
+              {shownTodo
+                ? "Contacte-le comme tu veux, puis dis comment : chaque canal compte."
+                : panelRow?.closedAt
+                  ? "Relance terminée."
+                  : "Note sa réponse, ou dis si c'est gagné ou perdu. Gagné est aussi noté tout seul s'il revient ou prend un abonnement."}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-3 space-y-4">
+            {shownTodo ? (
+              <>
+                <ul>
+                  <OutreachRow item={shownTodo} onMessage={(text) => onMessage(shownTodo, text)} />
+                </ul>
+                <QuickContact item={shownTodo} />
+              </>
+            ) : panelRow ? (
+              <ul>
+                <SuiviItem row={panelRow} index={0} />
+              </ul>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
+  );
+}
+
+/** One tap: "I reached them this way" (the answer can follow later). */
+function QuickContact({ item }: { item: OutreachItem }) {
+  const queryClient = useQueryClient();
+  const log = useMutation({
+    mutationFn: (channel: OutreachChannel) => outreachApi.log({ memberId: item.memberId, reason: item.reason, channel }),
+    onSuccess: (_r, channel) => {
+      toast.success(`${item.name} : contacté (${channelLabel(channel)})`);
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <div className="space-y-2 rounded-xl border p-3">
+      <div className="text-sm font-medium">Déjà contacté ? Dis comment</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {MANUAL_CHANNELS.map((c) => {
+          const Icon = CHANNEL_UI[c].icon;
+          return (
+            <Button key={c} variant="outline" size="sm" disabled={log.isPending} onClick={() => log.mutate(c)} className="justify-start">
+              <Icon className="mr-1.5 h-3.5 w-3.5" />
+              {CHANNEL_UI[c].button}
+            </Button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-muted-foreground">Il passe dans « Contacté ». Tu ajoutes sa réponse quand tu l&apos;as.</p>
+    </div>
   );
 }
 
@@ -995,135 +1392,29 @@ function RelancesInner() {
             </Card>
           </div>
 
+          <ChannelsCard results={results} />
+
+          <div className="flex flex-wrap gap-2">
+            <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
+              Tous · {data.todo.length}
+            </FilterChip>
+            {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
+              counts[r] ? (
+                <FilterChip key={r} active={filter === r} onClick={() => setFilter(r)}>
+                  {REASON_UI[r].label} · {counts[r]}
+                </FilterChip>
+              ) : null,
+            )}
+          </div>
+          {filter !== "ALL" ? <p className="-mt-3 text-xs text-muted-foreground">{REASON_UI[filter].why}</p> : null}
+
+          <RelancesBoard todo={todo} onMessage={(item, text) => setMessaging(text ? { ...item, message: text } : item)} />
+
           <AwayReasonsCard counts={data.awayReasons} />
 
           <CampaignsSection />
 
           <QuickCalculator />
-
-          <div role="tablist" className="flex gap-1 border-b">
-            <TabButton active={tab === "todo"} onClick={() => setTab("todo")}>
-              À contacter · {data.todo.length}
-            </TabButton>
-            <TabButton active={tab === "suivi"} onClick={() => setTab("suivi")}>
-              Suivi · {suiviCounts?.OPEN ?? "…"}
-              {suiviCounts?.due ? (
-                <span className="ml-1.5 rounded-full bg-teal-600 px-1.5 text-[11px] font-semibold text-white">
-                  {suiviCounts.due}
-                </span>
-              ) : null}
-            </TabButton>
-          </div>
-
-          {tab === "todo" ? (
-            <div key="todo" className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-              <div className="flex flex-wrap gap-2">
-                <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
-                  Tous · {data.todo.length}
-                </FilterChip>
-                {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
-                  counts[r] ? (
-                    <FilterChip key={r} active={filter === r} onClick={() => setFilter(r)}>
-                      {REASON_UI[r].label} · {counts[r]}
-                    </FilterChip>
-                  ) : null,
-                )}
-              </div>
-
-              <Card className="shadow-none">
-                <CardContent className="px-4 py-1">
-                  {filter !== "ALL" ? (
-                    <p className="border-b py-2 text-xs text-muted-foreground">{REASON_UI[filter].why}</p>
-                  ) : null}
-                  {todo.length ? (
-                    <>
-                      <ul
-                        key={`${filter}:${todoPaged.page}`}
-                        className="divide-y"
-                      >
-                        {todoPaged.pageItems.map((item, i) => (
-                          <OutreachRow
-                            key={`${item.memberId}:${item.reason}`}
-                            item={item}
-                            index={i}
-                            onMessage={(text) => setMessaging(text ? { ...item, message: text } : item)}
-                          />
-                        ))}
-                      </ul>
-                      <ListPager
-                        className="-mx-4"
-                        page={todoPaged.page}
-                        lastPage={todoPaged.lastPage}
-                        total={todoPaged.total}
-                        onPage={(p) => {
-                          todoPaged.setPage(p);
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <p className="py-10 text-center text-sm text-muted-foreground">
-                      Personne à relancer pour le moment. Les clients déjà contactés sont dans « Suivi ».
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          ) : (
-            <div key="suivi" className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-              <div className="flex flex-wrap gap-2">
-                <FilterChip
-                  active={suiviStatus === "OPEN"}
-                  onClick={() => {
-                    setSuiviStatus("OPEN");
-                    setSuiviPage(1);
-                  }}
-                >
-                  En cours · {suiviCounts?.OPEN ?? 0}
-                </FilterChip>
-                <FilterChip
-                  active={suiviStatus === "CLOSED"}
-                  onClick={() => {
-                    setSuiviStatus("CLOSED");
-                    setSuiviPage(1);
-                  }}
-                >
-                  Clôturés · {suiviCounts?.CLOSED ?? 0}
-                </FilterChip>
-              </div>
-              <Card className="shadow-none">
-                <CardContent className="px-4 py-1">
-                  {!suivi.data ? (
-                    <Skeleton className="my-3 h-40" />
-                  ) : suivi.data.rows.length ? (
-                    <>
-                      <ul key={`${suiviStatus}:${suiviPage}`} className="divide-y">
-                        {suivi.data.rows.map((row, i) => (
-                          <SuiviItem key={row.id} row={row} index={i} />
-                        ))}
-                      </ul>
-                      <ListPager
-                        className="-mx-4"
-                        page={suivi.data.meta.currentPage}
-                        lastPage={suivi.data.meta.lastPage}
-                        total={suivi.data.meta.total}
-                        onPage={(p) => {
-                          setSuiviPage(p);
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <p className="py-10 text-center text-sm text-muted-foreground">
-                      {suiviStatus === "OPEN"
-                        ? "Personne en suivi. Cliquez « Marquer contacté » sur une relance."
-                        : "Aucune relance clôturée ces 90 derniers jours."}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
 
           {!data.pushEnabled ? (
             <p className="text-xs text-muted-foreground">

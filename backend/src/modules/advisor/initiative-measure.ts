@@ -35,7 +35,8 @@ type Visit = {
 type Order = { journalId: string | null; memberId: string | null; at: Date; revenue: number };
 type Abo = { memberID: string; createdAt: Date; amount: number };
 type Slice = { visits: Visit[]; orders: Order[]; abos: Abo[] };
-type Window = { from: Date; to: Date };
+/** skip: days left out of the window (paused days of the action) */
+type Window = { from: Date; to: Date; skip?: (d: Date) => boolean };
 
 const inHours = (h: number, from: number | null | undefined, to: number | null | undefined) => {
   if (from == null || to == null) return true;
@@ -57,6 +58,7 @@ export const slotLabel = (t: InitiativeTarget) => {
 function countDays(w: Window, days: number[], invert = false) {
   let n = 0;
   for (let d = startOfDay(w.from); d <= w.to; d = addDays(d, 1)) {
+    if (w.skip?.(d)) continue;
     const match = !days.length || days.includes(d.getDay());
     if (match !== invert) n += 1;
   }
@@ -125,15 +127,16 @@ export class InitiativeMeasure {
           })
         : Promise.resolve([]),
     ]);
+    const keep = (d: Date) => !w.skip?.(d);
     return {
-      visits,
-      orders: orders.map((o) => ({
+      visits: visits.filter((v) => keep(v.registredTime)),
+      orders: orders.filter((o) => keep(o.createdAt)).map((o) => ({
         journalId: o.journalId,
         memberId: o.memberId,
         at: o.createdAt,
         revenue: orderUnitPrice(o) * (o.quantite || 0),
       })),
-      abos: abos.map((a) => ({
+      abos: abos.filter((a) => a.createdAt && keep(a.createdAt)).map((a) => ({
         memberID: a.memberID,
         createdAt: a.createdAt!,
         amount: a.amountDue ?? a.payedAmount ?? 0,
@@ -329,7 +332,7 @@ export class InitiativeMeasure {
    * promo → views, clicks, uses; client relance → contacted, came back.
    */
   async funnelInput(
-    i: { id: string; linkedKind?: string | null; linkedId?: string | null; channels?: string[] | null },
+    i: { id: string; linkedKind?: string | null; linkedId?: string | null; channels?: string[] | null; interested?: number | null },
     reach: number | null,
     links: Array<{ opens: number }>,
     campaign: { total: number; contacted: number; won: number } | null,
@@ -352,6 +355,7 @@ export class InitiativeMeasure {
           kind: 'EVENT',
           channels: i.channels ?? [],
           reach,
+          interested: i.interested ?? null,
           links: links.length,
           opens: links.reduce((a, l) => a + l.opens, 0),
           registered: regs.length,

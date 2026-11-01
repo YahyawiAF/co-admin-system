@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Price } from "@/lib/types";
 import { formatTarifPrice } from "@/lib/tarif-labels";
 import { UnpaidDebtBadge } from "@/components/admin/UnpaidDebtBadge";
+import { RelanceReminder } from "@/components/admin/RelanceReminder";
 
 export const SUB_TARIF = "__sub__";
 /** Tarif auto: the price follows the time spent (2h → 4h → …) */
@@ -24,6 +25,8 @@ export const AUTO_TARIF = "__auto__";
 export type FicheLine = {
   key: string;
   name: string;
+  /** Known member: shows the relance due for them, if any */
+  memberId?: string | null;
   /** Tarif promo applied to this line ("−20 % aujourd’hui −20 %") and DT saved */
   promoLabel?: string | null;
   promoOff?: number;
@@ -86,6 +89,7 @@ export function CheckInFicheCard({
             ) : null}
             <UnpaidDebtBadge amount={line.debt} />
           </div>
+          {line.memberId ? <RelanceReminder memberId={line.memberId} /> : null}
         </div>
         {onRemove ? (
           <Button

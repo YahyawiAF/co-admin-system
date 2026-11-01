@@ -43,6 +43,7 @@ export function adviceTargetText(
 
 /** One advice: what to do, the gain, why (one number), first step, who and what is measured. */
 export function AdviceCard({
+  defaultOpen,
   rec,
   index,
   tracked,
@@ -52,6 +53,8 @@ export function AdviceCard({
   onRelance,
   onOpenTracked,
 }: {
+  /** Open the detail right away (side panel) */
+  defaultOpen?: boolean;
   rec: AdvisorRecommendation;
   index: number;
   /** The action already started from this advice, if any */
@@ -63,7 +66,7 @@ export function AdviceCard({
   onRelance: () => void;
   onOpenTracked: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const ui = CATEGORY_UI[rec.category] ?? CATEGORY_UI.OPERATIONS;
   const Icon = ui.icon;
   const gain = gainHeadline(rec.expectedImpact);

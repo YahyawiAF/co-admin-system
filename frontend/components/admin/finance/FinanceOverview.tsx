@@ -44,6 +44,7 @@ import { analyticsApi, facilityApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { WEEKDAY_LABELS, WEEKDAYS_MON_FIRST } from "@/lib/traffic-utils";
 import { BreakEvenCard } from "./BreakEvenCard";
+import { ChangeQuestions, ForecastBlock, LeverMapCard } from "./FinanceForecast";
 import type {
   InsightSeverity,
   PerformanceInsight,
@@ -760,37 +761,6 @@ export function FinanceOverview({
             ? "warn"
             : "bad";
 
-  const summary = useMemo(() => {
-    if (!data?.current) return null;
-    const parts: string[] = [];
-    const rev = data.current.revenue;
-    const dRev = data.deltas?.revenue;
-    const versus = data.period.comparedTo.likeForLike
-      ? "par rapport à la même période du mois dernier"
-      : "par rapport au mois précédent";
-    parts.push(
-      `${data.period.isCurrent ? "Ce mois-ci" : "Sur le mois"} vous avez encaissé ${dt(rev)}${
-        dRev != null && Math.abs(dRev) >= 1 && dRev <= 300
-          ? ` (${dRev > 0 ? "+" : ""}${Math.round(dRev)} % ${versus})`
-          : ""
-      }.`,
-    );
-    if (data.period.isCurrent && data.projected != null) {
-      parts.push(`À ce rythme le mois finira vers ${dt(data.projected)}.`);
-    }
-    if (data.bestWeekday != null && data.worstWeekday != null) {
-      parts.push(
-        `Votre meilleur jour est le ${WEEKDAY_LABELS[data.bestWeekday].toLowerCase()}, le plus faible le ${WEEKDAY_LABELS[data.worstWeekday].toLowerCase()}.`,
-      );
-    }
-    const todo = insights.filter((i) => i.severity === "critical" || i.severity === "warning").length;
-    parts.push(
-      todo
-        ? `${todo} point${todo > 1 ? "s demandent" : " demande"} votre attention ci-dessous.`
-        : "Rien d'urgent à traiter.",
-    );
-    return parts.join(" ");
-  }, [data, insights]);
 
   return (
     <div className="space-y-6">
@@ -816,6 +786,9 @@ export function FinanceOverview({
         </Button>
       </div>
 
+      <ForecastBlock year={year} month={month} />
+      {data?.period.isCurrent ? <ChangeQuestions /> : null}
+
       {isLoading || !data ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -826,12 +799,6 @@ export function FinanceOverview({
         <TargetCard data={data} onEdit={() => setTargetOpen(true)} />
       ) : (
         <>
-          {summary ? (
-            <div className="rounded-xl border bg-indigo-50/50 p-4 text-sm leading-relaxed text-indigo-950">
-              {summary}
-            </div>
-          ) : null}
-
           <div className="grid gap-4 xl:grid-cols-2">
             <TargetCard data={data} onEdit={() => setTargetOpen(true)} />
             <BreakEvenCard data={data} />
@@ -905,6 +872,8 @@ export function FinanceOverview({
           ) : null}
         </>
       )}
+
+      <LeverMapCard />
 
       <Card className="shadow-none">
         <CardHeader className="pb-2">

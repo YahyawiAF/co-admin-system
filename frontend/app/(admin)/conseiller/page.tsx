@@ -30,6 +30,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { cn } from "@/lib/utils";
 import { advisorApi, outreachApi } from "@/lib/api/resources";
 import { AdvisorContextPanel } from "@/components/admin/advisor/AdvisorContextPanel";
+import { ConseillerBoard } from "@/components/admin/advisor/ConseillerBoard";
 import { AdviceCard } from "@/components/admin/advisor/AdviceCard";
 import { DonePanel, type DoneDraft } from "@/components/admin/advisor/DonePanel";
 import { FollowUpCard } from "@/components/admin/advisor/FollowUpCard";
@@ -592,142 +593,47 @@ export default function ConseillerPage() {
         />
       </section>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-        <section className="flex min-w-0 flex-col gap-3" aria-label="Conseils">
-          <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">
-              Conseils de la semaine{" "}
-              {result ? <span className="font-normal text-muted-foreground">· {result.recommendations.length}</span> : null}
-            </h2>
-            {result ? <FilterChips result={result} filter={filter} onChange={setFilter} /> : null}
-          </div>
-          {reports.isLoading || report.isLoading ? (
-            <Skeleton className="h-64 rounded-xl" />
-          ) : result ? (
-            <>
-              <Highlights result={result} />
-              <ul className="flex flex-col gap-2.5">
-                {recs.map((r, i) => {
-                  const tracked = actions.find((a) => a.recommendationTitle === r.title || a.title === r.title);
-                  const seg =
-                    r.outreach && r.outreach.segment !== "NONE" ? (r.outreach.segment as CampaignSegment) : undefined;
-                  return (
-                    <AdviceCard
-                      key={`${filter}-${r.title}-${i}`}
-                      rec={r}
-                      index={i}
-                      tracked={tracked}
-                      blockedBy={blockedLabel(r.category)}
-                      segmentCounts={segments.data}
-                      onOpenTracked={() => tracked && openAction(tracked)}
-                      onDone={() =>
-                        setDoneDraft({
-                          title: r.title,
-                          hint: r.actions[0],
-                          steps: r.actions,
-                          category: r.category,
-                          metric: r.metric,
-                          targetPct: r.targetPct,
-                          target: r.target,
-                          segment: seg,
-                          sourceReportId: report.data!.id,
-                          recommendationTitle: r.title,
-                        })
-                      }
-                      onRelance={() =>
-                        setRelanceDraft({
-                          title: r.title,
-                          message: r.outreach?.message ?? "",
-                          segment: seg,
-                          sourceReportId: report.data!.id,
-                          recommendationTitle: r.title,
-                          category: r.category,
-                          trackAsInitiative: true,
-                        })
-                      }
-                    />
-                  );
-                })}
-              </ul>
-              {result.questions.length ? (
-                <div className="flex flex-wrap items-start gap-3 rounded-xl border border-dashed p-3 text-sm">
-                  <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <span className="font-medium">
-                      {result.questions.length} question{result.questions.length > 1 ? "s" : ""} pour des conseils plus
-                      précis :
-                    </span>{" "}
-                    <span className="text-muted-foreground">{result.questions.join(" · ")}</span>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => setContextOpen(true)}>
-                    Répondre
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Pas encore d&apos;analyse. Cliquez sur « Analyser » pour vos premiers conseils.
-            </div>
-          )}
-        </section>
+      {result ? <Highlights result={result} /> : null}
 
-        <section className="flex min-w-0 flex-col gap-3" aria-label="Mes actions">
-          <div className="flex min-h-9 flex-wrap items-center justify-between gap-2">
-            <h2 className="text-base font-semibold">Mes actions</h2>
-            <div className="flex items-center gap-2">
-              <div role="tablist" className="inline-flex rounded-lg bg-muted p-0.5 text-sm">
-                {(
-                  [
-                    ["test", `En test · ${testing.length}`],
-                    ["done", `Terminées · ${finished.length}`],
-                  ] as const
-                ).map(([k, label]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    role="tab"
-                    aria-selected={actionsTab === k}
-                    onClick={() => setActionsTab(k)}
-                    className={cn(
-                      "rounded-md px-3 py-1 font-medium transition-[background-color,color,box-shadow] duration-200",
-                      actionsTab === k
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8"
-                title="Suivre une autre action"
-                onClick={() => setDoneDraft({ title: "", category: "NEW_REVENUE" })}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
+      {reports.isLoading || initiatives.isLoading ? (
+        <Skeleton className="h-72 rounded-xl" />
+      ) : (
+        <ConseillerBoard
+          result={result}
+          reportId={report.data?.id ?? null}
+          actions={actions}
+          blockedLabel={blockedLabel}
+          segmentCounts={segments.data}
+          onStart={(draft) => setDoneDraft(draft)}
+          onRelance={(r) =>
+            setRelanceDraft({
+              title: r.title,
+              message: r.outreach?.message ?? "",
+              segment: r.outreach && r.outreach.segment !== "NONE" ? (r.outreach.segment as CampaignSegment) : undefined,
+              sourceReportId: report.data!.id,
+              recommendationTitle: r.title,
+              category: r.category,
+              trackAsInitiative: true,
+            })
+          }
+          onNew={() => setDoneDraft({ title: "", category: "NEW_REVENUE" })}
+        />
+      )}
+
+      {result?.questions.length ? (
+        <div className="flex flex-wrap items-start gap-3 rounded-xl border border-dashed p-3 text-sm">
+          <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <span className="font-medium">
+              {result.questions.length} question{result.questions.length > 1 ? "s" : ""} pour des conseils plus précis :
+            </span>{" "}
+            <span className="text-muted-foreground">{result.questions.join(" · ")}</span>
           </div>
-          {initiatives.isLoading ? (
-            <Skeleton className="h-48 rounded-xl" />
-          ) : shownActions.length ? (
-            <ul key={actionsTab} className="flex flex-col gap-2.5">
-              {shownActions.map((a, i) => (
-                <FollowUpCard key={a.id} item={a} index={i} review={reviews.get(a.id)} highlight={focusId === a.id} />
-              ))}
-            </ul>
-          ) : (
-            <div key={actionsTab} className="advisor-in rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {actionsTab === "test"
-                ? "Rien en test. Sur un conseil, cliquez « Je l'ai fait » : l'app mesurera ce qu'il rapporte."
-                : "Aucune action terminée. Une action est terminée quand vous l'arrêtez ou après 28 jours de mesure."}
-            </div>
-          )}
-        </section>
-      </div>
+          <Button size="sm" variant="outline" onClick={() => setContextOpen(true)}>
+            Répondre
+          </Button>
+        </div>
+      ) : null}
       </>
       ) : null}
 

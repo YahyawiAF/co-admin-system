@@ -2,3 +2,7 @@ export * from './types';
 export { pendingQuestions, editableQuestions, knowledge, isMoneyKey, LEGAL_PREVIEW, QUESTION_SHORT, dt, dayLabel } from './questions';
 export { computeMoneyPlan, ideaFit, DEFAULT_RESERVE_MONTHS } from './money';
 export { featureIdeas, ticketMarkdown, type FeatureIdea } from './features';
+export { buildForecast, detectChanges, splitGap, weekBand, weekdayAverages } from './forecast';
+export type { DayFact, MonthDay, Totals, Driver, DriverKey, Forecast, ForecastDay, DetectedChange, ChangeMetric } from './forecast';
+export { evaluateLevers, LEVER_GROUP_LABEL, MISSING_FROM } from './levers';
+export type { ActionRecord, OutreachRecord, LeverDef, LeverGroup, LeverIdea, LeverMap, LeverResult, LeverStatus, MissingIdea } from './levers';

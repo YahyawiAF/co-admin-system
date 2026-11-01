@@ -8,6 +8,8 @@ Plain TypeScript: no database, no NestJS, no host table names.
 | `types.ts` | `MoneyFacts` (what the host app knows), `AnswerRecord` (what the owner answered), `MoneyPlan` |
 | `questions.ts` | The questions the manager asks, best first. Skips what the app knows, asks again when an answer is old |
 | `money.ts` | Keep / invest calculation. Deterministic and unit-tested |
+| `forecast.ts` | Month forecast from the 4 weeks before (same weekday average), band, prévu vs réel split into drivers, unexplained 7-day changes |
+| `levers.ts` | Lever map engine: each lever (from the host) gets WORKING / IN_PROGRESS / MISSING / NO_DATA / OK from the owner's actions; missing ones become ideas |
 | `features.ts` | When the manager asks for a tool, and the ticket text once the owner approves |
 
 ## Using it in another project
