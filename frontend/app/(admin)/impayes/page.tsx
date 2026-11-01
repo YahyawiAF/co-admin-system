@@ -6,7 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { differenceInCalendarDays, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { toast } from "sonner";
-import { Trash2, Wallet } from "lucide-react";
+import { Gift, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   abonnementsApi,
   journalApi,
@@ -53,6 +61,8 @@ export default function ImpayesPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("OPEN");
   const [toDelete, setToDelete] = useState<DebtorItem | null>(null);
+  const [toOffer, setToOffer] = useState<DebtorItem | null>(null);
+  const [received, setReceived] = useState("");
 
   const { data: openData } = useQuery({
     queryKey: [...queryKeys.debtors, "open"],
@@ -140,6 +150,65 @@ export default function ImpayesPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  // "Offert": what is left is a gift from the space, not money still owed
+  const offer = useMutation({
+    mutationFn: async ({
+      item,
+      got,
+    }: {
+      item: DebtorItem;
+      got: number;
+    }): Promise<number> => {
+      const gift = Math.round((item.amount - got) * 100) / 100;
+      if (item.source === "VISIT" && item.journalId) {
+        // The server knows the real price (open session, late billing):
+        // send what was received, the rest becomes the gift
+        const res = await mobileApi.setPayment(
+          item.journalId,
+          true,
+          "checkout",
+          undefined,
+          got,
+        );
+        return res.offeredAmount ?? 0;
+      }
+      if (item.source === "ABONNEMENT" && item.abonnementId) {
+        const paid = item.paid ?? 0;
+        await abonnementsApi.update(item.abonnementId, {
+          isPayed: true,
+          payedAmount: Math.round((paid + got) * 100) / 100,
+          offeredAmount: Math.round(((item.offered ?? 0) + gift) * 100) / 100,
+          paymentRemindAt: null,
+        });
+        return gift;
+      }
+      if (item.source === "LEDGER" && item.ledgerId) {
+        await membersApi.offerLedger(item.ledgerId, got);
+        return gift;
+      }
+      throw new Error("Impossible d’offrir cette écriture");
+    },
+    onSuccess: (gift) => {
+      toast.success(
+        gift > 0.009
+          ? `${gift.toFixed(1)} DT offert — plus rien à payer`
+          : "Marqué payé",
+      );
+      setToOffer(null);
+      invalidate();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const openOffer = (item: DebtorItem) => {
+    setReceived("");
+    setToOffer(item);
+  };
+  const offerGot = toOffer
+    ? Math.min(Math.max(Number(received.replace(",", ".")) || 0, 0), toOffer.amount)
+    : 0;
+  const offerGift = toOffer ? Math.max(0, toOffer.amount - offerGot) : 0;
 
   const setRemind = useMutation({
     mutationFn: async ({
@@ -394,6 +463,18 @@ export default function ImpayesPage() {
                           >
                             Marquer payé
                           </Button>
+                        ) : null}
+                        {!item.settled ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                            disabled={offer.isPending}
+                            onClick={() => openOffer(item)}
+                          >
+                            <Gift className="mr-1 h-3.5 w-3.5" />
+                            Offrir
+                          </Button>
                         ) : (
                           <Badge variant="secondary">Réglé</Badge>
                         )}
@@ -434,6 +515,72 @@ export default function ImpayesPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <Dialog
+        open={!!toOffer}
+        onOpenChange={(o) => {
+          if (!o) setToOffer(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="h-5 w-5 text-emerald-600" />
+              Offrir le reste
+            </DialogTitle>
+            <DialogDescription>
+              {toOffer?.memberName} — {toOffer?.label}. Reste dû{" "}
+              <b>{toOffer?.amount.toFixed(1)} DT</b>. La partie offerte n’est
+              plus une dette et ne compte pas dans le revenu.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">Montant reçu (DT)</span>
+              <Input
+                inputMode="decimal"
+                placeholder="0"
+                value={received}
+                autoFocus
+                onChange={(e) => setReceived(e.target.value)}
+              />
+            </label>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Encaissé</span>
+                <span className="font-medium tabular-nums">
+                  {offerGot.toFixed(1)} DT
+                </span>
+              </div>
+              <div className="flex justify-between text-emerald-800">
+                <span>Offert par vous</span>
+                <span className="font-semibold tabular-nums transition-all duration-200 motion-reduce:transition-none">
+                  {offerGift.toFixed(1)} DT
+                </span>
+              </div>
+              <div className="mt-1 border-t border-emerald-200 pt-1 text-xs text-emerald-700">
+                Reste à payer : 0 DT
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setToOffer(null)}>
+              Annuler
+            </Button>
+            <Button
+              className="bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={offer.isPending || !toOffer}
+              onClick={() =>
+                toOffer && offer.mutate({ item: toOffer, got: offerGot })
+              }
+            >
+              {offerGift > 0.009
+                ? `Offrir ${offerGift.toFixed(1)} DT`
+                : "Marquer payé"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={!!toDelete}

@@ -2348,6 +2348,7 @@ export class MobileService {
     isPayed: boolean,
     billing: LateBillingMode = 'now',
     offeredAmount = 0,
+    receivedAmount?: number,
   ) {
     const journal = await this.prisma.journal.findUnique({
       where: { id: journalId },
@@ -2388,6 +2389,10 @@ export class MobileService {
 
     // "Offert": the owed amount drops to what was collected, the gift is kept apart
     let gift: { payedAmount: number; offeredAmount: number | null } | null = null;
+    // Amount received given instead: everything above it is the gift
+    if (isPayed && receivedAmount != null) {
+      offeredAmount = Math.max(0, paidAmount - receivedAmount);
+    }
     if (isPayed && offeredAmount > 0) {
       const offered = Math.round(Math.min(offeredAmount, paidAmount) * 1000) / 1000;
       paidAmount = Math.round((paidAmount - offered) * 1000) / 1000;

@@ -147,6 +147,15 @@ export class MemberController {
     return this.memberService.settleLedger(entryId, body.settled !== false);
   }
 
+  @Patch('ledger/:entryId/offer')
+  @ApiBearerAuth()
+  offerLedger(
+    @Param('entryId', ParseUUIDPipe) entryId: string,
+    @Body() body: { received?: number },
+  ) {
+    return this.memberService.offerLedger(entryId, Number(body?.received) || 0);
+  }
+
   @Delete('ledger/:entryId')
   @ApiBearerAuth()
   removeLedger(@Param('entryId', ParseUUIDPipe) entryId: string) {

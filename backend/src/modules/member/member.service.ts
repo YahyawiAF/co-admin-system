@@ -1097,6 +1097,56 @@ export class MemberService {
     });
   }
 
+  /**
+   * "Offert": the rest of a debt is a gift, not money owed. The ledger row is
+   * closed and the gift is taken off the linked visit / abonnement, so revenue
+   * only counts what was really received.
+   */
+  async offerLedger(id: string, received = 0) {
+    const row = await this.prisma.memberLedger.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Écriture introuvable');
+    if (row.kind !== LedgerKind.CREDIT || row.settled) {
+      throw new BadRequestException('Cette dette est déjà réglée');
+    }
+    const r2 = (n: number) => Math.round(n * 100) / 100;
+    const got = r2(Math.min(Math.max(Number(received) || 0, 0), row.amount));
+    const offered = r2(row.amount - got);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (offered > 0.009 && row.journalId) {
+        const j = await tx.journal.findUnique({ where: { id: row.journalId } });
+        if (j && j.payedAmount != null) {
+          await tx.journal.update({
+            where: { id: j.id },
+            data: {
+              payedAmount: r2(Math.max(0, j.payedAmount - offered)),
+              offeredAmount: r2((j.offeredAmount || 0) + offered),
+            },
+          });
+        }
+      } else if (offered > 0.009 && row.abonnementId) {
+        const a = await tx.abonnement.findUnique({ where: { id: row.abonnementId } });
+        if (a && a.amountDue != null) {
+          await tx.abonnement.update({
+            where: { id: a.id },
+            data: {
+              amountDue: r2(Math.max(0, a.amountDue - offered)),
+              offeredAmount: r2((a.offeredAmount || 0) + offered),
+            },
+          });
+        }
+      }
+      const tag = offered > 0.009 ? `${offered} DT offert` : null;
+      return tx.memberLedger.update({
+        where: { id },
+        data: {
+          settled: true,
+          ...(tag ? { note: row.note ? `${row.note} · ${tag}` : tag } : {}),
+        },
+      });
+    });
+  }
+
   async removeLedger(id: string) {
     const row = await this.prisma.memberLedger.findUnique({ where: { id } });
     if (!row) throw new NotFoundException('Écriture introuvable');
@@ -1166,6 +1216,8 @@ export class MemberService {
           journalId?: string | null;
           abonnementId?: string | null;
           ledgerId?: string | null;
+          paid?: number;
+          offered?: number;
           memberId: string;
           memberName: string;
           visitorNumber: number | null;
@@ -1249,6 +1301,8 @@ export class MemberService {
         settled: false,
         label: a.price?.name || 'Abonnement',
         abonnementId: a.id,
+        paid,
+        offered: Number(a.offeredAmount ?? 0),
         memberId: a.memberID,
         memberName: memberName(a.members),
         visitorNumber: a.members.visitorNumber ?? null,
