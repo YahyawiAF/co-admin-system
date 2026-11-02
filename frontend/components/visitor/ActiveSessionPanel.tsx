@@ -39,8 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import { TierLevelUp } from "@/components/visitor/SessionTariffBoost";
 import { PassPickerSheet } from "@/components/visitor/PassPickerSheet";
-import { VisitVouchers } from "@/components/visitor/VisitVouchers";
-import { EnergyCupCard } from "@/components/visitor/EnergyCupCard";
+import { DrinkPickerCard } from "@/components/visitor/cafe/DrinkPickerCard";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
 import { CheckinRewardSheet } from "@/components/visitor/CheckinRewardSheet";
 import { FirstVisitWelcome } from "@/components/visitor/FirstVisitWelcome";
@@ -719,7 +718,7 @@ export function ActiveSessionPanel({
       ) : null}
 
       {!isOptimistic && session.registredTime ? (
-        <EnergyCupCard memberId={memberId} since={String(session.registredTime)} />
+        <DrinkPickerCard memberId={memberId} since={String(session.registredTime)} />
       ) : null}
 
       {/* Place + payment */}
@@ -769,16 +768,6 @@ export function ActiveSessionPanel({
         ) : null}
       </div>
 
-      <VisitVouchers
-        until={
-          session.expectedLeaveTime
-            ? new Date(session.expectedLeaveTime).toLocaleTimeString("fr-FR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : null
-        }
-      />
 
       <div className="space-y-2">
         {checkout.isError && !checkoutOpen ? (

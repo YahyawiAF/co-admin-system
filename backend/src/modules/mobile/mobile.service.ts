@@ -5516,10 +5516,14 @@ export class MobileService {
   }
 
   async listOrders(memberId: string) {
+    // Refused / cancelled orders stay visible for a day, so the member sees the answer
+    const since = new Date(Date.now() - 24 * 3600_000);
     const rows = await this.prisma.dailyProduct.findMany({
       where: {
-        OR: [{ memberId }, { externalRef: memberId }],
-        status: { not: ProductOrderStatus.CANCELLED },
+        AND: [
+          { OR: [{ memberId }, { externalRef: memberId }] },
+          { OR: [{ status: { not: ProductOrderStatus.CANCELLED } }, { updatedAt: { gte: since } }] },
+        ],
       },
       include: { product: true },
       orderBy: { createdAt: 'desc' },

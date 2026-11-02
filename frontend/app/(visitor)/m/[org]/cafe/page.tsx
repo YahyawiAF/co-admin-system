@@ -19,12 +19,10 @@ import { cn } from "@/lib/utils";
 import { useRealtime } from "@/lib/realtime/RealtimeProvider";
 import { useOrg } from "@/lib/org";
 import Link from "next/link";
-import { OffersStrip, useMemberPromotions } from "@/components/visitor/VisitorSpotlight";
-import { useMyVouchers } from "@/components/visitor/VisitVouchers";
+import { OffersStrip } from "@/components/visitor/VisitorSpotlight";
+import { useCafeDeals } from "@/components/visitor/cafe/use-cafe-deals";
 import { readLocalCache, writeLocalCache } from "@/lib/visitor-local-cache";
 import { isDrink } from "@/lib/drinks";
-import { applyPromoValue } from "@/lib/promo-price";
-import { PromoValueKind } from "@/lib/types";
 import { dtToPoints } from "@/lib/points-catalog";
 import { usePlayer } from "@/lib/hooks/use-player";
 
@@ -117,47 +115,7 @@ export default function CafePage() {
     staleTime: 20_000,
   });
 
-  const { data: promotions = [] } = useMemberPromotions();
-  /** productId → live offer (best price). An offer can cover one product, several or the whole café. */
-  const deals = useMemo(() => {
-    const m = new Map<string, { label: string; priceAfter: number }>();
-    const priceOfId = new Map(products.map((x) => [x.id, x.sellingPrice]));
-    for (const p of promotions) {
-      if (!p.liveNow || p.target !== "PRODUCT") continue;
-      const ids = p.productIds?.length ? p.productIds : p.productId ? [p.productId] : [];
-      for (const id of ids) {
-        const before = priceOfId.get(id);
-        if (before == null) continue;
-        const after = applyPromoValue(before, p.valueKind as PromoValueKind, p.value);
-        if (after >= before - 0.0005) continue;
-        const cur = m.get(id);
-        if (!cur || after < cur.priceAfter) m.set(id, { label: p.label, priceAfter: after });
-      }
-    }
-    return m;
-  }, [promotions, products]);
-  /** productId → gift-with-pass voucher of the visit (first unit at the voucher price). A voucher
-   *  for several products shows on each of them; the first one ordered uses it. */
-  const { data: vouchers = [] } = useMyVouchers();
-  const voucherOf = useMemo(() => {
-    const m = new Map<string, { label: string; priceAfter: number }>();
-    const priceOfId = new Map(products.map((x) => [x.id, x.sellingPrice]));
-    for (const v of vouchers) {
-      if (v.status !== "ACCEPTED") continue;
-      const ids = v.productIds?.length ? v.productIds : v.productId ? [v.productId] : [];
-      for (const id of ids) {
-        if (m.has(id)) continue;
-        const before = priceOfId.get(id);
-        if (before == null) continue;
-        const after =
-          v.productId === id && v.priceAfter != null
-            ? v.priceAfter
-            : applyPromoValue(before, v.valueKind as PromoValueKind, v.value);
-        m.set(id, { label: v.label, priceAfter: after });
-      }
-    }
-    return m;
-  }, [vouchers, products]);
+  const { promotions, deals, voucherOf } = useCafeDeals(products);
   const [focusPromo, setFocusPromo] = useState<string | null>(null);
   const [focusVoucher, setFocusVoucher] = useState<string | null>(null);
   useEffect(() => {
