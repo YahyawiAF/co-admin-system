@@ -10,6 +10,7 @@ Plain TypeScript: no database, no NestJS, no host table names.
 | `money.ts` | Keep / invest calculation. Deterministic and unit-tested |
 | `forecast.ts` | Month forecast from the 4 weeks before (same weekday average), band, prévu vs réel split into drivers, unexplained 7-day changes |
 | `levers.ts` | Lever map engine: each lever (from the host) gets WORKING / IN_PROGRESS / MISSING / NO_DATA / OK from the owner's actions; missing ones become ideas |
+| `stock-lots.ts` | Stock by purchase lot: recipes turn sales into ingredient use (first in, first out), each lot's money back and result, what is left, days left, losses from inventory counts |
 | `features.ts` | When the manager asks for a tool, and the ticket text once the owner approves |
 
 ## Using it in another project

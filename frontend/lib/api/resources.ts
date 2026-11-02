@@ -995,6 +995,146 @@ export const productsApi = {
   },
 };
 
+/** g | ml | pc — quantities are stored in this base unit */
+export type StockUnit = "g" | "ml" | "pc";
+export type StockItemKind = "INGREDIENT" | "UNIT";
+export type StockLotStatus = "OPEN" | "RESERVE" | "DONE";
+export type StockItemRow = {
+  id: string;
+  name: string;
+  unit: StockUnit;
+  kind: StockItemKind;
+  left: number;
+  unitCost: number;
+  dailyUse: number;
+  daysLeft: number | null;
+  uncovered: number;
+  reserve: number;
+  hasLots: boolean;
+  currentLot: { id: string; quantity: number; left: number; price: number; purchaseDate: string } | null;
+  usedBy: string[];
+};
+export type StockRecipeLine = {
+  stockItemId: string;
+  quantity: number;
+  itemName: string;
+  unit: StockUnit;
+  kind: StockItemKind;
+  cost: number;
+};
+export type StockProductRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  img?: string | null;
+  sellingPrice: number;
+  purchasePrice: number;
+  stock: number;
+  /** Stock computed from ingredients */
+  tracked: boolean;
+  unitCost: number;
+  possible: number;
+  limitedBy: string | null;
+  soldSinceFirstPurchase: number;
+  recipe: StockRecipeLine[];
+};
+export type StockLotRow = {
+  id: string;
+  stockItemId: string;
+  itemName: string;
+  unit: StockUnit;
+  quantity: number;
+  price: number;
+  used: number;
+  left: number;
+  recovered: number;
+  result: number;
+  status: StockLotStatus;
+  finishedAt: string | null;
+};
+export type StockPurchaseRow = {
+  id: string;
+  date: string;
+  source: "CAISSE" | "COFFRE" | "AUTRE" | "NONE";
+  note: string | null;
+  dailyExpenseId: string | null;
+  invested: number;
+  recovered: number;
+  result: number;
+  done: boolean;
+  lots: StockLotRow[];
+};
+export type StockLossRow = {
+  id: string;
+  date: string;
+  stockItemId: string;
+  itemName: string;
+  unit: StockUnit;
+  quantity: number;
+  amount: number;
+  note: string | null;
+};
+export type StockOverview = {
+  totals: {
+    invested: number;
+    recovered: number;
+    result: number;
+    stockValue: number;
+    losses: number;
+    purchases: number;
+    firstPurchaseDate: string | null;
+  };
+  items: StockItemRow[];
+  products: StockProductRow[];
+  purchases: StockPurchaseRow[];
+  losses: StockLossRow[];
+};
+export type StockPurchaseInput = {
+  date?: string;
+  source: StockPurchaseRow["source"];
+  note?: string;
+  lines: { stockItemId: string; quantity: number; price: number }[];
+};
+
+export const stockApi = {
+  overview() {
+    return http.get<StockOverview>(withOrgQuery("/stock/overview"));
+  },
+  createItem(data: { name: string; unit: StockUnit; kind?: StockItemKind }) {
+    return http.post<{ id: string }>("/stock/items", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
+  },
+  updateItem(id: string, data: { name?: string; unit?: StockUnit }) {
+    return http.patch(`/stock/items/${id}`, data);
+  },
+  removeItem(id: string) {
+    return http.delete(`/stock/items/${id}`);
+  },
+  count(id: string, remaining: number, note?: string) {
+    return http.post<{ gap: number }>(withOrgQuery(`/stock/items/${id}/count`), { remaining, note });
+  },
+  removeAdjustment(id: string) {
+    return http.delete(`/stock/adjustments/${id}`);
+  },
+  setRecipe(
+    productId: string,
+    data: { mode: "RECIPE" | "UNIT" | "NONE"; lines?: { stockItemId: string; quantity: number }[] }
+  ) {
+    return http.put(`/stock/recipes/${productId}`, data);
+  },
+  createPurchase(data: StockPurchaseInput) {
+    return http.post<{ id: string; total: number; expenseId: string | null }>("/stock/purchases", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
+  },
+  removePurchase(id: string) {
+    return http.delete(`/stock/purchases/${id}`);
+  },
+};
+
 export const expensesApi = {
   list() {
     return http.get<Expense[]>("/expenses");

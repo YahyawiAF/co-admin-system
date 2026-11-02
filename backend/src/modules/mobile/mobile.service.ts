@@ -110,6 +110,7 @@ import {
 } from './visit-amount';
 import { appPromoUsage, GLOBAL_APP_PROMO_KEY } from './app-install-promo-usage';
 import { PromotionService } from '../promotion/promotion.service';
+import { StockService } from '../stock/stock.service';
 import { orderUnitPrice } from '../product/order-price';
 import { firstVisitTodayIds } from '../member/first-visit';
 
@@ -130,6 +131,7 @@ export class MobileService {
     private readonly eventsGateway: EventsGateway,
     private readonly pushService: PushService,
     private readonly promotions: PromotionService,
+    private readonly stock: StockService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -5299,6 +5301,7 @@ export class MobileService {
       }),
     ]);
     if (deal) await this.recordProductDeal(deal, order.id, dto.memberId, product.sellingPrice, qty);
+    void this.stock.syncProductStock();
     const mapped = this.mapOrder(order);
     const seat = await this.resolveSeatForMember(dto.memberId);
     const session = await this.getOpenSession(dto.memberId);
@@ -5428,6 +5431,7 @@ export class MobileService {
       }),
     ]);
     if (deal) await this.recordProductDeal(deal, order.id, memberId, product.sellingPrice, qty);
+    void this.stock.syncProductStock();
     if (!existing && dto.isPayed && memberId) {
       const awarded = await creditProductPaidPoints(this.prisma, order.id);
       if (awarded) {
@@ -5501,6 +5505,7 @@ export class MobileService {
         data: { stock: { decrement: diff } },
       }),
     ]);
+    void this.stock.syncProductStock();
     this.eventsGateway.sendProductOrder({
       type: 'product_order_updated',
       orderId: id,
@@ -5558,6 +5563,7 @@ export class MobileService {
         data: { stock: { decrement: diff } },
       }),
     ]);
+    void this.stock.syncProductStock();
     this.eventsGateway.sendProductOrder({
       type: 'product_order_updated',
       orderId: id,
@@ -5607,6 +5613,7 @@ export class MobileService {
       await revokeProductPaidPoints(this.prisma, id);
     }
     await this.promotions.releaseVoucher(id);
+    void this.stock.syncProductStock();
     const productName = updated.product?.name || order.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_cancelled',

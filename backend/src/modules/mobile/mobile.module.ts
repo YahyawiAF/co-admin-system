@@ -8,6 +8,7 @@ import { PriceModule } from '../price/price.module';
 import { EventsModule } from '../webSocket/events.module';
 import { PushModule } from '../push/push.module';
 import { PromotionModule } from '../promotion/promotion.module';
+import { StockModule } from '../stock/stock.module';
 import { MemberOnboardingController } from './member-onboarding.controller';
 import { MemberOnboardingService } from './member-onboarding.service';
 
@@ -22,6 +23,7 @@ import { MemberOnboardingService } from './member-onboarding.service';
     EventsModule,
     PushModule,
     PromotionModule,
+    StockModule,
   ],
   controllers: [MobileController, MemberOnboardingController],
   providers: [MobileService, MemberOnboardingService, PrismaService],

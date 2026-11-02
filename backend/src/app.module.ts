@@ -33,6 +33,7 @@ import { SurveysModule } from './modules/surveys/surveys.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AdvisorModule } from './modules/advisor/advisor.module';
 import { PromotionModule } from './modules/promotion/promotion.module';
+import { StockModule } from './modules/stock/stock.module';
 import { StaffModule } from './modules/staff/staff.module';
 
 @Module({
@@ -87,6 +88,7 @@ import { StaffModule } from './modules/staff/staff.module';
     AnalyticsModule,
     AdvisorModule,
     PromotionModule,
+    StockModule,
     StaffModule,
   ],
   controllers: [AppController],
