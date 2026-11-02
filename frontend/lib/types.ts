@@ -1845,8 +1845,12 @@ export interface Promotion {
   title: string;
   description: string | null;
   target: PromotionTarget;
-  /** PRODUCT: discounted product · BUNDLE: the gift offered with the pass */
+  /** PRODUCT: discounted product · BUNDLE: the gift offered with the pass (one product) */
   productId: string | null;
+  /** PRODUCT / BUNDLE: every product id covered (one, several, or the whole café) */
+  productIds?: string[];
+  /** PRODUCT / BUNDLE: the whole café, present and future */
+  allProducts?: boolean;
   /** PRICE / BUNDLE: one tarif… */
   priceId: string | null;
   /** …or every tarif of this category */
@@ -1896,10 +1900,15 @@ export interface PromotionVoucher {
   id: string;
   promotionId: string;
   journalId: string;
-  productId: string;
+  /** null = any product of the offer (the client picks at the café) */
+  productId: string | null;
+  /** Products the voucher can be used on */
+  productIds?: string[];
   status: "ACCEPTED" | "USED";
   title: string;
   label: string;
+  valueKind: "PERCENT" | "FIXED_DT";
+  value: number;
   productName: string | null;
   productImg: string | null;
   priceBefore: number | null;
@@ -1914,6 +1923,8 @@ export type PromotionInput = Partial<
     | "description"
     | "target"
     | "productId"
+    | "productIds"
+    | "allProducts"
     | "priceId"
     | "priceCategory"
     | "valueKind"

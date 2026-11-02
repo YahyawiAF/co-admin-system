@@ -16,7 +16,8 @@ export function indexTarifPromos(promos: Promotion[], liveOnly = true) {
   const map = new Map<string, TarifPromos>();
   for (const p of promos) {
     if (!p.isActive || (liveOnly && !p.liveNow)) continue;
-    if (p.target !== "PRICE" && !(p.target === "BUNDLE" && p.productId)) continue;
+    const gift = !!p.productId || !!p.allProducts || !!p.productIds?.length;
+    if (p.target !== "PRICE" && !(p.target === "BUNDLE" && gift)) continue;
     const ids = p.priceIds?.length ? p.priceIds : p.priceId ? [p.priceId] : [];
     for (const id of ids) {
       const cur = map.get(id) ?? { deals: [], bundles: [] };
