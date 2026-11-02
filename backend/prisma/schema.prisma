@@ -1450,9 +1450,13 @@ model Promotion {
   description      String?
   /// PRODUCT (café…) | PRICE (pass / tarif) | BUNDLE (gift with a pass) | OTHER (free offer, reception applies it)
   target           String
-  /// PRODUCT: the discounted product · BUNDLE: the gift offered with the pass
+  /// PRODUCT: the discounted product · BUNDLE: the gift offered with the pass (one product)
   productId        String?
   product          Product?           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// PRODUCT / BUNDLE: several products (productId is null then)
+  productIds       String[]           @default([])
+  /// PRODUCT / BUNDLE: every café product, present and future
+  allProducts      Boolean            @default(false)
   /// PRICE / BUNDLE: one tarif, or every tarif of priceCategory
   priceId          String?
   price            Price?             @relation(fields: [priceId], references: [id], onDelete: Cascade)
@@ -1499,7 +1503,8 @@ model PromotionVoucher {
   promotion      Promotion              @relation(fields: [promotionId], references: [id], onDelete: Cascade)
   journalId      String
   memberId       String?
-  productId      String
+  /// The gift product; null = any product the promotion covers (client picks at the café)
+  productId      String?
   status         PromotionVoucherStatus
   /// Café order that used the voucher
   dailyProductId String?

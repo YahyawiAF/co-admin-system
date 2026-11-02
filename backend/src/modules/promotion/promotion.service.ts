@@ -15,6 +15,10 @@ type PromotionBody = {
   description?: string | null;
   target?: string;
   productId?: string | null;
+  /** PRODUCT / BUNDLE: several products */
+  productIds?: string[] | null;
+  /** PRODUCT / BUNDLE: the whole café */
+  allProducts?: boolean;
   priceId?: string | null;
   priceCategory?: string | null;
   valueKind?: string;
@@ -92,6 +96,45 @@ function priceMatchWhere(price: {
   };
 }
 
+/** Café promo rows that cover this product: one product, a list, or the whole café. */
+export function productMatchWhere(productId: string): Prisma.PromotionWhereInput {
+  return { OR: [{ productId }, { productIds: { has: productId } }, { allProducts: true }] };
+}
+
+/** PRODUCT / BUNDLE rows that name at least one product. */
+const HAS_PRODUCTS: Prisma.PromotionWhereInput = {
+  OR: [{ productId: { not: null } }, { productIds: { isEmpty: false } }, { allProducts: true }],
+};
+
+type ProductScope = { productId: string | null; productIds: string[]; allProducts: boolean };
+type CoverProduct = { id: string; name: string };
+
+const hasProducts = (r: ProductScope) => !!r.productId || r.productIds.length > 0 || r.allProducts;
+/** Several products or the whole café (names come from the product list, not the relation). */
+const isMulti = (r: ProductScope) => !r.productId && (r.allProducts || r.productIds.length > 0);
+
+/** Every product id a promo covers. */
+function coveredProductIds(r: ProductScope, products: CoverProduct[]) {
+  if (r.allProducts) return products.map((p) => p.id);
+  if (r.productIds.length) return r.productIds;
+  return r.productId ? [r.productId] : [];
+}
+
+/** « Café », « Café, Thé ou Jus », « 5 produits », « Tout le café » */
+function productsLabel(r: ProductScope & { target: string }, products: CoverProduct[]) {
+  const or = r.target === 'BUNDLE';
+  if (r.allProducts) return or ? 'Un produit du café au choix' : 'Tout le café';
+  const names = r.productIds
+    .map((id) => products.find((p) => p.id === id)?.name)
+    .filter((n): n is string => !!n);
+  if (!names.length) return null;
+  if (names.length === 1) return names[0];
+  if (names.length <= 3) {
+    return `${names.slice(0, -1).join(', ')} ${or ? 'ou' : 'et'} ${names[names.length - 1]}${or ? ', au choix' : ''}`;
+  }
+  return `${names.length} produits${or ? ' au choix' : ''}`;
+}
+
 /** End of the current happy-hour window or of the offer, whichever comes first (for countdowns). */
 function liveUntil(p: PromotionRow, at: Date) {
   let end: Date | null = p.endsAt;
@@ -167,13 +210,13 @@ export class PromotionService {
     const vCount = (id: string, st: PromotionVoucherStatus) =>
       vouchers.find((v) => v.promotionId === id && v.status === st)?._count ?? 0;
     const now = new Date();
-    const tarifs = await this.tarifsOf(id);
+    const [tarifs, products] = await Promise.all([this.tarifsOf(id), this.productsOf(id, rows)]);
     return rows.map((r) => {
       const s = stats.find((x) => x.promotionId === r.id);
       const used = vCount(r.id, 'USED');
       const accepted = vCount(r.id, 'ACCEPTED') + used;
       return {
-        ...this.serialize(r, now, tarifs),
+        ...this.serialize(r, now, tarifs, products),
         stats: {
           views: r.views,
           clicks: r.clicks,
@@ -201,10 +244,27 @@ export class PromotionService {
     });
   }
 
-  private serialize(r: PromotionRow, now: Date, tarifs: CoverPrice[] = []) {
+  /** Café products of the organization — only loaded when a promo covers several (names, « all »). */
+  private async productsOf(facilityId: string, rows: ProductScope[] = []): Promise<CoverProduct[]> {
+    if (rows.length && !rows.some(isMulti)) return [];
+    const f = await this.prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: { organizationId: true },
+    });
+    return this.prisma.product.findMany({
+      where: f?.organizationId ? { organizationId: f.organizationId } : {},
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  private serialize(r: PromotionRow, now: Date, tarifs: CoverPrice[] = [], products: CoverProduct[] = []) {
+    const multi = isMulti(r);
     const base =
       r.target === 'PRODUCT' || r.target === 'BUNDLE'
-        ? r.product?.sellingPrice
+        ? multi
+          ? null
+          : r.product?.sellingPrice
         : r.target === 'PRICE'
           ? r.price?.price
           : null;
@@ -214,6 +274,9 @@ export class PromotionService {
       description: r.description,
       target: r.target,
       productId: r.productId,
+      /** PRODUCT / BUNDLE: every product id the promo covers */
+      productIds: coveredProductIds(r, products),
+      allProducts: r.allProducts,
       priceId: r.priceId,
       priceCategory: r.priceCategory,
       /** PRICE / BUNDLE: every tarif id the promo covers */
@@ -223,8 +286,11 @@ export class PromotionService {
           ? tarifs.filter((t) => priceCategoriesFor(t).includes(r.priceCategory!)).map((t) => t.id)
           : [],
       /** BUNDLE: the gift; PRICE: the tarif; PRODUCT: the product */
-      itemName:
-        r.target === 'BUNDLE' ? r.product?.name ?? null : r.product?.name ?? r.price?.name ?? null,
+      itemName: multi
+        ? productsLabel(r, products)
+        : r.target === 'BUNDLE'
+          ? r.product?.name ?? null
+          : r.product?.name ?? r.price?.name ?? null,
       /** Tarif name for PRICE / BUNDLE (null when the promo covers a whole category) */
       priceName: r.price?.name ?? null,
       itemImg: r.product?.img ?? null,
@@ -262,7 +328,16 @@ export class PromotionService {
     }
     if (body.description !== undefined) d.description = body.description?.trim() || null;
     if (body.target !== undefined || creating) d.target = oneOf(body.target, PROMOTION_TARGETS, 'Cible');
-    if (body.productId !== undefined) d.productId = body.productId || null;
+    if (body.productId !== undefined || body.productIds !== undefined || body.allProducts !== undefined) {
+      // One product → productId (keeps the relation: name, photo, price) · several → productIds · all → allProducts
+      const all = !!body.allProducts;
+      const ids = all
+        ? []
+        : [...new Set([...(body.productIds ?? []), ...(body.productId ? [body.productId] : [])])].filter(Boolean);
+      d.allProducts = all;
+      d.productId = ids.length === 1 ? ids[0] : null;
+      d.productIds = ids.length > 1 ? ids : [];
+    }
     if (body.priceId !== undefined) d.priceId = body.priceId || null;
     if (body.priceCategory !== undefined) {
       const c = body.priceCategory || null;
@@ -313,8 +388,16 @@ export class PromotionService {
     return d;
   }
 
-  private check(d: { target?: unknown; productId?: unknown; priceId?: unknown; priceCategory?: unknown }) {
-    if ((d.target === 'PRODUCT' || d.target === 'BUNDLE') && !d.productId) {
+  private check(d: {
+    target?: unknown;
+    productId?: unknown;
+    productIds?: unknown;
+    allProducts?: unknown;
+    priceId?: unknown;
+    priceCategory?: unknown;
+  }) {
+    const products = !!d.productId || !!d.allProducts || (Array.isArray(d.productIds) && d.productIds.length > 0);
+    if ((d.target === 'PRODUCT' || d.target === 'BUNDLE') && !products) {
       throw new BadRequestException(d.target === 'BUNDLE' ? 'Choisissez le produit offert' : 'Choisissez le produit');
     }
     if ((d.target === 'PRICE' || d.target === 'BUNDLE') && !d.priceId && !d.priceCategory) {
@@ -330,7 +413,7 @@ export class PromotionService {
       data: { ...(d as Prisma.PromotionUncheckedCreateInput), facilityId: id },
       include: INCLUDE,
     });
-    return this.serialize(row, new Date());
+    return this.serialize(row, new Date(), [], await this.productsOf(id, [row]));
   }
 
   async update(id: string, body: PromotionBody) {
@@ -339,7 +422,7 @@ export class PromotionService {
     const d = this.data(body, false);
     this.check({ ...cur, ...d });
     const row = await this.prisma.promotion.update({ where: { id }, data: d, include: INCLUDE });
-    return this.serialize(row, new Date());
+    return this.serialize(row, new Date(), [], await this.productsOf(row.facilityId, [row]));
   }
 
   async remove(id: string) {
@@ -480,7 +563,7 @@ export class PromotionService {
       ? await this.facilityOfMember(memberId)
       : await this.facilityId();
     if (!facilityId) return null;
-    const rows = await this.eligible(facilityId, memberId, { target: 'PRODUCT', productId });
+    const rows = await this.eligible(facilityId, memberId, { target: 'PRODUCT', ...productMatchWhere(productId) });
     const pick = this.best(rows, unitPrice);
     return pick
       ? { promotionId: pick.row.id, unitPrice: pick.amount, label: `${pick.row.title}`, voucherId: null }
@@ -500,7 +583,12 @@ export class PromotionService {
     }
     if (!jid) return null;
     return this.prisma.promotionVoucher.findFirst({
-      where: { journalId: jid, productId, status: 'ACCEPTED' },
+      where: {
+        journalId: jid,
+        status: 'ACCEPTED',
+        // A voucher for this product, or one for « any product » of an offer that covers it
+        OR: [{ productId }, { productId: null, promotion: productMatchWhere(productId) }],
+      },
       include: { promotion: { select: { title: true, valueKind: true, value: true } } },
       orderBy: { createdAt: 'asc' },
     });
@@ -553,8 +641,7 @@ export class PromotionService {
     if (!facilityId) return [];
     return this.eligible(facilityId, memberId, {
       target: 'BUNDLE',
-      productId: { not: null },
-      ...priceMatchWhere(price),
+      AND: [HAS_PRODUCTS, priceMatchWhere(price)],
     });
   }
 
@@ -581,14 +668,15 @@ export class PromotionService {
       select: { promotionId: true },
     });
     const done = new Set(used.map((u) => u.promotionId));
-    const rows = offers.filter((o) => o.productId && !done.has(o.id));
+    const rows = offers.filter((o) => hasProducts(o) && !done.has(o.id));
     if (rows.length) {
       await this.prisma.promotionVoucher.createMany({
         data: rows.map((o) => ({
           promotionId: o.id,
           journalId: data.journalId,
           memberId: data.memberId ?? null,
-          productId: o.productId!,
+          // null = the client picks any product of the offer at the café
+          productId: o.productId ?? null,
           status: yes.has(o.id) ? ('ACCEPTED' as const) : ('DECLINED' as const),
         })),
         skipDuplicates: true,
@@ -614,19 +702,27 @@ export class PromotionService {
       include: { promotion: { include: INCLUDE } },
       orderBy: { createdAt: 'asc' },
     });
+    const multi = rows.filter((v) => !v.productId && isMulti(v.promotion));
+    const products = multi.length ? await this.productsOf(multi[0].promotion.facilityId) : [];
     return rows.map((v) => {
       const p = v.promotion;
-      const before = p.product?.sellingPrice ?? null;
+      const any = !v.productId && isMulti(p);
+      const before = any ? null : p.product?.sellingPrice ?? null;
       return {
         id: v.id,
         promotionId: v.promotionId,
         journalId: v.journalId,
+        /** null = any product of the offer */
         productId: v.productId,
+        /** Products the voucher can be used on */
+        productIds: v.productId ? [v.productId] : coveredProductIds(p, products),
         status: v.status,
         title: p.title,
         label: promotionLabel(p),
-        productName: p.product?.name ?? null,
-        productImg: p.product?.img ?? null,
+        valueKind: p.valueKind,
+        value: p.value,
+        productName: any ? productsLabel(p, products) : p.product?.name ?? null,
+        productImg: any ? null : p.product?.img ?? null,
         priceBefore: before,
         priceAfter: before != null ? applyDiscount(before, p.valueKind, p.value) : null,
         usedAt: v.usedAt,
@@ -667,9 +763,13 @@ export class PromotionService {
     if (!facilityId) return [];
     const now = new Date();
     const rows = await this.eligible(facilityId, memberId, {}, now);
-    const tarifs = rows.some((r) => r.priceCategory) ? await this.tarifsOf(facilityId) : [];
+    if (!rows.length) return [];
+    const [tarifs, products] = await Promise.all([
+      rows.some((r) => r.priceCategory) ? this.tarifsOf(facilityId) : Promise.resolve([]),
+      this.productsOf(facilityId, rows),
+    ]);
     return rows
-      .map((r) => this.serialize(r, now, tarifs))
+      .map((r) => this.serialize(r, now, tarifs, products))
       .sort((a, b) => (a.liveUntil?.getTime() ?? Infinity) - (b.liveUntil?.getTime() ?? Infinity));
   }
 
@@ -691,19 +791,20 @@ export class PromotionService {
       include: INCLUDE,
     });
     if (!rows.length) return [];
-    const [{ total, mine }, who, tarifs] = await Promise.all([
+    const [{ total, mine }, who, tarifs, products] = await Promise.all([
       this.usage(
         rows.map((r) => r.id),
         memberId,
       ),
       this.memberFacts(memberId, { first: true, app: true }, now),
       rows.some((r) => r.priceCategory) ? this.tarifsOf(facilityId) : Promise.resolve([]),
+      this.productsOf(facilityId, rows),
     ]);
     return rows
       .filter((r) => !(r.maxUses != null && (total.get(r.id) ?? 0) >= r.maxUses))
       .filter((r) => r.audience !== 'FIRST_VISIT' || who.firstVisit)
       .map((r) => ({
-        ...this.serialize(r, now, tarifs),
+        ...this.serialize(r, now, tarifs, products),
         usedUp: r.maxUsesPerMember != null && (mine.get(r.id) ?? 0) >= r.maxUsesPerMember,
         needsApp: r.requiresApp && !who.hasApp,
       }));

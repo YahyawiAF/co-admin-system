@@ -61,7 +61,7 @@ export function VisitVouchers({ until }: { until?: string | null }) {
               </p>
             ) : (
               <Link
-                href={orgHref(slug, `/cafe?voucher=${v.productId}`)}
+                href={orgHref(slug, v.productId ? `/cafe?voucher=${v.productId}` : "/cafe")}
                 className="mt-3 flex h-11 items-center justify-center rounded-full bg-amber-700 text-[13px] font-extrabold text-white transition-colors duration-200 hover:bg-amber-800 motion-reduce:transition-none"
               >
                 Commander mon {v.productName?.toLowerCase() ?? "cadeau"}
