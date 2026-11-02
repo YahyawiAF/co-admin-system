@@ -12,11 +12,20 @@ import {
   peekInstallNudgePending,
   skipInstall,
 } from "@/lib/visitorCache";
-import { isIosDevice, isStandalonePwa } from "@/lib/visitor-notify";
 import {
-  ANDROID_INSTALL_STEPS,
-  IOS_INSTALL_STEPS,
+  androidBrowser,
+  isIosDevice,
+  isStandalonePwa,
+  type AndroidBrowser,
+} from "@/lib/visitor-notify";
+import {
+  installSummary,
+  pickInstallSteps,
 } from "@/components/visitor/installSteps";
+import {
+  InAppBrowserNotice,
+  InstallStepVisual,
+} from "@/components/visitor/InstallStepVisual";
 
 type BeforeInstall = Event & { prompt: () => Promise<void> };
 
@@ -34,6 +43,7 @@ export function InstallAppNudge() {
   const [deferred, setDeferred] = useState<BeforeInstall | null>(null);
   const [ios, setIos] = useState(false);
   const [safari, setSafari] = useState(true);
+  const [browser, setBrowser] = useState<AndroidBrowser | null>(null);
   const [touchX, setTouchX] = useState<number | null>(null);
 
   useEffect(() => {
@@ -42,6 +52,7 @@ export function InstallAppNudge() {
     if (!forced && hasSkippedInstall(slug)) return;
     setIos(isIosDevice());
     setSafari(isIosSafari());
+    setBrowser(androidBrowser());
     setOpen(true);
     const onPrompt = (e: Event) => {
       e.preventDefault();
@@ -67,7 +78,7 @@ export function InstallAppNudge() {
 
   if (!open) return null;
 
-  const steps = ios ? IOS_INSTALL_STEPS : ANDROID_INSTALL_STEPS;
+  const steps = pickInstallSteps(ios, browser);
   const current = steps[step]!;
   const last = step === steps.length - 1;
 
@@ -96,9 +107,7 @@ export function InstallAppNudge() {
             {org.name} sur votre téléphone
           </h2>
           <p className="mt-1 text-sm text-slate-500">
-            {ios
-              ? "Safari — 3 gestes pour l’ajouter à l’écran d’accueil."
-              : "Chrome — menu ⋮ puis Installer l’application."}
+            {installSummary(ios, browser)}
           </p>
         </div>
 
@@ -108,6 +117,7 @@ export function InstallAppNudge() {
             Chrome) pour installer l’app.
           </p>
         ) : null}
+        {browser === "inapp" ? <InAppBrowserNotice className="mx-5 mb-2" /> : null}
 
         <div
           className="min-h-0 flex-1 overflow-y-auto px-5"
@@ -115,12 +125,7 @@ export function InstallAppNudge() {
           onTouchEnd={onTouchEnd}
         >
           <div className="overflow-hidden rounded-2xl bg-slate-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={current.src}
-              alt={current.alt}
-              className="mx-auto max-h-[42vh] w-full object-contain"
-            />
+            <InstallStepVisual step={current} className="max-h-[42vh]" />
           </div>
           <p className="mt-3 text-center text-[15px] font-semibold text-slate-900">
             {step + 1}. {current.title}
@@ -131,7 +136,7 @@ export function InstallAppNudge() {
           <div className="flex items-center justify-center gap-1.5 py-3">
             {steps.map((item, i) => (
               <button
-                key={item.src}
+                key={item.title}
                 type="button"
                 aria-label={`Étape ${i + 1}`}
                 onClick={() => setStep(i)}

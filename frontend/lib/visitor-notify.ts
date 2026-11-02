@@ -107,6 +107,35 @@ export function isIosDevice() {
     (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+/**
+ * Which Android browser we're in. Matters for install: Samsung phones open QR
+ * links in Samsung Internet (different menu), and in-app browsers (Facebook,
+ * Instagram, TikTok…) can't install at all. null = not Android.
+ */
+export type AndroidBrowser = "chrome" | "samsung" | "inapp" | "other";
+
+export function androidBrowser(): AndroidBrowser | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (!/Android/i.test(ua)) return null;
+  if (/FBAN|FBAV|FB_IAB|Instagram|Messenger|Snapchat|musical_ly|Bytedance|TikTok|LinkedInApp|Line\/|; wv\)/i.test(ua)) {
+    return "inapp";
+  }
+  if (/SamsungBrowser/i.test(ua)) return "samsung";
+  if (/Chrome\//.test(ua) && !/Edg|OPR|Opera|YaBrowser|MiuiBrowser|HeyTap|UCBrowser/i.test(ua)) {
+    return "chrome";
+  }
+  return "other";
+}
+
+/** Same page in Chrome (Android intent link) — used to leave an in-app browser. */
+export function openInChromeUrl(): string {
+  const { protocol, host, pathname, search } = window.location;
+  const scheme = protocol.replace(":", "");
+  const fallback = encodeURIComponent(window.location.href);
+  return `intent://${host}${pathname}${search}#Intent;scheme=${scheme};package=com.android.chrome;S.browser_fallback_url=${fallback};end`;
+}
+
 export function isStandalonePwa() {
   if (typeof window === "undefined") return false;
   const nav = window.navigator as Navigator & { standalone?: boolean };

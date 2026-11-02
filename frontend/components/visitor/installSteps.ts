@@ -1,4 +1,15 @@
-export const IOS_INSTALL_STEPS = [
+import type { AndroidBrowser } from "@/lib/visitor-notify";
+
+/** `src` = screenshot; without it the guide draws `icon` instead. */
+export type InstallStep = {
+  src?: string;
+  icon?: "menu" | "add" | "done";
+  alt: string;
+  title: string;
+  hint: string;
+};
+
+export const IOS_INSTALL_STEPS: readonly InstallStep[] = [
   {
     src: "/install/install-ios-1.jpg",
     alt: "Safari : appuyez sur le bouton Partager en bas de l’écran",
@@ -17,9 +28,9 @@ export const IOS_INSTALL_STEPS = [
     title: "C’est installé",
     hint: "Ouvrez l’app depuis l’écran d’accueil.",
   },
-] as const;
+];
 
-export const ANDROID_INSTALL_STEPS = [
+export const ANDROID_INSTALL_STEPS: readonly InstallStep[] = [
   {
     src: "/install/install-android-1.jpg",
     alt: "Chrome : appuyez sur le menu à trois points",
@@ -38,4 +49,43 @@ export const ANDROID_INSTALL_STEPS = [
     title: "C’est installé",
     hint: "L’icône est sur l’écran d’accueil.",
   },
-] as const;
+];
+
+/** Samsung Internet (default browser on Galaxy phones, opens QR links). */
+export const SAMSUNG_INSTALL_STEPS: readonly InstallStep[] = [
+  {
+    icon: "menu",
+    alt: "Samsung Internet : appuyez sur le menu ≡ en bas à droite",
+    title: "Ouvrez le menu",
+    hint: "Le bouton ≡ en bas à droite de l’écran.",
+  },
+  {
+    icon: "add",
+    alt: "Appuyez sur Ajouter la page à, puis Écran d’accueil",
+    title: "Ajouter la page à → Écran d’accueil",
+    hint: "Puis appuyez sur Ajouter (ou Installer).",
+  },
+  {
+    icon: "done",
+    alt: "L’app est installée sur l’écran d’accueil",
+    title: "C’est installé",
+    hint: "Ouvrez l’app depuis l’écran d’accueil.",
+  },
+];
+
+export function pickInstallSteps(
+  ios: boolean,
+  browser: AndroidBrowser | null
+): readonly InstallStep[] {
+  if (ios) return IOS_INSTALL_STEPS;
+  return browser === "samsung" ? SAMSUNG_INSTALL_STEPS : ANDROID_INSTALL_STEPS;
+}
+
+/** One-line summary under the guide title. */
+export function installSummary(ios: boolean, browser: AndroidBrowser | null) {
+  if (ios) return "Safari — 3 gestes pour l’ajouter à l’écran d’accueil.";
+  if (browser === "samsung") {
+    return "Samsung Internet — menu ≡ puis Ajouter la page à → Écran d’accueil.";
+  }
+  return "Chrome — menu ⋮ puis Installer l’application.";
+}

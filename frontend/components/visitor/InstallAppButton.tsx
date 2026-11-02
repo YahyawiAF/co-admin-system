@@ -11,11 +11,17 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { isIosDevice, isStandalonePwa } from "@/lib/visitor-notify";
 import {
-  ANDROID_INSTALL_STEPS,
-  IOS_INSTALL_STEPS,
-} from "@/components/visitor/installSteps";
+  androidBrowser,
+  isIosDevice,
+  isStandalonePwa,
+  type AndroidBrowser,
+} from "@/lib/visitor-notify";
+import { pickInstallSteps } from "@/components/visitor/installSteps";
+import {
+  InAppBrowserNotice,
+  InstallStepVisual,
+} from "@/components/visitor/InstallStepVisual";
 
 type BeforeInstall = Event & { prompt: () => Promise<void> };
 
@@ -32,6 +38,7 @@ export function InstallAppButton({
   const [step, setStep] = useState(0);
   const [deferred, setDeferred] = useState<BeforeInstall | null>(null);
   const [ios, setIos] = useState(false);
+  const [browser, setBrowser] = useState<AndroidBrowser | null>(null);
   const touchX = useRef<number | null>(null);
 
   useEffect(() => {
@@ -40,6 +47,7 @@ export function InstallAppButton({
       return;
     }
     setIos(isIosDevice());
+    setBrowser(androidBrowser());
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstall);
@@ -50,7 +58,7 @@ export function InstallAppButton({
 
   if (hidden) return null;
 
-  const steps = ios ? IOS_INSTALL_STEPS : ANDROID_INSTALL_STEPS;
+  const steps = pickInstallSteps(ios, browser);
   const current = steps[step]!;
   const last = step === steps.length - 1;
 
@@ -140,18 +148,15 @@ export function InstallAppButton({
             </SheetDescription>
           </SheetHeader>
 
+          {browser === "inapp" ? <InAppBrowserNotice className="mx-5 mb-3" /> : null}
+
           <div
             className="px-5"
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
           >
             <div className="overflow-hidden rounded-2xl bg-slate-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={current.src}
-                alt={current.alt}
-                className="mx-auto max-h-[46vh] w-full object-contain"
-              />
+              <InstallStepVisual step={current} className="max-h-[46vh]" />
             </div>
             <p className="mt-3 text-center text-[15px] font-semibold text-slate-900">
               {step + 1}. {current.title}
@@ -164,7 +169,7 @@ export function InstallAppButton({
           <div className="flex items-center justify-center gap-1.5 py-3">
             {steps.map((item, i) => (
               <button
-                key={item.src}
+                key={item.title}
                 type="button"
                 aria-label={`Étape ${i + 1}`}
                 aria-current={i === step ? "step" : undefined}
