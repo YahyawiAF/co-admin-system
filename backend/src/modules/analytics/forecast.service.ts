@@ -24,6 +24,7 @@ import {
   abonnementMonth,
   type MonthForecastResult,
 } from './month-data';
+import { buildForecastExport } from './forecast-export';
 import { PerformanceService } from './performance.service';
 import { NewcomersService } from './newcomers.service';
 import { OutreachService } from './outreach.service';
@@ -105,6 +106,21 @@ export class ForecastService {
     // Only the month in progress is kept: a past month rebuilt today would already know the answer
     if (f.period.isCurrent) await this.keepSnapshot(s.facilityId, f).catch(() => undefined);
     return f;
+  }
+
+  /** The month forecast and every number behind it, as JSON or as the day-by-day CSV. */
+  async exportForecast(opts: { year?: number; month?: number; facilityId?: string; format?: string }) {
+    const now = new Date();
+    const year = opts.year || now.getFullYear();
+    const month = opts.month || now.getMonth() + 1;
+    if (month < 1 || month > 12) throw new BadRequestException('Mois invalide');
+    const s = await this.performance.settings(opts.facilityId);
+    const x = await buildForecastExport(this.prisma, s.facilityId, year, month, now);
+    if (opts.format === 'csv') {
+      return { filename: `prevision-${x.tag}-jours.csv`, type: 'text/csv; charset=utf-8', body: '\uFEFF' + x.csv.days };
+    }
+    const body = JSON.stringify({ ...x.json, csv: x.csv }, null, 2);
+    return { filename: `prevision-${x.tag}.json`, type: 'application/json; charset=utf-8', body };
   }
 
   // ---------- abonnements ----------
