@@ -61,6 +61,11 @@ export type LeverDef = {
   outreachReasons?: string[];
   /** Already handled by the app itself (e.g. an automatic nudge) */
   builtIn?: string;
+  /**
+   * Results seen in the data even with no action logged (e.g. renewals done at
+   * the desk). count > 0 = the lever is being worked; improving = WORKING.
+   */
+  observed?: { count: number; note: string; improving?: boolean };
   idea?: LeverIdea;
 };
 
@@ -117,6 +122,9 @@ export function evaluateLevers(
     if (action) {
       const working = action.verdict === 'WORKING';
       return { ...base, status: working ? 'WORKING' : 'IN_PROGRESS', note: action.title, actionId: action.id };
+    }
+    if (def.observed && def.observed.count > 0) {
+      return { ...base, status: def.observed.improving ? 'WORKING' : 'IN_PROGRESS', note: def.observed.note, actionId: null };
     }
     const contacts = (def.outreachReasons ?? []).reduce(
       (n, r) => n + (outreach.find((o) => o.reason === r)?.contacts ?? 0),

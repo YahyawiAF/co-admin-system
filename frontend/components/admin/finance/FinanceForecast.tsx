@@ -32,12 +32,26 @@ const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${fmt(Math.abs
 const dayLabel = (key: string) => format(new Date(`${key}T12:00:00`), "d MMM", { locale: fr });
 
 const DRIVER_UI: Record<ForecastDriverKey, { label: string; sub: string; money?: boolean; decimals?: boolean }> = {
+  calendar: { label: "Calendrier", sub: "nombre de chaque jour de semaine", money: true },
+  periods: { label: "Périodes du calendrier", sub: "examens, vacances, jours fériés", money: true },
   newVisitors: { label: "Nouveaux visiteurs", sub: "1ʳᵉ visite" },
   otherVisits: { label: "Visites des habitués", sub: "déjà venus + sans compte" },
+  conversions: { label: "Passés en abonnement", sub: "leurs passes deviennent un abonnement" },
   ticket: { label: "Ticket moyen", sub: "par visite", money: true, decimals: true },
-  subscriptions: { label: "Abonnements", sub: "paiements reçus", money: true },
+  subscriptions: { label: "Abonnements", sub: "total du mois", money: true },
   products: { label: "Café et produits", sub: "ventes enregistrées", money: true },
 };
+
+const RATE_SOURCE: Record<MonthForecast["subscriptions"]["renewalRateSource"], string> = {
+  LAST_MONTH: "renouvelés le mois dernier",
+  CAREFUL: "taux prudent : le plus bas entre le mois dernier et tout l'historique",
+  HISTORY: "renouvelés sur tout l'historique",
+  ASSUMED: "pas assez d'historique",
+};
+
+const pctLabel = (factor: number) => `${factor >= 1 ? "+" : "−"}${Math.round(Math.abs(factor - 1) * 100)} %`;
+const rangeLabel = (from: string, to: string) =>
+  from === to ? dayLabel(from) : `${format(new Date(`${from}T12:00:00`), "d", { locale: fr })}–${dayLabel(to)}`;
 
 function driverValue(d: ForecastDriver, v: number) {
   const ui = DRIVER_UI[d.key];
@@ -50,6 +64,7 @@ function driverValue(d: ForecastDriver, v: number) {
 // ---------------------------------------------------------------------------
 
 function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: number | null }) {
+  // previousTotal = last month's passes + café replayed on this month's calendar
   const W = 640;
   const H = 260;
   const pl = 44;
@@ -58,7 +73,7 @@ function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: 
   const pb = 28;
   const n = f.days.length;
   const lived = f.days.filter((d) => d.actualCum != null);
-  const top = Math.max(f.expected.high, previousTotal ?? 0, lived.at(-1)?.actualCum ?? 0) * 1.08 || 1;
+  const top = Math.max(f.expected.variableHigh, previousTotal ?? 0, lived.at(-1)?.actualCum ?? 0) * 1.08 || 1;
   const step = top > 8000 ? 2000 : top > 3000 ? 1000 : top > 1200 ? 500 : 200;
   const max = Math.ceil(top / step) * step;
   const x = (i: number) => pl + ((W - pl - pr) * i) / Math.max(1, n - 1);
@@ -73,7 +88,33 @@ function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: 
   const lastIdx = last ? f.days.indexOf(last) : -1;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Encaissé cumulé : prévu et réel">
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Passes et café cumulés : prévu et réel">
+      {f.periods.map((p) => {
+        const i0 = f.days.findIndex((d) => d.key === p.from);
+        const i1 = f.days.findIndex((d) => d.key === p.to);
+        if (i0 < 0 || i1 < 0) return null;
+        const half = (W - pl - pr) / Math.max(1, n - 1) / 2;
+        const x0 = Math.max(pl, x(i0) - half);
+        const x1 = Math.min(W - pr, x(i1) + half);
+        return (
+          <g key={`${p.label}-${p.from}`} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+            <rect
+              x={x0}
+              y={pt}
+              width={Math.max(2, x1 - x0)}
+              height={H - pt - pb}
+              className={p.known ? (p.factor < 1 ? "fill-amber-400/15" : "fill-emerald-400/15") : "fill-slate-400/15"}
+            >
+              <title>{`${p.label} : ${p.known ? pctLabel(p.factor) : "effet inconnu"}`}</title>
+            </rect>
+            {x1 - x0 > 34 ? (
+              <text x={(x0 + x1) / 2} y={pt + 11} textAnchor="middle" fontSize={10} className="fill-muted-foreground">
+                {p.label.length > 14 ? `${p.label.slice(0, 13)}…` : p.label}
+              </text>
+            ) : null}
+          </g>
+        );
+      })}
       {Array.from({ length: max / step + 1 }, (_, k) => k * step).map((g) => (
         <g key={g}>
           <line x1={pl} x2={W - pr} y1={y(g)} y2={y(g)} className="stroke-border" />
@@ -91,7 +132,7 @@ function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: 
         <g>
           <line x1={pl} x2={W - pr} y1={y(previousTotal)} y2={y(previousTotal)} strokeDasharray="2 4" className="stroke-muted-foreground" />
           <text x={W - pr} y={y(previousTotal) - 6} textAnchor="end" fontSize={11} className="fill-muted-foreground">
-            {f.period.previousLabel} {fmt(previousTotal)}
+            {f.period.previousLabel} à calendrier égal {fmt(previousTotal)}
           </text>
         </g>
       ) : null}
@@ -104,7 +145,7 @@ function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: 
         className="stroke-indigo-500"
       />
       <text x={x(n - 1) - 4} y={y(f.expected.total) + 16} textAnchor="end" fontSize={11.5} fontWeight={700} className="fill-indigo-600">
-        prévu {fmt(r50(f.expected.total))}
+        prévu {fmt(r50(f.expected.variable))}
       </text>
       {lived.length ? (
         <g className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
@@ -222,12 +263,16 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
 
   const t = f.toDate;
   const prevTotal = f.versusPrevious?.previousTotal ?? null;
+  const calendarDriver = f.versusPrevious?.drivers.find((d) => d.key === "calendar");
+  // Last month's passes + café on this month's calendar (5 Sundays vs 4…)
+  const prevVariableAdjusted = calendarDriver ? calendarDriver.to : null;
   const vsPrev = prevTotal != null ? f.expected.total - prevTotal : null;
   const subsDriver = f.versusPrevious?.drivers.find((d) => d.key === "subscriptions");
   const ahead = t ? t.gap >= 0 : null;
   const lastComplete = t ? f.days[t.days - 1] : null;
   const showsPast = !f.period.isCurrent && !f.period.isFuture;
   const s = f.subscriptions;
+  const subsPaid = t?.subscriptions.actual ?? null;
 
   return (
     <div className="grid gap-4">
@@ -238,7 +283,7 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
               <div className="grid content-start gap-1.5">
                 <span
                   className={cn(
-                    "justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors",
+                    "justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors duration-300",
                     ahead ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
                   )}
                 >
@@ -246,7 +291,7 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 </span>
                 <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(t.actual)}</div>
                 <p className="text-sm text-muted-foreground">
-                  encaissés {showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete.key)}`} · prévu{" "}
+                  passes + café {showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete.key)}`} · prévu{" "}
                   <b className="text-foreground">{dt(t.expected)}</b>
                 </p>
               </div>
@@ -254,17 +299,27 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 label="Écart vs prévu"
                 value={`${signed(t.gap)} DT`}
                 tone={t.gap >= 0 ? "good" : "bad"}
-                sub={t.gapPct != null ? `${signed(t.gapPct)} %` : undefined}
+                sub={t.gapPct != null ? `${signed(t.gapPct)} % · mêmes jours de semaine` : undefined}
               />
               <Kpi
-                label={showsPast ? "Prévu pour le mois" : "Fin de mois estimée"}
-                value={dt(showsPast ? f.expected.total : r50(t.projected))}
-                sub={showsPast ? `fourchette ${fmt(r50(f.expected.low))} – ${fmt(r50(f.expected.high))}` : `si la suite suit le prévu · prévu ${fmt(r50(f.expected.total))}`}
+                label={showsPast ? "Mois complet" : "Fin de mois estimée"}
+                value={dt(showsPast ? t.actual + t.subscriptions.actual : r50(t.projected))}
+                sub={
+                  showsPast
+                    ? `prévu ${fmt(r50(f.expected.total))} · abonnements ${fmt(t.subscriptions.actual)} DT`
+                    : `passes + café ${fmt(r50(t.projectedVariable))} + abonnements ${fmt(r50(t.projectedSubscriptions))}`
+                }
               />
               <Kpi
                 label={`vs ${f.period.previousLabel}`}
                 value={prevTotal != null ? dt(prevTotal) : "—"}
-                sub={prevTotal != null ? `${signed((showsPast ? t.actual : t.projected) - prevTotal)} DT` : undefined}
+                sub={
+                  prevTotal != null
+                    ? `${signed((showsPast ? t.actual + t.subscriptions.actual : t.projected) - prevTotal)} DT${
+                        calendarDriver && Math.abs(calendarDriver.effect) >= 20 ? ` · dont calendrier ${signed(calendarDriver.effect)}` : ""
+                      }`
+                    : undefined
+                }
               />
             </>
           ) : (
@@ -275,7 +330,8 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 </span>
                 <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(r50(f.expected.total))}</div>
                 <p className="text-sm text-muted-foreground">
-                  Fourchette {fmt(r50(f.expected.low))} – {fmt(r50(f.expected.high))} DT.
+                  Passes + café {fmt(r50(f.expected.variable))} + abonnements {fmt(r50(f.expected.subscriptions))} · fourchette{" "}
+                  {fmt(r50(f.expected.low))} – {fmt(r50(f.expected.high))} DT.
                   {f.period.isCurrent ? " Le réel se remplit chaque soir." : ""}
                 </p>
               </div>
@@ -283,12 +339,18 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 label={`vs ${f.period.previousLabel}`}
                 value={vsPrev != null ? `${signed(vsPrev)} DT` : "—"}
                 tone={vsPrev == null ? "neutral" : vsPrev >= 0 ? "good" : "bad"}
-                sub={prevTotal != null ? `${f.period.previousLabel} : ${fmt(prevTotal)} DT${subsDriver && Math.abs(subsDriver.effect) >= 50 ? ` · abonnements ${signed(subsDriver.effect)}` : ""}` : undefined}
+                sub={
+                  prevTotal != null
+                    ? `${f.period.previousLabel} : ${fmt(prevTotal)} DT${
+                        calendarDriver && Math.abs(calendarDriver.effect) >= 20 ? ` · calendrier ${signed(calendarDriver.effect)}` : ""
+                      }${subsDriver && Math.abs(subsDriver.effect) >= 50 ? ` · abonnements ${signed(subsDriver.effect)}` : ""}`
+                    : undefined
+                }
               />
               <Kpi
                 label={`Repère du ${dayLabel(f.checkpoints[0].key)}`}
                 value={dt(r50(f.checkpoints[0].expectedCum))}
-                sub={`en dessous de ${fmt(r50(f.checkpoints[0].expectedCum * 0.9))} DT → lancer une idée`}
+                sub={`passes + café · en dessous de ${fmt(r50(f.checkpoints[0].expectedCum * 0.9))} DT → lancer une idée`}
               />
               <Kpi
                 label="Nouveaux attendus"
@@ -303,18 +365,22 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
       <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
         <Card className="min-w-0 shadow-none">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">{f.period.label} : prévu jour par jour</CardTitle>
+            <CardTitle className="text-base">{f.period.label} : passes + café jour par jour</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Chaque jour reçoit la moyenne du même jour de semaine sur les 4 semaines avant le mois ({dayLabel(f.period.base.from)} →{" "}
-              {dayLabel(f.period.base.to)}). Zone = ta semaine la plus faible → la plus forte.
+              Chaque jour reçoit la moyenne du même jour de semaine avant le mois ({dayLabel(f.period.base.from)} →{" "}
+              {dayLabel(f.period.base.to)}), sans les jours fériés ni les périodes. Zones colorées = calendrier du Conseiller. Les
+              abonnements sont comptés à part.
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            <ForecastCurve f={f} previousTotal={prevTotal} />
+            <ForecastCurve f={f} previousTotal={prevVariableAdjusted} />
             <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><i className="inline-block h-0.5 w-4 border-t-2 border-dashed border-indigo-500" />Prévu</span>
               <span className="flex items-center gap-1.5"><i className="inline-block h-0.5 w-4 bg-foreground" />Réel</span>
               <span className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-4 rounded-sm bg-indigo-500/15" />Fourchette</span>
+              {f.periods.length ? (
+                <span className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-4 rounded-sm bg-amber-400/25" />Période du calendrier</span>
+              ) : null}
             </div>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {f.checkpoints.slice(-4).map((c) => {
@@ -334,11 +400,34 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 );
               })}
             </div>
+            {f.periods.length ? (
+              <ul className="space-y-1 text-xs text-muted-foreground">
+                {f.periods.map((p) => (
+                  <li key={`${p.label}-${p.from}`} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+                    <b className="text-foreground">{p.label}</b> ({rangeLabel(p.from, p.to)}) :{" "}
+                    {p.known ? (
+                      <>
+                        {pctLabel(p.factor)} vs un jour habituel, mesuré les fois précédentes → {signed(p.effect)} DT
+                      </>
+                    ) : (
+                      <>effet inconnu (jamais mesuré), compté comme un jour habituel avec une fourchette plus large</>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
             <p className="text-xs text-muted-foreground">
-              Abonnements prévus {dt(s.expected)} : {s.endingCount} finissent ce mois ({dt(s.endingValue)}) ×{" "}
-              {s.renewalRatePct != null ? `${s.renewalRatePct} % renouvelés le mois dernier` : "40 % (pas assez d'historique)"}, plus{" "}
-              {dt(s.newPace)} de nouveaux abonnés au rythme récent.
+              <b className="text-foreground">Abonnements</b> (jamais répartis par jour) : {dt(s.expected)} prévus
+              {subsPaid != null ? `, ${fmt(subsPaid)} DT encaissés` : ""}. {s.endingCount} finissent ce mois ({dt(s.endingValue)}) ×{" "}
+              {s.renewalRatePct != null ? `${s.renewalRatePct} %` : "40 %"} ({RATE_SOURCE[s.renewalRateSource]}), plus {dt(s.newPace)} de
+              nouveaux abonnés au rythme récent.
             </p>
+            {f.bookings.thisMonth || f.bookings.lastMonthSamePoint ? (
+              <p className="text-xs text-muted-foreground">
+                Réservations pour {f.period.label} : <b className="text-foreground">{f.bookings.thisMonth}</b> (à la même date le mois
+                dernier : {f.bookings.lastMonthSamePoint}).
+              </p>
+            ) : null}
           </CardContent>
         </Card>
 
@@ -349,8 +438,8 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
             </CardTitle>
             <p className="text-sm text-muted-foreground">
               {t
-                ? "Prévu contre réel, moteur par moteur. Barre = ce que ce moteur a ajouté ou retiré."
-                : `Chaque moteur du chiffre d'affaires, ${f.period.previousLabel} réel contre ${f.period.label} prévu.`}
+                ? "Passes + café, prévu contre réel sur les mêmes jours. Barre = ce que ce moteur a ajouté ou retiré."
+                : `${f.period.previousLabel} réel contre ${f.period.label} prévu. « Calendrier » = l'effet du nombre de chaque jour de semaine, le reste est comparé à calendrier égal.`}
             </p>
           </CardHeader>
           <CardContent className="space-y-3">

@@ -46,6 +46,7 @@ import { WEEKDAY_LABELS, WEEKDAYS_MON_FIRST } from "@/lib/traffic-utils";
 import { BreakEvenCard } from "./BreakEvenCard";
 import { ChangeQuestions, ForecastBlock, LeverMapCard } from "./FinanceForecast";
 import type {
+  AbonnementMonth,
   InsightSeverity,
   PerformanceInsight,
   PerformanceOverview,
@@ -483,7 +484,8 @@ function TargetDialog({
   const monthName = data
     ? format(new Date(data.period.year, data.period.month - 1, 1), "MMMM yyyy", { locale: fr })
     : "";
-  const samePeriodLastMonth = data?.period.isCurrent ? data.previous : null;
+  // Same weekdays 4 weeks earlier for passes + café, same date last month for abonnements
+  const samePeriodBefore = data?.period.isCurrent ? data.comparable : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -507,9 +509,9 @@ function TargetDialog({
             />
             {data?.projected != null && data.period.isCurrent ? (
               <p className="text-xs text-muted-foreground">
-                Au rythme actuel vous finirez vers {dt(data.projected)}.
-                {samePeriodLastMonth
-                  ? ` Même période le mois dernier : ${dt(samePeriodLastMonth.revenue)}.`
+                Au rythme actuel (jour de semaine par jour de semaine) vous finirez vers {dt(data.projected)}.
+                {samePeriodBefore
+                  ? ` Mêmes jours il y a 4 semaines : ${dt(samePeriodBefore.revenue)}.`
                   : ""}
               </p>
             ) : null}
@@ -616,7 +618,9 @@ function TargetCard({ data, onEdit }: { data: PerformanceOverview; onEdit: () =>
           {data.period.isCurrent ? (
             <>
               <div>
-                <div className="text-xs text-muted-foreground">Attendu à cette date</div>
+                <div className="text-xs text-muted-foreground">
+                  Attendu à cette date{t.pacedByWeekday ? " (selon les jours de semaine)" : ""}
+                </div>
                 <div className="font-semibold">
                   {Math.round(t.expectedPct)} %{" "}
                   <span className={cn("text-xs font-medium", ahead ? "text-emerald-600" : "text-amber-600")}>
@@ -666,8 +670,8 @@ function WeekdayPerformance({ data }: { data: PerformanceOverview }) {
       <CardHeader className="pb-2">
         <CardTitle className="text-base">Performance par jour de la semaine</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Moyenne par jour ce mois-ci. Les jours faibles sont ceux où une offre ou un
-          événement rapporte le plus.
+          Passes + café par jour ce mois-ci (les abonnements ne comptent pas pour un jour). Les jours
+          faibles sont ceux où une offre ou un événement rapporte le plus.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -700,6 +704,123 @@ function WeekdayPerformance({ data }: { data: PerformanceOverview }) {
             </div>
           );
         })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SplitLine({ label, value, delta }: { label: string; value: number; delta: number | null | undefined }) {
+  return (
+    <span className="flex items-center justify-between gap-2">
+      <span>
+        {label} <b className="font-medium text-foreground tabular-nums">{dt(value)}</b>
+      </span>
+      <DeltaChip value={delta} />
+    </span>
+  );
+}
+
+function Compare({ now, before, unit = "" }: { now: number; before: number; unit?: string }) {
+  const diff = Math.round((now - before) * 10) / 10;
+  return (
+    <span
+      className={cn(
+        "text-xs font-medium tabular-nums transition-colors duration-300",
+        diff > 0 ? "text-emerald-600" : diff < 0 ? "text-rose-600" : "text-muted-foreground",
+      )}
+    >
+      {diff > 0 ? "+" : diff < 0 ? "−" : "±"}
+      {Math.abs(diff).toLocaleString("fr-FR")}
+      {unit}
+    </span>
+  );
+}
+
+/** Abonnements as monthly totals: never judged by the day they are paid. */
+function AbonnementsMonthCard({ a, isCurrent }: { a: AbonnementMonth; isCurrent: boolean }) {
+  const r = a.renewedFromLastMonth;
+  const ratePrev = r.previousRatePct;
+  const pointLabel = isCurrent
+    ? `au ${format(new Date(a.previousPoint), "d MMM", { locale: fr })}`
+    : "le mois d'avant";
+  return (
+    <Card className="shadow-none motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">Abonnements du mois</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          En totaux du mois, jamais par jour. Un bon taux de renouvellement montre que les clients se sentent bien
+          dans l'espace. Comparé {isCurrent ? "à la même date le mois dernier" : "au mois d'avant"}.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid content-start gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Abonnés actifs</span>
+          <span className="flex items-baseline gap-2">
+            <b className="text-2xl font-semibold tabular-nums">{a.active.now}</b>
+            <Compare now={a.active.now} before={a.active.previous} />
+          </span>
+          <span className="text-xs text-muted-foreground">{a.active.previous} {pointLabel}</span>
+        </div>
+        <div className="grid content-start gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Renouvelés (finis le mois dernier)</span>
+          <span className="flex items-baseline gap-2">
+            <b className="text-2xl font-semibold tabular-nums">
+              {r.renewed} / {r.ended}
+            </b>
+            {r.ratePct != null ? <span className="text-sm font-medium">{r.ratePct} %</span> : null}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {ratePrev != null ? `${ratePrev} % le mois d'avant` : "pas de mois d'avant"}
+            {r.otherOffer ? ` · ${r.otherOffer} avec une autre offre` : ""}
+          </span>
+        </div>
+        <div className="grid content-start gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Nouveaux abonnés</span>
+          <span className="flex items-baseline gap-2">
+            <b className="text-2xl font-semibold tabular-nums">{a.newSubscribers.now}</b>
+            <Compare now={a.newSubscribers.now} before={a.newSubscribers.previous} />
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {a.conversions.length
+              ? `dont ${a.conversions.length} venu${a.conversions.length > 1 ? "s" : ""} d'abord en passes`
+              : `${a.newSubscribers.previous} ${pointLabel}`}
+          </span>
+        </div>
+        <div className="grid content-start gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Argent des abonnements</span>
+          <span className="flex items-baseline gap-2">
+            <b className="text-2xl font-semibold tabular-nums">{dt(a.money.paid)}</b>
+            <Compare now={a.money.paid} before={a.money.paidPrevious} unit=" DT" />
+          </span>
+          <span className="text-xs text-muted-foreground">
+            encaissé · {dt(a.money.earned)} gagné sur les jours couverts
+          </span>
+        </div>
+        {isCurrent && (a.thisMonth.ended || a.thisMonth.stillToEnd) ? (
+          <p className="text-sm text-muted-foreground sm:col-span-2 xl:col-span-4">
+            Ce mois-ci : {a.thisMonth.renewed} renouvelé{a.thisMonth.renewed > 1 ? "s" : ""} sur {a.thisMonth.ended} fini
+            {a.thisMonth.ended > 1 ? "s" : ""}, {a.thisMonth.stillToEnd} finissent encore d'ici la fin du mois.
+          </p>
+        ) : null}
+        {r.notRenewed.length ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-sm sm:col-span-2 xl:col-span-4">
+            <span className="text-muted-foreground">Pas renouvelés :</span>
+            {r.notRenewed.slice(0, 8).map((m) => (
+              <span key={`${m.memberId}-${m.endedOn}`} className="rounded-full bg-muted px-2 py-0.5 text-xs">
+                {m.name} · {m.plan}
+              </span>
+            ))}
+            {r.notRenewed.length > 8 ? (
+              <span className="text-xs text-muted-foreground">+{r.notRenewed.length - 8}</span>
+            ) : null}
+            <Link
+              href="/relances"
+              className="ml-1 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline"
+            >
+              Relancer <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );
@@ -738,9 +859,11 @@ export function FinanceOverview({
     if (!data) return "";
     const from = new Date(data.period.comparedTo.from);
     const to = new Date(data.period.comparedTo.to);
-    return data.period.comparedTo.likeForLike
-      ? `vs ${format(from, "d", { locale: fr })}–${format(to, "d MMM", { locale: fr })}`
-      : `vs ${format(from, "MMMM", { locale: fr })}`;
+    // A Sunday is compared with a Sunday: same weekdays 4 weeks earlier, or the
+    // previous month replayed on this month's calendar
+    return data.period.comparedTo.mode === "SAME_WEEKDAYS"
+      ? `vs mêmes jours il y a 4 semaines (${format(from, "EEE d", { locale: fr })} – ${format(to, "EEE d MMM", { locale: fr })})`
+      : `vs ${format(from, "MMMM", { locale: fr })} à calendrier égal`;
   }, [data]);
 
   const c = data?.current;
@@ -775,8 +898,7 @@ export function FinanceOverview({
           />
           {compareLabel ? (
             <span className="text-xs text-muted-foreground">
-              Évolutions {compareLabel}
-              {data?.period.comparedTo.likeForLike ? " (même période)" : ""}
+              Évolutions {compareLabel} · abonnements vs même date du mois dernier
             </span>
           ) : null}
         </div>
@@ -810,8 +932,20 @@ export function FinanceOverview({
                 label="Revenu brut (CA)"
                 value={dt(c.revenue)}
                 delta={<DeltaChip value={d?.revenue} />}
-                sub={`Passes ${dt(c.revenueJournal)} · Abonnements ${dt(c.revenueAbonnements)} · Produits ${dt(c.revenueProducts)}`}
-                help="Tout l'argent encaissé sur la période, avant les dépenses."
+                sub={
+                  <span className="mt-1 grid gap-1">
+                    <SplitLine label="Passes" value={c.revenueJournal} delta={d?.passes} />
+                    <SplitLine label="Café et produits" value={c.revenueProducts} delta={d?.products} />
+                    <SplitLine label="Abonnements" value={c.revenueAbonnements} delta={d?.abonnements} />
+                    {d?.revenueRaw != null && Math.abs((d.revenueRaw ?? 0) - (d.revenue ?? 0)) >= 1 ? (
+                      <span>
+                        Sans tenir compte du calendrier : {d.revenueRaw > 0 ? "+" : ""}
+                        {Math.round(d.revenueRaw)} %
+                      </span>
+                    ) : null}
+                  </span>
+                }
+                help="Tout l'argent encaissé, avant les dépenses. Passes et café comparés aux mêmes jours de semaine, abonnements en total du mois."
               />
               <KpiCard
                 label="Dépenses"
@@ -870,6 +1004,8 @@ export function FinanceOverview({
               />
             </div>
           ) : null}
+
+          {data.abonnements ? <AbonnementsMonthCard a={data.abonnements} isCurrent={data.period.isCurrent} /> : null}
         </>
       )}
 
@@ -902,7 +1038,7 @@ export function FinanceOverview({
 
       {data && data.period.isCurrent ? (
         <p className="text-xs text-muted-foreground">
-          7 derniers jours : {dt(data.week.revenue)}
+          7 derniers jours (passes + café) : {dt(data.week.revenue)}
           {data.week.revenueDelta != null && data.week.revenueDelta <= 300
             ? ` (${data.week.revenueDelta > 0 ? "+" : ""}${Math.round(data.week.revenueDelta)} % vs semaine d'avant)`
             : ""}

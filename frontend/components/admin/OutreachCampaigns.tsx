@@ -239,7 +239,8 @@ function CampaignDetailDialog({ id, onClose }: { id: string | null; onClose: () 
                     <span className="font-medium">{t.name}</span>
                     {t.won ? (
                       <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white">
-                        Revenu{t.revenue > 0 ? ` · ${dt(t.revenue)}` : ""}
+                        {t.withoutContact ? "Renouvelé sans relance enregistrée" : "Revenu"}
+                        {t.revenue > 0 ? ` · ${dt(t.revenue)}` : ""}
                       </span>
                     ) : t.contactedAt ? (
                       <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] text-sky-800">

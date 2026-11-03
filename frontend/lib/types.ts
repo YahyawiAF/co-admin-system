@@ -707,6 +707,8 @@ export interface FinanceYearMonthRow {
   revenueJournal: number;
   revenueAbonnements: number;
   revenueProducts: number;
+  /** Passes + café */
+  revenueVariable: number;
   expenses: number;
   net: number;
 }
@@ -881,7 +883,10 @@ export interface PerformanceSettings {
 export interface PerformanceWeekday {
   weekday: number;
   occurrences: number;
+  /** Passes + café per day (abonnements are never counted by day) */
   avgRevenue: number;
+  avgPasses: number;
+  avgProducts: number;
   avgVisits: number;
   occupancyPct: number | null;
 }
@@ -922,12 +927,33 @@ export interface PerformanceOverview {
     remainingDays: number;
     isCurrent: boolean;
     isFuture: boolean;
-    comparedTo: { from: string; to: string; likeForLike: boolean };
+    comparedTo: {
+      from: string;
+      to: string;
+      likeForLike: boolean;
+      /** SAME_WEEKDAYS: 4 weeks earlier · CALENDAR_EQUAL: previous month replayed on this calendar */
+      mode: "SAME_WEEKDAYS" | "CALENDAR_EQUAL";
+      abonnementsFrom: string;
+      abonnementsTo: string;
+    };
   };
   current: PerformancePeriodMetrics | null;
   previous: PerformancePeriodMetrics;
+  /** The figures each delta is computed against */
+  comparable: {
+    revenue: number;
+    passes: number;
+    products: number;
+    abonnements: number;
+    visits: number;
+    revenueRaw: number | null;
+  };
   deltas: {
     revenue: number | null;
+    passes: number | null;
+    products: number | null;
+    abonnements: number | null;
+    revenueRaw: number | null;
     net: number | null;
     visits: number | null;
     occupancyPct: number | null;
@@ -937,6 +963,8 @@ export interface PerformanceOverview {
     marginPct: number | null;
   } | null;
   projected: number | null;
+  projection: { method: "WEEKDAYS"; variable: number; subscriptions: number } | null;
+  abonnements: AbonnementMonth | null;
   target: {
     revenue: number;
     occupancyPct: number | null;
@@ -949,6 +977,7 @@ export interface PerformanceOverview {
     remaining: number;
     neededPerDay: number | null;
     projectedPct: number | null;
+    pacedByWeekday: boolean;
   } | null;
   breakEven: BreakEven;
   bestWeekday: number | null;
@@ -961,6 +990,28 @@ export interface PerformanceOverview {
     visitsDelta: number | null;
     bestWeekday: number | null;
   };
+}
+
+export interface AbonnementRenewalStats {
+  ended: number;
+  renewed: number;
+  otherOffer: number;
+  ratePct: number | null;
+}
+
+/** Finance → abonnements of the month, as totals (never by day). */
+export interface AbonnementMonth {
+  point: string;
+  previousPoint: string;
+  active: { now: number; previous: number };
+  newSubscribers: { now: number; previous: number };
+  renewedFromLastMonth: AbonnementRenewalStats & {
+    previousRatePct: number | null;
+    notRenewed: Array<{ memberId: string; name: string; plan: string; endedOn: string }>;
+  };
+  thisMonth: AbonnementRenewalStats & { stillToEnd: number };
+  conversions: Array<{ memberId: string; name: string; plan: string; on: string }>;
+  money: { paid: number; paidPrevious: number; earned: number; earnedPrevious: number };
 }
 
 export interface BreakEven {
@@ -1091,7 +1142,7 @@ export interface SuiviRow {
   closedResult: "WON" | "LOST" | null;
   closedAuto: boolean;
   since: {
-    abonnement: { name: string; at: string } | null;
+    abonnement: { name: string; at: string; previousName: string | null; otherOffer: boolean } | null;
     visits: number;
     spent: number;
     lastVisit: string | null;
@@ -1982,6 +2033,8 @@ export interface CampaignTarget {
   contactedAt: string | null;
   channel: OutreachChannel | null;
   won: boolean;
+  /** Renewed although no contact was logged in the app */
+  withoutContact?: boolean;
   revenue: number;
 }
 
@@ -2035,7 +2088,10 @@ export type MemberOffer = {
 export type NewcomersOverview = {
   kpis: {
     thisMonth: number;
-    prevMonthSamePoint: number;
+    /** Same weekdays 4 weeks earlier */
+    sameWeekdaysBefore: number;
+    sameWeekdaysFrom: string;
+    sameWeekdaysTo: string;
     prevMonth: number;
     thisWeek: number;
     returnPct: number | null;
@@ -2089,7 +2145,15 @@ export type NewcomersListResponse = {
 };
 
 // ---- Finance: prévision du mois, leviers ----
-export type ForecastDriverKey = "newVisitors" | "otherVisits" | "ticket" | "subscriptions" | "products";
+export type ForecastDriverKey =
+  | "calendar"
+  | "periods"
+  | "newVisitors"
+  | "otherVisits"
+  | "conversions"
+  | "ticket"
+  | "subscriptions"
+  | "products";
 export interface ForecastDriver {
   key: ForecastDriverKey;
   from: number;
@@ -2106,6 +2170,17 @@ export interface ForecastDay {
   actual: number | null;
   actualCum: number | null;
   complete: boolean;
+  period: { label: string; type: string; factor: number; known: boolean } | null;
+}
+export interface ForecastPeriod {
+  type: string;
+  label: string;
+  from: string;
+  to: string;
+  days: number;
+  factor: number;
+  known: boolean;
+  effect: number;
 }
 export interface MonthForecast {
   period: {
@@ -2115,7 +2190,7 @@ export interface MonthForecast {
     previousLabel: string;
     isCurrent: boolean;
     isFuture: boolean;
-    base: { from: string; to: string };
+    base: { from: string; to: string; days: number };
   };
   subscriptions: {
     expected: number;
@@ -2123,6 +2198,9 @@ export interface MonthForecast {
     endingValue: number;
     renewalRatePct: number | null;
     renewalRateAssumed: boolean;
+    renewalRateSource: "LAST_MONTH" | "CAREFUL" | "HISTORY" | "ASSUMED";
+    lastMonthRatePct: number | null;
+    historyRatePct: number | null;
     renewals: number;
     newPace: number;
     newCount: number;
@@ -2130,11 +2208,55 @@ export interface MonthForecast {
   baseDays: number;
   perWeekday: Array<{ weekday: number; samples: number; revenueVisits: number; visits: number; newVisitors: number; products: number }>;
   days: ForecastDay[];
-  expected: { total: number; low: number; high: number; visits: number; subscriptions: number; products: number; visitCount: number; newVisitors: number };
+  expected: {
+    total: number;
+    low: number;
+    high: number;
+    /** Passes + café */
+    variable: number;
+    variableLow: number;
+    variableHigh: number;
+    visits: number;
+    subscriptions: number;
+    products: number;
+    visitCount: number;
+    newVisitors: number;
+    periodsEffect: number;
+  };
   band: { low: number; high: number };
-  toDate: null | { days: number; expected: number; actual: number; gap: number; gapPct: number | null; projected: number; drivers: ForecastDriver[] };
-  versusPrevious: null | { previousTotal: number; drivers: ForecastDriver[] };
+  periods: ForecastPeriod[];
+  calendar: {
+    effects: Array<{ type: string; label: string; factor: number; days: number; occurrences: number }>;
+    entriesInMonth: Array<{ type: string; label: string; start: string; end: string }>;
+  };
+  bookings: { thisMonth: number; lastMonthSamePoint: number };
+  conversionsToDate: { members: number; toDateVisits: number } | null;
+  /** Passes + café on complete days */
+  toDate: null | {
+    days: number;
+    expected: number;
+    actual: number;
+    gap: number;
+    gapPct: number | null;
+    projectedVariable: number;
+    projectedSubscriptions: number;
+    projected: number;
+    subscriptions: { actual: number; expected: number };
+    drivers: ForecastDriver[];
+  };
+  versusPrevious: null | { previousTotal: number; previousAdjusted: number; drivers: ForecastDriver[] };
   checkpoints: Array<{ day: number; key: string; expectedCum: number; actualCum: number | null }>;
+}
+export interface ForecastAccuracy {
+  months: Array<{
+    year: number;
+    month: number;
+    label: string;
+    takenAt: string;
+    lines: Array<{ key: string; label: string; predicted: number; actual: number; errorPct: number | null }>;
+    inRange: boolean;
+    periods: Array<{ label: string; assumedFactor: number | null; measuredFactor: number | null }>;
+  }>;
 }
 export interface PerformanceChange {
   metric: "newVisitors" | "visits";

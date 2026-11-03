@@ -724,6 +724,7 @@ model Facility {
   surveys                     Survey[]
   businessAnswers             BusinessAnswer[]
   featureProposals            FeatureProposal[]
+  forecastSnapshots           ForecastSnapshot[]
 
   @@index([organizationId])
   @@map("facilities")
@@ -743,6 +744,30 @@ model MonthlyTarget {
 
   @@unique([facilityId, year, month])
   @@map("monthly_targets")
+}
+
+/// A month's forecast as first computed (normally on the 1st), kept to check it against reality
+model ForecastSnapshot {
+  id            String   @id @default(uuid())
+  facilityId    String
+  facility      Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  year          Int
+  month         Int
+  takenAt       DateTime @default(now())
+  /// Expected money, per line (host currency)
+  passes        Float
+  products      Float
+  subscriptions Float
+  /// Passes + café
+  variable      Float
+  total         Float
+  low           Float
+  high          Float
+  /// Rules used: base window, weekday averages, calendar periods and factors, renewal rate, new pace, bookings
+  rules         Json
+
+  @@unique([facilityId, year, month])
+  @@map("forecast_snapshots")
 }
 
 /// App-install promo linked to an abonnement tarif (max ~3 per facility)

@@ -69,8 +69,18 @@ export class AnalyticsController {
   }
 
   @Get('performance/forecast')
-  performanceForecast(@Query('year') year?: string, @Query('month') month?: string) {
-    return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined });
+  performanceForecast(
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('facilityId') facilityId?: string,
+  ) {
+    return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined, facilityId });
+  }
+
+  /** Stored predictions of the last finished months against what happened. */
+  @Get('performance/forecast/accuracy')
+  performanceForecastAccuracy(@Query('facilityId') facilityId?: string) {
+    return this.forecasts.accuracy(facilityId);
   }
 
   @Get('performance/changes')
