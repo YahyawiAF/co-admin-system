@@ -644,7 +644,25 @@ export class RedeemVisitPointsDto {
   @IsNotEmpty()
   journalId: string;
 
-  @ApiProperty({ description: 'Points to apply (100 pts = 1 DT)' })
+  @ApiProperty({
+    description: 'Points to apply (1000 pts = 1 DT, whole blocks only)',
+  })
   @IsNumber()
   points: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Amount due in DT as shown in the Régler dialog (departure / pass picked there)',
+  })
+  @IsOptional()
+  @IsNumber()
+  dueDt?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'false = only debit the points; the Régler dialog marks the visit paid right after',
+  })
+  @IsOptional()
+  @IsBoolean()
+  settle?: boolean;
 }

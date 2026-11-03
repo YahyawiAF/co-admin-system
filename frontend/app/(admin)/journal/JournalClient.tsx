@@ -176,10 +176,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import {
-  dtToRedeemPoints,
-  pointsToDt,
-} from "@/lib/points-catalog";
 
 type QuickFilter =
   | "all"
@@ -257,8 +253,6 @@ export default function JournalClient() {
   const [identityMode, setIdentityMode] = useState<"link" | "create">("link");
   const [detailMember, setDetailMember] = useState<Member | null>(null);
   const [linkMemberId, setLinkMemberId] = useState("");
-  const [redeemRow, setRedeemRow] = useState<Journal | null>(null);
-  const [redeemPts, setRedeemPts] = useState("");
   const [promoteForm, setPromoteForm] = useState({
     firstName: "",
     phone: "",
@@ -945,33 +939,6 @@ export default function JournalClient() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const redeemVisit = useMutation({
-    mutationFn: ({ journalId, points }: { journalId: string; points: number }) =>
-      mobileApi.redeemVisitPoints({ journalId, points }),
-    onSuccess: (res) => {
-      toast.success(
-        res.fullyCovered
-          ? `Payé en points (−${res.pointsApplied} pts)`
-          : `−${res.pointsApplied} pts · reste ${res.remainingDue.toFixed(1)} DT`
-      );
-      setRedeemRow(null);
-      setRedeemPts("");
-      invalidateJournal();
-      queryClient.invalidateQueries({ queryKey: queryKeys.members });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const openRedeem = (row: Journal) => {
-    const mid = row.memberID;
-    if (!mid || row.isPayed) return;
-    const member = memberById.get(mid) || row.members;
-    const balance = Number(member?.points ?? 0);
-    const due = visitAmountDue(row, now);
-    const maxPts = Math.min(balance, dtToRedeemPoints(due));
-    setRedeemRow(row);
-    setRedeemPts(maxPts > 0 ? String(maxPts) : "");
-  };
 
   const remove = useMutation({
     mutationFn: (id: string) => journalApi.remove(id),
@@ -2461,104 +2428,7 @@ export default function JournalClient() {
         onOpenChange={(o) => {
           if (!o) setReglerRow(null);
         }}
-        onPayWithPoints={openRedeem}
       />
-      <Dialog
-        open={!!redeemRow}
-        onOpenChange={(o) => {
-          if (!o) {
-            setRedeemRow(null);
-            setRedeemPts("");
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Payer en points</DialogTitle>
-          </DialogHeader>
-          {redeemRow ? (
-            <div className="space-y-3">
-              {(() => {
-                const mid = redeemRow.memberID;
-                const member =
-                  (mid && memberById.get(mid)) || redeemRow.members;
-                const balance = Number(member?.points ?? 0);
-                const due = visitAmountDue(redeemRow, now);
-                const pts = Math.max(0, Math.floor(Number(redeemPts) || 0));
-                const maxPts = Math.min(balance, dtToRedeemPoints(due));
-                const cover = pointsToDt(Math.min(pts, maxPts));
-                const remaining = Math.max(0, due - cover);
-                return (
-                  <>
-                    <p className="text-sm text-muted-foreground">
-                      {visitorLabel(redeemRow)} · dû{" "}
-                      <span className="font-medium text-foreground">
-                        {due.toFixed(1)} DT
-                      </span>
-                    </p>
-                    <p className="text-sm">
-                      Solde :{" "}
-                      <span className="font-semibold tabular-nums">
-                        {balance.toLocaleString("fr-FR")} pts
-                      </span>{" "}
-                      <span className="text-muted-foreground">
-                        (100 pts = 1 DT)
-                      </span>
-                    </p>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="redeem-pts">Points à utiliser</Label>
-                      <Input
-                        id="redeem-pts"
-                        type="number"
-                        min={0}
-                        max={maxPts}
-                        value={redeemPts}
-                        onChange={(e) => setRedeemPts(e.target.value)}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Max {maxPts} · couvre {cover.toFixed(1)} DT
-                        {remaining > 0.009
-                          ? ` · reste ${remaining.toFixed(1)} DT`
-                          : " · paiement complet"}
-                      </p>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRedeemRow(null);
-                setRedeemPts("");
-              }}
-            >
-              Annuler
-            </Button>
-            <Button
-              disabled={
-                redeemVisit.isPending ||
-                !redeemRow ||
-                Math.floor(Number(redeemPts) || 0) <= 0
-              }
-              onClick={() => {
-                if (!redeemRow) return;
-                const pts = Math.floor(Number(redeemPts) || 0);
-                if (pts <= 0) return;
-                redeemVisit.mutate({
-                  journalId: redeemRow.id,
-                  points: pts,
-                });
-              }}
-            >
-              Confirmer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <MemberDetailSheet
         member={detailMember}
         open={!!detailMember}

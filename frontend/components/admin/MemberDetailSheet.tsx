@@ -351,7 +351,7 @@ export function MemberDetailSheet({ member, open, onOpenChange }: Props) {
                     </span>
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    100 pts = 1 DT · gain = montant × 100
+                    1 000 pts = 1 DT · gain = montant × 50
                   </p>
                 </div>
                 <div className="flex gap-1.5">

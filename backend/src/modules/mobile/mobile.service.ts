@@ -64,7 +64,8 @@ import {
   levelForSessions,
   nextTrophyThreshold,
   pointsToDt,
-  dtToRedeemPoints,
+  redeemablePoints,
+  POINTS_PER_DT,
   PROFILE_DETAILS_POINTS,
   PROFILE_AVATAR_POINTS,
 } from './points';
@@ -7089,14 +7090,22 @@ export class MobileService {
   }
 
   /**
-   * Redeem points against a journal visit (100 pts = 1 DT).
-   * Full cover → isPayed; partial → remainder unpaid (no visit earn on redeemed DT).
+   * Redeem points against a journal visit (1000 pts = 1 DT, whole blocks only:
+   * 1200 pts → 1000 pts used). Full cover → isPayed; partial → remainder unpaid
+   * (no visit earn on redeemed DT). `settle: false` only debits the points —
+   * the Régler dialog collects the rest and marks the visit paid itself.
    */
-  async adminRedeemVisitPoints(dto: { journalId: string; points: number }) {
+  async adminRedeemVisitPoints(dto: {
+    journalId: string;
+    points: number;
+    dueDt?: number;
+    settle?: boolean;
+  }) {
     const points = Math.floor(Number(dto.points));
     if (!Number.isFinite(points) || points <= 0) {
       throw new BadRequestException('Nombre de points invalide');
     }
+    const settle = dto.settle !== false;
 
     const journal = await this.prisma.journal.findUnique({
       where: { id: dto.journalId },
@@ -7117,21 +7126,28 @@ export class MobileService {
       throw new BadRequestException('Visite déjà payée');
     }
 
-    const due = Math.max(0, Number(journal.payedAmount || 0));
+    const clientDue = Number(dto.dueDt);
+    const due = Math.max(
+      0,
+      Number.isFinite(clientDue) && clientDue > 0
+        ? clientDue
+        : Number(journal.payedAmount || 0),
+    );
     if (due <= 0) {
       throw new BadRequestException('Montant dû invalide');
     }
 
-    const maxPts = dtToRedeemPoints(due);
     const member = await this.prisma.member.findUnique({
       where: { id: journal.memberID },
       select: { points: true },
     });
     if (!member) throw new NotFoundException('Membre introuvable');
 
-    const apply = Math.min(points, maxPts, member.points);
+    const apply = redeemablePoints(Math.min(points, member.points), due);
     if (apply <= 0) {
-      throw new BadRequestException('Solde points insuffisant');
+      throw new BadRequestException(
+        `Il faut au moins ${POINTS_PER_DT.toLocaleString('fr-FR')} pts (1 DT) et 1 DT à payer`,
+      );
     }
 
     const debit = await debitPoints(this.prisma, {
@@ -7145,12 +7161,12 @@ export class MobileService {
     const fullyCovered = coveredDt + 1e-9 >= due;
     const updated = await this.prisma.journal.update({
       where: { id: journal.id },
-      data: fullyCovered ? { isPayed: true } : {},
+      data: fullyCovered && settle ? { isPayed: true } : {},
       include: { members: true, prices: true },
     });
 
     // Full cover: maybeAward yields 0 earnable after redeem subtraction.
-    if (fullyCovered) {
+    if (fullyCovered && settle) {
       await this.maybeAwardVisitPaidPoints(updated.id);
     }
 
@@ -7158,7 +7174,7 @@ export class MobileService {
       type: 'journal_redeem_points',
       journalId: journal.id,
       points: apply,
-      isPayed: fullyCovered,
+      isPayed: fullyCovered && settle,
     });
 
     return {
@@ -7166,7 +7182,7 @@ export class MobileService {
       pointsApplied: apply,
       dtCovered: coveredDt,
       fullyCovered,
-      isPayed: fullyCovered,
+      isPayed: fullyCovered && settle,
       remainingDue: fullyCovered
         ? 0
         : Math.round((due - coveredDt) * 100) / 100,
