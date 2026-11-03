@@ -158,8 +158,10 @@ export class CaisseService {
     return { ok: true };
   }
 
-  async daySummary(date: string) {
-    await this.ensureOpenToday(date);
+  /** open: false = read only (Conseil, Argent): today's caisse is not opened by a read. */
+  async daySummary(date: string, opts: { open?: boolean } = {}) {
+    const readOnly = opts.open === false;
+    if (!readOnly) await this.ensureOpenToday(date);
     const day = parseLocalDay(date);
     const start = startOfDay(day);
     const end = endOfDay(day);
@@ -231,7 +233,8 @@ export class CaisseService {
       .filter((m) => m.type === 'OUT')
       .reduce((a, m) => a + m.amount, 0);
 
-    const openingFloat = session?.openingFloat || 0;
+    // Not opened yet (read only): it will open with yesterday's kept cash
+    const openingFloat = session ? session.openingFloat || 0 : readOnly ? await this.carriedFloat(day) : 0;
     const revenue = revenueJournal + revenueAbonnements + revenueProducts;
     const expectedClose = round2(
       openingFloat + revenue + movementsIn - expensesCash - movementsOut,

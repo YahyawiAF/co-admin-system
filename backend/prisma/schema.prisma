@@ -1310,13 +1310,13 @@ model AdvisorReport {
 
 /// A business change the owner started (e.g. "selling coffee"), tracked before/after
 model BusinessInitiative {
-  id                  String      @id @default(uuid())
+  id                  String           @id @default(uuid())
   facilityId          String
-  facility            Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility            Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   title               String
   description         String?
   /// NEW_REVENUE, PROMO, PRICING, CAFE, RETENTION, OPERATIONS
-  category            String      @default("NEW_REVENUE")
+  category            String           @default("NEW_REVENUE")
   startDate           DateTime
   endDate             DateTime?
   sourceReportId      String?
@@ -1331,17 +1331,17 @@ model BusinessInitiative {
   /// Owner's own conclusion: WORKING | MIXED | NOT_WORKING
   ownerVerdict        String?
   /// What happened, written by the owner: [{ date: "yyyy-MM-dd", text }]
-  notes               Json        @default("[]")
+  notes               Json             @default("[]")
   /// Who the action aims at — only that is measured: ALL | SLOT (days + hours) | LIST (clients)
-  targetKind          String      @default("ALL")
+  targetKind          String           @default("ALL")
   /// SLOT: 0 = Sunday … 6 = Saturday; empty = every day
-  targetDays          Int[]       @default([])
+  targetDays          Int[]            @default([])
   /// SLOT: hours [from, to); to ≤ from wraps past midnight; null = all day
   targetFromHour      Int?
   targetToHour        Int?
   /// LIST: the list chosen (campaign segment code) and its clients, frozen at start
   targetSegment       String?
-  targetMemberIds     String[]    @default([])
+  targetMemberIds     String[]         @default([])
   /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION | EVENT
   linkedKind          String?
   linkedId            String?
@@ -1350,24 +1350,50 @@ model BusinessInitiative {
   /// Why it should work, one line
   hypothesis          String?
   /// INSTAGRAM_POST | INSTAGRAM_STORY | WHATSAPP | APP | PARTNER | WALK_IN
-  channels            String[]    @default([])
+  channels            String[]         @default([])
   /// Planned steps: [{ text, done, doneAt?: "yyyy-MM-dd" }]
-  steps               Json        @default("[]")
+  steps               Json             @default("[]")
   /// Figures typed from Instagram: [{ date: "yyyy-MM-dd", channel?, reach }]
-  manualFunnel        Json        @default("[]")
+  manualFunnel        Json             @default("[]")
   /// People who said they are interested (typed by the owner): funnel step between "seen" and "registered"
   interested          Int?
   /// Pauses: [{ from: "yyyy-MM-dd", to: "yyyy-MM-dd" | null }]; paused days are left out of the measure
-  pauses              Json        @default("[]")
+  pauses              Json             @default("[]")
   /// "Pas pour moi": the owner stopped it and does not want it proposed again
   droppedAt           DateTime?
   dropReason          String?
+  /// Goal in DT over the 4 weeks ("Gagner +300 DT"); the money is counted by the app
+  goalAmount          Float?
+  /// Health-check point the solution works on: cafe | abos | creux | nouveaux | retour | impayes
+  area                String?
+  /// Lever of the lever map it works on (e.g. "renew")
+  leverId             String?
+  /// Drafts of the app features to use, prepared by the AI: [{ kind, step, label, draft }]
+  tools               Json             @default("[]")
   shareLinks          ShareLink[]
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  links               InitiativeLink[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
+}
+
+/// A promo, event, survey, relance, tarif or product used by a solution: its sales are counted for it
+model InitiativeLink {
+  id           String             @id @default(uuid())
+  initiativeId String
+  initiative   BusinessInitiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  /// PROMOTION | EVENT | SURVEY | CAMPAIGN | PRICE | PRODUCT
+  kind         String
+  targetId     String
+  /// Objective (step) this tool fulfils; ticked when the link is made
+  stepIndex    Int?
+  createdAt    DateTime           @default(now())
+
+  @@unique([initiativeId, kind, targetId])
+  @@index([kind, targetId])
+  @@map("initiative_links")
 }
 
 /// Conseiller: an idea the owner does not want ("Pas pour moi"); the AI must not propose it again

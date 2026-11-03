@@ -174,7 +174,7 @@ const initials = (name: string) =>
 const digits = (s: string) => s.replace(/\D/g, "");
 const ago = (iso: string) => formatDistanceToNow(new Date(iso), { locale: fr, addSuffix: true });
 const ENTER = "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 motion-reduce:animate-none";
-const DIALOG_CLASS =
+export const DIALOG_CLASS =
   "flex max-h-[92vh] w-[96vw] flex-col gap-0 overflow-hidden rounded-2xl border-0 p-0 [&>button]:right-4 [&>button]:top-4 [&>button]:rounded-full [&>button]:bg-white/20 [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100 [&>button]:transition-colors [&>button:hover]:bg-white/30";
 
 // ---------------------------------------------------------------------------

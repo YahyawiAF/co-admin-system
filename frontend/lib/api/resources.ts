@@ -26,6 +26,11 @@ import type {
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
+  AdaptedSolution,
+  AdvisorHealth,
+  HealthAreaId,
+  ToolDraft,
+  ToolKind,
   StaffActionRow,
   StaffMember,
   StaffPermissions,
@@ -2113,6 +2118,20 @@ export const advisorApi = {
   initiatives() {
     return http.get<BusinessInitiative[]>("/advisor/initiatives");
   },
+  /** Bilan: six points with number, colour and solutions */
+  health() {
+    return http.get<AdvisorHealth>("/advisor/health");
+  },
+  /** « Adapter » a solution with the AI (nothing saved) */
+  adapt(data: { solution: Partial<AdaptedSolution>; instruction: string }) {
+    return http.post<AdaptedSolution>("/advisor/solutions/adapt", data);
+  },
+  addTool(initiativeId: string, data: { kind: ToolKind; targetId: string; stepIndex?: number | null }) {
+    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools`, data);
+  },
+  removeTool(initiativeId: string, linkId: string) {
+    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools/${linkId}`);
+  },
   createInitiative(data: {
     title: string;
     description?: string;
@@ -2134,6 +2153,10 @@ export const advisorApi = {
     hypothesis?: string | null;
     channels?: InitiativeChannel[];
     steps?: InitiativeStep[];
+    goalAmount?: number | null;
+    area?: HealthAreaId | null;
+    leverId?: string | null;
+    tools?: ToolDraft[];
   }) {
     return http.post<BusinessInitiative>("/advisor/initiatives", data);
   },
@@ -2153,6 +2176,8 @@ export const advisorApi = {
       interested: number | null;
       paused: boolean;
       drop: { reason: string } | null;
+      goalAmount: number | null;
+      tools: ToolDraft[];
     }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -106,13 +107,24 @@ export default function ProductsPage() {
     setOpen(true);
   };
 
+  // Opened from Conseil IA (« Préparer le produit »): name and price ready to check
+  const conseil = useConseilDraft("PRODUCT");
+  useEffect(() => {
+    const d = conseil.draft as { name?: string; price?: number } | null;
+    if (!d) return;
+    setEdit(null);
+    form.reset({ name: d.name ?? "", purchasePrice: 0, sellingPrice: d.price ?? 0, stock: 0, description: "", img: "" });
+    setOpen(true);
+  }, [conseil.draft, form]);
+
   const save = useMutation({
     mutationFn: (v: FormValues) =>
       edit ? productsApi.update(edit.id, v) : productsApi.create(v),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(edit ? "Produit mis à jour" : "Produit créé");
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setOpen(false);
+      if (!edit && conseil.active && saved?.id) void conseil.linked(saved.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -155,7 +167,13 @@ export default function ProductsPage() {
           <h1 className="text-2xl font-bold">Products</h1>
           <p className="text-muted-foreground">Stock café / boutique</p>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+          open={open}
+          onOpenChange={(o) => {
+            setOpen(o);
+            if (!o && conseil.active && !save.isPending) conseil.dismiss();
+          }}
+        >
           <DialogTrigger asChild>
             <Button onClick={openCreate}>+ Produit</Button>
           </DialogTrigger>

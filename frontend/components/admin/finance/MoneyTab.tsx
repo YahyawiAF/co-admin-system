@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/components/admin/advisor/advice-ui";
 import { dt, managerApi, type MoneyIdea, type MoneyPlan, type MoneySourceKind, type MoneyView } from "@/lib/api/manager";
-import { MONEY_KEY, QUESTIONS_KEY } from "./QuestionsTab";
+import { MONEY_KEY, QUESTIONS_KEY } from "./MoneyQuestions";
 
 const chip = "inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold";
 

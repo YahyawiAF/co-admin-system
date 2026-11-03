@@ -1752,6 +1752,104 @@ export interface InitiativeNote {
   text: string;
 }
 
+// ---------- Conseil IA: bilan, solutions, tools ----------
+
+export type ToolKind = "PROMOTION" | "EVENT" | "SURVEY" | "CAMPAIGN" | "PRICE" | "PRODUCT";
+export type HealthAreaId = "cafe" | "abos" | "creux" | "nouveaux" | "retour" | "impayes";
+export type HealthStatus = "red" | "orange" | "green" | "grey";
+
+/** A form pre-filled by the AI or the rules; nothing is created until the owner saves it. */
+export interface ToolDraft {
+  kind: ToolKind;
+  /** Objective (step) it fulfils */
+  step: number | null;
+  label: string;
+  draft: Record<string, unknown>;
+}
+
+/** A feature used by a solution, with what it brought. */
+export interface InitiativeToolLink {
+  id: string;
+  kind: ToolKind;
+  targetId: string;
+  stepIndex: number | null;
+  label: string | null;
+  count: number;
+  revenue: number;
+  stages: Array<{ label: string; value: number | null }>;
+}
+
+export interface HealthSolution {
+  key: string;
+  source: "ai" | "rules";
+  area: HealthAreaId;
+  title: string;
+  why: string;
+  gain: number;
+  cost: number;
+  effort: "low" | "medium" | "high";
+  steps: string[];
+  goalAmount: number;
+  tools: ToolDraft[];
+  target: { kind: TargetKind; days: number[]; fromHour: number | null; toHour: number | null } | null;
+  segment: string | null;
+  metric: AdviceMetric | null;
+  category: AdvisorCategory;
+  objective: InitiativeObjective | null;
+  channels: InitiativeChannel[];
+  leverId: string | null;
+  reportId: string | null;
+}
+
+export interface HealthArea {
+  id: HealthAreaId;
+  name: string;
+  status: HealthStatus;
+  statusLabel: string;
+  big: string;
+  sub: string;
+  headline: string;
+  compare: { value: string; label: string };
+  lost: { value: string; label: string } | null;
+  problem: string;
+  trend: { label: string; unit: string; values: Array<number | null> };
+  how: string;
+  solutions: HealthSolution[];
+  alreadyDone: Array<{ leverId: string; title: string; note: string | null; working: boolean }>;
+  running: string[];
+  history: Array<{
+    id: string;
+    title: string;
+    when: string;
+    netGain: number | null;
+    verdict: InitiativeVerdict | null;
+    status: InitiativeStatus | null;
+  }>;
+}
+
+export interface AdvisorHealth {
+  generatedAt: string;
+  report: { id: string; createdAt: string } | null;
+  weekStarts: string[];
+  areas: HealthArea[];
+  max: number;
+  runningCount: number;
+  toFix: number;
+  gainedTotal: number;
+  finishedCount: number;
+  other: Array<{ title: string; why: string }>;
+}
+
+export interface AdaptedSolution {
+  title: string;
+  why: string;
+  steps: string[];
+  gain: number;
+  cost: number;
+  goalAmount: number;
+  tools: ToolDraft[];
+}
+
 export interface BusinessInitiative {
   id: string;
   title: string;
@@ -1786,6 +1884,14 @@ export interface BusinessInitiative {
     label: string;
   };
   linked: { kind: LinkedKind; id: string } | null;
+  /** Goal in DT over the 4 weeks */
+  goalAmount: number | null;
+  area: HealthAreaId | null;
+  leverId: string | null;
+  /** Feature drafts for the objectives (Préparer) */
+  tools: ToolDraft[];
+  /** Features used, with what each brought */
+  toolLinks: InitiativeToolLink[];
   objective: InitiativeObjective | null;
   hypothesis: string | null;
   channels: InitiativeChannel[];
@@ -1827,14 +1933,11 @@ export interface BusinessInitiative {
     effect: number | null;
     changePct: number | null;
     targetPct: number | null;
-    sale: {
-      kind: LinkedKind;
-      label: string;
-      count: number;
-      revenue: number;
-      margin: number;
-      discount: number;
-    } | null;
+    goalAmount: number | null;
+    /** Gain ÷ goal in DT, 0–100 */
+    goalPct: number | null;
+    /** Sales of the tools used, each sale counted once */
+    sale: { count: number; revenue: number; discount: number } | null;
     gainSource: "sale" | "campaign" | "target" | "global";
     gain: number;
     cost: number;

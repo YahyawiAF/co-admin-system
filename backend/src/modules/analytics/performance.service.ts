@@ -20,6 +20,7 @@ import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 import { expenseAmount } from '../expense/expense-amount';
 import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
+import { openHoursForDay, paidJournalsIn, visitsIn } from './money-rules';
 import { computeOffers } from './offers';
 import { abonnementMonth, computeMonthForecast, loadAbonnements } from './month-data';
 import { expectedShare } from '../../business-manager-core';
@@ -281,21 +282,6 @@ export class PerformanceService {
     );
   }
 
-  /** Hours open on a day: configured window, widened when visits happened outside it. */
-  private openHoursForDay(
-    s: PerformanceSettings,
-    observed?: { first: number; last: number },
-  ) {
-    if (s.alwaysOpen) return 24;
-    let from = s.openHour;
-    let to = s.closeHour;
-    if (observed) {
-      from = Math.min(from, observed.first);
-      to = Math.max(to, observed.last);
-    }
-    return Math.min(24, Math.max(0, to - from));
-  }
-
   private async periodMetrics(
     s: PerformanceSettings,
     seats: number,
@@ -306,7 +292,7 @@ export class PerformanceService {
     const [journals, aboPayments, dailyProducts, dailyExpenses, visits] =
       await Promise.all([
         this.prisma.journal.findMany({
-          where: { registredTime: { gte: start, lte: end }, isPayed: true },
+          where: paidJournalsIn(start, end),
           select: { registredTime: true, payedAmount: true },
         }),
         this.prisma.abonnementPayment.findMany({
@@ -330,7 +316,7 @@ export class PerformanceService {
           select: { amount: true, expense: { select: { amount: true } } },
         }),
         this.prisma.journal.findMany({
-          where: { registredTime: { gte: start, lte: end }, isReservation: false },
+          where: visitsIn(start, end),
           select: {
             registredTime: true,
             leaveTime: true,
@@ -414,7 +400,7 @@ export class PerformanceService {
     }));
     for (let d = startOfDay(start); d <= lastDay; d = addDays(d, 1)) {
       const k = localDayKey(d);
-      let h = this.openHoursForDay(s, observed.get(k));
+      let h = openHoursForDay(s, observed.get(k));
       if (k === localDayKey(now)) {
         const sinceOpen = (now.getTime() - d.getTime()) / HOUR_MS - (s.alwaysOpen ? 0 : s.openHour);
         h = Math.max(0, Math.min(h, sinceOpen));

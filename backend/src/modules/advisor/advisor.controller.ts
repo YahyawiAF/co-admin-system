@@ -62,6 +62,29 @@ export class AdvisorController {
     return this.advisor.report(id);
   }
 
+  /** Bilan: six points of the business, with the solutions to try (rules + last AI analysis). */
+  @Get('health')
+  health(@Query('facilityId') facilityId?: string) {
+    return this.advisor.health(facilityId);
+  }
+
+  /** « Adapter » a solution with the AI, from one sentence of the owner (nothing saved). */
+  @Post('solutions/adapt')
+  adapt(@Query('facilityId') facilityId: string | undefined, @Body() body: Record<string, unknown>) {
+    return this.advisor.adapt(facilityId, body as never);
+  }
+
+  /** A promo, event, survey, relance, tarif or product used by the solution. */
+  @Post('initiatives/:id/tools')
+  addTool(@Param('id') id: string, @Body() body: { kind?: string; targetId?: string; stepIndex?: number | null }) {
+    return this.advisor.addTool(id, body);
+  }
+
+  @Delete('initiatives/:id/tools/:linkId')
+  removeTool(@Param('id') id: string, @Param('linkId') linkId: string) {
+    return this.advisor.removeTool(id, linkId);
+  }
+
   @Get('initiatives')
   initiatives(@Query('facilityId') facilityId?: string) {
     return this.advisor.initiatives(facilityId);
@@ -92,6 +115,10 @@ export class AdvisorController {
       hypothesis?: string | null;
       channels?: string[];
       steps?: Array<{ text?: string; done?: boolean }>;
+      goalAmount?: number | null;
+      area?: string | null;
+      leverId?: string | null;
+      tools?: unknown[];
     },
   ) {
     return this.advisor.createInitiative(facilityId, body);
@@ -127,6 +154,10 @@ export class AdvisorController {
       interested?: number | null;
       paused?: boolean;
       drop?: { reason?: string } | null;
+      goalAmount?: number | null;
+      area?: string | null;
+      leverId?: string | null;
+      tools?: unknown[];
     },
   ) {
     return this.advisor.updateInitiative(id, body);

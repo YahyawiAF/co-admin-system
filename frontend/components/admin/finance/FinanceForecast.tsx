@@ -587,12 +587,16 @@ function ideaPayload(idea: MissingIdea) {
     channels: p.channels,
     metric: p.metric,
     targetPct: p.targetPct ?? null,
-    targetKind: p.targetKind,
+    // A slot needs days: without them the whole space is measured
+    targetKind: p.targetKind === "SLOT" && !p.targetDays?.length ? "ALL" : p.targetKind,
     targetDays: p.targetDays,
     hypothesis: idea.why.slice(0, 300),
     recommendationTitle: idea.title,
     startDate: format(new Date(), "yyyy-MM-dd"),
     steps: idea.steps.map((text) => ({ text, done: false })),
+    // Same as « Je m'en occupe » in Conseil IA: a goal in DT, tied to its lever
+    leverId: idea.leverId,
+    goalAmount: Math.max(50, Math.round(idea.gain / 10) * 10),
   };
 }
 
@@ -609,7 +613,9 @@ export function LeverMapCard() {
     mutationFn: (idea: MissingIdea) => advisorApi.createInitiative(ideaPayload(idea)),
     onSuccess: (_r, idea) => {
       setAdded((s) => new Set(s).add(idea.leverId));
-      toast.success("Ajoutée au plan : suivie dans Conseiller → Actions");
+      toast.success("Solution lancée : suivez-la dans Conseil IA", {
+        action: { label: "Ouvrir", onClick: () => window.location.assign("/conseiller") },
+      });
       void queryClient.invalidateQueries({ queryKey: ["advisor"] });
     },
     onError: (e: Error) => toast.error(e.message || "Erreur"),
