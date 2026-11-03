@@ -28,6 +28,8 @@ export type DayFact = {
   products: number;
   /** Subscription payments (kept out of daily comparisons) */
   subscriptions: number;
+  /** Paid event places (kept out of the passes + café curve) */
+  events?: number;
 };
 
 export type MonthDay = { key: string; weekday: number };
@@ -111,7 +113,11 @@ export type DriverKey =
   | 'conversions'
   | 'ticket'
   | 'subscriptions'
-  | 'products';
+  | 'products'
+  /** Passes + café above / below the expected on the days already lived */
+  | 'goodStart'
+  /** Paid event places */
+  | 'events';
 
 export type Driver = {
   key: DriverKey;
@@ -190,6 +196,16 @@ export type Forecast = {
     projected: number;
     subscriptions: { actual: number; expected: number };
     drivers: Driver[];
+    /**
+     * « Rythme du mois »: the gap so far also moves the days left, with a
+     * weight that grows with the days lived (2 days → 22 %, 14 days → 67 %).
+     */
+    pace: {
+      weight: number;
+      multiplier: number;
+      projectedVariable: number;
+      projected: number;
+    };
   };
   /** Previous month vs the expected month. */
   versusPrevious: null | {
@@ -415,6 +431,18 @@ export function splitGap(ref: Totals, cmp: Totals, opts: { subscriptions?: boole
   return out;
 }
 
+/**
+ * How much the gap on the days lived moves the days left: weight = days ÷
+ * (days + 7), so one good weekend barely counts and two good weeks count a lot.
+ * The multiplier stays within 50 %–150 %.
+ */
+export function paceOf(daysLived: number, expected: number, actual: number) {
+  const weight = daysLived > 0 ? daysLived / (daysLived + 7) : 0;
+  if (!(expected > 0)) return { weight, multiplier: 1 };
+  const multiplier = Math.max(0.5, Math.min(1.5, 1 + ((actual - expected) / expected) * weight));
+  return { weight, multiplier };
+}
+
 export function buildForecast(input: ForecastInput): Forecast {
   const avg = weekdayAverages(input.base);
   const band = weekBand(input.bandBase ?? input.base);
@@ -515,6 +543,8 @@ export function buildForecast(input: ForecastInput): Forecast {
     const a = act.revenueVisits + act.products;
     const projectedVariable = a + (variableTotal - e);
     const projectedSubscriptions = Math.max(subsActual, subsExp);
+    const pace = paceOf(completeDays.length, e, a);
+    const paceVariable = a + (variableTotal - e) * pace.multiplier;
     toDate = {
       days: completeDays.length,
       expected: r1(e),
@@ -526,6 +556,12 @@ export function buildForecast(input: ForecastInput): Forecast {
       projected: r1(projectedVariable + projectedSubscriptions),
       subscriptions: { actual: r1(subsActual), expected: r1(subsExp) },
       drivers: splitGap(exp, act, { subscriptions: false }),
+      pace: {
+        weight: r2(pace.weight),
+        multiplier: r2(pace.multiplier),
+        projectedVariable: r1(paceVariable),
+        projected: r1(paceVariable + projectedSubscriptions),
+      },
     };
   }
 

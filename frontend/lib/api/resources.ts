@@ -584,6 +584,7 @@ export const analyticsApi = {
     year: number;
     month: number;
     revenue: number | null;
+    netRevenue?: number | null;
     occupancyPct?: number | null;
   }) {
     return http.put<MonthlyTarget | null>("/analytics/performance/targets", data);
@@ -599,6 +600,29 @@ export const analyticsApi = {
     const q = new URLSearchParams({ year: String(year), month: String(month) });
     if (facilityId) q.set("facilityId", facilityId);
     return http.get<MonthForecast>(`/analytics/performance/forecast?${q.toString()}`);
+  },
+  /** The forecast and every number behind it, saved as a file (needs the auth header, so fetched as a blob). */
+  async downloadForecast(year: number, month: number, format: "csv" | "json", facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month), format });
+    if (facilityId) q.set("facilityId", facilityId);
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const org = getAdminOrganizationId();
+    const res = await fetch(`${API_BASE_URL}/analytics/performance/forecast/export?${q.toString()}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(org && { "X-Organization-Id": org }),
+      },
+    });
+    if (!res.ok) throw new Error("Export impossible");
+    const name =
+      /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] ||
+      `prevision-${year}-${String(month).padStart(2, "0")}${format === "csv" ? "-jours.csv" : ".json"}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
   performanceForecastAccuracy(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";

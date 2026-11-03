@@ -29,6 +29,7 @@ import {
   type CalendarEntry,
   type DayFact,
 } from '../../business-manager-core';
+import { buildSources } from './forecast-sources';
 
 const DAY_MS = 86_400_000;
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -42,7 +43,7 @@ const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : null)
 export async function loadDayFacts(prisma: PrismaService, from: Date, to: Date): Promise<DayFact[]> {
   const start = startOfDay(from);
   const end = endOfDay(to);
-  const [paid, visits, firsts, subs, products] = await Promise.all([
+  const [paid, visits, firsts, subs, products, events] = await Promise.all([
     prisma.journal.findMany({
       where: { registredTime: { gte: start, lte: end }, isPayed: true },
       select: { registredTime: true, payedAmount: true },
@@ -64,12 +65,16 @@ export async function loadDayFacts(prisma: PrismaService, from: Date, to: Date):
       where: { date: { gte: start, lte: end }, status: { notIn: ['PENDING', 'CANCELLED'] } },
       select: { date: true, quantite: true, unitPrice: true, product: { select: { sellingPrice: true } } },
     }),
+    prisma.eventRegistration.findMany({
+      where: { paidAt: { gte: start, lte: end } },
+      select: { paidAt: true, paidAmount: true },
+    }),
   ]);
 
   const rows = new Map<string, DayFact>();
   for (let d = start; d <= end; d = addDays(d, 1)) {
     const key = localDayKey(d);
-    rows.set(key, { key, weekday: d.getDay(), revenueVisits: 0, visits: 0, newVisitors: 0, products: 0, subscriptions: 0 });
+    rows.set(key, { key, weekday: d.getDay(), revenueVisits: 0, visits: 0, newVisitors: 0, products: 0, subscriptions: 0, events: 0 });
   }
   const at = (d: Date | null) => (d ? rows.get(localDayKey(d)) : undefined);
   for (const j of paid) {
@@ -94,12 +99,37 @@ export async function loadDayFacts(prisma: PrismaService, from: Date, to: Date):
     const r = at(p.date);
     if (r) r.products += orderUnitPrice(p) * p.quantite;
   }
+  for (const e of events) {
+    const r = at(e.paidAt);
+    if (r) r.events = (r.events ?? 0) + (e.paidAmount ?? 0);
+  }
   return [...rows.values()].map((r) => ({
     ...r,
     revenueVisits: r1(r.revenueVisits),
     products: r1(r.products),
     subscriptions: r1(r.subscriptions),
+    events: r1(r.events ?? 0),
   }));
+}
+
+/** Passes money per day and per tarif (same rule as `revenueVisits`). */
+export async function loadTarifDays(prisma: PrismaService, from: Date, to: Date) {
+  const rows = await prisma.journal.findMany({
+    where: { registredTime: { gte: startOfDay(from), lte: endOfDay(to) }, isPayed: true },
+    select: { registredTime: true, payedAmount: true, priceId: true, prices: { select: { name: true } } },
+  });
+  const names = new Map<string, string>();
+  const byDay = new Map<string, Record<string, number>>();
+  for (const j of rows) {
+    if (!j.registredTime) continue;
+    const id = j.priceId ?? 'none';
+    if (!names.has(id)) names.set(id, j.prices?.name ?? 'Sans tarif');
+    const k = localDayKey(j.registredTime);
+    const m = byDay.get(k) ?? {};
+    m[id] = (m[id] ?? 0) + (j.payedAmount || 0);
+    byDay.set(k, m);
+  }
+  return { names, byDay };
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +269,8 @@ export function subscriptionsOutlook(abos: AboRow[], monthStart: Date) {
   const avgPrice = recent.length ? r1(recent.reduce((s, a) => s + aboPrice(a), 0) / recent.length) : 0;
   return {
     expected: r1(renewals + newPace),
+    /** Day each abonnement ending this month is expected to renew, and its value × the rate */
+    endingDays: ending.map((a) => ({ key: localDayKey(a.leaveDate!), value: r1((aboPrice(a) * rate) / 100) })),
     endingCount: ending.length,
     endingValue,
     renewalRatePct,
@@ -448,7 +480,7 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
   const historyTo = isFuture || isCurrent ? yesterday : end;
   const historyFrom = subDays(start, 365);
 
-  const [history, actual, abos, calendar, bookings, bookingsPrev] = await Promise.all([
+  const [history, actual, abos, calendar, bookings, bookingsPrev, tarif, upcomingRegs] = await Promise.all([
     loadDayFacts(prisma, historyFrom, historyTo),
     isFuture ? Promise.resolve([] as DayFact[]) : loadDayFacts(prisma, start, isCurrent ? now : end),
     loadAbonnements(prisma),
@@ -464,6 +496,18 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
         createdAt: { lte: subMonths(now, 1) },
       },
     }),
+    loadTarifDays(prisma, subDays(start, 62), isCurrent ? now : end),
+    // Event places of the month not paid yet (paid ones are in the day facts)
+    isCurrent || isFuture
+      ? prisma.eventRegistration.findMany({
+          where: {
+            paidAt: null,
+            status: { in: ['REGISTERED', 'ATTENDED'] },
+            event: { facilityId, status: 'PUBLISHED', price: { gt: 0 }, startAt: { gte: isCurrent ? startOfDay(now) : start, lte: end } },
+          },
+          select: { event: { select: { startAt: true, price: true } } },
+        })
+      : Promise.resolve([] as Array<{ event: { startAt: Date; price: number | null } }>),
   ]);
 
   const startKey = localDayKey(start);
@@ -523,6 +567,27 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
     conversions,
   });
 
+  const sources = buildSources({
+    month: monthDays,
+    todayKey,
+    base,
+    dayFactors,
+    actual,
+    previousMonthDays,
+    tarifDays: tarif.byDay,
+    tarifNames: tarif.names,
+    subscriptions: subs,
+    eventsUpcoming: upcomingRegs.map((r) => ({ key: localDayKey(r.event.startAt), value: r.event.price ?? 0 })),
+  });
+  const eventsPaid = r1(actual.reduce((a, d) => a + (d.events ?? 0), 0));
+  const eventsUpcoming = r1(upcomingRegs.reduce((a, r) => a + (r.event.price ?? 0), 0));
+  const events = {
+    paid: eventsPaid,
+    upcoming: eventsUpcoming,
+    projected: r1(eventsPaid + eventsUpcoming),
+    previousMonth: r1(previousMonthDays.reduce((a, d) => a + (d.events ?? 0), 0)),
+  };
+
   const monthTypes = new Set(Object.values(dayFactors).map((x) => x.type));
   return {
     period: {
@@ -543,6 +608,13 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
     },
     bookings: { thisMonth: bookings, lastMonthSamePoint: bookingsPrev },
     conversionsToDate: conversions,
+    sources,
+    events,
     ...f,
+    /** Everything this month: passes + café + abonnements + events (current method and « rythme du mois ») */
+    projectedAll: {
+      current: r1((f.toDate?.projected ?? f.expected.total) + events.projected),
+      pace: r1((f.toDate?.pace.projected ?? f.expected.total) + events.projected),
+    },
   };
 }

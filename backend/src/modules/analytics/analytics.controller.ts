@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
@@ -49,6 +50,7 @@ export class AnalyticsController {
       year: number;
       month: number;
       revenue?: number | null;
+      netRevenue?: number | null;
       occupancyPct?: number | null;
     },
   ) {
@@ -75,6 +77,24 @@ export class AnalyticsController {
     @Query('facilityId') facilityId?: string,
   ) {
     return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined, facilityId });
+  }
+
+  /** Download the forecast and the numbers behind it: `format=csv` (day by day) or json (everything). */
+  @Get('performance/forecast/export')
+  async performanceForecastExport(
+    @Res() res: Response,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('format') format?: string,
+    @Query('facilityId') facilityId?: string,
+  ) {
+    const x = await this.forecasts.exportForecast({ year: Number(year) || undefined, month: Number(month) || undefined, format, facilityId });
+    res.setHeader('Content-Type', x.type);
+    res.setHeader('Content-Disposition', `attachment; filename="${x.filename}"`);
+    // The admin app runs on another origin: let it read the file name
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(x.body);
   }
 
   /** Stored predictions of the last finished months against what happened. */

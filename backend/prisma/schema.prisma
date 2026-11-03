@@ -738,6 +738,8 @@ model MonthlyTarget {
   year         Int
   month        Int
   revenue      Float
+  /// Optional goal on net (revenue − expenses), shown next to the revenue goal
+  netRevenue   Float?
   occupancyPct Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

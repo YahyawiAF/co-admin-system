@@ -10,6 +10,7 @@ export {
   dayFactorsFor,
   detectChanges,
   expectedShare,
+  paceOf,
   splitGap,
   totalsOf,
   usualDays,

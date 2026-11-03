@@ -896,6 +896,8 @@ export interface PerformancePeriodMetrics {
   revenueJournal: number;
   revenueAbonnements: number;
   revenueProducts: number;
+  /** Paid event places */
+  revenueEvents: number;
   expenses: number;
   net: number;
   marginPct: number | null;
@@ -963,6 +965,8 @@ export interface PerformanceOverview {
     marginPct: number | null;
   } | null;
   projected: number | null;
+  /** « Rythme du mois »: the gap so far also moves the days left */
+  projectedPace: number | null;
   projection: { method: "WEEKDAYS"; variable: number; subscriptions: number } | null;
   abonnements: AbonnementMonth | null;
   target: {
@@ -978,6 +982,21 @@ export interface PerformanceOverview {
     neededPerDay: number | null;
     projectedPct: number | null;
     pacedByWeekday: boolean;
+    /** Goal on net (revenue − expenses), when set */
+    net: {
+      revenue: number;
+      now: number;
+      expensesExpected: number;
+      progressPct: number | null;
+      expectedByNow: number;
+      expectedPct: number | null;
+      gap: number;
+      projected: number | null;
+      projectedPct: number | null;
+      /** Revenue still to collect */
+      remaining: number;
+      neededPerDay: number | null;
+    } | null;
   } | null;
   breakEven: BreakEven;
   bestWeekday: number | null;
@@ -1227,6 +1246,7 @@ export interface MonthlyTarget {
   year: number;
   month: number;
   revenue: number;
+  netRevenue: number | null;
   occupancyPct: number | null;
 }
 
@@ -2318,7 +2338,9 @@ export type ForecastDriverKey =
   | "conversions"
   | "ticket"
   | "subscriptions"
-  | "products";
+  | "products"
+  | "goodStart"
+  | "events";
 export interface ForecastDriver {
   key: ForecastDriverKey;
   from: number;
@@ -2408,9 +2430,33 @@ export interface MonthForecast {
     projected: number;
     subscriptions: { actual: number; expected: number };
     drivers: ForecastDriver[];
+    pace: { weight: number; multiplier: number; projectedVariable: number; projected: number };
   };
   versusPrevious: null | { previousTotal: number; previousAdjusted: number; drivers: ForecastDriver[] };
   checkpoints: Array<{ day: number; key: string; expectedCum: number; actualCum: number | null }>;
+  /** The month split by source, day by day */
+  sources: {
+    list: ForecastSource[];
+    days: ForecastSourceDay[];
+  };
+  events: { paid: number; upcoming: number; projected: number; previousMonth: number };
+  /** Passes + café + abonnements + events */
+  projectedAll: { current: number; pace: number };
+}
+export type ForecastSourceKind = "tarif" | "cafe" | "abos" | "events";
+export interface ForecastSource {
+  key: string;
+  label: string;
+  kind: ForecastSourceKind;
+}
+export interface ForecastSourceDay {
+  key: string;
+  weekday: number;
+  expected: Record<string, number>;
+  actual: Record<string, number> | null;
+  complete: boolean;
+  /** Last month: same weekday (tarifs, café) or same date (abonnements, events) */
+  previous: Record<string, number>;
 }
 export interface ForecastAccuracy {
   months: Array<{
