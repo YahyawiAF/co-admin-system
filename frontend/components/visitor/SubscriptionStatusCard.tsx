@@ -8,6 +8,8 @@ import {
   type SubscriptionTone,
 } from "@/lib/subscription-dates";
 import { cn } from "@/lib/utils";
+import { useTarifPromos } from "@/components/visitor/PassPickerSheet";
+import { GiftIncludedLine } from "@/components/visitor/quest/GiftOffer";
 
 type ActiveSub = {
   priceId?: string | null;
@@ -78,6 +80,86 @@ export function SubscriptionStatusCard({
   }
 
   if (subscription) {
+    return (
+      <ActiveSubscriptionCard subscription={subscription} onOpen={onOpen} onRenew={onRenew} />
+    );
+  }
+
+
+  if (upcomingSubscription) {
+    const t = subscriptionTiming(upcomingSubscription);
+    return (
+      <section className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3 shadow-sm">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+          <CalendarClock className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            Prochain abonnement
+          </p>
+          <p className="truncate text-sm font-bold text-slate-900">
+            {upcomingSubscription.name}
+          </p>
+          <p className="text-[11px] font-medium text-indigo-600">{t.headline}</p>
+          {t.endLabel ? (
+            <p className="text-[11px] text-slate-500">
+              {t.startLabel} → {t.endLabel.toLowerCase()}
+            </p>
+          ) : null}
+        </div>
+      </section>
+    );
+  }
+
+  if (lastSubscription) {
+    const t = subscriptionTiming(lastSubscription);
+    if ((t.endedDaysAgo ?? Infinity) > ENDED_SUBSCRIPTION_VISIBLE_DAYS) return null;
+    return (
+      <section className="rounded-3xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-rose-100">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <CalendarX2 className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              Abonnement terminé
+            </p>
+            <p className="truncate text-base font-bold text-slate-900">
+              {lastSubscription.name}
+            </p>
+            <p className="text-[11px] font-medium text-rose-600">{t.headline}</p>
+          </div>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Du {t.startLabel.toLowerCase()} au {t.endLabel?.toLowerCase()}. {t.renewHint}
+        </p>
+        <button
+          type="button"
+          onClick={() => onRenew(lastSubscription.priceId)}
+          className="mt-2.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-full border border-indigo-200 text-sm font-semibold text-indigo-700 transition active:scale-[0.98]"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Renouveler mon abonnement
+        </button>
+      </section>
+    );
+  }
+
+  return null;
+}
+
+/** Active (or upcoming) abonnement, with the gift its tarif gives at each visit. */
+function ActiveSubscriptionCard({
+  subscription,
+  onOpen,
+  onRenew,
+}: {
+  subscription: ActiveSub;
+  onOpen: () => void;
+  onRenew: (priceId?: string) => void;
+}) {
+  const promosOf = useTarifPromos();
+  const gift = promosOf(subscription.priceId).bundles[0] ?? null;
     const name =
       subscription.serviceName || subscription.price?.name || "Abonnement";
     const t = subscriptionTiming(subscription);
@@ -181,68 +263,7 @@ export function SubscriptionStatusCard({
             </button>
           ) : null}
         </div>
+        {gift ? <GiftIncludedLine promo={gift} /> : null}
       </section>
     );
-  }
-
-  if (upcomingSubscription) {
-    const t = subscriptionTiming(upcomingSubscription);
-    return (
-      <section className="flex items-center gap-3 rounded-3xl bg-white px-4 py-3 shadow-sm">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-          <CalendarClock className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            Prochain abonnement
-          </p>
-          <p className="truncate text-sm font-bold text-slate-900">
-            {upcomingSubscription.name}
-          </p>
-          <p className="text-[11px] font-medium text-indigo-600">{t.headline}</p>
-          {t.endLabel ? (
-            <p className="text-[11px] text-slate-500">
-              {t.startLabel} → {t.endLabel.toLowerCase()}
-            </p>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
-
-  if (lastSubscription) {
-    const t = subscriptionTiming(lastSubscription);
-    if ((t.endedDaysAgo ?? Infinity) > ENDED_SUBSCRIPTION_VISIBLE_DAYS) return null;
-    return (
-      <section className="rounded-3xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-rose-100">
-        <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
-            <CalendarX2 className="h-5 w-5" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-              Abonnement terminé
-            </p>
-            <p className="truncate text-base font-bold text-slate-900">
-              {lastSubscription.name}
-            </p>
-            <p className="text-[11px] font-medium text-rose-600">{t.headline}</p>
-          </div>
-        </div>
-        <p className="mt-2 text-[11px] text-slate-500">
-          Du {t.startLabel.toLowerCase()} au {t.endLabel?.toLowerCase()}. {t.renewHint}
-        </p>
-        <button
-          type="button"
-          onClick={() => onRenew(lastSubscription.priceId)}
-          className="mt-2.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-full border border-indigo-200 text-sm font-semibold text-indigo-700 transition active:scale-[0.98]"
-        >
-          <RefreshCw className="h-4 w-4" />
-          Renouveler mon abonnement
-        </button>
-      </section>
-    );
-  }
-
-  return null;
 }

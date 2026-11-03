@@ -7,6 +7,8 @@ import { priceCategoriesFor } from '../mobile/space-occupy';
 
 export const PROMOTION_TARGETS = ['PRODUCT', 'PRICE', 'BUNDLE', 'OTHER'] as const;
 const PRICE_CATEGORIES = Object.values(PriceCategory) as string[];
+/** A gift the client can still use: said yes, or « Plus tard » at pass choice (it comes with the tarif). */
+const AVAILABLE: PromotionVoucherStatus[] = ['ACCEPTED', 'DECLINED'];
 export const PROMOTION_AUDIENCES = ['ALL', 'IN_SESSION', 'FIRST_VISIT'] as const;
 export const PROMOTION_STYLES = ['GOLD', 'VIOLET', 'GREEN'] as const;
 
@@ -570,7 +572,10 @@ export class PromotionService {
       : null;
   }
 
-  /** Accepted, unused voucher for this product on the visit (given journal, else the member's open one). */
+  /**
+   * Unused gift for this product on the visit (given journal, else the member's open one).
+   * « Plus tard » at pass choice still counts: the gift comes with the tarif.
+   */
   private async openVoucher(productId: string, memberId?: string | null, journalId?: string | null) {
     let jid = journalId ?? null;
     if (!jid && memberId) {
@@ -582,10 +587,11 @@ export class PromotionService {
       jid = open?.id ?? null;
     }
     if (!jid) return null;
+    await this.syncVisitGifts(jid);
     return this.prisma.promotionVoucher.findFirst({
       where: {
         journalId: jid,
-        status: 'ACCEPTED',
+        status: { in: AVAILABLE },
         // A voucher for this product, or one for « any product » of an offer that covers it
         OR: [{ productId }, { productId: null, promotion: productMatchWhere(productId) }],
       },
@@ -596,7 +602,7 @@ export class PromotionService {
 
   async markVoucherUsed(voucherId: string, dailyProductId: string) {
     await this.prisma.promotionVoucher.updateMany({
-      where: { id: voucherId, status: 'ACCEPTED' },
+      where: { id: voucherId, status: { in: AVAILABLE } },
       data: { status: 'USED', usedAt: new Date(), dailyProductId },
     });
   }
@@ -642,6 +648,38 @@ export class PromotionService {
     return this.eligible(facilityId, memberId, {
       target: 'BUNDLE',
       AND: [HAS_PRODUCTS, priceMatchWhere(price)],
+    });
+  }
+
+  /**
+   * The visit's tarif (day pass or abonnement) gives its gifts: offers the client never
+   * saw (pass chosen at the desk, abonnement visit) get a voucher. Only for today's
+   * visit and offers live now; a « Plus tard » answer stays as it is (still usable).
+   */
+  private async syncVisitGifts(journalId: string) {
+    const j = await this.prisma.journal.findUnique({
+      where: { id: journalId },
+      select: { priceId: true, memberID: true, registredTime: true, isReservation: true },
+    });
+    if (!j?.priceId || j.isReservation || !isSameDay(j.registredTime, new Date())) return;
+    const offers = (await this.bundlesFor(j.priceId, j.memberID)).filter(hasProducts);
+    if (!offers.length) return;
+    const have = await this.prisma.promotionVoucher.findMany({
+      where: { journalId },
+      select: { promotionId: true },
+    });
+    const done = new Set(have.map((v) => v.promotionId));
+    const missing = offers.filter((o) => !done.has(o.id));
+    if (!missing.length) return;
+    await this.prisma.promotionVoucher.createMany({
+      data: missing.map((o) => ({
+        promotionId: o.id,
+        journalId,
+        memberId: j.memberID ?? null,
+        productId: o.productId ?? null,
+        status: 'ACCEPTED' as const,
+      })),
+      skipDuplicates: true,
     });
   }
 
@@ -697,8 +735,9 @@ export class PromotionService {
   }
 
   async vouchersForJournal(journalId: string) {
+    await this.syncVisitGifts(journalId);
     const rows = await this.prisma.promotionVoucher.findMany({
-      where: { journalId, status: { in: ['ACCEPTED', 'USED'] } },
+      where: { journalId },
       include: { promotion: { include: INCLUDE } },
       orderBy: { createdAt: 'asc' },
     });
@@ -716,7 +755,10 @@ export class PromotionService {
         productId: v.productId,
         /** Products the voucher can be used on */
         productIds: v.productId ? [v.productId] : coveredProductIds(p, products),
-        status: v.status,
+        /** « Plus tard » at pass choice is still usable: shown as ACCEPTED */
+        status: v.status === 'USED' ? ('USED' as const) : ('ACCEPTED' as const),
+        /** The client said « Plus tard » when choosing the pass */
+        later: v.status === 'DECLINED',
         title: p.title,
         label: promotionLabel(p),
         valueKind: p.valueKind,

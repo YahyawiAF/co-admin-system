@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { LateBillingChoice } from "@/components/admin/LateBillingChoice";
-import { membersApi, mobileApi } from "@/lib/api/resources";
+import { membersApi, mobileApi, promotionsApi } from "@/lib/api/resources";
+import { bestDeal, indexTarifPromos } from "@/lib/tarif-promos";
 import { queryKeys } from "@/lib/query-client";
 import {
   amountIfPaidNow,
@@ -26,6 +27,7 @@ import {
   isAnonymousVisit,
   lateAmountForMode,
   priceOf,
+  promoShare,
   rowPricing,
   rowPricingAt,
   visitAmountDue,
@@ -105,6 +107,24 @@ export function JournalReglerDialog({
     [ledger, row?.id]
   );
 
+  /** Live tarif promos, for a visit that had none and moves to a pass on promo */
+  const { data: promotions = [] } = useQuery({
+    queryKey: ["promotions"],
+    queryFn: () => promotionsApi.list(),
+    enabled: open && !paid,
+    staleTime: 60_000,
+  });
+  const promosOf = useMemo(() => indexTarifPromos(promotions), [promotions]);
+  /** The visit's promo follows the pass at the same share (−20 % on 2h → −20 % on 4h) */
+  const share = row ? promoShare(row) : 0;
+  /** Price of a pass for this visit: member discount, then the promo (mirrors the backend). */
+  const tierPrice = (t: PricingTier) => {
+    const list = round3(t.price * (1 - (row?.pricing?.discountPercent || 0) / 100));
+    if (share > 0) return { list, final: round3(list * (1 - share)), label: row?.promoLabel ?? "Promo" };
+    const deal = bestDeal(promosOf(t.priceId).deals, list);
+    return deal ? { list, final: round3(deal.final), label: deal.promo.label } : { list, final: list, label: null };
+  };
+
   // Same kind of pass as the visit (day / open space), one per duration
   const passCategory = row && pricing?.mode === "FIXED" ? priceOf(row)?.category ?? null : null;
   const sortedTiers = useMemo(() => ladderFor(tiers, passCategory), [tiers, passCategory]);
@@ -141,7 +161,8 @@ export function JournalReglerDialog({
     const billAt = leaveAtMs ?? nowMs;
     if (pickedTier && row.pricing) {
       const p = row.pricing;
-      const amount = round3(pickedTier.price * (1 - (p.discountPercent || 0) / 100));
+      // Promo already inside the pass price
+      const amount = tierPrice(pickedTier).final;
       const res = computeSessionPricing({
         mode: "FIXED",
         registredTime: row.registredTime,
@@ -157,14 +178,26 @@ export function JournalReglerDialog({
           category: pickedTier.category ?? null,
         },
       });
-      return round3(Math.max(0, (res?.amountDue ?? amount) - (row.promoDiscount || 0)));
+      return round3(Math.max(0, res?.amountDue ?? amount));
     }
     if (late) return lateAmountForMode(late, lateMode);
     if (present && row.pricing) {
       return rowPricingAt(row, billAt)?.amountDue ?? visitAmountDue(row, billAt);
     }
     return visitAmountDue(row, billAt);
-  }, [row, paid, leaveAtMs, nowMs, pickedTier, tiers, late, lateMode, present]);
+  }, [row, paid, leaveAtMs, nowMs, pickedTier, tiers, late, lateMode, present, share, promosOf]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Promo inside the visit amount: the picked pass's, else the visit's own. */
+  const promoLine = (() => {
+    if (!row || paid) return null;
+    if (pickedTier) {
+      const t = tierPrice(pickedTier);
+      return t.label && t.list - t.final > 0.0005 ? { label: t.label, off: round3(t.list - t.final) } : null;
+    }
+    return (row.promoDiscount ?? 0) > 0.0005
+      ? { label: row.promoLabel || "Promo", off: row.promoDiscount! }
+      : null;
+  })();
 
   const alreadyPaid = row && !paid ? visitPaidAmount(row) : 0;
   const visitDue = Math.max(0, round3(visitAmount - alreadyPaid));
@@ -341,23 +374,34 @@ export function JournalReglerDialog({
                     <span className="font-semibold">Garder</span>{" "}
                     <span className="opacity-75">· {tariffLabel}</span>
                   </Choice>
-                  {sortedTiers.map((t) => (
-                    <Choice
-                      key={t.priceId}
-                      active={tierId === t.priceId}
-                      onClick={() => setTierId(t.priceId === currentTierId ? null : t.priceId)}
-                      compact
-                    >
-                      <span className="font-semibold">{t.name}</span>{" "}
-                      <span className="tabular-nums opacity-75">
-                        {formatDt(round3(t.price * (1 - (row.pricing?.discountPercent || 0) / 100)))}
-                      </span>
-                    </Choice>
-                  ))}
+                  {sortedTiers.map((t) => {
+                    const tp = tierPrice(t);
+                    const promo = tp.final < tp.list - 0.0005;
+                    return (
+                      <Choice
+                        key={t.priceId}
+                        active={tierId === t.priceId}
+                        onClick={() => setTierId(t.priceId === currentTierId ? null : t.priceId)}
+                        compact
+                      >
+                        <span className="font-semibold">{t.name}</span>{" "}
+                        {promo ? (
+                          <s className="tabular-nums text-[11px] opacity-60">{formatDt(tp.list)}</s>
+                        ) : null}{" "}
+                        <span className={cn("tabular-nums", promo ? "font-semibold text-emerald-700 dark:text-emerald-400" : "opacity-75")}>
+                          {formatDt(tp.final)}
+                        </span>
+                      </Choice>
+                    );
+                  })}
                 </div>
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
                   Resté moins (ou plus) longtemps ? Choisissez le pass : le montant est recalculé
-                  {present ? "" : " à l’heure de départ"}.
+                  {present ? "" : " à l’heure de départ"}
+                  {share > 0
+                    ? ` · la promo (−${Math.round(share * 100)} %) suit le nouveau pass`
+                    : ""}
+                  .
                 </p>
               </Section>
             ) : null}
@@ -495,6 +539,13 @@ export function JournalReglerDialog({
                       label={`Remise membre −${row.pricing.discountPercent}% incluse`}
                       value=""
                       muted
+                    />
+                  ) : null}
+                  {promoLine ? (
+                    <Line
+                      label={`${promoLine.label} incluse · −${formatDt(promoLine.off)} DT`}
+                      value=""
+                      tone="gift"
                     />
                   ) : null}
                   {alreadyPaid > 0.0005 ? (

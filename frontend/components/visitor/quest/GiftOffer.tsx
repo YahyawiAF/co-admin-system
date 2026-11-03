@@ -6,7 +6,8 @@ import { formatDt } from "@/lib/promo-price";
 import type { Promotion } from "@/lib/types";
 
 /**
- * Gift offered with a pass ("Café −50 % avec ce pass"): the client says Oui or Non.
+ * Gift offered with a pass ("Café −50 % avec ce pass"): the client takes it now or
+ * later — the gift comes with the pass, so « Plus tard » keeps it for the café.
  * Opens under the pass it belongs to.
  */
 export function GiftOfferPanel({
@@ -37,7 +38,7 @@ export function GiftOfferPanel({
             {promo.itemName ?? "Cadeau"} {free ? "offert" : `à ${promo.label}`} avec ce pass
           </span>
           <span className="block text-xs text-amber-800">
-            {promo.description?.trim() || "1 pendant votre visite"}
+            {promo.description?.trim() || "1 pendant votre visite"} · reste à vous jusqu’au départ
           </span>
         </span>
         {promo.priceBefore != null && promo.priceAfter != null ? (
@@ -64,7 +65,7 @@ export function GiftOfferPanel({
               : "bg-white text-slate-700 ring-1 ring-inset ring-slate-200"
           )}
         >
-          Non merci
+          Plus tard
         </button>
         <button
           type="button"
@@ -102,8 +103,27 @@ export function GiftAnswerLine({
     >
       {answer
         ? `+ ${promo.itemName ?? "Cadeau"} ${promo.label} inclus`
-        : `${promo.itemName ?? "Cadeau"} refusé`}
+        : `${promo.itemName ?? "Cadeau"} ${promo.label} gardé pour plus tard · au café`}
       <span className="ml-1 font-semibold text-amber-700 underline">changer</span>
     </button>
+  );
+}
+
+/** Gift that comes with an abonnement: no question, it applies at each visit. */
+export function GiftIncludedLine({ promo }: { promo: Promotion }) {
+  const free = promo.priceAfter != null && promo.priceAfter <= 0;
+  return (
+    <p className="v-rise mt-1 flex items-center gap-1.5 rounded-xl bg-amber-50 px-3 py-1.5 text-xs font-extrabold text-amber-800 ring-1 ring-inset ring-amber-200">
+      <Coffee className="h-3.5 w-3.5 shrink-0" />
+      <span className="min-w-0">
+        {promo.itemName ?? "Cadeau"} {free ? "offert" : promo.label} à chaque visite
+        {promo.priceBefore != null && promo.priceAfter != null && !free ? (
+          <span className="font-semibold text-amber-700">
+            {" "}
+            · {formatDt(promo.priceAfter)} DT au lieu de {formatDt(promo.priceBefore)}
+          </span>
+        ) : null}
+      </span>
+    </p>
   );
 }

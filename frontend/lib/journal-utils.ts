@@ -258,6 +258,29 @@ export type LatePaymentAmounts = {
   extra: number;
 };
 
+type PromoFields = Pick<Journal, "pricingMode" | "fixedAmount" | "priceBeforePromo" | "promoDiscount">;
+
+/** Share of the pass the visit's promo took off (0.2 = −20 %), 0 when none (mirrors the backend). */
+export function promoShare(row: PromoFields): number {
+  const off = row.promoDiscount || 0;
+  const before = row.priceBeforePromo || 0;
+  if (off <= 0.0005 || before <= 0.0005) return 0;
+  return Math.min(1, off / before);
+}
+
+/**
+ * Promo still to take off a computed amount: a fixed pass already carries it
+ * (fixedAmount = price after promo), auto pricing does not (mirrors the backend).
+ */
+export function promoOutsidePrice(row: PromoFields): number {
+  const off = row.promoDiscount || 0;
+  if (off <= 0.0005) return 0;
+  if (row.pricingMode === "AUTO" || row.fixedAmount == null) return off;
+  return row.priceBeforePromo != null && Math.abs(row.fixedAmount - row.priceBeforePromo) < 0.0005
+    ? off
+    : 0;
+}
+
 export function amountIfPaidNow(
   row: Journal,
   now = Date.now()
@@ -270,7 +293,7 @@ export function amountIfPaidNow(
   const billAt = Math.max(leave, Math.min(now, dayEnd.getTime()));
   const live = rowPricingAt(row, billAt);
   let due: number | null = live
-    ? Math.max(0, live.amountDue - (row.promoDiscount || 0))
+    ? Math.max(0, live.amountDue - promoOutsidePrice(row))
     : row.latePayment?.amountIfPaidNow ?? null;
   if (due == null) return null;
   due = Math.round(Math.max(row.payedAmount || 0, due) * 1000) / 1000;

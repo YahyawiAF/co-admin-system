@@ -276,6 +276,25 @@ export function ActiveSessionPanel({
           hasPromo: true,
         }
       : null;
+  /** What the member saves on this visit: member / group discount and promo, shown on the tile */
+  const memberPct = !covered && live ? live.discountPercent || 0 : 0;
+  const savings =
+    live && !covered && (memberPct > 0 || promoOff)
+      ? (() => {
+          const before =
+            Math.round(((live.amountDue + (promoOff ?? 0)) / (1 - Math.min(memberPct, 99) / 100)) * 1000) /
+            1000;
+          const chips = [
+            ...(memberPct > 0 ? [`Remise −${memberPct} %`] : []),
+            ...(promoOff
+              ? [(session as { promoLabel?: string | null }).promoLabel || `Promo −${formatDt(promoOff)} DT`]
+              : []),
+          ];
+          return before > live.amountDue + 0.0005
+            ? { before, saved: Math.round((before - live.amountDue) * 1000) / 1000, chips }
+            : null;
+        })()
+      : null;
   const passTitle = live
     ? live.mode === "AUTO"
       ? "Tarif auto"
@@ -459,18 +478,42 @@ export function ActiveSessionPanel({
       label="À payer"
       tone="slate"
       big
-      value={formatDt(live.amountDue)}
+      value={
+        savings ? (
+          <span className="flex items-baseline gap-1.5">
+            {formatDt(live.amountDue)}
+            <s className="text-sm font-bold text-slate-400">{formatDt(savings.before)}</s>
+          </span>
+        ) : (
+          formatDt(live.amountDue)
+        )
+      }
       extra={
-        pointsForSession > 0 ? (
-          <p className="mt-0.5 text-xs font-extrabold text-amber-700">
-            +{pointsForSession} pts à gagner
-          </p>
-        ) : null
+        <>
+          {savings ? (
+            <div className="v-rise mt-1 flex flex-wrap items-center gap-1">
+              <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white">
+                −{formatDt(savings.saved)} DT
+              </span>
+              {savings.chips.map((c) => (
+                <span
+                  key={c}
+                  className="max-w-full truncate rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-extrabold text-emerald-700 ring-1 ring-inset ring-emerald-200"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {pointsForSession > 0 ? (
+            <p className="mt-0.5 text-xs font-extrabold text-amber-700">
+              +{pointsForSession} pts à gagner
+            </p>
+          ) : null}
+        </>
       }
       sub={
-        promoOff && live.paidAmount <= 0 && !session.isPayed
-          ? `Promo appliquée · −${formatDt(promoOff)}`
-          : live.paidAmount > 0
+        live.paidAmount > 0
           ? `Payé ${formatDt(live.paidAmount)}${
               live.balanceDue > 0 ? ` · reste ${formatDt(live.balanceDue)}` : ""
             }`
