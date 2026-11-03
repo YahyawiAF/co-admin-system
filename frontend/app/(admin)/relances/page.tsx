@@ -19,6 +19,11 @@ import {
   Phone,
   Sparkles,
   Star,
+  History,
+  LayoutGrid,
+  Megaphone,
+  Plus,
+  Undo2,
   UserMinus,
   UserPlus,
   UserX,
@@ -40,9 +45,9 @@ import {
 import { cn } from "@/lib/utils";
 import { outreachApi, pricesApi } from "@/lib/api/resources";
 import { leaveDateFromPeriodStart } from "@/lib/subscription-utils";
-import { CampaignsSection } from "@/components/admin/OutreachCampaigns";
+import { BannerChip, CampaignsSection, FilterPill, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
+import { PastRelanceDialog } from "@/components/admin/PastRelanceDialog";
 import { AWAY_LABEL, AwayReasonChips } from "@/components/admin/AwayReasonChips";
-import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -835,12 +840,25 @@ function suiviFollow(r: SuiviRow) {
 function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
   const queryClient = useQueryClient();
   const [answering, setAnswering] = useState(false);
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+    queryClient.invalidateQueries({ queryKey: ["outreach"] });
+  };
+  const reopen = useMutation({
+    mutationFn: () => outreachApi.reopen(row.id),
+    onSuccess: () => {
+      refresh();
+      toast.success(`${row.name} : relance rouverte`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const close = useMutation({
     mutationFn: (result: "WON" | "LOST") => outreachApi.close(row.id, result),
     onSuccess: (_, result) => {
-      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
-      queryClient.invalidateQueries({ queryKey: ["outreach"] });
-      toast.success(result === "WON" ? "Relance clôturée : converti" : "Relance clôturée");
+      refresh();
+      toast.success(result === "WON" ? `${row.name} : converti` : `${row.name} : non converti`, {
+        action: { label: "Annuler", onClick: () => reopen.mutate() },
+      });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -882,14 +900,29 @@ function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           {row.closedAt ? (
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs font-medium",
-                row.closedResult === "WON" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground",
-              )}
-            >
-              {row.closedResult === "WON" ? (row.closedAuto ? "Converti (auto)" : "Converti") : "Non converti"}
-            </span>
+            <>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-xs font-medium animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none",
+                  row.closedResult === "WON" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {row.closedResult === "WON" ? (row.closedAuto ? "Converti (auto)" : "Converti") : "Non converti"}
+              </span>
+              {!row.closedAuto ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-muted-foreground"
+                  title="Remettre la relance en suivi"
+                  disabled={reopen.isPending}
+                  onClick={() => reopen.mutate()}
+                >
+                  <Undo2 className="mr-1 h-3.5 w-3.5" />
+                  Annuler
+                </Button>
+              ) : null}
+            </>
           ) : (
             <>
               <Button size="sm" variant={answering ? "default" : "ghost"} onClick={() => setAnswering((v) => !v)}>
@@ -1295,7 +1328,7 @@ function QuickContact({ item }: { item: OutreachItem }) {
   );
 }
 
-type Tab = "todo" | "suivi";
+type Tab = "board" | "campagnes";
 
 export default function RelancesPage() {
   return (
@@ -1312,18 +1345,18 @@ function RelancesInner() {
     initialReason && initialReason in REASON_UI ? initialReason : "ALL",
   );
   const [messaging, setMessaging] = useState<OutreachItem | null>(null);
-  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "suivi" ? "suivi" : "todo");
-  const [suiviStatus, setSuiviStatus] = useState<"OPEN" | "CLOSED">("OPEN");
-  const [suiviPage, setSuiviPage] = useState(1);
+  const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "campagnes" ? "campagnes" : "board");
+  const [campaignDraft, setCampaignDraft] = useState<CampaignDraft | null>(null);
+  const [pastOpen, setPastOpen] = useState(false);
   const { data, isLoading } = useQuery({
     queryKey: ["outreach"],
     queryFn: () => outreachApi.list(),
   });
   const suivi = useQuery({
-    queryKey: ["outreach-suivi", suiviStatus, suiviPage],
-    queryFn: () => outreachApi.suivi({ status: suiviStatus, page: suiviPage }),
-    placeholderData: (prev) => prev,
+    queryKey: ["outreach-suivi", "OPEN", 1],
+    queryFn: () => outreachApi.suivi({ status: "OPEN", page: 1 }),
   });
+  const campaigns = useQuery({ queryKey: ["outreach-campaigns"], queryFn: outreachApi.campaigns });
   const suiviCounts = suivi.data?.counts;
 
   const counts = useMemo(() => {
@@ -1335,147 +1368,122 @@ function RelancesInner() {
     () => (data?.todo ?? []).filter((i) => filter === "ALL" || i.reason === filter),
     [data, filter],
   );
-  const todoPaged = usePaged(todo, undefined, filter);
   const atStake = (data?.todo ?? []).reduce((a, i) => a + i.value, 0);
   const results = data?.results;
+  const activeCampaigns = (campaigns.data ?? []).filter((c) => c.status !== "DONE").length;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Relances</h1>
-        <p className="text-muted-foreground">
-          Les clients à contacter aujourd&apos;hui. Un message au bon moment fait renouveler, revenir et payer.
-        </p>
+    <div className="space-y-5">
+      {/* Hero — same banner as the check-in modal */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-6 py-5 text-white shadow-sm">
+        <div className="pointer-events-none absolute inset-0" aria-hidden>
+          <div className="absolute -right-8 -top-12 h-44 w-44 rounded-full bg-white/10" />
+          <div className="absolute -bottom-16 left-1/4 h-36 w-36 rounded-full bg-white/10" />
+        </div>
+        <div className="relative flex flex-wrap items-end justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-100">
+              {format(new Date(), "EEEE d MMMM", { locale: fr })}
+            </p>
+            <h1 className="flex items-center gap-2 text-2xl font-extrabold leading-tight">
+              <Megaphone className="h-6 w-6" />
+              Relances
+            </h1>
+            <p className="text-[13px] text-indigo-100">Qui contacter, ce qu&apos;ils ont répondu, ce que ça a rapporté.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setPastOpen(true)}
+              className="h-11 rounded-2xl border border-white/40 bg-white/10 px-4 font-semibold text-white shadow-none transition-colors hover:bg-white/20"
+            >
+              <History className="mr-1.5 h-4 w-4" />
+              Relance passée
+            </Button>
+            <Button
+              onClick={() => {
+                setTab("campagnes");
+                setCampaignDraft({ title: "", message: "" });
+              }}
+              className="h-11 rounded-2xl bg-white px-5 font-bold text-indigo-700 shadow-md transition-colors hover:bg-indigo-50"
+            >
+              <Plus className="mr-1.5 h-4 w-4" />
+              Nouvelle campagne
+            </Button>
+          </div>
+        </div>
+        <div className="relative mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <BannerChip label="À contacter" value={data ? String(data.todo.length) : "–"} sub={`~${dt(atStake)} en jeu`} />
+          <BannerChip
+            label="En suivi"
+            value={suiviCounts ? String(suiviCounts.OPEN) : "–"}
+            sub={
+              suiviCounts?.due
+                ? `${suiviCounts.due} rappel${suiviCounts.due > 1 ? "s" : ""} à faire`
+                : "en attente du résultat"
+            }
+          />
+          <BannerChip
+            label="Contactés (30 j)"
+            value={String(results?.contacted ?? 0)}
+            sub={
+              results?.contacted
+                ? `${results.won} ont renouvelé, payé ou sont revenus (${Math.round((results.won / results.contacted) * 100)} %)`
+                : "rien encore"
+            }
+          />
+          <BannerChip label="Gagné grâce aux relances" value={dt(results?.revenue ?? 0)} sub="dans les 14 jours après le message" />
+        </div>
       </div>
 
-      {isLoading || !data ? (
-        <Skeleton className="h-64" />
-      ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="shadow-none">
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">À contacter</div>
-                <div className="text-2xl font-semibold tabular-nums">{data.todo.length}</div>
-                <div className="text-xs text-muted-foreground">~{dt(atStake)} en jeu</div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-none">
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">En suivi</div>
-                <div className="text-2xl font-semibold tabular-nums">{suiviCounts?.OPEN ?? "–"}</div>
-                <div className="text-xs text-muted-foreground">
-                  {suiviCounts?.due
-                    ? `${suiviCounts.due} rappel${suiviCounts.due > 1 ? "s" : ""} à faire`
-                    : suiviCounts?.CLOSED
-                      ? `${suiviCounts.won} converti${suiviCounts.won > 1 ? "s" : ""} sur ${suiviCounts.CLOSED} clôturés`
-                      : "Contactés, en attente du résultat"}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-none">
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">Contactés (30 jours)</div>
-                <div className="text-2xl font-semibold tabular-nums">{results?.contacted ?? 0}</div>
-                <div className="text-xs text-muted-foreground">
-                  {results?.contacted
-                    ? `${results.won} ont renouvelé, payé ou sont revenus (${Math.round((results.won / results.contacted) * 100)} %)`
-                    : "Commencez par la liste ci-dessous"}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="shadow-none">
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground">Gagné grâce aux relances</div>
-                <div className="text-2xl font-semibold tabular-nums text-emerald-700">
-                  {dt(results?.revenue ?? 0)}
-                </div>
-                <div className="text-xs text-muted-foreground">Dans les 14 jours après le message</div>
-              </CardContent>
-            </Card>
+      <div className="flex flex-wrap gap-2" role="tablist">
+        <FilterPill active={tab === "board"} onClick={() => setTab("board")} icon={LayoutGrid} count={data?.todo.length}>
+          Tableau
+        </FilterPill>
+        <FilterPill active={tab === "campagnes"} onClick={() => setTab("campagnes")} icon={Megaphone} count={activeCampaigns}>
+          Campagnes
+        </FilterPill>
+      </div>
+
+      <div key={tab} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
+        {tab === "campagnes" ? (
+          <CampaignsSection draft={campaignDraft} onDraft={setCampaignDraft} />
+        ) : isLoading || !data ? (
+          <Skeleton className="h-64" />
+        ) : (
+          <div className="space-y-5">
+            <ChannelsCard results={results} />
+
+            <div className="flex flex-wrap gap-1.5">
+              <FilterPill small active={filter === "ALL"} onClick={() => setFilter("ALL")} count={data.todo.length}>
+                Tous
+              </FilterPill>
+              {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
+                counts[r] ? (
+                  <FilterPill key={r} small active={filter === r} onClick={() => setFilter(r)} count={counts[r]}>
+                    {REASON_UI[r].label}
+                  </FilterPill>
+                ) : null,
+              )}
+            </div>
+            {filter !== "ALL" ? <p className="-mt-3 text-xs text-muted-foreground">{REASON_UI[filter].why}</p> : null}
+
+            <RelancesBoard todo={todo} onMessage={(item, text) => setMessaging(text ? { ...item, message: text } : item)} />
+
+            <AwayReasonsCard counts={data.awayReasons} />
+
+            <QuickCalculator />
+
+            {!data.pushEnabled ? (
+              <p className="text-xs text-muted-foreground">
+                Les notifications dans l&apos;app sont désactivées sur le serveur (clés VAPID manquantes) : seuls WhatsApp et l&apos;appel sont proposés.
+              </p>
+            ) : null}
           </div>
-
-          <ChannelsCard results={results} />
-
-          <div className="flex flex-wrap gap-2">
-            <FilterChip active={filter === "ALL"} onClick={() => setFilter("ALL")}>
-              Tous · {data.todo.length}
-            </FilterChip>
-            {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
-              counts[r] ? (
-                <FilterChip key={r} active={filter === r} onClick={() => setFilter(r)}>
-                  {REASON_UI[r].label} · {counts[r]}
-                </FilterChip>
-              ) : null,
-            )}
-          </div>
-          {filter !== "ALL" ? <p className="-mt-3 text-xs text-muted-foreground">{REASON_UI[filter].why}</p> : null}
-
-          <RelancesBoard todo={todo} onMessage={(item, text) => setMessaging(text ? { ...item, message: text } : item)} />
-
-          <AwayReasonsCard counts={data.awayReasons} />
-
-          <CampaignsSection />
-
-          <QuickCalculator />
-
-          {!data.pushEnabled ? (
-            <p className="text-xs text-muted-foreground">
-              Les notifications dans l&apos;app sont désactivées sur le serveur (clés VAPID manquantes) : seuls WhatsApp et l&apos;appel sont proposés.
-            </p>
-          ) : null}
-        </>
-      )}
+        )}
+      </div>
 
       <MessageDialog item={messaging} onClose={() => setMessaging(null)} />
+      <PastRelanceDialog open={pastOpen} onClose={() => setPastOpen(false)} />
     </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        "-mb-px flex items-center border-b-2 px-4 py-2 text-sm font-semibold transition-colors duration-200 motion-reduce:transition-none",
-        active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function FilterChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full border px-3 py-1 text-sm transition-colors",
-        active ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted",
-      )}
-    >
-      {children}
-    </button>
   );
 }

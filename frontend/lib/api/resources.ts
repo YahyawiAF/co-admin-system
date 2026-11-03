@@ -50,6 +50,7 @@ import type {
   LinkedKind,
   TargetKind,
   CampaignInput,
+  CampaignCandidate,
   CampaignSegment,
   OutreachCampaign,
   OutreachCampaignDetail,
@@ -633,6 +634,8 @@ export const outreachApi = {
     reason: OutreachReason;
     channel: OutreachChannel;
     message?: string;
+    /** "Relance passée": yyyy-MM-dd of the real contact */
+    contactedAt?: string;
   }) {
     return http.post("/analytics/outreach/log", data);
   },
@@ -668,6 +671,10 @@ export const outreachApi = {
   close(id: string, result: "WON" | "LOST") {
     return http.post(`/analytics/outreach/${id}/close`, { result });
   },
+  /** Undo a hand-made Converti / Non converti */
+  reopen(id: string) {
+    return http.post(`/analytics/outreach/${id}/reopen`);
+  },
   /** Why the member stopped coming; "révise à la maison" schedules a recall before exams */
   awayReason(data: { memberId: string; reason: AwayReason | null; recallAt?: string | null }) {
     return http.post<{ memberId: string; awayReason: AwayReason | null; recallAt: string | null }>(
@@ -697,6 +704,28 @@ export const outreachApi = {
   },
   logCampaign(id: string, data: { memberId: string; channel: OutreachChannel; message?: string }) {
     return http.post(`/analytics/outreach/campaigns/${id}/log`, data);
+  },
+  /** The member's answer inside a campaign (same answers as Relances) */
+  answerCampaign(
+    id: string,
+    data: { memberId: string; outcome: OutreachOutcome | null; note?: string | null; followUpAt?: string | null },
+  ) {
+    return http.post(`/analytics/outreach/campaigns/${id}/answer`, data);
+  },
+  campaignMembers(id: string, data: { add?: string[]; remove?: string[] }) {
+    return http.post<{ total: number; added: number }>(`/analytics/outreach/campaigns/${id}/members`, data);
+  },
+  /** People of a list, to tick one by one */
+  candidates(segment: CampaignSegment, groupId?: string | null) {
+    const q = new URLSearchParams({ segment });
+    if (groupId) q.set("groupId", groupId);
+    return http.get<CampaignCandidate[]>(`/analytics/outreach/candidates?${q}`);
+  },
+  /** "Relance passée": abonnement taken since that day? */
+  pastCheck(memberId: string, date: string) {
+    return http.get<{ abonnement: { name: string; at: string; amount: number } | null }>(
+      `/analytics/outreach/past-check?memberId=${encodeURIComponent(memberId)}&date=${encodeURIComponent(date)}`,
+    );
   },
 };
 

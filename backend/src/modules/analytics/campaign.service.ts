@@ -3,7 +3,14 @@ import { addDays, startOfDay, subDays } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { PushService } from '../push/push.service';
 import { orderUnitPrice } from '../product/order-price';
-import { OutreachService, whatsappNumber, type OutreachReason } from './outreach.service';
+import { parseLocalDay } from '../../../common/parse-local-day';
+import {
+  OUTREACH_OUTCOMES,
+  OutreachService,
+  whatsappNumber,
+  type OutreachOutcome,
+  type OutreachReason,
+} from './outreach.service';
 import { PerformanceService } from './performance.service';
 import { round1 } from './traffic';
 
@@ -17,6 +24,8 @@ export const CAMPAIGN_SEGMENTS = [
   'RECENT_30',
   'ALL',
   'GROUP',
+  /** People picked one by one */
+  'MANUAL',
 ] as const;
 export type CampaignSegment = (typeof CAMPAIGN_SEGMENTS)[number];
 export const CAMPAIGN_GOALS = ['VISIT', 'SUBSCRIPTION', 'ANY'] as const;
@@ -24,12 +33,16 @@ const CAMPAIGN_CHANNELS = ['WHATSAPP', 'PUSH', 'CALL', 'SKIP'] as const;
 /** Days after the message during which a visit / purchase counts as a result. */
 const RESULT_WINDOW_DAYS = 14;
 const AUTO_LISTS: OutreachReason[] = ['ABO_EXPIRING', 'ABO_ENDED', 'INACTIVE', 'TOP_UP', 'CONVERT', 'UNPAID'];
+/** Most people a campaign can hold. */
+const MAX_TARGETS = 1000;
 
 type CampaignBody = {
   title?: string;
   message?: string;
   segment?: string;
   memberGroupId?: string | null;
+  /** Picked by hand (ticked / unticked from a list): used instead of the segment's members */
+  memberIds?: string[];
   goal?: string;
   sourceReportId?: string | null;
   recommendationTitle?: string | null;
@@ -63,6 +76,7 @@ export class CampaignService {
 
   /** Member ids of a segment right now. */
   async segmentMembers(segment: CampaignSegment, facilityId: string, groupId?: string | null) {
+    if (segment === 'MANUAL') return [];
     if ((AUTO_LISTS as string[]).includes(segment)) {
       const list = await this.outreach.list(facilityId);
       return [...list.todo, ...list.contacted]
@@ -96,6 +110,55 @@ export class CampaignService {
     return rows.map((r) => r.id);
   }
 
+  private async organizationId(facilityId: string) {
+    const facility = await this.prisma.facility.findUnique({
+      where: { id: facilityId },
+      select: { organizationId: true },
+    });
+    return facility?.organizationId ?? null;
+  }
+
+  /** Keep only existing members of this organisation (no duplicates). */
+  private async validMembers(facilityId: string, ids: unknown) {
+    const wanted = [...new Set((Array.isArray(ids) ? ids : []).filter((i): i is string => typeof i === 'string'))];
+    if (!wanted.length) return [];
+    const org = await this.organizationId(facilityId);
+    const rows = await this.prisma.member.findMany({
+      where: { id: { in: wanted }, deletedAt: null, ...(org ? { organizationId: org } : {}) },
+      select: { id: true },
+    });
+    const ok = new Set(rows.map((r) => r.id));
+    return wanted.filter((i) => ok.has(i));
+  }
+
+  /** People of a list, to tick / untick one by one (new campaign, "Ajouter"). */
+  async candidates(facilityId?: string, segment?: string, groupId?: string | null) {
+    const id = await this.facilityId(facilityId);
+    const seg = (CAMPAIGN_SEGMENTS.includes(segment as CampaignSegment) ? segment : 'ALL') as CampaignSegment;
+    const ids = [...new Set(await this.segmentMembers(seg === 'MANUAL' ? 'ALL' : seg, id, groupId))];
+    if (!ids.length) return [];
+    const [people, visits] = await Promise.all([
+      this.prisma.member.findMany({
+        where: { id: { in: ids }, deletedAt: null },
+        select: { id: true, firstName: true, lastName: true, phone: true },
+      }),
+      this.prisma.journal.groupBy({
+        by: ['memberID'],
+        where: { memberID: { in: ids }, isReservation: false },
+        _max: { registredTime: true },
+      }),
+    ]);
+    const last = new Map(visits.map((v) => [v.memberID, v._max.registredTime]));
+    return people
+      .map((p) => ({
+        memberId: p.id,
+        name: [p.firstName, p.lastName].filter(Boolean).join(' ') || 'Client',
+        phone: p.phone,
+        lastVisit: last.get(p.id)?.toISOString() ?? null,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  }
+
   async segmentCounts(facilityId?: string, groupId?: string | null) {
     const id = await this.facilityId(facilityId);
     const list = await this.outreach.list(id);
@@ -120,16 +183,23 @@ export class CampaignService {
     const message = (body.message || '').trim();
     if (!title || title.length > 200) throw new BadRequestException('Titre requis (200 max)');
     if (!message || message.length > 2000) throw new BadRequestException('Message requis (2000 max)');
-    if (!CAMPAIGN_SEGMENTS.includes(body.segment as CampaignSegment)) {
-      throw new BadRequestException('Liste de clients invalide');
-    }
-    const segment = body.segment as CampaignSegment;
-    if (segment === 'GROUP' && !body.memberGroupId) throw new BadRequestException('Choisissez le groupe');
+    const picked = Array.isArray(body.memberIds);
+    const segment = (
+      CAMPAIGN_SEGMENTS.includes(body.segment as CampaignSegment) ? body.segment : picked ? 'MANUAL' : null
+    ) as CampaignSegment | null;
+    if (!segment) throw new BadRequestException('Liste de clients invalide');
+    if (!picked && segment === 'MANUAL') throw new BadRequestException('Choisissez les personnes');
+    if (!picked && segment === 'GROUP' && !body.memberGroupId) throw new BadRequestException('Choisissez le groupe');
     const goal = CAMPAIGN_GOALS.includes(body.goal as (typeof CAMPAIGN_GOALS)[number])
       ? body.goal!
       : 'ANY';
-    const memberIds = [...new Set(await this.segmentMembers(segment, id, body.memberGroupId))];
-    if (!memberIds.length) throw new BadRequestException('Personne dans cette liste pour le moment');
+    const memberIds = picked
+      ? await this.validMembers(id, body.memberIds)
+      : [...new Set(await this.segmentMembers(segment, id, body.memberGroupId))];
+    if (!memberIds.length) {
+      throw new BadRequestException(picked ? 'Cochez au moins une personne' : 'Personne dans cette liste pour le moment');
+    }
+    if (memberIds.length > MAX_TARGETS) throw new BadRequestException(`${MAX_TARGETS} personnes au plus`);
 
     let initiativeId: string | null = null;
     if (body.trackAsInitiative) {
@@ -159,7 +229,7 @@ export class CampaignService {
         title,
         message,
         segment,
-        memberGroupId: segment === 'GROUP' ? body.memberGroupId : null,
+        memberGroupId: segment === 'GROUP' ? body.memberGroupId || null : null,
         memberIds,
         goal,
         sourceReportId: body.sourceReportId || null,
@@ -188,12 +258,56 @@ export class CampaignService {
     return { ok: true };
   }
 
+  /** Add people to a campaign that already exists, or take some out. */
+  async members(id: string, body: { add?: string[]; remove?: string[] }) {
+    const c = await this.prisma.outreachCampaign.findUnique({
+      where: { id },
+      select: { facilityId: true, memberIds: true },
+    });
+    if (!c) throw new NotFoundException('Campagne introuvable');
+    const add = await this.validMembers(c.facilityId, body.add);
+    const remove = new Set(Array.isArray(body.remove) ? body.remove : []);
+    const next = [...new Set([...c.memberIds.filter((m) => !remove.has(m)), ...add])];
+    if (!next.length) throw new BadRequestException('Une campagne garde au moins une personne');
+    if (next.length > MAX_TARGETS) throw new BadRequestException(`${MAX_TARGETS} personnes au plus`);
+    await this.prisma.outreachCampaign.update({ where: { id }, data: { memberIds: next } });
+    return { total: next.length, added: add.filter((m) => !c.memberIds.includes(m)).length };
+  }
+
+  /** What the member answered (same answers as Relances), a note, the day to call back. */
+  async answer(
+    id: string,
+    body: { memberId?: string; outcome?: string | null; note?: string | null; followUpAt?: string | null },
+  ) {
+    const c = await this.prisma.outreachCampaign.findUnique({ where: { id }, select: { memberIds: true } });
+    if (!c) throw new NotFoundException('Campagne introuvable');
+    if (!body.memberId || !c.memberIds.includes(body.memberId)) {
+      throw new BadRequestException('Client hors de cette campagne');
+    }
+    const outcome = (body.outcome ?? null) as OutreachOutcome | null;
+    if (outcome !== null && !OUTREACH_OUTCOMES.includes(outcome)) throw new BadRequestException('Réponse invalide');
+    const data = {
+      outcome,
+      note: body.note?.trim().slice(0, 500) || null,
+      followUpAt: outcome && outcome !== 'NOT_INTERESTED' && body.followUpAt ? parseLocalDay(body.followUpAt.slice(0, 10)) : null,
+    };
+    const last = await this.prisma.memberOutreach.findFirst({
+      where: { campaignId: id, memberId: body.memberId, channel: { not: 'SKIP' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (last) return this.prisma.memberOutreach.update({ where: { id: last.id }, data });
+    // Answered without a logged contact (talked at the desk): record it as a call
+    return this.prisma.memberOutreach.create({
+      data: { memberId: body.memberId, reason: 'CAMPAIGN', channel: 'CALL', campaignId: id, ...data },
+    });
+  }
+
   async list(facilityId?: string) {
     const id = await this.facilityId(facilityId);
     const rows = await this.prisma.outreachCampaign.findMany({
       where: { facilityId: id },
       orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
-      take: 30,
+      take: 200,
     });
     return this.withProgress(rows);
   }
@@ -206,17 +320,42 @@ export class CampaignService {
     });
     const first = new Map<string, Date>();
     const lastChannel = new Map<string, string>();
+    /** Latest real contact: its answer is the member's current answer */
+    const lastContact = new Map<string, (typeof contacts)[number]>();
     for (const c of contacts) {
       lastChannel.set(c.memberId, c.channel);
-      if (c.channel !== 'SKIP' && !first.has(c.memberId)) first.set(c.memberId, c.createdAt);
+      if (c.channel !== 'SKIP') {
+        lastContact.set(c.memberId, c);
+        if (!first.has(c.memberId)) first.set(c.memberId, c.createdAt);
+      }
     }
     const ids = [...first.keys()];
     const out = new Map<
       string,
-      { contactedAt: Date | null; channel: string | null; won: boolean; revenue: number; withoutContact?: boolean }
+      {
+        contactedAt: Date | null;
+        lastContactAt: Date | null;
+        channel: string | null;
+        outcome: string | null;
+        note: string | null;
+        followUpAt: Date | null;
+        won: boolean;
+        revenue: number;
+        withoutContact?: boolean;
+      }
     >();
     for (const m of campaign.memberIds) {
-      out.set(m, { contactedAt: first.get(m) ?? null, channel: lastChannel.get(m) ?? null, won: false, revenue: 0 });
+      const lc = lastContact.get(m);
+      out.set(m, {
+        contactedAt: first.get(m) ?? null,
+        lastContactAt: lc?.createdAt ?? null,
+        channel: lastChannel.get(m) ?? null,
+        outcome: lc?.outcome ?? null,
+        note: lc?.note ?? null,
+        followUpAt: lc?.followUpAt ?? null,
+        won: false,
+        revenue: 0,
+      });
     }
     // Abonnement lists: a renewal counts even when the contact was not logged in
     // the app (talked at the desk, renewed with another offer…)
@@ -290,7 +429,13 @@ export class CampaignService {
           progress: {
             total: c.memberIds.length,
             contacted: values.filter((v) => v.contactedAt).length,
-            skipped: values.filter((v) => !v.contactedAt && v.channel === 'SKIP').length,
+            skipped: values.filter((v) => !v.won && !v.contactedAt && v.channel === 'SKIP').length,
+            /** Not contacted yet (nor skipped, nor already won) */
+            todo: values.filter((v) => !v.won && !v.contactedAt && v.channel !== 'SKIP').length,
+            /** Contacted, waiting for an answer */
+            waiting: values.filter((v) => !v.won && v.contactedAt && !v.outcome).length,
+            noAnswer: values.filter((v) => !v.won && v.outcome === 'NO_ANSWER').length,
+            answered: values.filter((v) => !v.won && v.outcome && v.outcome !== 'NO_ANSWER').length,
             won: values.filter((v) => v.won).length,
             revenue: round1(values.reduce((s, v) => s + v.revenue, 0)),
           },
@@ -332,14 +477,18 @@ export class CampaignService {
             hasPush: pushEnabled && withPush.has(p.id),
             message: personalize(c.message, p.firstName),
             contactedAt: r?.contactedAt ?? null,
+            lastContactAt: r?.lastContactAt ?? null,
             channel: r?.channel ?? null,
+            outcome: r?.outcome ?? null,
+            note: r?.note ?? null,
+            followUpAt: r?.followUpAt ?? null,
             won: !!r?.won,
             /** Renewed although no contact was logged in the app */
             withoutContact: !!r?.withoutContact,
             revenue: r?.revenue ?? 0,
           };
         })
-        .sort((a, b) => Number(!!a.contactedAt) - Number(!!b.contactedAt) || a.name.localeCompare(b.name)),
+        .sort((a, b) => Number(!!a.contactedAt) - Number(!!b.contactedAt) || a.name.localeCompare(b.name, 'fr')),
     };
   }
 
