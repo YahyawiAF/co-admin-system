@@ -126,6 +126,7 @@ import type {
   OutreachReason,
   OutreachChannel,
   OutreachItem,
+  OutreachHistory,
   OutreachOutcome,
   SuiviList,
 } from "@/lib/types";
@@ -662,6 +663,10 @@ export const outreachApi = {
   /** Check-in: the relance to do with this member, if any */
   forMember(memberId: string) {
     return http.get<{ items: OutreachItem[] }>(`/analytics/outreach/member/${memberId}`);
+  },
+  /** Relances modal: member, contacts with answers, last visit, abonnement */
+  history(memberId: string) {
+    return http.get<OutreachHistory>(`/analytics/outreach/member/${memberId}/history`);
   },
   suivi(params: { status: "OPEN" | "CLOSED"; page: number; perPage?: number }) {
     return http.get<SuiviList>(

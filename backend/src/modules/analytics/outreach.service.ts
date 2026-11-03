@@ -896,6 +896,83 @@ export class OutreachService {
     return { items };
   }
 
+  /**
+   * Relances modal: who the member is, every contact (relances and campaigns) with the answer,
+   * last visit and current abonnement.
+   */
+  async history(memberId: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, firstName: true, lastName: true, phone: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const today = startOfDay(new Date());
+    const [rows, push, lastVisit, visits30, abo] = await Promise.all([
+      this.prisma.memberOutreach.findMany({
+        where: { memberId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+      this.prisma.pushSubscription.count({ where: { memberId } }),
+      this.prisma.journal.findFirst({
+        where: { memberID: memberId, isReservation: false },
+        orderBy: { registredTime: 'desc' },
+        select: { registredTime: true },
+      }),
+      this.prisma.journal.count({
+        where: { memberID: memberId, isReservation: false, registredTime: { gte: subDays(today, 29) } },
+      }),
+      this.prisma.abonnement.findFirst({
+        where: { memberID: memberId, isReservation: false, hiddenAt: null },
+        orderBy: { registredDate: 'desc' },
+        select: { registredDate: true, leaveDate: true, serviceName: true, price: { select: { name: true } } },
+      }),
+    ]);
+    const campaignIds = [...new Set(rows.map((r) => r.campaignId).filter((c): c is string => !!c))];
+    const campaigns = campaignIds.length
+      ? await this.prisma.outreachCampaign.findMany({ where: { id: { in: campaignIds } }, select: { id: true, title: true } })
+      : [];
+    const title = new Map(campaigns.map((c) => [c.id, c.title]));
+    const contacts = rows.filter((r) => r.channel !== 'SKIP');
+    return {
+      memberId: member.id,
+      name: [member.firstName, member.lastName].filter(Boolean).join(' ') || 'Client',
+      firstName: member.firstName?.trim() || '',
+      phone: member.phone,
+      whatsapp: whatsappNumber(member.phone),
+      hasPush: this.push.isEnabled() && push > 0,
+      lastVisit: lastVisit?.registredTime.toISOString() ?? null,
+      visits30,
+      abonnement: abo
+        ? {
+            name: abo.serviceName || abo.price?.name || 'Abonnement',
+            from: abo.registredDate.toISOString(),
+            until: abo.leaveDate?.toISOString() ?? null,
+            active: !abo.leaveDate || abo.leaveDate >= today,
+          }
+        : null,
+      /** Times the member was reached without answering */
+      noAnswer: contacts.filter((r) => r.outcome === 'NO_ANSWER').length,
+      /** Contact the next answer will fill (relances only, last 30 days, no answer yet) */
+      openContactId:
+        contacts.find(
+          (r) => !r.campaignId && !r.outcome && !r.closedAt && r.createdAt >= subDays(today, 30),
+        )?.id ?? null,
+      contacts: rows.map((r) => ({
+        id: r.id,
+        at: r.createdAt.toISOString(),
+        reason: r.reason,
+        channel: r.channel,
+        outcome: r.outcome,
+        note: r.note,
+        followUpAt: r.followUpAt?.toISOString() ?? null,
+        closedResult: r.closedResult,
+        closedAuto: r.closedAuto,
+        campaign: r.campaignId ? title.get(r.campaignId) ?? 'Campagne' : null,
+      })),
+    };
+  }
+
   /** One open Suivi per member: a newer contact takes over the older ones. */
   private replaceOpen(memberId: string, keepId: string) {
     return this.prisma.memberOutreach.updateMany({

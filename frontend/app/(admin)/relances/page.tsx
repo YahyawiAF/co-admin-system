@@ -19,7 +19,15 @@ import {
   Phone,
   Sparkles,
   Star,
+  ArrowUpDown,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Search,
   History,
+  Lightbulb,
+  MessageSquareReply,
+  Send,
   LayoutGrid,
   Megaphone,
   Plus,
@@ -38,19 +46,17 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { outreachApi, pricesApi } from "@/lib/api/resources";
 import { leaveDateFromPeriodStart } from "@/lib/subscription-utils";
-import { BannerChip, CampaignsSection, FilterPill, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
+import { ANSWER_UI, BannerChip, CampaignsSection, FilterPill, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
 import { PastRelanceDialog } from "@/components/admin/PastRelanceDialog";
 import { AWAY_LABEL, AwayReasonChips } from "@/components/admin/AwayReasonChips";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CHANNEL_UI, MANUAL_CHANNELS, channelLabel } from "@/lib/outreach-ui";
 import type {
   AwayReason,
@@ -400,116 +406,6 @@ function actionLink(item: OutreachItem) {
   return null;
 }
 
-function MessageDialog({
-  item,
-  onClose,
-}: {
-  item: OutreachItem | null;
-  onClose: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [text, setText] = useState("");
-  const [forId, setForId] = useState<string | null>(null);
-  if (item && forId !== `${item.memberId}:${item.reason}:${item.message}`) {
-    setForId(`${item.memberId}:${item.reason}:${item.message}`);
-    setText(item.message);
-  }
-  const done = () => {
-    queryClient.invalidateQueries({ queryKey: ["outreach"] });
-    onClose();
-  };
-  const log = useMutation({
-    mutationFn: (channel: OutreachChannel) =>
-      outreachApi.log({
-        memberId: item!.memberId,
-        reason: item!.reason,
-        channel,
-        message: text,
-      }),
-    onSuccess: done,
-    onError: (e: Error) => toast.error(e.message),
-  });
-  const push = useMutation({
-    mutationFn: () =>
-      outreachApi.push({ memberId: item!.memberId, reason: item!.reason, message: text }),
-    onSuccess: () => {
-      toast.success("Notification envoyée");
-      done();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  if (!item) return null;
-  const openWhatsApp = () => {
-    window.open(
-      `https://wa.me/${item.whatsapp}?text=${encodeURIComponent(text)}`,
-      "_blank",
-      "noopener",
-    );
-    log.mutate("WHATSAPP");
-  };
-  const copy = async () => {
-    await navigator.clipboard.writeText(text);
-    toast.success("Message copié");
-  };
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Message pour {item.name}</DialogTitle>
-          <DialogDescription>
-            Modifiez le texte si besoin, puis envoyez-le.
-            {item.phone ? ` Téléphone : ${item.phone}.` : " Pas de numéro enregistré."}
-          </DialogDescription>
-        </DialogHeader>
-        <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} />
-        <DialogFooter className="flex-col gap-2 sm:flex-col">
-          {item.whatsapp ? (
-            <Button
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-              disabled={!text.trim() || log.isPending}
-              onClick={openWhatsApp}
-            >
-              <MessageCircle className="mr-2 h-4 w-4" />
-              Envoyer sur WhatsApp
-            </Button>
-          ) : null}
-          {item.hasPush ? (
-            <Button
-              variant="outline"
-              className="w-full"
-              disabled={!text.trim() || push.isPending}
-              onClick={() => push.mutate()}
-            >
-              <BellRing className="mr-2 h-4 w-4" />
-              Envoyer une notification dans l&apos;app
-            </Button>
-          ) : null}
-          <Button variant="ghost" className="w-full" onClick={copy}>
-            <Copy className="mr-2 h-4 w-4" />
-            Copier le message
-          </Button>
-          <div className="w-full space-y-1.5 border-t pt-3">
-            <p className="text-xs text-muted-foreground">Déjà contacté autrement ? Dis comment :</p>
-            <div className="flex flex-wrap gap-1.5">
-              {MANUAL_CHANNELS.filter((c) => c !== "WHATSAPP" || !item.whatsapp).map((c) => {
-                const Icon = CHANNEL_UI[c].icon;
-                return (
-                  <Button key={c} size="sm" variant="outline" disabled={log.isPending} onClick={() => log.mutate(c)}>
-                    <Icon className="mr-1.5 h-3.5 w-3.5" />
-                    {CHANNEL_UI[c].button}
-                  </Button>
-                );
-              })}
-            </div>
-          </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 /** Reasons where asking "pourquoi ?" makes sense */
 const ASK_WHY = new Set<OutreachReason>(["INACTIVE", "NEW_NOT_BACK", "ABO_ENDED", "RECALL"]);
 
@@ -550,257 +446,6 @@ function AwayReasonsCard({ counts }: { counts?: Partial<Record<AwayReason, numbe
   );
 }
 
-/** "Marquer contacté": the member's answer, a note, the day to call back. */
-function AnswerPanel({
-  memberId,
-  reason,
-  outreachId,
-  name,
-  onDone,
-}: {
-  memberId: string;
-  reason: OutreachReason;
-  outreachId?: string;
-  name: string;
-  onDone: () => void;
-}) {
-  const queryClient = useQueryClient();
-  const [outcome, setOutcome] = useState<OutreachOutcome>("INTERESTED");
-  const [channel, setChannel] = useState<OutreachChannel>("PERSON");
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(ymd(addDays(new Date(), 3)));
-  const ui = OUTCOME_UI[outcome];
-  const save = useMutation({
-    mutationFn: () =>
-      outreachApi.answer({
-        memberId,
-        reason,
-        outreachId,
-        outcome,
-        note: note.trim() || null,
-        followUpAt: ui.days === null ? null : date || null,
-        channel: outreachId ? undefined : channel,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["outreach"] });
-      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
-      toast.success(
-        ui.days === null
-          ? `${name} : clôturé (pas intéressé)`
-          : date
-            ? `${name} → Suivi, rappel le ${dayLabel(localDay(date))}`
-            : `${name} → Suivi`,
-      );
-      onDone();
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  return (
-    <div className="mt-3 space-y-3 rounded-lg border bg-muted/30 p-3 animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none">
-      {!outreachId ? (
-        <>
-          <div className="text-sm font-medium">Comment tu l&apos;as contacté</div>
-          <div className="flex flex-wrap gap-1.5">
-            {MANUAL_CHANNELS.map((c) => {
-              const Icon = CHANNEL_UI[c].icon;
-              return (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setChannel(c)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm transition-colors duration-200 motion-reduce:transition-none",
-                    channel === c ? "border-primary bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
-                  )}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                  {CHANNEL_UI[c].label}
-                </button>
-              );
-            })}
-          </div>
-        </>
-      ) : null}
-      <div className="text-sm font-medium">Sa réponse</div>
-      <div className="flex flex-wrap gap-1.5">
-        {OUTCOMES.map((o) => (
-          <button
-            key={o}
-            type="button"
-            onClick={() => {
-              setOutcome(o);
-              const days = OUTCOME_UI[o].days;
-              setDate(days === null ? "" : ymd(addDays(new Date(), days)));
-            }}
-            className={cn(
-              "rounded-full border px-3 py-1 text-sm transition-colors duration-200 motion-reduce:transition-none",
-              outcome === o ? cn(OUTCOME_UI[o].tone, "font-medium") : "bg-background hover:bg-muted",
-            )}
-          >
-            {OUTCOME_UI[o].label}
-          </button>
-        ))}
-      </div>
-      <div className="grid gap-2 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <div className="space-y-1">
-          <Label className="text-xs">Note (optionnel)</Label>
-          <Input
-            value={note}
-            maxLength={500}
-            placeholder="ex. demande le tarif semaine"
-            onChange={(e) => setNote(e.target.value)}
-          />
-        </div>
-        {ui.days !== null ? (
-          <div className="space-y-1">
-            <Label className="text-xs">{outcome === "AWAY" ? "Date de retour" : "Rappeler le"}</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span key={outcome} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-          {ui.days !== null && !date ? "Sans date : il reste dans Suivi jusqu'à ce que vous le clôturiez." : ui.hint}
-        </span>
-        <div className="flex gap-1.5">
-          <Button size="sm" variant="ghost" onClick={onDone}>
-            Annuler
-          </Button>
-          <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>
-            Enregistrer
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OutreachRow({
-  item,
-  index = 0,
-  onMessage,
-}: {
-  item: OutreachItem;
-  /** Position on the page, for the light stagger */
-  index?: number;
-  /** Optional custom text (e.g. top-up with the chosen start date) */
-  onMessage: (text?: string) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [answering, setAnswering] = useState(false);
-  const ui = REASON_UI[item.reason];
-  const Icon = ui.icon;
-  const link = actionLink(item);
-  const skip = useMutation({
-    mutationFn: () =>
-      outreachApi.log({ memberId: item.memberId, reason: item.reason, channel: "SKIP" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outreach"] }),
-    onError: (e: Error) => toast.error(e.message),
-  });
-  return (
-    <li
-      className={cn(
-        "py-3 transition-colors duration-200 animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both motion-reduce:animate-none",
-        answering && "bg-muted/20",
-      )}
-      style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-full", ui.tone)}>
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{item.name}</span>
-            <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", ui.tone)}>
-              {ui.label}
-            </span>
-            {item.followUp && item.reason !== "FOLLOW_UP" ? (
-              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", REASON_UI.FOLLOW_UP.tone)}>
-                Rappel prévu
-              </span>
-            ) : null}
-            {item.owed > 0 && item.reason !== "UNPAID" ? (
-              <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] text-red-700">
-                doit {dt(item.owed)}
-              </span>
-            ) : null}
-          </div>
-          <div className="text-sm">{item.title}</div>
-          {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
-          {item.reason === "TOP_UP" && item.topUp ? (
-            <TopUpCalculator item={item} topUp={item.topUp} onMessage={onMessage} />
-          ) : null}
-          <div className="text-xs text-muted-foreground">
-            {[
-              item.reason === "CONVERT" && item.offer ? null : item.detail,
-              item.lastContact
-                ? `contacté ${formatDistanceToNow(new Date(item.lastContact.at), { locale: fr, addSuffix: true })} (${channelLabel(item.lastContact.channel)})`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </div>
-          {item.followUp && item.reason !== "FOLLOW_UP" ? (
-            <div className="text-xs text-teal-800">
-              Contacté {ago(item.followUp.contactedAt)} · avait dit « {OUTCOME_UI[item.followUp.outcome]?.label ?? item.followUp.outcome} »
-              {item.followUp.note ? ` · ${item.followUp.note}` : ""}
-            </div>
-          ) : null}
-          {ASK_WHY.has(item.reason) ? (
-            <AwayReasonChips memberId={item.memberId} awayReason={item.awayReason} recallAt={item.recallAt} />
-          ) : null}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {link ? (
-            <Button asChild size="sm" variant="outline">
-              <Link href={link.href}>{link.label}</Link>
-            </Button>
-          ) : null}
-          <Button
-            size="sm"
-            className={item.whatsapp ? "bg-emerald-600 hover:bg-emerald-700" : undefined}
-            onClick={() => onMessage()}
-          >
-            <MessageCircle className="mr-1.5 h-4 w-4" />
-            Contacter
-          </Button>
-          <Button
-            size="sm"
-            variant={answering ? "default" : "outline"}
-            onClick={() => setAnswering((v) => !v)}
-          >
-            <Check className="mr-1.5 h-4 w-4" />
-            {answering ? "Fermer" : "Marquer contacté"}
-          </Button>
-          {!item.snoozed ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-muted-foreground"
-              title="Ignorer pour l'instant"
-              disabled={skip.isPending}
-              onClick={() => skip.mutate()}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      {answering ? (
-        <div className="sm:pl-12">
-          <AnswerPanel
-            memberId={item.memberId}
-            reason={item.reason}
-            name={item.name}
-            onDone={() => setAnswering(false)}
-          />
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
 /** What happened since the contact: abonnement taken, visits at the tarif, nothing. */
 function suiviSignal(r: SuiviRow) {
   if (r.since.abonnement) {
@@ -837,132 +482,535 @@ function suiviFollow(r: SuiviRow) {
   return r.outcome ? "Sans date de rappel" : "En attente de sa réponse";
 }
 
-function SuiviItem({ row, index }: { row: SuiviRow; index: number }) {
+// ---------------------------------------------------------------------------
+// Member modal: why to contact, quick contact, their answer, every contact so far
+// ---------------------------------------------------------------------------
+
+/** Text for someone no longer in « À contacter » (follow-up). */
+function followUpText(firstName: string, reason: OutreachReason) {
+  const hi = firstName ? `Bonjour ${firstName}, ` : "Bonjour, ";
+  if (reason === "UNPAID") return `${hi}petit rappel pour le reste à régler. Tu peux passer quand tu veux, merci !`;
+  if (reason === "INACTIVE" || reason === "NEW_NOT_BACK" || reason === "RECALL") {
+    return `${hi}on ne t'a pas vu depuis un moment. Ta place t'attend, à bientôt ?`;
+  }
+  return `${hi}je reviens vers toi suite à notre échange. Tu as pu y réfléchir ?`;
+}
+
+function ModalSection({ title, icon: Icon, aside, children }: { title: string; icon: typeof Phone; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="space-y-3 rounded-2xl bg-muted/40 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em] text-indigo-600 dark:text-indigo-300">
+          <Icon className="h-3.5 w-3.5" />
+          {title}
+        </h3>
+        {aside}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const TILE_BTN =
+  "inline-flex h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors duration-150 disabled:opacity-50";
+
+function MemberModal({
+  memberId,
+  item,
+  row,
+  onClose,
+}: {
+  memberId: string | null;
+  /** In « À contacter » (snapshot kept once contacted, for the offer and the message) */
+  item: OutreachItem | null;
+  /** Already contacted (Suivi) */
+  row: SuiviRow | null;
+  onClose: () => void;
+}) {
   const queryClient = useQueryClient();
-  const [answering, setAnswering] = useState(false);
+  const history = useQuery({
+    queryKey: ["outreach-history", memberId],
+    queryFn: () => outreachApi.history(memberId!),
+    enabled: !!memberId,
+  });
+  const h = history.data;
+  const reason: OutreachReason = item?.reason ?? row?.reason ?? "FOLLOW_UP";
+  const name = item?.name ?? row?.name ?? h?.name ?? "…";
+  const firstName = item?.firstName ?? row?.firstName ?? h?.firstName ?? "";
+  const whatsapp = item?.whatsapp ?? row?.whatsapp ?? h?.whatsapp ?? null;
+  const phone = item?.phone ?? row?.phone ?? h?.phone ?? null;
+  const hasPush = item?.hasPush ?? h?.hasPush ?? false;
+
+  const [text, setText] = useState("");
+  const [outcome, setOutcome] = useState<OutreachOutcome | null>(null);
+  const [channel, setChannel] = useState<OutreachChannel>("PERSON");
+  const [note, setNote] = useState("");
+  const [date, setDate] = useState("");
+  const [openFor, setOpenFor] = useState<string | null>(null);
+  if (memberId && openFor !== memberId) {
+    setOpenFor(memberId);
+    setText(item?.message ?? followUpText(firstName, reason));
+    setOutcome(row?.outcome ?? null);
+    setChannel("PERSON");
+    setNote(row?.note ?? "");
+    setDate(row?.followUpAt ? ymd(new Date(row.followUpAt)) : "");
+  }
+
   const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
     queryClient.invalidateQueries({ queryKey: ["outreach"] });
+    queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+    queryClient.invalidateQueries({ queryKey: ["outreach-history", memberId] });
   };
-  const reopen = useMutation({
-    mutationFn: () => outreachApi.reopen(row.id),
-    onSuccess: () => {
+  const log = useMutation({
+    mutationFn: (c: OutreachChannel) =>
+      outreachApi.log({ memberId: memberId!, reason, channel: c, message: c === "WHATSAPP" ? text : undefined }),
+    onSuccess: (_r, c) => {
+      toast.success(`${name} : contacté (${channelLabel(c)}). Note sa réponse à droite.`);
       refresh();
-      toast.success(`${row.name} : relance rouverte`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const push = useMutation({
+    mutationFn: () => outreachApi.push({ memberId: memberId!, reason, message: text }),
+    onSuccess: () => {
+      toast.success("Notification envoyée");
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  /** The contact the answer fills: the one just made, else the open Suivi */
+  const outreachId = h?.openContactId ?? (row && !row.closedAt ? row.id : undefined);
+  const days = outcome ? OUTCOME_UI[outcome].days : null;
+  const answer = useMutation({
+    mutationFn: () =>
+      outreachApi.answer({
+        memberId: memberId!,
+        reason,
+        outreachId,
+        outcome: outcome!,
+        note: note.trim() || null,
+        followUpAt: days === null ? null : date || null,
+        channel: outreachId ? undefined : channel,
+      }),
+    onSuccess: () => {
+      toast.success(
+        days === null
+          ? `${name} : clôturé (pas intéressé)`
+          : date
+            ? `${name} : ${OUTCOME_UI[outcome!].label}, rappel le ${dayLabel(localDay(date))}`
+            : `${name} : ${OUTCOME_UI[outcome!].label}`,
+      );
+      refresh();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  const reopen = useMutation({
+    mutationFn: (id: string) => outreachApi.reopen(id),
+    onSuccess: () => {
+      toast.success(`${name} : relance rouverte`);
+      refresh();
     },
     onError: (e: Error) => toast.error(e.message),
   });
   const close = useMutation({
-    mutationFn: (result: "WON" | "LOST") => outreachApi.close(row.id, result),
-    onSuccess: (_, result) => {
+    mutationFn: (v: { id: string; result: "WON" | "LOST" }) => outreachApi.close(v.id, v.result),
+    onSuccess: (_r, v) => {
       refresh();
-      toast.success(result === "WON" ? `${row.name} : converti` : `${row.name} : non converti`, {
-        action: { label: "Annuler", onClick: () => reopen.mutate() },
+      toast.success(v.result === "WON" ? `${name} : converti` : `${name} : non converti`, {
+        action: { label: "Annuler", onClick: () => reopen.mutate(v.id) },
       });
     },
     onError: (e: Error) => toast.error(e.message),
   });
-  const outcome = row.outcome ? OUTCOME_UI[row.outcome] : null;
-  const signal = suiviSignal(row);
+
+  const whatsappSend = () => {
+    window.open(`https://wa.me/${whatsapp}?text=${encodeURIComponent(text)}`, "_blank", "noopener");
+    log.mutate("WHATSAPP");
+  };
+  const copy = async (value: string, what: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${what} copié`);
+    } catch {
+      toast.error("Copie impossible");
+    }
+  };
+
+  const ui = REASON_UI[reason];
+  const link = item ? actionLink(item) : null;
+  const contacts = (h?.contacts ?? []).filter((c) => c.channel !== "SKIP");
+  const status = row?.closedAt
+    ? row.closedResult === "WON"
+      ? "Converti"
+      : "Non converti"
+    : row?.outcome
+      ? OUTCOME_UI[row.outcome].label
+      : row
+        ? "Attend sa réponse"
+        : "À contacter";
+  const busy = log.isPending || push.isPending;
+
   return (
-    <li
-      className={cn(
-        "py-3 transition-colors duration-200 animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both motion-reduce:animate-none",
-        row.due && "bg-teal-50/50",
-      )}
-      style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
-    >
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-[1_1_300px]">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{row.name}</span>
-            {outcome ? (
-              <span className={cn("rounded-full border px-2 py-0.5 text-[11px] font-medium", outcome.tone)}>
-                {outcome.label}
-              </span>
-            ) : (
-              <span className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
-                Message envoyé
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground">{REASON_UI[row.reason]?.label ?? row.reason}</span>
+    <Dialog open={!!memberId} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="flex h-[90vh] max-h-[92vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden rounded-2xl border-0 p-0 sm:max-w-5xl [&>button]:right-4 [&>button]:top-4 [&>button]:rounded-full [&>button]:bg-white/20 [&>button]:p-1.5 [&>button]:text-white [&>button]:opacity-100 [&>button]:transition-colors [&>button:hover]:bg-white/30">
+        <div className="relative shrink-0 overflow-hidden bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-6 pb-4 pt-5 text-white">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            <div className="absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/10" />
+            <div className="absolute -bottom-14 left-1/3 h-32 w-32 rounded-full bg-white/10" />
           </div>
-          <div className="text-xs text-muted-foreground">
-            Contacté {ago(row.contactedAt)} ({channelLabel(row.channel)})
-            {row.note ? ` · « ${row.note} »` : ""}
+          <div className="relative flex flex-wrap items-end justify-between gap-4 pr-10">
+            <DialogHeader className="min-w-0 space-y-1 text-left">
+              <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-indigo-100">
+                Relance · {ui?.label ?? reason}
+              </p>
+              <DialogTitle className="flex items-center gap-2.5 text-2xl font-extrabold leading-tight text-white">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/20 text-base">
+                  {name
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map((w) => w[0])
+                    .slice(0, 2)
+                    .join("")
+                    .toUpperCase()}
+                </span>
+                <span className="truncate">{name}</span>
+              </DialogTitle>
+              <DialogDescription className="text-[13px] text-indigo-100">
+                {[
+                  phone ?? "Pas de numéro",
+                  h?.lastVisit ? `venu ${ago(h.lastVisit)}` : h ? "jamais venu" : null,
+                  h?.abonnement ? `${h.abonnement.active ? "abonné" : "abonnement fini"} : ${h.abonnement.name}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-wrap gap-2">
+              <BannerChip label="Statut" value={status} />
+              <BannerChip label="Contacts" value={h ? String(contacts.length) : "–"} />
+              <BannerChip label="Sans réponse" value={h ? String(h.noAnswer) : "–"} />
+              {item && item.value > 0 ? (
+                <BannerChip label="En jeu" value={dt(item.value)} />
+              ) : row?.followUpAt && !row.closedAt ? (
+                <BannerChip label="Rappel" value={dayLabel(new Date(row.followUpAt))} />
+              ) : (
+                <BannerChip label="Visites 30 j" value={h ? String(h.visits30) : "–"} />
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex min-w-0 flex-[1_1_240px] flex-col">
-          <span className={cn("text-sm", signal.tone)}>{signal.text}</span>
-          <span className={cn("text-xs", row.due ? "font-medium text-teal-800" : "text-muted-foreground")}>
-            {suiviFollow(row)}
-          </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {row.closedAt ? (
-            <>
-              <span
-                className={cn(
-                  "rounded-full px-2.5 py-0.5 text-xs font-medium animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none",
-                  row.closedResult === "WON" ? "bg-emerald-100 text-emerald-800" : "bg-muted text-muted-foreground",
-                )}
-              >
-                {row.closedResult === "WON" ? (row.closedAuto ? "Converti (auto)" : "Converti") : "Non converti"}
-              </span>
-              {!row.closedAuto ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-muted-foreground"
-                  title="Remettre la relance en suivi"
-                  disabled={reopen.isPending}
-                  onClick={() => reopen.mutate()}
-                >
-                  <Undo2 className="mr-1 h-3.5 w-3.5" />
-                  Annuler
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div key={memberId ?? ""} className="grid items-start gap-4 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none lg:grid-cols-2">
+            <div className="space-y-4">
+              <ModalSection title="Pourquoi le contacter" icon={Lightbulb} aside={link ? (
+                <Button asChild size="sm" variant="outline" className="h-8 rounded-lg">
+                  <Link href={link.href}>{link.label}</Link>
                 </Button>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <Button size="sm" variant={answering ? "default" : "ghost"} onClick={() => setAnswering((v) => !v)}>
-                {answering ? "Fermer" : row.outcome ? "Changer la réponse" : "Sa réponse"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                disabled={close.isPending}
-                onClick={() => close.mutate("WON")}
+              ) : undefined}>
+                {item ? (
+                  <div className="space-y-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", ui.tone)}>{ui.label}</span>
+                      {item.owed > 0 && item.reason !== "UNPAID" ? (
+                        <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+                          doit {dt(item.owed)}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="font-semibold">{item.title}</p>
+                    {item.reason === "CONVERT" && item.offer ? <OfferCompare offer={item.offer} /> : null}
+                    {item.reason === "TOP_UP" && item.topUp ? (
+                      <TopUpCalculator item={item} topUp={item.topUp} onMessage={(t) => setText(t)} />
+                    ) : null}
+                    {!(item.reason === "CONVERT" && item.offer) && item.detail ? (
+                      <p className="text-xs text-muted-foreground">{item.detail}</p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">{ui.why}</p>
+                    {ASK_WHY.has(item.reason) ? (
+                      <AwayReasonChips memberId={item.memberId} awayReason={item.awayReason} recallAt={item.recallAt} />
+                    ) : null}
+                  </div>
+                ) : row ? (
+                  <div className="space-y-1 text-sm">
+                    <p className={suiviSignal(row).tone}>{suiviSignal(row).text}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Contacté {ago(row.contactedAt)} ({channelLabel(row.channel)}) · {suiviFollow(row)}
+                    </p>
+                  </div>
+                ) : (
+                  <Skeleton className="h-16 rounded-xl" />
+                )}
+              </ModalSection>
+
+              <ModalSection title="Contacter" icon={Send}>
+                <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={4} className="rounded-xl bg-background" />
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    disabled={!whatsapp || !text.trim() || busy}
+                    onClick={whatsappSend}
+                    title={whatsapp ? undefined : "Pas de numéro WhatsApp"}
+                    className={cn(TILE_BTN, "bg-indigo-600 text-white hover:bg-indigo-700")}
+                  >
+                    <MessageCircle className="h-4 w-4" />
+                    WhatsApp
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!hasPush || !text.trim() || busy}
+                    onClick={() => push.mutate()}
+                    title={hasPush ? undefined : "Il n'a pas activé les notifications"}
+                    className={cn(TILE_BTN, "border bg-background hover:border-indigo-300 hover:text-indigo-700")}
+                  >
+                    <BellRing className="h-4 w-4" />
+                    Notification
+                  </button>
+                  <button type="button" onClick={() => copy(text, "Message")} className={cn(TILE_BTN, "border bg-background hover:border-indigo-300 hover:text-indigo-700")}>
+                    <Copy className="h-4 w-4" />
+                    Copier
+                  </button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl bg-background p-2 ring-1 ring-inset ring-border">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-100 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                    <Phone className="h-4 w-4" />
+                  </span>
+                  {phone ? (
+                    <>
+                      <a href={`tel:${phone}`} className="min-w-0 flex-1 select-all truncate text-base font-bold tabular-nums hover:text-indigo-700">
+                        {phone}
+                      </a>
+                      <Button size="sm" variant="ghost" className="h-9 rounded-lg" onClick={() => copy(phone, "Numéro")} aria-label="Copier le numéro">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-9 rounded-lg font-semibold" disabled={busy} onClick={() => log.mutate("CALL")}>
+                        J&apos;ai appelé
+                      </Button>
+                    </>
+                  ) : (
+                    <span className="flex-1 text-sm text-muted-foreground">Pas de numéro enregistré.</span>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">Déjà contacté autrement ? Un clic :</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {MANUAL_CHANNELS.filter((c) => c !== "CALL" && (c !== "WHATSAPP" || !whatsapp)).map((c) => {
+                      const Icon = CHANNEL_UI[c].icon;
+                      return (
+                        <button
+                          key={c}
+                          type="button"
+                          disabled={busy}
+                          onClick={() => log.mutate(c)}
+                          className="inline-flex items-center gap-1.5 rounded-full border bg-background px-3 py-1.5 text-[13px] font-semibold text-muted-foreground transition-colors duration-150 hover:border-indigo-300 hover:text-foreground disabled:opacity-50"
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {CHANNEL_UI[c].button}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </ModalSection>
+            </div>
+
+            <div className="space-y-4">
+              <ModalSection title="Sa réponse" icon={MessageSquareReply}>
+                {row?.closedAt ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-background p-3 ring-1 ring-inset ring-border">
+                    <span
+                      className={cn(
+                        "rounded-full px-3 py-1 text-sm font-semibold animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none",
+                        row.closedResult === "WON" ? "bg-emerald-600 text-white" : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {row.closedResult === "WON" ? (row.closedAuto ? "Converti (tout seul)" : "Converti") : "Non converti"}
+                    </span>
+                    {!row.closedAuto ? (
+                      <Button size="sm" variant="ghost" className="rounded-lg text-muted-foreground" disabled={reopen.isPending} onClick={() => reopen.mutate(row.id)}>
+                        <Undo2 className="mr-1 h-3.5 w-3.5" />
+                        Annuler
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Abonnement ou paiement enregistré</span>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    {h && !outreachId ? (
+                      <div className="space-y-1.5">
+                        <p className="text-xs text-muted-foreground">Pas encore contacté : comment tu l&apos;as joint ?</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {MANUAL_CHANNELS.map((c) => {
+                            const Icon = CHANNEL_UI[c].icon;
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                aria-pressed={channel === c}
+                                onClick={() => setChannel(c)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[13px] font-semibold transition-colors duration-200",
+                                  channel === c ? "border-indigo-600 bg-indigo-600 text-white" : "bg-background text-muted-foreground hover:border-indigo-300",
+                                )}
+                              >
+                                <Icon className="h-3.5 w-3.5" />
+                                {CHANNEL_UI[c].label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {OUTCOMES.map((o) => {
+                        const a = ANSWER_UI[o];
+                        const on = outcome === o;
+                        return (
+                          <button
+                            key={o}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => {
+                              setOutcome(o);
+                              const d = OUTCOME_UI[o].days;
+                              setDate(d === null ? "" : ymd(addDays(new Date(), d)));
+                            }}
+                            className={cn(
+                              "flex items-center gap-2 rounded-xl border-2 px-2.5 py-2 text-left text-[13px] font-semibold transition-all duration-200 motion-reduce:transition-none",
+                              on ? "border-indigo-600 bg-indigo-50 shadow-sm dark:bg-indigo-950/40" : "border-transparent bg-background hover:border-indigo-100",
+                            )}
+                          >
+                            <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors duration-200", on ? "bg-indigo-600 text-white" : "bg-muted text-muted-foreground")}>
+                              <a.icon className="h-3.5 w-3.5" />
+                            </span>
+                            {a.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {outcome ? (
+                      <p key={outcome} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+                        {OUTCOME_UI[outcome].hint}
+                      </p>
+                    ) : null}
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <Input value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Note (ex. : demande le tarif semaine)" className="h-10 rounded-xl bg-background" />
+                      {days !== null ? (
+                        <label className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3 text-sm text-muted-foreground">
+                          <CalendarDays className="h-4 w-4" />
+                          {outcome === "AWAY" ? "Retour le" : "Rappeler le"}
+                          <input type="date" value={date} min={ymd(new Date())} onChange={(e) => setDate(e.target.value)} className="bg-transparent text-sm text-foreground outline-none" />
+                        </label>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Button
+                        className="rounded-xl bg-indigo-600 font-bold text-white hover:bg-indigo-700"
+                        disabled={!outcome || !h || answer.isPending}
+                        onClick={() => answer.mutate()}
+                      >
+                        <Check className="mr-1.5 h-4 w-4" />
+                        Enregistrer sa réponse
+                      </Button>
+                      {row ? (
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="rounded-lg border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                            disabled={close.isPending}
+                            onClick={() => close.mutate({ id: row.id, result: "WON" })}
+                          >
+                            Converti
+                          </Button>
+                          <Button size="sm" variant="outline" className="rounded-lg" disabled={close.isPending} onClick={() => close.mutate({ id: row.id, result: "LOST" })}>
+                            Non converti
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </>
+                )}
+              </ModalSection>
+
+              <ModalSection
+                title="Historique"
+                icon={History}
+                aside={h?.noAnswer ? (
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                    Pas de réponse × {h.noAnswer}
+                  </span>
+                ) : undefined}
               >
-                Converti
-              </Button>
-              <Button size="sm" variant="outline" disabled={close.isPending} onClick={() => close.mutate("LOST")}>
-                Non converti
-              </Button>
-            </>
-          )}
+                {!h ? (
+                  <Skeleton className="h-24 rounded-xl" />
+                ) : h.contacts.length ? (
+                  <ol className="space-y-1.5">
+                    {h.contacts.map((c, i) => {
+                      const Icon = CHANNEL_UI[c.channel]?.icon ?? Phone;
+                      const what = c.campaign ? `Campagne « ${c.campaign} »` : REASON_UI[c.reason as OutreachReason]?.label ?? c.reason;
+                      return (
+                        <li
+                          key={c.id}
+                          className={cn(
+                            "flex items-start gap-2.5 rounded-xl bg-background p-2.5 ring-1 ring-inset ring-border animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 motion-reduce:animate-none",
+                            c.channel === "SKIP" && "opacity-60",
+                          )}
+                          style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
+                        >
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                              <span className="text-sm font-semibold">
+                                {c.channel === "SKIP" ? "Ignoré" : CHANNEL_UI[c.channel]?.label ?? c.channel}
+                                <span className="font-normal text-muted-foreground"> · {what}</span>
+                              </span>
+                              <span className="text-[11px] tabular-nums text-muted-foreground">
+                                {format(new Date(c.at), "d MMM yyyy, HH:mm", { locale: fr })}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs">
+                              {c.outcome ? (
+                                <span className={cn("rounded-full px-2 py-px font-semibold", ANSWER_UI[c.outcome].tone)}>{ANSWER_UI[c.outcome].label}</span>
+                              ) : c.channel !== "SKIP" ? (
+                                <span className="rounded-full bg-indigo-100 px-2 py-px font-semibold text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300">
+                                  Réponse pas notée
+                                </span>
+                              ) : null}
+                              {c.closedResult === "WON" ? (
+                                <span className="rounded-full bg-emerald-600 px-2 py-px font-semibold text-white">Converti{c.closedAuto ? " (auto)" : ""}</span>
+                              ) : c.closedResult === "LOST" ? (
+                                <span className="rounded-full bg-muted px-2 py-px font-semibold text-muted-foreground">Non converti</span>
+                              ) : null}
+                              {c.followUpAt ? <span className="text-muted-foreground">rappel {dayLabel(new Date(c.followUpAt))}</span> : null}
+                              {c.note ? <span className="text-muted-foreground">« {c.note} »</span> : null}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <p className="rounded-xl border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">Jamais contacté.</p>
+                )}
+              </ModalSection>
+            </div>
+          </div>
         </div>
-      </div>
-      {answering ? (
-        <AnswerPanel
-          memberId={row.memberId}
-          reason={row.reason}
-          outreachId={row.id}
-          name={row.name}
-          onDone={() => setAnswering(false)}
-        />
-      ) : null}
-    </li>
+      </DialogContent>
+    </Dialog>
   );
 }
-
 
 // ---------------------------------------------------------------------------
 // Board: À contacter → Contacté → A répondu → Résultat
 // ---------------------------------------------------------------------------
 
-const PAGE = 20;
+/** Cards per page in each board column (columns are narrow). */
+const PAGE = 10;
 const itemKey = (i: { memberId: string; reason: string }) => `${i.memberId}:${i.reason}`;
 
 /** Contacted → won, per way of contact (last 30 days). */
@@ -1013,7 +1061,8 @@ function ChannelsCard({ results }: { results?: OutreachResults }) {
   );
 }
 
-type Shown = { kind: "todo"; key: string } | { kind: "suivi"; id: string };
+/** Member shown in the modal (the « À contacter » card is kept once they move column). */
+type Shown = { memberId: string; item: OutreachItem | null };
 
 function BoardColumn({
   title,
@@ -1042,24 +1091,58 @@ function BoardColumn({
   );
 }
 
-function MoreButton({ shown, total, onMore }: { shown: number; total: number; onMore: () => void }) {
-  if (shown >= total) return null;
+/** Compact pager under a board column: "11–20 sur 87" + previous / next. */
+function ColumnPager({ page, total, onPage }: { page: number; total: number; onPage: (p: number) => void }) {
+  const last = Math.max(1, Math.ceil(total / PAGE));
+  if (total <= PAGE) return null;
+  const from = (page - 1) * PAGE + 1;
+  const to = Math.min(total, page * PAGE);
   return (
-    <button type="button" onClick={onMore} className="rounded-lg py-1.5 text-xs font-medium text-primary hover:bg-background">
-      Afficher plus ({total - shown})
-    </button>
+    <div className="flex items-center justify-between gap-1 rounded-lg bg-background px-1.5 py-1 ring-1 ring-inset ring-border">
+      <button
+        type="button"
+        aria-label="Page précédente"
+        disabled={page <= 1}
+        onClick={() => onPage(page - 1)}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+        {from}–{to} sur {total} · page {page}/{last}
+      </span>
+      <button
+        type="button"
+        aria-label="Page suivante"
+        disabled={page >= last}
+        onClick={() => onPage(page + 1)}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
+
+type TodoSort = "value" | "name" | "contact";
 
 const cardClass =
   "w-full rounded-lg border bg-background px-3 py-2 text-left transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-primary hover:shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-both motion-reduce:transition-none";
 
 function RelancesBoard({
-  todo,
-  onMessage,
+  todo: reasonTodo,
+  total,
+  counts,
+  filter,
+  onFilter,
 }: {
+  /** À contacter, already filtered by reason */
   todo: OutreachItem[];
-  onMessage: (item: OutreachItem, text?: string) => void;
+  /** Everyone to contact (all reasons) */
+  total: number;
+  counts: Partial<Record<OutreachReason, number>>;
+  filter: OutreachReason | "ALL";
+  onFilter: (f: OutreachReason | "ALL") => void;
 }) {
   const queryClient = useQueryClient();
   const openQ = useQuery({
@@ -1072,15 +1155,48 @@ function RelancesBoard({
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState<Shown | null>(null);
-  const [limit, setLimit] = useState<Record<string, number>>({});
-  const more = (col: string) => setLimit((l) => ({ ...l, [col]: (l[col] ?? PAGE) + PAGE }));
-  const lim = (col: string) => limit[col] ?? PAGE;
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<TodoSort>("value");
+  const [pages, setPages] = useState<Record<string, number>>({});
+  const [pagesFor, setPagesFor] = useState(`${filter}|${q}|${sort}`);
+  if (pagesFor !== `${filter}|${q}|${sort}`) {
+    // A new filter, search or sort starts every column at page 1
+    setPagesFor(`${filter}|${q}|${sort}`);
+    setPages({});
+  }
+  /** This column's cards for its current page (page kept in range when the list shrinks). */
+  const pageOf = <T,>(col: string, list: T[]) => {
+    const last = Math.max(1, Math.ceil(list.length / PAGE));
+    const page = Math.min(pages[col] ?? 1, last);
+    return { page, items: list.slice((page - 1) * PAGE, page * PAGE), total: list.length };
+  };
+  const goPage = (col: string) => (p: number) => setPages((x) => ({ ...x, [col]: p }));
 
-  const open = openQ.data?.rows ?? [];
+  const needle = q.trim().toLowerCase();
+  const needleDigits = needle.replace(/\D/g, "");
+  const matches = (name: string, phone: string | null, extra = "") =>
+    !needle ||
+    name.toLowerCase().includes(needle) ||
+    extra.toLowerCase().includes(needle) ||
+    (needleDigits.length >= 3 && (phone ?? "").replace(/\D/g, "").includes(needleDigits));
+  const todo = useMemo(() => {
+    const list = reasonTodo.filter((i) => matches(i.name, i.phone, i.title));
+    if (sort === "name") return [...list].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    if (sort === "contact") {
+      // Never contacted first, then the longest ago
+      const at = (i: OutreachItem) => (i.lastContact ? new Date(i.lastContact.at).getTime() : 0);
+      return [...list].sort((a, b) => at(a) - at(b));
+    }
+    return list;
+  }, [reasonTodo, needle, sort]);
+
+  const open = (openQ.data?.rows ?? []).filter((r) => matches(r.name, r.phone));
   const contacted = open.filter((r) => !r.outcome);
   const answered = open.filter((r) => r.outcome);
   const since30 = Date.now() - 30 * 86_400_000;
-  const closed = (closedQ.data?.rows ?? []).filter((r) => r.closedAt && new Date(r.closedAt).getTime() >= since30);
+  const closed = (closedQ.data?.rows ?? []).filter(
+    (r) => r.closedAt && new Date(r.closedAt).getTime() >= since30 && matches(r.name, r.phone),
+  );
   const won = closed.filter((r) => r.closedResult === "WON");
   const lost = closed.filter((r) => r.closedResult !== "WON");
 
@@ -1108,14 +1224,26 @@ function RelancesBoard({
     });
   const allTodo = todo.length > 0 && todo.every((i) => selected.has(itemKey(i)));
 
-  // The panel follows the data: once the person moved column, show their new card
-  const shownTodo = shown?.kind === "todo" ? todo.find((i) => itemKey(i) === shown.key) ?? null : null;
-  const shownRow =
-    shown?.kind === "suivi" ? [...open, ...(closedQ.data?.rows ?? [])].find((r) => r.id === shown.id) ?? null : null;
-  const todoMember = shown?.kind === "todo" ? shown.key.split(":")[0] : null;
-  const movedRow = !shownTodo && todoMember ? open.find((r) => r.memberId === todoMember) ?? null : null;
-  const panelRow = shownRow ?? movedRow;
-  const panelOpen = !!(shownTodo || panelRow);
+  // The modal follows the data: once the person moved column, it shows their new state
+  const modalRow = shown
+    ? open.find((r) => r.memberId === shown.memberId) ??
+      (closedQ.data?.rows ?? []).find((r) => r.memberId === shown.memberId) ??
+      null
+    : null;
+  const modalItem = shown
+    ? todo.find((i) => (shown.item ? itemKey(i) === itemKey(shown.item) : i.memberId === shown.memberId)) ?? shown.item
+    : null;
+  /** WhatsApp straight from the card, then the modal opens to note the answer */
+  const quickWhatsApp = useMutation({
+    mutationFn: (item: OutreachItem) =>
+      outreachApi.log({ memberId: item.memberId, reason: item.reason, channel: "WHATSAPP", message: item.message }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["outreach"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
+      queryClient.invalidateQueries({ queryKey: ["outreach-history"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const suiviCard = (r: SuiviRow, i: number) => {
     const outcome = r.outcome ? OUTCOME_UI[r.outcome] : null;
@@ -1124,7 +1252,7 @@ function RelancesBoard({
       <button
         key={r.id}
         type="button"
-        onClick={() => setShown({ kind: "suivi", id: r.id })}
+        onClick={() => setShown({ memberId: r.memberId, item: null })}
         className={cn(cardClass, r.due && "border-teal-400")}
         style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
       >
@@ -1158,8 +1286,63 @@ function RelancesBoard({
     );
   };
 
+  const todoPage = pageOf("todo", todo);
+  const contactedPage = pageOf("contacted", contacted);
+  const answeredPage = pageOf("answered", answered);
+  const wonPage = pageOf("won", won);
+  const lostPage = pageOf("lost", lost);
+
   return (
     <>
+      <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Chercher un nom ou un téléphone…"
+              className="h-10 rounded-xl bg-background pl-9"
+            />
+          </div>
+          <label className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3 text-sm text-muted-foreground">
+            <ArrowUpDown className="h-4 w-4" />
+            <span className="hidden sm:inline">À contacter :</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as TodoSort)}
+              className="bg-transparent font-semibold text-foreground outline-none"
+            >
+              <option value="value">le plus en jeu</option>
+              <option value="contact">pas contacté depuis longtemps</option>
+              <option value="name">nom A → Z</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <FilterPill small active={filter === "ALL"} onClick={() => onFilter("ALL")} count={total}>
+            Tous
+          </FilterPill>
+          {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
+            counts[r] ? (
+              <FilterPill key={r} small active={filter === r} onClick={() => onFilter(r)} count={counts[r]}>
+                {REASON_UI[r].label}
+              </FilterPill>
+            ) : null,
+          )}
+        </div>
+        {filter !== "ALL" ? (
+          <p key={filter} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+            {REASON_UI[filter].why}
+          </p>
+        ) : null}
+        {needle ? (
+          <p className="text-xs text-muted-foreground">
+            {todo.length + open.length + closed.length} résultat{todo.length + open.length + closed.length > 1 ? "s" : ""} pour « {q.trim()} »
+          </p>
+        ) : null}
+      </div>
+
       <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <BoardColumn
           title="À contacter"
@@ -1178,7 +1361,7 @@ function RelancesBoard({
           }
         >
           {todo.length ? (
-            todo.slice(0, lim("todo")).map((item, i) => {
+            todoPage.items.map((item, i) => {
               const k = itemKey(item);
               const ui = REASON_UI[item.reason];
               return (
@@ -1186,7 +1369,7 @@ function RelancesBoard({
                   key={k}
                   className={cn(cardClass, "flex cursor-pointer items-start gap-2.5", selected.has(k) && "border-primary bg-primary/5")}
                   style={{ animationDelay: `${Math.min(i, 10) * 25}ms` }}
-                  onClick={() => setShown({ kind: "todo", key: k })}
+                  onClick={() => setShown({ memberId: item.memberId, item })}
                 >
                   <input
                     type="checkbox"
@@ -1201,36 +1384,55 @@ function RelancesBoard({
                     <div className="line-clamp-2 text-xs text-muted-foreground">{item.title}</div>
                     <span className={cn("mt-1 inline-block rounded-full px-1.5 py-px text-[10.5px] font-medium", ui.tone)}>{ui.label}</span>
                   </div>
+                  {item.whatsapp ? (
+                    <button
+                      type="button"
+                      title="Envoyer le message sur WhatsApp"
+                      aria-label={`WhatsApp à ${item.name}`}
+                      disabled={quickWhatsApp.isPending}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(`https://wa.me/${item.whatsapp}?text=${encodeURIComponent(item.message)}`, "_blank", "noopener");
+                        quickWhatsApp.mutate(item);
+                        setShown({ memberId: item.memberId, item });
+                      }}
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-background text-muted-foreground shadow-sm ring-1 ring-inset ring-border transition-colors duration-150 hover:bg-emerald-50 hover:text-emerald-600 hover:ring-emerald-200 disabled:opacity-50 dark:hover:bg-emerald-950/40"
+                    >
+                      <MessageCircle className="h-4 w-4" />
+                    </button>
+                  ) : null}
                 </div>
               );
             })
           ) : (
-            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">Personne à contacter.</p>
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+              {needle ? "Personne ne correspond." : "Personne à contacter."}
+            </p>
           )}
-          <MoreButton shown={lim("todo")} total={todo.length} onMore={() => more("todo")} />
+          <ColumnPager page={todoPage.page} total={todoPage.total} onPage={goPage("todo")} />
         </BoardColumn>
 
         <BoardColumn title="Contacté" hint="en attente de sa réponse" count={contacted.length}>
-          {openQ.isLoading ? <Skeleton className="h-20" /> : contacted.length ? contacted.slice(0, lim("contacted")).map(suiviCard) : (
+          {openQ.isLoading ? <Skeleton className="h-20" /> : contacted.length ? contactedPage.items.map(suiviCard) : (
             <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
           )}
-          <MoreButton shown={lim("contacted")} total={contacted.length} onMore={() => more("contacted")} />
+          <ColumnPager page={contactedPage.page} total={contactedPage.total} onPage={goPage("contacted")} />
         </BoardColumn>
 
         <BoardColumn title="A répondu" hint="intéressé, à rappeler…" count={answered.length}>
-          {openQ.isLoading ? <Skeleton className="h-20" /> : answered.length ? answered.slice(0, lim("answered")).map(suiviCard) : (
+          {openQ.isLoading ? <Skeleton className="h-20" /> : answered.length ? answeredPage.items.map(suiviCard) : (
             <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
           )}
-          <MoreButton shown={lim("answered")} total={answered.length} onMore={() => more("answered")} />
+          <ColumnPager page={answeredPage.page} total={answeredPage.total} onPage={goPage("answered")} />
         </BoardColumn>
 
         <BoardColumn title="Résultat" hint="30 derniers jours" count={closed.length}>
           <h4 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Gagnés · {won.length}</h4>
-          {won.slice(0, lim("won")).map(suiviCard)}
-          <MoreButton shown={lim("won")} total={won.length} onMore={() => more("won")} />
+          {wonPage.items.map(suiviCard)}
+          <ColumnPager page={wonPage.page} total={wonPage.total} onPage={goPage("won")} />
           <h4 className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Perdus · {lost.length}</h4>
-          {lost.slice(0, lim("lost")).map(suiviCard)}
-          <MoreButton shown={lim("lost")} total={lost.length} onMore={() => more("lost")} />
+          {lostPage.items.map(suiviCard)}
+          <ColumnPager page={lostPage.page} total={lostPage.total} onPage={goPage("lost")} />
         </BoardColumn>
       </div>
 
@@ -1265,66 +1467,8 @@ function RelancesBoard({
         </button>
       </div>
 
-      <Sheet open={panelOpen} onOpenChange={(o) => !o && setShown(null)}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-          <SheetHeader className="text-left">
-            <SheetTitle>{shownTodo?.name ?? panelRow?.name}</SheetTitle>
-            <SheetDescription>
-              {shownTodo
-                ? "Contacte-le comme tu veux, puis dis comment : chaque canal compte."
-                : panelRow?.closedAt
-                  ? "Relance terminée."
-                  : "Note sa réponse, ou dis si c'est gagné ou perdu. Gagné est aussi noté tout seul s'il revient ou prend un abonnement."}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-3 space-y-4">
-            {shownTodo ? (
-              <>
-                <ul>
-                  <OutreachRow item={shownTodo} onMessage={(text) => onMessage(shownTodo, text)} />
-                </ul>
-                <QuickContact item={shownTodo} />
-              </>
-            ) : panelRow ? (
-              <ul>
-                <SuiviItem row={panelRow} index={0} />
-              </ul>
-            ) : null}
-          </div>
-        </SheetContent>
-      </Sheet>
+      <MemberModal memberId={shown?.memberId ?? null} item={modalItem} row={modalRow} onClose={() => setShown(null)} />
     </>
-  );
-}
-
-/** One tap: "I reached them this way" (the answer can follow later). */
-function QuickContact({ item }: { item: OutreachItem }) {
-  const queryClient = useQueryClient();
-  const log = useMutation({
-    mutationFn: (channel: OutreachChannel) => outreachApi.log({ memberId: item.memberId, reason: item.reason, channel }),
-    onSuccess: (_r, channel) => {
-      toast.success(`${item.name} : contacté (${channelLabel(channel)})`);
-      queryClient.invalidateQueries({ queryKey: ["outreach"] });
-      queryClient.invalidateQueries({ queryKey: ["outreach-suivi"] });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  return (
-    <div className="space-y-2 rounded-xl border p-3">
-      <div className="text-sm font-medium">Déjà contacté ? Dis comment</div>
-      <div className="grid grid-cols-2 gap-1.5">
-        {MANUAL_CHANNELS.map((c) => {
-          const Icon = CHANNEL_UI[c].icon;
-          return (
-            <Button key={c} variant="outline" size="sm" disabled={log.isPending} onClick={() => log.mutate(c)} className="justify-start">
-              <Icon className="mr-1.5 h-3.5 w-3.5" />
-              {CHANNEL_UI[c].button}
-            </Button>
-          );
-        })}
-      </div>
-      <p className="text-xs text-muted-foreground">Il passe dans « Contacté ». Tu ajoutes sa réponse quand tu l&apos;as.</p>
-    </div>
   );
 }
 
@@ -1344,7 +1488,6 @@ function RelancesInner() {
   const [filter, setFilter] = useState<OutreachReason | "ALL">(
     initialReason && initialReason in REASON_UI ? initialReason : "ALL",
   );
-  const [messaging, setMessaging] = useState<OutreachItem | null>(null);
   const [tab, setTab] = useState<Tab>(searchParams.get("tab") === "campagnes" ? "campagnes" : "board");
   const [campaignDraft, setCampaignDraft] = useState<CampaignDraft | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
@@ -1453,21 +1596,7 @@ function RelancesInner() {
           <div className="space-y-5">
             <ChannelsCard results={results} />
 
-            <div className="flex flex-wrap gap-1.5">
-              <FilterPill small active={filter === "ALL"} onClick={() => setFilter("ALL")} count={data.todo.length}>
-                Tous
-              </FilterPill>
-              {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
-                counts[r] ? (
-                  <FilterPill key={r} small active={filter === r} onClick={() => setFilter(r)} count={counts[r]}>
-                    {REASON_UI[r].label}
-                  </FilterPill>
-                ) : null,
-              )}
-            </div>
-            {filter !== "ALL" ? <p className="-mt-3 text-xs text-muted-foreground">{REASON_UI[filter].why}</p> : null}
-
-            <RelancesBoard todo={todo} onMessage={(item, text) => setMessaging(text ? { ...item, message: text } : item)} />
+            <RelancesBoard todo={todo} total={data.todo.length} counts={counts} filter={filter} onFilter={setFilter} />
 
             <AwayReasonsCard counts={data.awayReasons} />
 
@@ -1482,7 +1611,6 @@ function RelancesInner() {
         )}
       </div>
 
-      <MessageDialog item={messaging} onClose={() => setMessaging(null)} />
       <PastRelanceDialog open={pastOpen} onClose={() => setPastOpen(false)} />
     </div>
   );
