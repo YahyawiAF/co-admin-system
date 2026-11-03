@@ -4,6 +4,11 @@ import { PriceCategory, Prisma, PromoValueKind, PromotionVoucherStatus } from '@
 import { PrismaService } from 'database/prisma.service';
 import { round1 } from '../analytics/traffic';
 import { priceCategoriesFor } from '../mobile/space-occupy';
+import {
+  computeRowPricing,
+  loadPricingContext,
+  PricedJournalRow,
+} from '../mobile/session-pricing-context';
 
 export const PROMOTION_TARGETS = ['PRODUCT', 'PRICE', 'BUNDLE', 'OTHER'] as const;
 const PRICE_CATEGORIES = Object.values(PriceCategory) as string[];
@@ -659,10 +664,16 @@ export class PromotionService {
   private async syncVisitGifts(journalId: string) {
     const j = await this.prisma.journal.findUnique({
       where: { id: journalId },
-      select: { priceId: true, memberID: true, registredTime: true, isReservation: true },
+      include: { prices: true, members: { include: { group: true } } },
     });
     if (!j?.priceId || j.isReservation || !isSameDay(j.registredTime, new Date())) return;
-    const offers = (await this.bundlesFor(j.priceId, j.memberID)).filter(hasProducts);
+    const tarifIds = await this.visitTarifIds(j);
+    const offers: Awaited<ReturnType<PromotionService['bundlesFor']>> = [];
+    for (const id of tarifIds) {
+      for (const o of await this.bundlesFor(id, j.memberID)) {
+        if (hasProducts(o) && !offers.some((x) => x.id === o.id)) offers.push(o);
+      }
+    }
     if (!offers.length) return;
     const have = await this.prisma.promotionVoucher.findMany({
       where: { journalId },
@@ -681,6 +692,84 @@ export class PromotionService {
       })),
       skipDuplicates: true,
     });
+  }
+
+  /**
+   * Tarifs whose gifts the visit gets: its pass, and for an auto visit also the tier it
+   * has moved up to (2h → 4h: the 4h gift too).
+   */
+  private async visitTarifIds(
+    j: { priceId: string | null; pricingMode: string; leaveTime: Date | null; members: { organizationId: string } | null },
+  ) {
+    const ids = j.priceId ? [j.priceId] : [];
+    if (j.pricingMode !== 'AUTO') return ids;
+    const ctx = await loadPricingContext(this.prisma, j.members?.organizationId ?? null);
+    const tier = computeRowPricing(j as unknown as PricedJournalRow, ctx, j.leaveTime ?? new Date())
+      ?.currentTier.priceId;
+    return tier && !ids.includes(tier) ? [...ids, tier] : ids;
+  }
+
+  /**
+   * Café prices for one member / visit (reception adds a drink in the Journal): best live
+   * café promo per product, and the gift price of the visit's tarif (first unit).
+   */
+  async cafePrices(opts: { memberId?: string | null; journalId?: string | null }) {
+    const memberId = opts.memberId ?? null;
+    let jid = opts.journalId ?? null;
+    if (!jid && memberId) {
+      const open = await this.prisma.journal.findFirst({
+        where: { memberID: memberId, leaveTime: null, isReservation: false },
+        orderBy: { registredTime: 'desc' },
+        select: { id: true },
+      });
+      jid = open?.id ?? null;
+    }
+    if (jid) await this.syncVisitGifts(jid);
+    const facilityId = memberId ? await this.facilityOfMember(memberId) : await this.facilityId();
+    if (!facilityId) return [];
+    const [vouchers, promos, f] = await Promise.all([
+      jid
+        ? this.prisma.promotionVoucher.findMany({
+            where: { journalId: jid, status: { in: AVAILABLE } },
+            include: { promotion: true },
+            orderBy: { createdAt: 'asc' },
+          })
+        : Promise.resolve([]),
+      this.eligible(facilityId, memberId, { target: 'PRODUCT', ...HAS_PRODUCTS }),
+      this.prisma.facility.findUnique({ where: { id: facilityId }, select: { organizationId: true } }),
+    ]);
+    if (!vouchers.length && !promos.length) return [];
+    const products = await this.prisma.product.findMany({
+      where: f?.organizationId ? { organizationId: f.organizationId } : {},
+      select: { id: true, sellingPrice: true },
+    });
+    const covers = (r: ProductScope, id: string) =>
+      r.allProducts || r.productId === id || r.productIds.includes(id);
+    const out: {
+      productId: string;
+      /** Best café promo (every unit), null when none */
+      unitPrice: number | null;
+      label: string | null;
+      /** Gift of the visit's tarif (first unit), null when none */
+      giftPrice: number | null;
+      giftLabel: string | null;
+    }[] = [];
+    for (const p of products) {
+      const pick = this.best(
+        promos.filter((r) => covers(r, p.id)),
+        p.sellingPrice,
+      );
+      const v = vouchers.find((x) => x.productId === p.id || (!x.productId && covers(x.promotion, p.id)));
+      if (!pick && !v) continue;
+      out.push({
+        productId: p.id,
+        unitPrice: pick ? pick.amount : null,
+        label: pick ? promotionLabel(pick.row) : null,
+        giftPrice: v ? applyDiscount(p.sellingPrice, v.promotion.valueKind, v.promotion.value) : null,
+        giftLabel: v ? `Cadeau ${promotionLabel(v.promotion)}` : null,
+      });
+    }
+    return out;
   }
 
   /**
