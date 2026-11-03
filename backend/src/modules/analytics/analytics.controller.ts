@@ -148,7 +148,7 @@ export class AnalyticsController {
 
   @Post('outreach/log')
   outreachLog(
-    @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string },
+    @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string; contactedAt?: string | null },
   ) {
     return this.outreach.log(body);
   }
@@ -200,10 +200,32 @@ export class AnalyticsController {
     return this.outreach.close(id, body.result);
   }
 
+  /** Relances → Suivi: undo a hand-made close. */
+  @Post('outreach/:id/reopen')
+  outreachReopen(@Param('id') id: string) {
+    return this.outreach.reopen(id);
+  }
+
   /** Saved relances (e.g. from an AI suggestion) with their progress. */
   @Get('outreach/campaigns')
   campaignList(@Query('facilityId') facilityId?: string) {
     return this.campaigns.list(facilityId);
+  }
+
+  /** People of a list, to pick one by one. */
+  @Get('outreach/candidates')
+  campaignCandidates(
+    @Query('facilityId') facilityId?: string,
+    @Query('segment') segment?: string,
+    @Query('groupId') groupId?: string,
+  ) {
+    return this.campaigns.candidates(facilityId, segment, groupId || null);
+  }
+
+  /** "Relance passée": abonnement taken since that day? */
+  @Get('outreach/past-check')
+  outreachPastCheck(@Query('memberId') memberId?: string, @Query('date') date?: string) {
+    return this.outreach.pastCheck(memberId, date);
   }
 
   @Get('outreach/segments')
@@ -243,6 +265,19 @@ export class AnalyticsController {
     @Body() body: { memberId?: string; channel?: string; message?: string },
   ) {
     return this.campaigns.log(id, body);
+  }
+
+  @Post('outreach/campaigns/:id/members')
+  campaignMembers(@Param('id') id: string, @Body() body: { add?: string[]; remove?: string[] }) {
+    return this.campaigns.members(id, body);
+  }
+
+  @Post('outreach/campaigns/:id/answer')
+  campaignAnswer(
+    @Param('id') id: string,
+    @Body() body: { memberId?: string; outcome?: string | null; note?: string | null; followUpAt?: string | null },
+  ) {
+    return this.campaigns.answer(id, body);
   }
 
   @Post('outreach/push')

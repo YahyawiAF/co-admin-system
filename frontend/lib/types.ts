@@ -2004,7 +2004,9 @@ export type CampaignSegment =
   | "UNPAID"
   | "RECENT_30"
   | "ALL"
-  | "GROUP";
+  | "GROUP"
+  /** People picked one by one */
+  | "MANUAL";
 export type CampaignGoal = "VISIT" | "SUBSCRIPTION" | "ANY";
 
 export interface OutreachCampaign {
@@ -2020,7 +2022,20 @@ export interface OutreachCampaign {
   recommendationTitle: string | null;
   initiativeId: string | null;
   createdAt: string;
-  progress: { total: number; contacted: number; skipped: number; won: number; revenue: number };
+  progress: {
+    total: number;
+    contacted: number;
+    skipped: number;
+    /** Not contacted yet */
+    todo: number;
+    /** Contacted, no answer noted yet */
+    waiting: number;
+    noAnswer: number;
+    /** Answered (not "Pas de réponse"), not won yet */
+    answered: number;
+    won: number;
+    revenue: number;
+  };
 }
 
 export interface CampaignTarget {
@@ -2031,7 +2046,12 @@ export interface CampaignTarget {
   hasPush: boolean;
   message: string;
   contactedAt: string | null;
+  lastContactAt: string | null;
   channel: OutreachChannel | null;
+  /** Answer noted on the latest contact */
+  outcome: OutreachOutcome | null;
+  note: string | null;
+  followUpAt: string | null;
   won: boolean;
   /** Renewed although no contact was logged in the app */
   withoutContact?: boolean;
@@ -2048,11 +2068,21 @@ export interface CampaignInput {
   message: string;
   segment: CampaignSegment;
   memberGroupId?: string | null;
+  /** Picked by hand: used instead of the segment's members */
+  memberIds?: string[];
   goal: CampaignGoal;
   sourceReportId?: string | null;
   recommendationTitle?: string | null;
   trackAsInitiative?: boolean;
   category?: AdvisorCategory;
+}
+
+/** Someone who can be ticked into a campaign */
+export interface CampaignCandidate {
+  memberId: string;
+  name: string;
+  phone: string | null;
+  lastVisit: string | null;
 }
 
 /** Member profile asked in 1 tap at check-in. */

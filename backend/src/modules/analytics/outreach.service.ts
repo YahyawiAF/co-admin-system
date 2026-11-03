@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 import {
   addDays,
@@ -800,22 +800,83 @@ export class OutreachService {
     return { contacted: contacts.length, won, revenue: round1(revenue), byReason, byChannel };
   }
 
-  async log(body: { memberId?: string; reason?: string; channel?: string; message?: string }) {
+  async log(body: {
+    memberId?: string;
+    reason?: string;
+    channel?: string;
+    message?: string;
+    /** "Relance passée": the day it was really done (yyyy-MM-dd, up to SUIVI_DAYS back) */
+    contactedAt?: string | null;
+  }) {
     const reason = body.reason as OutreachReason;
     const channel = body.channel as OutreachChannel;
     if (!body.memberId) throw new BadRequestException('memberId requis');
     if (!OUTREACH_REASONS.includes(reason)) throw new BadRequestException('Motif invalide');
     if (!OUTREACH_CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
+    const past = body.contactedAt ? this.pastDay(body.contactedAt) : null;
+    if (past && channel === 'SKIP') throw new BadRequestException('Canal invalide');
     const row = await this.prisma.memberOutreach.create({
       data: {
         memberId: body.memberId,
         reason,
         channel,
         message: body.message?.slice(0, 2000) || null,
+        ...(past ? { createdAt: past } : {}),
       },
     });
-    if (channel !== 'SKIP') await this.replaceOpen(body.memberId, row.id);
-    return row;
+    if (channel !== 'SKIP') {
+      if (past) {
+        // A past relance only takes over older open ones, never a newer contact
+        await this.prisma.memberOutreach.updateMany({
+          where: {
+            memberId: body.memberId,
+            id: { not: row.id },
+            closedAt: null,
+            channel: { not: 'SKIP' },
+            campaignId: null,
+            createdAt: { lt: past },
+          },
+          data: { closedAt: new Date(), closedResult: 'REPLACED' },
+        });
+        // Abonnement already taken since that day → counted as converted right away
+        await this.autoClose(startOfDay(new Date()));
+      } else {
+        await this.replaceOpen(body.memberId, row.id);
+      }
+    }
+    return this.prisma.memberOutreach.findUniqueOrThrow({ where: { id: row.id } });
+  }
+
+  /** A day in the past (not today's future), at most SUIVI_DAYS ago. */
+  private pastDay(input: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.slice(0, 10))) throw new BadRequestException('Date invalide');
+    const day = parseLocalDay(input.slice(0, 10));
+    const today = startOfDay(new Date());
+    if (day > today) throw new BadRequestException('La date ne peut pas être dans le futur');
+    if (differenceInCalendarDays(today, day) > SUIVI_DAYS) {
+      throw new BadRequestException(`Au plus ${SUIVI_DAYS} jours en arrière`);
+    }
+    return day;
+  }
+
+  /** "Relance passée": the first abonnement this member took after that day, if any. */
+  async pastCheck(memberId?: string, date?: string) {
+    if (!memberId || !date) throw new BadRequestException('Membre et date requis');
+    const day = this.pastDay(date);
+    const abo = await this.prisma.abonnement.findFirst({
+      where: { memberID: memberId, isReservation: false, hiddenAt: null, createdAt: { gt: day } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, amountDue: true, payedAmount: true, serviceName: true, price: { select: { name: true } } },
+    });
+    return {
+      abonnement: abo
+        ? {
+            name: abo.serviceName || abo.price?.name || 'Abonnement',
+            at: abo.createdAt!.toISOString(),
+            amount: round1(abo.amountDue ?? abo.payedAmount ?? 0),
+          }
+        : null,
+    };
   }
 
   /** One channel for several people at once (a WhatsApp status, a word to everyone at the desk…). */
@@ -909,6 +970,22 @@ export class OutreachService {
       where: { id },
       data: { closedAt: new Date(), closedResult: result, closedAuto: false },
     });
+  }
+
+  /** Undo a hand-made "Converti" / "Non converti": the relance goes back to the Suivi. */
+  async reopen(id: string) {
+    const row = await this.prisma.memberOutreach.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Relance introuvable');
+    if (!row.closedAt || row.closedResult === 'REPLACED') throw new BadRequestException("Cette relance n'est pas clôturée");
+    if (row.closedAuto) {
+      throw new BadRequestException('Clôturée toute seule (abonnement ou paiement enregistré) : rien à annuler');
+    }
+    const reopened = await this.prisma.memberOutreach.update({
+      where: { id },
+      data: { closedAt: null, closedResult: null, closedAuto: false },
+    });
+    await this.replaceOpen(row.memberId, id);
+    return reopened;
   }
 
   /** Open relances close themselves when the member takes an abonnement (or pays, for impayés). */
