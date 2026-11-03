@@ -19,7 +19,11 @@ import {
   Phone,
   Sparkles,
   Star,
+  ArrowUpDown,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Search,
   History,
   Lightbulb,
   MessageSquareReply,
@@ -1005,7 +1009,8 @@ function MemberModal({
 // Board: À contacter → Contacté → A répondu → Résultat
 // ---------------------------------------------------------------------------
 
-const PAGE = 20;
+/** Cards per page in each board column (columns are narrow). */
+const PAGE = 10;
 const itemKey = (i: { memberId: string; reason: string }) => `${i.memberId}:${i.reason}`;
 
 /** Contacted → won, per way of contact (last 30 days). */
@@ -1086,19 +1091,59 @@ function BoardColumn({
   );
 }
 
-function MoreButton({ shown, total, onMore }: { shown: number; total: number; onMore: () => void }) {
-  if (shown >= total) return null;
+/** Compact pager under a board column: "11–20 sur 87" + previous / next. */
+function ColumnPager({ page, total, onPage }: { page: number; total: number; onPage: (p: number) => void }) {
+  const last = Math.max(1, Math.ceil(total / PAGE));
+  if (total <= PAGE) return null;
+  const from = (page - 1) * PAGE + 1;
+  const to = Math.min(total, page * PAGE);
   return (
-    <button type="button" onClick={onMore} className="rounded-lg py-1.5 text-xs font-medium text-primary hover:bg-background">
-      Afficher plus ({total - shown})
-    </button>
+    <div className="flex items-center justify-between gap-1 rounded-lg bg-background px-1.5 py-1 ring-1 ring-inset ring-border">
+      <button
+        type="button"
+        aria-label="Page précédente"
+        disabled={page <= 1}
+        onClick={() => onPage(page - 1)}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
+        {from}–{to} sur {total} · page {page}/{last}
+      </span>
+      <button
+        type="button"
+        aria-label="Page suivante"
+        disabled={page >= last}
+        onClick={() => onPage(page + 1)}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
   );
 }
+
+type TodoSort = "value" | "name" | "contact";
 
 const cardClass =
   "w-full rounded-lg border bg-background px-3 py-2 text-left transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-primary hover:shadow-sm motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-bottom-1 motion-safe:fill-mode-both motion-reduce:transition-none";
 
-function RelancesBoard({ todo }: { todo: OutreachItem[] }) {
+function RelancesBoard({
+  todo: reasonTodo,
+  total,
+  counts,
+  filter,
+  onFilter,
+}: {
+  /** À contacter, already filtered by reason */
+  todo: OutreachItem[];
+  /** Everyone to contact (all reasons) */
+  total: number;
+  counts: Partial<Record<OutreachReason, number>>;
+  filter: OutreachReason | "ALL";
+  onFilter: (f: OutreachReason | "ALL") => void;
+}) {
   const queryClient = useQueryClient();
   const openQ = useQuery({
     queryKey: ["outreach-suivi", "OPEN", "board"],
@@ -1110,15 +1155,48 @@ function RelancesBoard({ todo }: { todo: OutreachItem[] }) {
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState<Shown | null>(null);
-  const [limit, setLimit] = useState<Record<string, number>>({});
-  const more = (col: string) => setLimit((l) => ({ ...l, [col]: (l[col] ?? PAGE) + PAGE }));
-  const lim = (col: string) => limit[col] ?? PAGE;
+  const [q, setQ] = useState("");
+  const [sort, setSort] = useState<TodoSort>("value");
+  const [pages, setPages] = useState<Record<string, number>>({});
+  const [pagesFor, setPagesFor] = useState(`${filter}|${q}|${sort}`);
+  if (pagesFor !== `${filter}|${q}|${sort}`) {
+    // A new filter, search or sort starts every column at page 1
+    setPagesFor(`${filter}|${q}|${sort}`);
+    setPages({});
+  }
+  /** This column's cards for its current page (page kept in range when the list shrinks). */
+  const pageOf = <T,>(col: string, list: T[]) => {
+    const last = Math.max(1, Math.ceil(list.length / PAGE));
+    const page = Math.min(pages[col] ?? 1, last);
+    return { page, items: list.slice((page - 1) * PAGE, page * PAGE), total: list.length };
+  };
+  const goPage = (col: string) => (p: number) => setPages((x) => ({ ...x, [col]: p }));
 
-  const open = openQ.data?.rows ?? [];
+  const needle = q.trim().toLowerCase();
+  const needleDigits = needle.replace(/\D/g, "");
+  const matches = (name: string, phone: string | null, extra = "") =>
+    !needle ||
+    name.toLowerCase().includes(needle) ||
+    extra.toLowerCase().includes(needle) ||
+    (needleDigits.length >= 3 && (phone ?? "").replace(/\D/g, "").includes(needleDigits));
+  const todo = useMemo(() => {
+    const list = reasonTodo.filter((i) => matches(i.name, i.phone, i.title));
+    if (sort === "name") return [...list].sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    if (sort === "contact") {
+      // Never contacted first, then the longest ago
+      const at = (i: OutreachItem) => (i.lastContact ? new Date(i.lastContact.at).getTime() : 0);
+      return [...list].sort((a, b) => at(a) - at(b));
+    }
+    return list;
+  }, [reasonTodo, needle, sort]);
+
+  const open = (openQ.data?.rows ?? []).filter((r) => matches(r.name, r.phone));
   const contacted = open.filter((r) => !r.outcome);
   const answered = open.filter((r) => r.outcome);
   const since30 = Date.now() - 30 * 86_400_000;
-  const closed = (closedQ.data?.rows ?? []).filter((r) => r.closedAt && new Date(r.closedAt).getTime() >= since30);
+  const closed = (closedQ.data?.rows ?? []).filter(
+    (r) => r.closedAt && new Date(r.closedAt).getTime() >= since30 && matches(r.name, r.phone),
+  );
   const won = closed.filter((r) => r.closedResult === "WON");
   const lost = closed.filter((r) => r.closedResult !== "WON");
 
@@ -1208,8 +1286,63 @@ function RelancesBoard({ todo }: { todo: OutreachItem[] }) {
     );
   };
 
+  const todoPage = pageOf("todo", todo);
+  const contactedPage = pageOf("contacted", contacted);
+  const answeredPage = pageOf("answered", answered);
+  const wonPage = pageOf("won", won);
+  const lostPage = pageOf("lost", lost);
+
   return (
     <>
+      <div className="space-y-3 rounded-2xl bg-muted/40 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Chercher un nom ou un téléphone…"
+              className="h-10 rounded-xl bg-background pl-9"
+            />
+          </div>
+          <label className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3 text-sm text-muted-foreground">
+            <ArrowUpDown className="h-4 w-4" />
+            <span className="hidden sm:inline">À contacter :</span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as TodoSort)}
+              className="bg-transparent font-semibold text-foreground outline-none"
+            >
+              <option value="value">le plus en jeu</option>
+              <option value="contact">pas contacté depuis longtemps</option>
+              <option value="name">nom A → Z</option>
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <FilterPill small active={filter === "ALL"} onClick={() => onFilter("ALL")} count={total}>
+            Tous
+          </FilterPill>
+          {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
+            counts[r] ? (
+              <FilterPill key={r} small active={filter === r} onClick={() => onFilter(r)} count={counts[r]}>
+                {REASON_UI[r].label}
+              </FilterPill>
+            ) : null,
+          )}
+        </div>
+        {filter !== "ALL" ? (
+          <p key={filter} className="text-xs text-muted-foreground animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+            {REASON_UI[filter].why}
+          </p>
+        ) : null}
+        {needle ? (
+          <p className="text-xs text-muted-foreground">
+            {todo.length + open.length + closed.length} résultat{todo.length + open.length + closed.length > 1 ? "s" : ""} pour « {q.trim()} »
+          </p>
+        ) : null}
+      </div>
+
       <div className="grid items-start gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <BoardColumn
           title="À contacter"
@@ -1228,7 +1361,7 @@ function RelancesBoard({ todo }: { todo: OutreachItem[] }) {
           }
         >
           {todo.length ? (
-            todo.slice(0, lim("todo")).map((item, i) => {
+            todoPage.items.map((item, i) => {
               const k = itemKey(item);
               const ui = REASON_UI[item.reason];
               return (
@@ -1272,32 +1405,34 @@ function RelancesBoard({ todo }: { todo: OutreachItem[] }) {
               );
             })
           ) : (
-            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">Personne à contacter.</p>
+            <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">
+              {needle ? "Personne ne correspond." : "Personne à contacter."}
+            </p>
           )}
-          <MoreButton shown={lim("todo")} total={todo.length} onMore={() => more("todo")} />
+          <ColumnPager page={todoPage.page} total={todoPage.total} onPage={goPage("todo")} />
         </BoardColumn>
 
         <BoardColumn title="Contacté" hint="en attente de sa réponse" count={contacted.length}>
-          {openQ.isLoading ? <Skeleton className="h-20" /> : contacted.length ? contacted.slice(0, lim("contacted")).map(suiviCard) : (
+          {openQ.isLoading ? <Skeleton className="h-20" /> : contacted.length ? contactedPage.items.map(suiviCard) : (
             <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
           )}
-          <MoreButton shown={lim("contacted")} total={contacted.length} onMore={() => more("contacted")} />
+          <ColumnPager page={contactedPage.page} total={contactedPage.total} onPage={goPage("contacted")} />
         </BoardColumn>
 
         <BoardColumn title="A répondu" hint="intéressé, à rappeler…" count={answered.length}>
-          {openQ.isLoading ? <Skeleton className="h-20" /> : answered.length ? answered.slice(0, lim("answered")).map(suiviCard) : (
+          {openQ.isLoading ? <Skeleton className="h-20" /> : answered.length ? answeredPage.items.map(suiviCard) : (
             <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">—</p>
           )}
-          <MoreButton shown={lim("answered")} total={answered.length} onMore={() => more("answered")} />
+          <ColumnPager page={answeredPage.page} total={answeredPage.total} onPage={goPage("answered")} />
         </BoardColumn>
 
         <BoardColumn title="Résultat" hint="30 derniers jours" count={closed.length}>
           <h4 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Gagnés · {won.length}</h4>
-          {won.slice(0, lim("won")).map(suiviCard)}
-          <MoreButton shown={lim("won")} total={won.length} onMore={() => more("won")} />
+          {wonPage.items.map(suiviCard)}
+          <ColumnPager page={wonPage.page} total={wonPage.total} onPage={goPage("won")} />
           <h4 className="px-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Perdus · {lost.length}</h4>
-          {lost.slice(0, lim("lost")).map(suiviCard)}
-          <MoreButton shown={lim("lost")} total={lost.length} onMore={() => more("lost")} />
+          {lostPage.items.map(suiviCard)}
+          <ColumnPager page={lostPage.page} total={lostPage.total} onPage={goPage("lost")} />
         </BoardColumn>
       </div>
 
@@ -1461,21 +1596,7 @@ function RelancesInner() {
           <div className="space-y-5">
             <ChannelsCard results={results} />
 
-            <div className="flex flex-wrap gap-1.5">
-              <FilterPill small active={filter === "ALL"} onClick={() => setFilter("ALL")} count={data.todo.length}>
-                Tous
-              </FilterPill>
-              {(Object.keys(REASON_UI) as OutreachReason[]).map((r) =>
-                counts[r] ? (
-                  <FilterPill key={r} small active={filter === r} onClick={() => setFilter(r)} count={counts[r]}>
-                    {REASON_UI[r].label}
-                  </FilterPill>
-                ) : null,
-              )}
-            </div>
-            {filter !== "ALL" ? <p className="-mt-3 text-xs text-muted-foreground">{REASON_UI[filter].why}</p> : null}
-
-            <RelancesBoard todo={todo} />
+            <RelancesBoard todo={todo} total={data.todo.length} counts={counts} filter={filter} onFilter={setFilter} />
 
             <AwayReasonsCard counts={data.awayReasons} />
 
