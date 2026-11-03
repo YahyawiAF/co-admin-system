@@ -1149,6 +1149,35 @@ export interface SuiviRow {
   };
 }
 
+/** Relances modal: the member, every contact with the answer, last visit, abonnement */
+export interface OutreachHistory {
+  memberId: string;
+  name: string;
+  firstName: string;
+  phone: string | null;
+  whatsapp: string | null;
+  hasPush: boolean;
+  lastVisit: string | null;
+  visits30: number;
+  abonnement: { name: string; from: string; until: string | null; active: boolean } | null;
+  /** Times reached without answering */
+  noAnswer: number;
+  /** Contact the next answer fills (relances, last 30 days, no answer yet) */
+  openContactId: string | null;
+  contacts: Array<{
+    id: string;
+    at: string;
+    reason: OutreachReason | "CAMPAIGN";
+    channel: OutreachChannel;
+    outcome: OutreachOutcome | null;
+    note: string | null;
+    followUpAt: string | null;
+    closedResult: "WON" | "LOST" | "REPLACED" | null;
+    closedAuto: boolean;
+    campaign: string | null;
+  }>;
+}
+
 export interface SuiviList {
   rows: SuiviRow[];
   counts: { OPEN: number; CLOSED: number; due: number; won: number };

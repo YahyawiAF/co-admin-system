@@ -162,6 +162,12 @@ export class AnalyticsController {
   }
 
   /** Check-in: the relance to do with this member, if any. */
+  /** Relances modal: member, contacts with answers, last visit, abonnement. */
+  @Get('outreach/member/:memberId/history')
+  outreachHistory(@Param('memberId') memberId: string) {
+    return this.outreach.history(memberId);
+  }
+
   @Get('outreach/member/:memberId')
   outreachForMember(@Param('memberId') memberId: string, @Query('facilityId') facilityId?: string) {
     return this.outreach.forMember(memberId, facilityId);
