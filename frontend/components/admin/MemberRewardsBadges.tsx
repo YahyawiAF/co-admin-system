@@ -35,7 +35,7 @@ export function MemberRewardsBadges({
         <Badge
           variant="secondary"
           className="h-5 gap-0.5 bg-amber-50 px-1.5 text-[10px] font-semibold text-amber-800 hover:bg-amber-50"
-          title="Solde points (100 pts = 1 DT)"
+          title="Solde points (1 000 pts = 1 DT)"
         >
           <Sparkles className="h-3 w-3" />
           {points.toLocaleString("fr-FR")} pts

@@ -1648,7 +1648,14 @@ export const mobileApi = {
       message: string;
     }>("/mobile/admin/points/adjust", data);
   },
-  redeemVisitPoints(data: { journalId: string; points: number }) {
+  redeemVisitPoints(data: {
+    journalId: string;
+    points: number;
+    /** Amount due shown in the Régler dialog */
+    dueDt?: number;
+    /** false = only debit the points, the visit is marked paid separately */
+    settle?: boolean;
+  }) {
     return http.post<{
       journalId: string;
       pointsApplied: number;

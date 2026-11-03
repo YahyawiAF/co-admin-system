@@ -33,6 +33,7 @@ import {
   visitorLabel,
 } from "@/lib/journal-utils";
 import { computeSessionPricing, formatDt, ladderFor, type PricingTier } from "@/lib/session-pricing";
+import { POINTS_PER_DT, redeemablePoints } from "@/lib/points-catalog";
 import type { Journal, LateBillingMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -49,12 +50,10 @@ export function JournalReglerDialog({
   row,
   tiers,
   onOpenChange,
-  onPayWithPoints,
 }: {
   row: Journal | null;
   tiers: PricingTier[];
   onOpenChange: (open: boolean) => void;
-  onPayWithPoints?: (row: Journal) => void;
 }) {
   const queryClient = useQueryClient();
   const open = !!row;
@@ -73,6 +72,8 @@ export function JournalReglerDialog({
   /** "Offert": staff gives part of the visit away — collected less, no debt */
   const [offerOn, setOfferOn] = useState(false);
   const [received, setReceived] = useState("");
+  /** Pay part of the visit with loyalty points (whole 1000-pt blocks) */
+  const [usePoints, setUsePoints] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -87,6 +88,7 @@ export function JournalReglerDialog({
     setSkipDebt(new Set());
     setOfferOn(false);
     setReceived("");
+    setUsePoints(false);
   }, [row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: ledger } = useQuery({
@@ -169,12 +171,17 @@ export function JournalReglerDialog({
   const debtTotal = round3(
     debts.filter((d) => !skipDebt.has(d.id)).reduce((s, d) => s + d.amount, 0)
   );
-  const total = round3(visitDue + debtTotal);
+  const balance = Number((row?.members || row?.member)?.points ?? 0);
+  /** Points that can go to the visit: 1000 pts = 1 DT, 1200 pts → 1000 pts */
+  const usablePoints = !paid && memberId ? redeemablePoints(balance, visitDue) : 0;
+  const pointsUsed = usePoints ? usablePoints : 0;
+  const pointsDt = pointsUsed / POINTS_PER_DT;
+  const total = round3(visitDue + debtTotal - pointsDt);
   const receivedNum = Number(String(received).replace(",", "."));
   /** Given away: only the visit, never older debts. */
   const offered =
     offerOn && received.trim() !== "" && Number.isFinite(receivedNum)
-      ? round3(Math.min(visitDue, Math.max(0, total - receivedNum)))
+      ? round3(Math.min(visitDue - pointsDt, Math.max(0, total - receivedNum)))
       : 0;
   const toCollect = round3(total - offered);
 
@@ -198,6 +205,15 @@ export function JournalReglerDialog({
   const collect = useMutation({
     mutationFn: async () => {
       await applyTier();
+      if (pointsUsed > 0) {
+        // Points first, while the visit is still unpaid; the rest is collected below
+        await mobileApi.redeemVisitPoints({
+          journalId: row!.id,
+          points: pointsUsed,
+          dueDt: visitDue,
+          settle: false,
+        });
+      }
       if (present) {
         if (leaveAtMs == null) await mobileApi.setPayment(row!.id, true, undefined, offered);
         else
@@ -221,7 +237,9 @@ export function JournalReglerDialog({
     },
     onSuccess: () =>
       done(
-        `Encaissé · ${formatDt(toCollect)}${offered > 0 ? ` · offert ${formatDt(offered)}` : ""}`
+        `Encaissé · ${formatDt(toCollect)}${
+          pointsUsed > 0 ? ` · ${pointsUsed.toLocaleString("fr-FR")} pts (${formatDt(pointsDt)})` : ""
+        }${offered > 0 ? ` · offert ${formatDt(offered)}` : ""}`
       ),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -263,8 +281,6 @@ export function JournalReglerDialog({
       ? `Auto · ${pricing.currentTier.name}`
       : pricing.fixedServiceName || price?.name || "Forfait"
     : price?.name || "—";
-  const member = row?.members || row?.member;
-  const points = Number(member?.points ?? 0);
 
   const departOptions: { id: Depart; label: string; hint?: string; hidden?: boolean }[] = [
     { id: "now", label: "Part maintenant", hint: format(nowMs, "HH:mm") },
@@ -384,6 +400,34 @@ export function JournalReglerDialog({
               </Section>
             ) : null}
 
+            {!paid && memberId && balance > 0 && visitDue > 0.0005 ? (
+              <Section title="Points fidélité" icon={<Wallet className="h-3.5 w-3.5" />}>
+                {usablePoints > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Choice active={!usePoints} onClick={() => setUsePoints(false)} compact>
+                      <span className="font-semibold">Sans points</span>
+                    </Choice>
+                    <Choice active={usePoints} onClick={() => setUsePoints(true)} compact>
+                      <span className="font-semibold">
+                        Utiliser {usablePoints.toLocaleString("fr-FR")} pts
+                      </span>{" "}
+                      <span className="opacity-75">· −{formatDt(usablePoints / POINTS_PER_DT)}</span>
+                    </Choice>
+                  </div>
+                ) : null}
+                <p className="pt-1.5 text-[11px] text-muted-foreground">
+                  Solde {balance.toLocaleString("fr-FR")} pts · par tranche de 1 000 pts = 1 DT
+                  {usablePoints <= 0
+                    ? balance < POINTS_PER_DT
+                      ? " · pas encore 1 000 pts"
+                      : " · moins de 1 DT à payer"
+                    : balance > usablePoints && usePoints
+                      ? ` · il garde ${(balance - usablePoints).toLocaleString("fr-FR")} pts`
+                      : ""}
+                </p>
+              </Section>
+            ) : null}
+
             {!paid && visitDue > 0.0005 ? (
               <Section title="Remise offerte" icon={<Gift className="h-3.5 w-3.5" />}>
                 <div className="flex flex-wrap gap-1.5">
@@ -457,6 +501,13 @@ export function JournalReglerDialog({
                     <Line label="Déjà payé" value={`− ${formatDt(alreadyPaid)}`} muted />
                   ) : null}
                   {debtTotal > 0.0005 ? <Line label="Dettes" value={`+ ${formatDt(debtTotal)}`} /> : null}
+                  {pointsUsed > 0 ? (
+                    <Line
+                      label={`Points · ${pointsUsed.toLocaleString("fr-FR")} pts`}
+                      value={`− ${formatDt(pointsDt)}`}
+                      tone="points"
+                    />
+                  ) : null}
                   {offered > 0 ? (
                     <Line label="Offert" value={`− ${formatDt(offered)}`} tone="gift" />
                   ) : null}
@@ -469,21 +520,6 @@ export function JournalReglerDialog({
         ) : null}
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-          {row && !paid && memberId && points > 0 && onPayWithPoints ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto gap-1.5"
-              disabled={busy}
-              onClick={() => {
-                onOpenChange(false);
-                onPayWithPoints(row);
-              }}
-            >
-              <Wallet className="h-4 w-4" />
-              Points
-            </Button>
-          ) : null}
           {paid ? (
             <>
               <Button variant="outline" disabled={busy} onClick={() => unpay.mutate()}>
@@ -512,7 +548,9 @@ export function JournalReglerDialog({
                 onClick={() => collect.mutate()}
               >
                 <Check className="h-4 w-4" />
-                Encaisser {formatDt(toCollect)}
+                {toCollect <= 0.0005 && pointsUsed > 0
+                  ? "Payer en points"
+                  : `Encaisser ${formatDt(toCollect)}`}
               </Button>
             </>
           )}
@@ -605,7 +643,7 @@ function Line({
   value: string;
   strong?: boolean;
   muted?: boolean;
-  tone?: "gift";
+  tone?: "gift" | "points";
 }) {
   return (
     <div
@@ -614,7 +652,9 @@ function Line({
         strong && "text-base font-bold",
         muted && "text-xs text-muted-foreground",
         tone === "gift" &&
-          "font-medium text-emerald-700 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:text-emerald-400"
+          "font-medium text-emerald-700 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:text-emerald-400",
+        tone === "points" &&
+          "font-medium text-indigo-600 animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none dark:text-indigo-400"
       )}
     >
       <span>{label}</span>
