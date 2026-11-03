@@ -21,6 +21,8 @@ import { expenseAmount } from '../expense/expense-amount';
 import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
 import { computeOffers } from './offers';
+import { abonnementMonth, computeMonthForecast, loadAbonnements } from './month-data';
+import { expectedShare } from '../../business-manager-core';
 
 const HOUR_MS = 3_600_000;
 const WEEKDAYS = [
@@ -339,28 +341,27 @@ export class PerformanceService {
         }),
       ]);
 
-    const revenueByDay = new Map<string, number>();
-    const addDay = (d: Date | null, amount: number) => {
+    // Daily money = passes + café. Abonnements are never judged by the day they are paid.
+    const passesByDay = new Map<string, number>();
+    const productsByDay = new Map<string, number>();
+    const addDay = (map: Map<string, number>, d: Date | null, amount: number) => {
       if (!d) return;
       const k = localDayKey(d);
-      revenueByDay.set(k, (revenueByDay.get(k) || 0) + amount);
+      map.set(k, (map.get(k) || 0) + amount);
     };
 
     let journalRevenue = 0;
     for (const j of journals) {
       journalRevenue += j.payedAmount || 0;
-      addDay(j.registredTime, j.payedAmount || 0);
+      addDay(passesByDay, j.registredTime, j.payedAmount || 0);
     }
     let abonnements = 0;
-    for (const p of aboPayments) {
-      abonnements += p.amount;
-      addDay(p.paidAt, p.amount);
-    }
+    for (const p of aboPayments) abonnements += p.amount;
     let products = 0;
     for (const dp of dailyProducts) {
       const v = orderUnitPrice(dp) * dp.quantite;
       products += v;
-      addDay(dp.date, v);
+      addDay(productsByDay, dp.date, v);
     }
     const expenses = dailyExpenses.reduce((a, de) => a + expenseAmount(de), 0);
     const revenue = journalRevenue + abonnements + products;
@@ -405,7 +406,8 @@ export class PerformanceService {
     const weekdays = Array.from({ length: 7 }, (_, weekday) => ({
       weekday,
       occurrences: 0,
-      revenue: 0,
+      passes: 0,
+      products: 0,
       visits: 0,
       seatHoursUsed: 0,
       openHours: 0,
@@ -421,7 +423,8 @@ export class PerformanceService {
       days += 1;
       const w = weekdays[d.getDay()];
       w.occurrences += 1;
-      w.revenue += revenueByDay.get(k) || 0;
+      w.passes += passesByDay.get(k) || 0;
+      w.products += productsByDay.get(k) || 0;
       w.visits += visitsByDay.get(k) || 0;
       w.seatHoursUsed += usedByDay.get(k) || 0;
       w.openHours += h;
@@ -433,6 +436,8 @@ export class PerformanceService {
       revenueJournal: round1(journalRevenue),
       revenueAbonnements: round1(abonnements),
       revenueProducts: round1(products),
+      /** Passes + café: the money that follows the days */
+      revenueVariable: round1(journalRevenue + products),
       expenses: round1(expenses),
       net: round1(revenue - expenses),
       marginPct: pct(revenue - expenses, revenue),
@@ -454,7 +459,10 @@ export class PerformanceService {
       weekdays: weekdays.map((w) => ({
         weekday: w.weekday,
         occurrences: w.occurrences,
-        avgRevenue: w.occurrences ? round1(w.revenue / w.occurrences) : 0,
+        /** Passes + café per day (no abonnements) */
+        avgRevenue: w.occurrences ? round1((w.passes + w.products) / w.occurrences) : 0,
+        avgPasses: w.occurrences ? round1(w.passes / w.occurrences) : 0,
+        avgProducts: w.occurrences ? round1(w.products / w.occurrences) : 0,
         avgVisits: w.occurrences ? round1(w.visits / w.occurrences) : 0,
         occupancyPct:
           seats && w.openHours > 0
@@ -486,15 +494,38 @@ export class PerformanceService {
 
     const prevStart = startOfMonth(subMonths(start, 1));
     const prevMonthEnd = endOfMonth(prevStart);
-    const prevCutoff = isCurrent
-      ? new Date(Math.min(prevStart.getTime() + (now.getTime() - start.getTime()), prevMonthEnd.getTime()))
+    // Passes, café and visits follow the weekday (Sunday ≠ Thursday):
+    // - month in progress → the same weekdays 4 weeks earlier (1–2 Nov ↔ 4–5 Oct)
+    // - finished month → the previous month replayed on this month's calendar
+    const cmpFrom = isCurrent ? subDays(start, 28) : prevStart;
+    const cmpTo = isCurrent ? subDays(cutoff, 28) : prevMonthEnd;
+    // Abonnements don't follow the weekday: same point of the previous month
+    const aboPrevTo = isCurrent
+      ? new Date(Math.min(subMonths(cutoff, 1).getTime(), prevMonthEnd.getTime()))
       : prevMonthEnd;
 
-    const [current, previous, target] = await Promise.all([
+    const [current, previous, aboPrev, target, abos, forecast] = await Promise.all([
       isFuture ? null : this.periodMetrics(s, seats, start, cutoff, now),
-      this.periodMetrics(s, seats, prevStart, prevCutoff, now),
+      this.periodMetrics(s, seats, cmpFrom, cmpTo, now),
+      this.prisma.abonnementPayment.aggregate({
+        where: abonnementPaymentsInRange(prevStart, aboPrevTo),
+        _sum: { amount: true },
+      }),
       this.targetFor(s.facilityId, year, month),
+      loadAbonnements(this.prisma),
+      isCurrent ? computeMonthForecast(this.prisma, s.facilityId, year, month, now).catch(() => null) : null,
     ]);
+
+    // Comparable previous figures
+    const counts = new Array(7).fill(0);
+    for (let d = start; d <= monthEnd; d = addDays(d, 1)) counts[d.getDay()] += 1;
+    const replay = (pick: (w: (typeof previous.weekdays)[number]) => number) =>
+      round1(previous.weekdays.reduce((a, w) => a + pick(w) * counts[w.weekday], 0));
+    const cmpPasses = isCurrent ? previous.revenueJournal : replay((w) => w.avgPasses);
+    const cmpProducts = isCurrent ? previous.revenueProducts : replay((w) => w.avgProducts);
+    const cmpVisits = isCurrent ? previous.visits : replay((w) => w.avgVisits);
+    const cmpAbonnements = round1(aboPrev._sum.amount ?? 0);
+    const cmpRevenue = round1(cmpPasses + cmpProducts + cmpAbonnements);
 
     const openSpan = s.alwaysOpen ? 24 : Math.max(1, s.closeHour - s.openHour);
     const todayDone = isCurrent
@@ -505,14 +536,21 @@ export class PerformanceService {
       : isCurrent
         ? now.getDate() - 1 + todayDone
         : daysInMonth;
-    const elapsedFraction = elapsedDays / daysInMonth;
+    // Share of the month expected by now, weighted by weekday (a Sunday weighs more than a Thursday)
+    const weekdayShare = isCurrent && forecast ? expectedShare(forecast.days, localDayKey(now), todayDone) : null;
+    const elapsedFraction = weekdayShare ?? elapsedDays / daysInMonth;
     const revenue = current?.revenue ?? 0;
-    const projected =
-      isCurrent && elapsedDays > 0.5
-        ? round1((revenue / elapsedDays) * daysInMonth)
-        : isFuture
-          ? null
-          : revenue;
+    // Projection: passes + café so far + the usual amount of each day left for
+    // its weekday (calendar periods included) + abonnements expected
+    const projected = isFuture
+      ? null
+      : !isCurrent
+        ? revenue
+        : forecast
+          ? round1(forecast.toDate?.projected ?? Math.max(revenue, forecast.expected.total))
+          : elapsedDays > 0.5
+            ? round1((revenue / elapsedDays) * daysInMonth)
+            : null;
     const remainingDays = isCurrent ? daysInMonth - now.getDate() + 1 : 0;
 
     const targetBlock = target
@@ -532,28 +570,34 @@ export class PerformanceService {
               : null,
           projectedPct:
             projected != null ? round1((projected / target.revenue) * 100) : null,
+          pacedByWeekday: weekdayShare != null,
         }
       : null;
 
     const deltas = current
       ? {
-          revenue: this.delta(current.revenue, previous.revenue),
-          net: this.delta(current.net, previous.net),
-          visits: this.delta(current.visits, previous.visits),
+          revenue: this.delta(current.revenue, cmpRevenue),
+          passes: this.delta(current.revenueJournal, cmpPasses),
+          products: this.delta(current.revenueProducts, cmpProducts),
+          abonnements: this.delta(current.revenueAbonnements, cmpAbonnements),
+          net: this.delta(current.net, round1(cmpRevenue - previous.expenses)),
+          visits: this.delta(current.visits, cmpVisits),
           occupancyPct:
             current.occupancyPct != null && previous.occupancyPct != null
               ? round1(current.occupancyPct - previous.occupancyPct)
               : null,
           revenuePerSeatDay: this.delta(current.revenuePerSeatDay, previous.revenuePerSeatDay),
           recurringSharePct:
-            current.recurringSharePct != null && previous.recurringSharePct != null
-              ? round1(current.recurringSharePct - previous.recurringSharePct)
+            current.recurringSharePct != null && cmpRevenue > 0
+              ? round1(current.recurringSharePct - (cmpAbonnements / cmpRevenue) * 100)
               : null,
           avgTicket: this.delta(current.avgTicket, previous.avgTicket),
           marginPct:
             current.marginPct != null && previous.marginPct != null
               ? round1(current.marginPct - previous.marginPct)
               : null,
+          /** Finished month: raw change, before the calendar adjustment */
+          revenueRaw: isCurrent ? null : this.delta(current.revenue, previous.revenue),
         }
       : null;
 
@@ -568,6 +612,7 @@ export class PerformanceService {
       projected,
     );
 
+    // Last 7 days vs the 7 before: same weekdays by construction (passes + café)
     const weekEnd = now;
     const weekStart = startOfDay(subDays(now, 6));
     const [week, prevWeek] = await Promise.all([
@@ -599,24 +644,45 @@ export class PerformanceService {
         isCurrent,
         isFuture,
         comparedTo: {
-          from: prevStart.toISOString(),
-          to: prevCutoff.toISOString(),
+          from: cmpFrom.toISOString(),
+          to: cmpTo.toISOString(),
           likeForLike: isCurrent,
+          /** SAME_WEEKDAYS: 4 weeks earlier · CALENDAR_EQUAL: previous month replayed on this calendar */
+          mode: isCurrent ? 'SAME_WEEKDAYS' : 'CALENDAR_EQUAL',
+          abonnementsFrom: prevStart.toISOString(),
+          abonnementsTo: aboPrevTo.toISOString(),
         },
       },
       current,
       previous,
+      /** The figures each delta is computed against */
+      comparable: {
+        revenue: cmpRevenue,
+        passes: cmpPasses,
+        products: cmpProducts,
+        abonnements: cmpAbonnements,
+        visits: cmpVisits,
+        revenueRaw: isCurrent ? null : previous.revenue,
+      },
       deltas,
       projected,
+      projection: forecast && isCurrent
+        ? {
+            method: 'WEEKDAYS' as const,
+            variable: forecast.toDate?.projectedVariable ?? forecast.expected.variable,
+            subscriptions: forecast.toDate?.projectedSubscriptions ?? forecast.expected.subscriptions,
+          }
+        : null,
       target: targetBlock,
       breakEven,
+      abonnements: isFuture ? null : await abonnementMonth(this.prisma, abos, year, month, now),
       bestWeekday: ranked[0]?.weekday ?? null,
       worstWeekday: ranked.length > 1 ? ranked[ranked.length - 1].weekday : null,
       week: {
-        revenue: week.revenue,
+        revenue: week.revenueVariable,
         visits: week.visits,
         occupancyPct: week.occupancyPct,
-        revenueDelta: this.delta(week.revenue, prevWeek.revenue),
+        revenueDelta: this.delta(week.revenueVariable, prevWeek.revenueVariable),
         visitsDelta: this.delta(week.visits, prevWeek.visits),
         bestWeekday:
           [...week.weekdays].sort((a, b) => b.avgRevenue - a.avgRevenue)[0]

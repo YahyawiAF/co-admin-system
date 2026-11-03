@@ -24,6 +24,12 @@ export type CoworkingFacts = {
   aboEndingCount: number;
   aboEndingValue: number;
   renewalRatePct: number | null;
+  /** Renewals that really happened in the last 30 days (any offer, logged relance or not) */
+  renewals30: number;
+  /** …of which with another offer than the previous abonnement */
+  renewalsOtherOffer30: number;
+  /** Renewal rate of this month so far beats last month's */
+  renewalImproving: boolean;
   avgAboPrice: number;
   events60: number;
   paidEvents60: number;
@@ -229,6 +235,14 @@ export function coworkingLevers(f: CoworkingFacts): LeverDef[] {
     strength: f.aboEndingCount >= 2 && (renew == null || renew < 60) ? 0.8 : 0.3,
     gain: clamp(f.aboEndingValue * (0.6 - (renew ?? 40) / 100)),
     outreachReasons: ['ABO_EXPIRING', 'ABO_ENDED'],
+    // Renewals done at the desk count even with no relance logged, whatever the offer
+    observed: {
+      count: f.renewals30,
+      improving: f.renewalImproving,
+      note: `${f.renewals30} renouvelé${f.renewals30 > 1 ? 's' : ''} en 30 j${
+        f.renewalsOtherOffer30 ? ` · ${f.renewalsOtherOffer30} avec une autre offre` : ''
+      }`,
+    },
     matchesAction: (a) => a.objective === 'SUBSCRIBERS' || /renouvel|abonnement/i.test(a.title),
     idea: {
       title: 'Relancer chaque abonnement 3 jours avant la fin',

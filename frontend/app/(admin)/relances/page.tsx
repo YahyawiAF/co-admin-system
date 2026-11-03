@@ -800,7 +800,10 @@ function OutreachRow({
 function suiviSignal(r: SuiviRow) {
   if (r.since.abonnement) {
     return {
-      text: `A pris ${r.since.abonnement.name} · ${dayLabel(new Date(r.since.abonnement.at))}`,
+      // Any offer counts as a renewal; a different one is the owner's offer that worked
+      text: r.since.abonnement.otherOffer && r.since.abonnement.previousName
+        ? `Renouvelé avec une autre offre : ${r.since.abonnement.name} (avant : ${r.since.abonnement.previousName}) · ${dayLabel(new Date(r.since.abonnement.at))}`
+        : `A pris ${r.since.abonnement.name} · ${dayLabel(new Date(r.since.abonnement.at))}`,
       tone: "font-semibold text-emerald-700",
     };
   }

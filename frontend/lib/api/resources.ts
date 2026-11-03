@@ -113,6 +113,7 @@ import type {
   LateBillingMode,
   PerformanceSettings,
   PerformanceOverview,
+  ForecastAccuracy,
   MonthForecast,
   AdvisorDismissal,
   PerformanceChange,
@@ -587,9 +588,14 @@ export const analyticsApi = {
       `/analytics/performance/overview?${q.toString()}`,
     );
   },
-  performanceForecast(year: number, month: number) {
+  performanceForecast(year: number, month: number, facilityId?: string) {
     const q = new URLSearchParams({ year: String(year), month: String(month) });
+    if (facilityId) q.set("facilityId", facilityId);
     return http.get<MonthForecast>(`/analytics/performance/forecast?${q.toString()}`);
+  },
+  performanceForecastAccuracy(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<ForecastAccuracy>(`/analytics/performance/forecast/accuracy${q}`);
   },
   performanceChanges(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";

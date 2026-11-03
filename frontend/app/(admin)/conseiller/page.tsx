@@ -42,6 +42,7 @@ import {
 } from "@/components/admin/advisor/advice-ui";
 import { CampaignDialog, type CampaignDraft } from "@/components/admin/OutreachCampaigns";
 import { ConseillerTabs, type ConseillerTab } from "@/components/admin/advisor/ConseillerTabs";
+import { ForecastRulesCard } from "@/components/admin/advisor/ForecastRulesCard";
 import { MoneyTab } from "@/components/admin/advisor/MoneyTab";
 import { QuestionsTab } from "@/components/admin/advisor/QuestionsTab";
 import type {
@@ -619,6 +620,8 @@ export default function ConseillerPage() {
           onNew={() => setDoneDraft({ title: "", category: "NEW_REVENUE" })}
         />
       )}
+
+      <ForecastRulesCard />
 
       {result?.questions.length ? (
         <div className="flex flex-wrap items-start gap-3 rounded-xl border border-dashed p-3 text-sm">

@@ -144,6 +144,8 @@ export class SnapshotService {
       dismissals,
       changeAnswers,
       relanceResults,
+      forecastAccuracy,
+      abonnementsView,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -165,7 +167,7 @@ export class SnapshotService {
       this.campaigns.list(facilityId).catch(() => []),
       this.recentDays(now),
       this.forecasts.levers(facilityId).catch(() => null),
-      this.forecasts.forecast({}).catch(() => null),
+      this.forecasts.forecast({ facilityId }).catch(() => null),
       this.forecasts.changes(facilityId).catch(() => ({ changes: [] })),
       this.forecasts.newcomersBySource(8).catch(() => []),
       this.prisma.advisorDismissal.findMany({ where: { facilityId }, orderBy: { createdAt: 'desc' }, take: 50 }),
@@ -175,6 +177,8 @@ export class SnapshotService {
         take: 20,
       }),
       this.outreach.list(facilityId).then((l) => l.results).catch(() => null),
+      this.forecasts.accuracy(facilityId).catch(() => ({ months: [] })),
+      this.forecasts.abonnementsOverview(now).catch(() => null),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
@@ -313,13 +317,33 @@ export class SnapshotService {
       monthForecast: monthForecast
         ? {
             month: monthForecast.period.label,
+            rules: {
+              passesAndCafe:
+                'chaque jour = moyenne du même jour de semaine sur les semaines avant le mois, sans les jours fériés, périodes et leurs veilles/lendemains',
+              calendar:
+                "un jour dans une période du calendrier = jour habituel × l'effet mesuré les fois précédentes (known=false : jamais mesuré, fourchette élargie)",
+              subscriptions:
+                'abonnements qui finissent ce mois × taux de renouvellement (renewalRateSource) + nouveaux abonnés au rythme des 4 dernières semaines ; jamais répartis par jour',
+              previousMonth: 'comparé à calendrier égal : moyennes par jour de semaine du mois dernier rejouées sur les jours de ce mois (driver calendar)',
+            },
             expected: monthForecast.expected,
             basedOn: monthForecast.period.base,
+            perWeekdayPassesAndCafe: monthForecast.perWeekday.map((w) => ({
+              weekday: w.weekday,
+              amount: Math.round((w.revenueVisits + w.products) * 10) / 10,
+              samples: w.samples,
+            })),
+            calendarPeriods: monthForecast.periods,
+            calendarEffects: monthForecast.calendar.effects,
             subscriptionsOutlook: monthForecast.subscriptions,
+            bookingsForTheMonth: monthForecast.bookings,
             versusPreviousMonth: monthForecast.versusPrevious,
             toDate: monthForecast.toDate,
           }
         : null,
+      forecastAccuracy: forecastAccuracy.months,
+      abonnementsThisMonth: abonnementsView?.month ?? null,
+      recentRenewals: abonnementsView?.recentRenewals ?? [],
       dismissedIdeas: [
         ...dismissals.map((d) => ({ title: d.title, leverId: d.leverId, reason: d.reason, on: localDayKey(d.createdAt) })),
         ...initiatives

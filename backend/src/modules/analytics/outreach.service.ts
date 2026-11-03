@@ -1007,9 +1007,16 @@ export class OutreachService {
         select: { id: true, firstName: true, lastName: true, phone: true },
       }),
       this.prisma.abonnement.findMany({
-        where: { memberID: { in: ids }, isReservation: false, createdAt: { gt: since } },
-        select: { memberID: true, createdAt: true, serviceName: true, price: { select: { name: true } } },
-        orderBy: { createdAt: 'asc' },
+        where: { memberID: { in: ids }, isReservation: false, hiddenAt: null },
+        select: {
+          memberID: true,
+          createdAt: true,
+          registredDate: true,
+          priceId: true,
+          serviceName: true,
+          price: { select: { name: true } },
+        },
+        orderBy: { registredDate: 'asc' },
       }),
       this.prisma.journal.findMany({
         where: { memberID: { in: ids }, isReservation: false, registredTime: { gt: since } },
@@ -1022,7 +1029,11 @@ export class OutreachService {
       rows: slice.map((r) => {
         const p = person.get(r.memberId);
         const until = r.closedAt ?? now;
-        const abo = abos.find((a) => a.memberID === r.memberId && a.createdAt > r.createdAt && a.createdAt <= until);
+        const myAbos = abos.filter((a) => a.memberID === r.memberId);
+        const abo = myAbos.find((a) => !!a.createdAt && a.createdAt > r.createdAt && a.createdAt <= until);
+        // The abonnement it renews (any offer counts as a renewal)
+        const before = abo ? [...myAbos].reverse().find((a) => a.registredDate < abo.registredDate) : undefined;
+        const aboName = (a: (typeof abos)[number]) => a.serviceName || a.price?.name || 'Abonnement';
         const mine = visits.filter(
           (v) => v.memberID === r.memberId && v.registredTime > r.createdAt && v.registredTime <= until,
         );
@@ -1045,7 +1056,14 @@ export class OutreachService {
           closedResult: r.closedResult,
           closedAuto: r.closedAuto,
           since: {
-            abonnement: abo ? { name: abo.serviceName || abo.price?.name || 'Abonnement', at: abo.createdAt.toISOString() } : null,
+            abonnement: abo
+              ? {
+                  name: aboName(abo),
+                  at: abo.createdAt!.toISOString(),
+                  previousName: before ? aboName(before) : null,
+                  otherOffer: !!before && before.priceId !== abo.priceId,
+                }
+              : null,
             visits: mine.length,
             spent: round1(mine.reduce((a, v) => a + (v.payedAmount || 0), 0)),
             lastVisit: lastVisit?.toISOString() ?? null,

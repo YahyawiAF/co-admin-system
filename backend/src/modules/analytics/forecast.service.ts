@@ -5,14 +5,25 @@ import { PrismaService } from 'database/prisma.service';
 import { localDayKey } from '../../../common/parse-local-day';
 import { orderUnitPrice } from '../product/order-price';
 import {
-  buildForecast,
+  calendarEffects,
   detectChanges,
   evaluateLevers,
+  totalsOf,
   type ActionRecord,
   type DayFact,
   type DetectedChange,
   type Totals,
 } from '../../business-manager-core';
+import {
+  computeMonthForecast,
+  loadAbonnements,
+  loadCalendar,
+  loadDayFacts,
+  recentRenewals,
+  subscriptionsOutlook,
+  abonnementMonth,
+  type MonthForecastResult,
+} from './month-data';
 import { PerformanceService } from './performance.service';
 import { NewcomersService } from './newcomers.service';
 import { OutreachService } from './outreach.service';
@@ -68,185 +79,144 @@ export class ForecastService {
   // ---------- daily facts ----------
 
   /** One row per calendar day in [from, to], same money rules as the Finance overview. */
-  async dayFacts(from: Date, to: Date): Promise<DayFact[]> {
-    const start = startOfDay(from);
-    const end = endOfDay(to);
-    const [paid, visits, firsts, subs, products] = await Promise.all([
-      this.prisma.journal.findMany({
-        where: { registredTime: { gte: start, lte: end }, isPayed: true },
-        select: { registredTime: true, payedAmount: true },
-      }),
-      this.prisma.journal.findMany({
-        where: { registredTime: { gte: start, lte: end }, isReservation: false },
-        select: { registredTime: true },
-      }),
-      this.prisma.journal.groupBy({
-        by: ['memberID'],
-        where: { memberID: { not: null }, isReservation: false, hiddenAt: null },
-        _min: { registredTime: true },
-      }),
-      this.prisma.abonnementPayment.findMany({
-        where: { paidAt: { gte: start, lte: end } },
-        select: { paidAt: true, amount: true },
-      }),
-      this.prisma.dailyProduct.findMany({
-        where: { date: { gte: start, lte: end }, status: { notIn: ['PENDING', 'CANCELLED'] } },
-        select: { date: true, quantite: true, unitPrice: true, product: { select: { sellingPrice: true } } },
-      }),
-    ]);
-
-    const rows = new Map<string, DayFact>();
-    for (let d = start; d <= end; d = addDays(d, 1)) {
-      const key = localDayKey(d);
-      rows.set(key, { key, weekday: d.getDay(), revenueVisits: 0, visits: 0, newVisitors: 0, products: 0, subscriptions: 0 });
-    }
-    const at = (d: Date | null) => (d ? rows.get(localDayKey(d)) : undefined);
-    for (const j of paid) {
-      const r = at(j.registredTime);
-      if (r) r.revenueVisits += j.payedAmount || 0;
-    }
-    for (const v of visits) {
-      const r = at(v.registredTime);
-      if (r) r.visits += 1;
-    }
-    for (const f of firsts) {
-      const first = f._min.registredTime;
-      if (!first || first < start || first > end) continue;
-      const r = at(first);
-      if (r) r.newVisitors += 1;
-    }
-    for (const p of subs) {
-      const r = at(p.paidAt);
-      if (r) r.subscriptions += p.amount;
-    }
-    for (const p of products) {
-      const r = at(p.date);
-      if (r) r.products += orderUnitPrice(p) * p.quantite;
-    }
-    return [...rows.values()].map((r) => ({
-      ...r,
-      revenueVisits: r1(r.revenueVisits),
-      products: r1(r.products),
-      subscriptions: r1(r.subscriptions),
-    }));
+  dayFacts(from: Date, to: Date): Promise<DayFact[]> {
+    return loadDayFacts(this.prisma, from, to);
   }
 
   private totals(days: DayFact[]): Totals {
-    const s = (f: (d: DayFact) => number) => r1(days.reduce((a, d) => a + f(d), 0));
-    return {
-      revenueVisits: s((d) => d.revenueVisits),
-      visits: s((d) => d.visits),
-      newVisitors: s((d) => d.newVisitors),
-      products: s((d) => d.products),
-      subscriptions: s((d) => d.subscriptions),
-    };
+    return totalsOf(days);
   }
 
   // ---------- subscriptions expected ----------
 
-  /**
-   * Abonnements ending in the month (latest per member, not terminated) × last
-   * month's renewal rate, plus new subscribers at the pace of the 4 weeks before.
-   */
   async subscriptionsOutlook(monthStart: Date) {
-    const monthEnd = endOfMonth(monthStart);
-    const prevStart = startOfMonth(subMonths(monthStart, 1));
-    const prevEnd = endOfMonth(prevStart);
-    const abos = await this.prisma.abonnement.findMany({
-      where: { isReservation: false, hiddenAt: null },
-      select: { id: true, memberID: true, registredDate: true, leaveDate: true, payedAmount: true, listPrice: true, terminatedAt: true },
-      orderBy: { registredDate: 'asc' },
-    });
-    const byMember = new Map<string, typeof abos>();
-    for (const a of abos) byMember.set(a.memberID, [...(byMember.get(a.memberID) ?? []), a]);
-    const price = (a: (typeof abos)[number]) => a.listPrice ?? a.payedAmount ?? 0;
-    const renewed = (a: (typeof abos)[number]) =>
-      (byMember.get(a.memberID) ?? []).some(
-        (b) =>
-          b.id !== a.id &&
-          a.leaveDate != null &&
-          b.registredDate.getTime() >= a.leaveDate.getTime() - 7 * DAY_MS &&
-          b.registredDate.getTime() <= a.leaveDate.getTime() + 14 * DAY_MS,
-      );
-    const latest = (a: (typeof abos)[number]) => {
-      const list = byMember.get(a.memberID) ?? [];
-      return !list.some((b) => b.id !== a.id && b.registredDate > a.registredDate);
-    };
-
-    const endedPrev = abos.filter((a) => a.leaveDate && a.leaveDate >= prevStart && a.leaveDate <= prevEnd && !a.terminatedAt);
-    const renewalRatePct = endedPrev.length >= 3 ? pct(endedPrev.filter(renewed).length, endedPrev.length) : null;
-    const ending = abos.filter((a) => a.leaveDate && a.leaveDate >= monthStart && a.leaveDate <= monthEnd && !a.terminatedAt && latest(a));
-    const endingValue = r1(ending.reduce((s, a) => s + price(a), 0));
-
-    // First abonnement of a member, started in the 28 days before the month
-    const baseFrom = subDays(monthStart, 28);
-    const firstAbos = abos.filter((a) => {
-      const list = byMember.get(a.memberID) ?? [];
-      return list[0]?.id === a.id && a.registredDate >= baseFrom && a.registredDate < monthStart;
-    });
-    const newPace = r1((firstAbos.reduce((s, a) => s + price(a), 0) / 28) * getDaysInMonth(monthStart));
-    const rate = renewalRatePct ?? 40;
-    const renewals = r1((endingValue * rate) / 100);
-    const avgPrice = abos.length ? r1(abos.slice(-30).reduce((s, a) => s + price(a), 0) / Math.min(30, abos.length)) : 0;
-    return {
-      expected: r1(renewals + newPace),
-      endingCount: ending.length,
-      endingValue,
-      renewalRatePct,
-      renewalRateAssumed: renewalRatePct == null,
-      renewals,
-      newPace,
-      newCount: firstAbos.length,
-      avgPrice,
-    };
+    return subscriptionsOutlook(await loadAbonnements(this.prisma), monthStart);
   }
 
   // ---------- forecast ----------
 
-  async forecast(opts: { year?: number; month?: number }) {
+  async forecast(opts: { year?: number; month?: number; facilityId?: string }) {
     const now = new Date();
     const year = opts.year || now.getFullYear();
     const month = opts.month || now.getMonth() + 1;
     if (month < 1 || month > 12) throw new BadRequestException('Mois invalide');
-    const start = startOfMonth(new Date(year, month - 1, 1));
-    const end = endOfMonth(start);
-    const isCurrent = now >= start && now <= end;
-    const isFuture = start > now;
-    const baseFrom = subDays(start, 28);
-    const baseTo = subDays(start, 1);
-    const prevStart = startOfMonth(subMonths(start, 1));
+    const s = await this.performance.settings(opts.facilityId);
+    const f = await computeMonthForecast(this.prisma, s.facilityId, year, month, now);
+    // Only the month in progress is kept: a past month rebuilt today would already know the answer
+    if (f.period.isCurrent) await this.keepSnapshot(s.facilityId, f).catch(() => undefined);
+    return f;
+  }
 
-    const [base, actual, previous, subs] = await Promise.all([
-      this.dayFacts(baseFrom, baseTo),
-      isFuture ? Promise.resolve([] as DayFact[]) : this.dayFacts(start, isCurrent ? now : end),
-      this.dayFacts(prevStart, endOfMonth(prevStart)),
-      this.subscriptionsOutlook(start),
-    ]);
-    const monthDays = Array.from({ length: getDaysInMonth(start) }, (_, i) => {
-      const d = addDays(start, i);
-      return { key: localDayKey(d), weekday: d.getDay() };
+  // ---------- abonnements ----------
+
+  /** This month's abonnements (totals, renewals, conversions) and the recent renewals with their offers. */
+  async abonnementsOverview(now = new Date()) {
+    const abos = await loadAbonnements(this.prisma);
+    const month = await abonnementMonth(this.prisma, abos, now.getFullYear(), now.getMonth() + 1, now);
+    return { month, recentRenewals: recentRenewals(abos, subDays(now, 60)).slice(0, 20) };
+  }
+
+  // ---------- stored predictions ----------
+
+  /**
+   * The month's prediction is kept as it was the first time it was computed
+   * (normally the 1st), with the rules behind it, so it can be checked at the
+   * end of the month. Never overwritten.
+   */
+  private async keepSnapshot(facilityId: string, f: MonthForecastResult) {
+    const { year, month } = f.period;
+    const exists = await this.prisma.forecastSnapshot.findUnique({
+      where: { facilityId_year_month: { facilityId, year, month } },
+      select: { id: true },
     });
-    const f = buildForecast({
-      base,
-      month: monthDays,
-      actual,
-      todayKey: isCurrent ? localDayKey(now) : isFuture ? localDayKey(start) : null,
-      subscriptionsExpected: subs.expected,
-      previousMonth: this.totals(previous),
-    });
-    return {
-      period: {
+    if (exists) return;
+    // A snapshot taken late in the month would mostly hold actual numbers
+    if (new Date().getDate() > 10) return;
+    await this.prisma.forecastSnapshot.create({
+      data: {
+        facilityId,
         year,
         month,
-        label: format(start, 'MMMM yyyy', { locale: fr }),
-        previousLabel: format(prevStart, 'MMMM', { locale: fr }),
-        isCurrent,
-        isFuture,
-        base: { from: localDayKey(baseFrom), to: localDayKey(baseTo) },
+        passes: f.expected.visits,
+        products: f.expected.products,
+        subscriptions: f.expected.subscriptions,
+        variable: f.expected.variable,
+        total: f.expected.total,
+        low: f.expected.low,
+        high: f.expected.high,
+        rules: {
+          base: f.period.base,
+          perWeekday: f.perWeekday.map((w) => ({ weekday: w.weekday, passesAndCafe: Math.round((w.revenueVisits + w.products) * 10) / 10 })),
+          band: f.band,
+          periods: f.periods.map((p) => ({ label: p.label, type: p.type, from: p.from, to: p.to, factor: p.factor, known: p.known, effect: p.effect })),
+          subscriptions: {
+            endingCount: f.subscriptions.endingCount,
+            endingValue: f.subscriptions.endingValue,
+            renewalRatePct: f.subscriptions.renewalRatePct,
+            renewalRateSource: f.subscriptions.renewalRateSource,
+            newPace: f.subscriptions.newPace,
+          },
+          bookings: f.bookings,
+        },
       },
-      subscriptions: subs,
-      ...f,
-    };
+    });
+  }
+
+  /**
+   * Prediction vs reality for the last finished months that have a stored
+   * prediction: per line (passes, café, abonnements) and per calendar period
+   * (effect assumed vs effect measured).
+   */
+  async accuracy(facilityId?: string, months = 3) {
+    const s = await this.performance.settings(facilityId);
+    const now = new Date();
+    const thisMonth = startOfMonth(now);
+    const snaps = await this.prisma.forecastSnapshot.findMany({
+      where: { facilityId: s.facilityId },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      take: months + 1,
+    });
+    const done = snaps.filter((x) => new Date(x.year, x.month - 1, 1) < thisMonth).slice(0, months);
+    if (!done.length) return { months: [] };
+    const calendar = await loadCalendar(this.prisma, s.facilityId);
+    const out = [];
+    for (const snap of done) {
+      const start = new Date(snap.year, snap.month - 1, 1);
+      const end = endOfMonth(start);
+      const days = await this.dayFacts(start, end);
+      const t = totalsOf(days);
+      const line = (key: string, label: string, predicted: number, actual: number) => ({
+        key,
+        label,
+        predicted: Math.round(predicted),
+        actual: Math.round(actual),
+        errorPct: predicted > 0 ? Math.round(((actual - predicted) / predicted) * 100) : null,
+      });
+      const rules = (snap.rules ?? {}) as { periods?: Array<{ label: string; type: string; from: string; to: string; factor: number; known: boolean }> };
+      const measured = calendarEffects(
+        await this.dayFacts(subDays(start, 60), end),
+        calendar.filter((c) => c.end >= localDayKey(start) && c.start <= localDayKey(end)),
+      );
+      out.push({
+        year: snap.year,
+        month: snap.month,
+        label: format(start, 'MMMM yyyy', { locale: fr }),
+        takenAt: snap.takenAt.toISOString(),
+        lines: [
+          line('passes', 'Passes', snap.passes, t.revenueVisits),
+          line('products', 'Café et produits', snap.products, t.products),
+          line('subscriptions', 'Abonnements', snap.subscriptions, t.subscriptions),
+          line('total', 'Total', snap.total, t.revenueVisits + t.products + t.subscriptions),
+        ],
+        inRange: snap.low <= t.revenueVisits + t.products + t.subscriptions && t.revenueVisits + t.products + t.subscriptions <= snap.high,
+        periods: (rules.periods ?? []).map((p) => ({
+          label: p.label,
+          assumedFactor: p.known ? p.factor : null,
+          measuredFactor: measured[p.type]?.factor ?? null,
+        })),
+      });
+    }
+    return { months: out };
   }
 
   // ---------- unexplained changes ----------
@@ -368,11 +338,12 @@ export class ForecastService {
     const now = new Date();
     const d30 = subDays(now, 30);
     const d60 = subDays(now, 60);
-    const [days, newcomers, list, subs, events, nextEvent, referrals, reviewClicks, cafeOrders, base] = await Promise.all([
+    const abos = await loadAbonnements(this.prisma);
+    const [days, newcomers, list, subs, events, nextEvent, referrals, reviewClicks, cafeOrders, base, aboMonth] = await Promise.all([
       this.dayFacts(subDays(startOfDay(now), 29), now),
       this.newcomers.newcomers(now),
       this.outreach.list(facilityId).catch(() => null),
-      this.subscriptionsOutlook(startOfMonth(now)),
+      Promise.resolve(subscriptionsOutlook(abos, startOfMonth(now))),
       this.prisma.event.findMany({
         where: { facilityId, startAt: { gte: d60, lte: now }, status: { not: 'DRAFT' } },
         select: { price: true },
@@ -386,7 +357,11 @@ export class ForecastService {
       this.prisma.member.count({ where: { reviewClickedAt: { gte: d60 } } }),
       this.prisma.dailyProduct.count({ where: { date: { gte: d30 }, status: { notIn: ['PENDING', 'CANCELLED'] } } }),
       this.dayFacts(subDays(startOfDay(now), 28), subDays(startOfDay(now), 1)),
+      abonnementMonth(this.prisma, abos, now.getFullYear(), now.getMonth() + 1, now),
     ]);
+    const renewals = recentRenewals(abos, d30);
+    const rateNow = aboMonth?.thisMonth.ended && aboMonth.thisMonth.ended >= 3 ? aboMonth.thisMonth.ratePct : null;
+    const rateLast = aboMonth?.renewedFromLastMonth.ratePct ?? null;
     const t = this.totals(days);
     const recent = newcomers.filter((n) => n.first >= d30);
     const judged = newcomers.filter((n) => n.judged && n.first >= d60);
@@ -419,6 +394,9 @@ export class ForecastService {
       aboEndingCount: subs.endingCount,
       aboEndingValue: subs.endingValue,
       renewalRatePct: subs.renewalRatePct,
+      renewals30: renewals.length,
+      renewalsOtherOffer30: renewals.filter((r) => !r.sameOffer).length,
+      renewalImproving: rateNow != null && rateLast != null && rateNow > rateLast,
       avgAboPrice: subs.avgPrice,
       events60: events.length,
       paidEvents60: events.filter((e) => (e.price ?? 0) > 0).length,

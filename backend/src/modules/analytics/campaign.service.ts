@@ -199,7 +199,7 @@ export class CampaignService {
   }
 
   /** Per member: first contact for the campaign and what followed within the window. */
-  private async memberResults(campaign: { id: string; memberIds: string[]; goal: string }) {
+  private async memberResults(campaign: { id: string; memberIds: string[]; goal: string; segment?: string; createdAt?: Date }) {
     const contacts = await this.prisma.memberOutreach.findMany({
       where: { campaignId: campaign.id },
       orderBy: { createdAt: 'asc' },
@@ -211,9 +211,31 @@ export class CampaignService {
       if (c.channel !== 'SKIP' && !first.has(c.memberId)) first.set(c.memberId, c.createdAt);
     }
     const ids = [...first.keys()];
-    const out = new Map<string, { contactedAt: Date | null; channel: string | null; won: boolean; revenue: number }>();
+    const out = new Map<
+      string,
+      { contactedAt: Date | null; channel: string | null; won: boolean; revenue: number; withoutContact?: boolean }
+    >();
     for (const m of campaign.memberIds) {
       out.set(m, { contactedAt: first.get(m) ?? null, channel: lastChannel.get(m) ?? null, won: false, revenue: 0 });
+    }
+    // Abonnement lists: a renewal counts even when the contact was not logged in
+    // the app (talked at the desk, renewed with another offer…)
+    if (campaign.createdAt && (campaign.segment === 'ABO_EXPIRING' || campaign.segment === 'ABO_ENDED')) {
+      const silent = campaign.memberIds.filter((m) => !first.has(m) && lastChannel.get(m) !== 'SKIP');
+      if (silent.length) {
+        const from = campaign.createdAt;
+        const to = addDays(from, 30);
+        const abos = await this.prisma.abonnement.findMany({
+          where: { memberID: { in: silent }, isReservation: false, hiddenAt: null, createdAt: { gt: from, lte: to } },
+          select: { memberID: true, amountDue: true, payedAmount: true },
+        });
+        for (const a of abos) {
+          const r = out.get(a.memberID)!;
+          r.won = true;
+          r.withoutContact = true;
+          r.revenue = round1(r.revenue + (a.amountDue ?? a.payedAmount ?? 0));
+        }
+      }
     }
     if (!ids.length) return out;
     const since = new Date(Math.min(...[...first.values()].map((d) => d.getTime())));
@@ -312,6 +334,8 @@ export class CampaignService {
             contactedAt: r?.contactedAt ?? null,
             channel: r?.channel ?? null,
             won: !!r?.won,
+            /** Renewed although no contact was logged in the app */
+            withoutContact: !!r?.withoutContact,
             revenue: r?.revenue ?? 0,
           };
         })
