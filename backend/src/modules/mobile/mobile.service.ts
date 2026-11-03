@@ -101,6 +101,7 @@ import {
   memberDiscountPercent,
   pricingPayload,
   PricedJournalRow,
+  promoShare,
 } from './session-pricing-context';
 import {
   LateBillingMode,
@@ -2716,30 +2717,44 @@ export class MobileService {
     const percent = memberDiscountPercent(journal.members, price);
     const listAmount = this.applyPercentOff(price.price, percent);
 
-    // Tarif promo (golden card / promo du jour) on the new pass; the previous pass's one is dropped
-    const hadFlash = await this.prisma.promotionUse.count({
+    // The visit's promo follows the pass at the same share (−20 % on 2h → −20 % on 4h);
+    // a visit without one gets the live tarif promo of the new pass, if any.
+    const prevUse = await this.prisma.promotionUse.findFirst({
       where: { journalId, dailyProductId: null },
+      orderBy: { createdAt: 'desc' },
+      select: { promotionId: true },
     });
+    const share = promoShare(journal);
     await this.promotions.clearJournalPriceUses(journalId);
-    const deal = await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
+    const deal =
+      share > 0
+        ? {
+            promotionId: prevUse?.promotionId ?? null,
+            amount: Math.round(listAmount * (1 - share) * 1000) / 1000,
+            label: journal.promoLabel,
+          }
+        : await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
     let amount = listAmount;
     let promoData: {
       priceBeforePromo?: number | null;
       promoDiscount?: number | null;
       promoLabel?: string | null;
     } = {};
-    if (deal) {
+    if (deal && deal.amount < listAmount - 0.0005) {
+      // Promo inside the pass price (fixedAmount), like at check-in
       const off = Math.round((listAmount - deal.amount) * 1000) / 1000;
       amount = deal.amount;
       promoData = { priceBeforePromo: listAmount, promoDiscount: off, promoLabel: deal.label };
-      await this.promotions.recordUse({
-        promotionId: deal.promotionId,
-        memberId: journal.memberID,
-        journalId,
-        amount: deal.amount,
-        discount: off,
-      });
-    } else if (hadFlash) {
+      if (deal.promotionId) {
+        await this.promotions.recordUse({
+          promotionId: deal.promotionId,
+          memberId: journal.memberID,
+          journalId,
+          amount: deal.amount,
+          discount: off,
+        });
+      }
+    } else if (journal.promoDiscount || prevUse) {
       promoData = { priceBeforePromo: null, promoDiscount: null, promoLabel: null };
     }
 
@@ -2772,11 +2787,8 @@ export class MobileService {
         ctx,
         updated.leaveTime,
       );
-      // A tarif promo is already in fixedAmount; an older install promo is not
-      const billed =
-        Math.round(
-          Math.max(0, (due ?? amount) - (deal ? 0 : updated.promoDiscount || 0)) * 1000,
-        ) / 1000;
+      // The promo is already in fixedAmount
+      const billed = Math.round(Math.max(0, due ?? amount) * 1000) / 1000;
       updated = await this.prisma.journal.update({
         where: { id: journalId },
         data: { payedAmount: billed, amountAtCheckout: billed },

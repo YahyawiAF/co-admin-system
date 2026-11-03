@@ -133,7 +133,7 @@ export function DrinkPickerCard({ memberId, since }: { memberId: string; since: 
         ? 15_000
         : false,
   });
-  const { voucherOf, vouchers, priceOf } = useCafeDeals(products);
+  const { voucherOf, vouchers, priceOf, deals } = useCafeDeals(products);
 
   // Reception accepts / refuses → refresh the status right away
   useEffect(() => {
@@ -331,6 +331,10 @@ export function DrinkPickerCard({ memberId, since }: { memberId: string; since: 
               <span className="absolute right-1.5 top-1.5 rounded-full bg-gradient-to-r from-amber-400 to-rose-500 px-1.5 py-0.5 text-[9px] font-black uppercase text-white shadow">
                 {voucherOf.get(d.id)!.label}
               </span>
+            ) : deals.has(d.id) ? (
+              <span className="absolute right-1.5 top-1.5 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[9px] font-black text-white shadow">
+                {deals.get(d.id)!.label}
+              </span>
             ) : null}
           </button>
         ))}
@@ -459,6 +463,10 @@ export function DrinkPickerCard({ memberId, since }: { memberId: string; since: 
                   {g ? (
                     <span className="absolute right-2 top-2 rounded-full bg-gradient-to-r from-amber-400 to-rose-500 px-2 py-0.5 text-[10px] font-black uppercase text-white shadow-[0_0_0_3px_rgba(251,191,36,0.3)]">
                       Cadeau
+                    </span>
+                  ) : deals.has(d.id) ? (
+                    <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-black text-white shadow-[0_0_0_3px_rgba(5,150,105,0.2)]">
+                      {deals.get(d.id)!.label}
                     </span>
                   ) : null}
                   {on ? (

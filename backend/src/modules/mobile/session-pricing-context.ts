@@ -255,6 +255,35 @@ export function fixedPackAmount(row: PricedJournalRow): number {
   return Math.round(list * (1 - percent / 100) * 1000) / 1000;
 }
 
+type PromoFields = {
+  pricingMode?: string | null;
+  fixedAmount?: number | null;
+  priceBeforePromo?: number | null;
+  promoDiscount?: number | null;
+};
+
+/** Share of the pass the visit's promo took off (0.2 = −20 %), 0 when none. */
+export function promoShare(row: PromoFields): number {
+  const off = row.promoDiscount || 0;
+  const before = row.priceBeforePromo || 0;
+  if (off <= 0.0005 || before <= 0.0005) return 0;
+  return Math.min(1, off / before);
+}
+
+/**
+ * Promo still to take off the computed amount. A fixed pass already carries it
+ * (fixedAmount = price after promo); auto pricing / an older pass stored at the
+ * price before promo does not.
+ */
+export function promoOutsidePrice(row: PromoFields): number {
+  const off = row.promoDiscount || 0;
+  if (off <= 0.0005) return 0;
+  if (row.pricingMode === 'AUTO' || row.fixedAmount == null) return off;
+  return row.priceBeforePromo != null && Math.abs(row.fixedAmount - row.priceBeforePromo) < 0.0005
+    ? off
+    : 0;
+}
+
 /** API payload attached to sessions / journal rows (`pricing`). */
 export function pricingPayload(
   row: PricedJournalRow,

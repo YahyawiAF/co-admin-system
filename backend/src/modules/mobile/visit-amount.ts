@@ -3,6 +3,7 @@ import { endOfDay } from 'date-fns';
 import {
   computeRowPricing,
   fixedPackAmount,
+  promoOutsidePrice,
   memberDiscountPercent,
   PricedJournalRow,
   PricingContext,
@@ -58,6 +59,7 @@ export function visitAmountAt(
 export type LatePaymentRow = PricedJournalRow & {
   amountAtCheckout?: number | null;
   promoDiscount?: number | null;
+  priceBeforePromo?: number | null;
 };
 
 /** Checked out while still owing money. */
@@ -91,7 +93,7 @@ function fixedForfaitAmount(row: LatePaymentRow): number | null {
     discounted = percentOff(p.price, memberDiscountPercent(row.members, p));
   }
   if (discounted == null) return null;
-  return Math.round(Math.max(0, discounted - (row.promoDiscount || 0)) * 1000) / 1000;
+  return Math.round(Math.max(0, discounted - promoOutsidePrice(row)) * 1000) / 1000;
 }
 
 export type LateBillingMode = 'now' | 'checkout' | 'fixed';
@@ -107,7 +109,7 @@ export function latePaymentInfo(
   const billAt = latePaymentBillAt(row, now);
   const raw = visitAmountAt(row, ctx, billAt);
   if (raw == null) return null;
-  const afterPromo = Math.max(0, raw - (row.promoDiscount || 0));
+  const afterPromo = Math.max(0, raw - promoOutsidePrice(row));
   const amountIfPaidNow =
     Math.round(Math.max(row.payedAmount || 0, afterPromo) * 1000) / 1000;
   return {

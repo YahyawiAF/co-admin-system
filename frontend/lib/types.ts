@@ -2087,7 +2087,10 @@ export interface PromotionVoucher {
   productId: string | null;
   /** Products the voucher can be used on */
   productIds?: string[];
+  /** ACCEPTED = still usable (also after « Plus tard »: the gift comes with the tarif) */
   status: "ACCEPTED" | "USED";
+  /** The client said « Plus tard » when choosing the pass */
+  later?: boolean;
   title: string;
   label: string;
   valueKind: "PERCENT" | "FIXED_DT";
