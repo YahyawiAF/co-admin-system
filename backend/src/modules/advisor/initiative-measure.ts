@@ -5,6 +5,7 @@ import { localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from '../analytics/traffic';
 import { orderUnitPrice } from '../product/order-price';
 import type { FunnelInput } from './funnel';
+import { type LinkedSale, sale } from './sales';
 
 /** Figures in % already: the effect is a difference in points, not a % change. */
 export const RATE_METRICS = ['cafeAttachRatePct', 'avgOccupancyPct'];
@@ -37,6 +38,8 @@ type Abo = { memberID: string; createdAt: Date; amount: number };
 type Slice = { visits: Visit[]; orders: Order[]; abos: Abo[] };
 /** skip: days left out of the window (paused days of the action) */
 type Window = { from: Date; to: Date; skip?: (d: Date) => boolean };
+
+export { sale, sumSales, type LinkedSale, type SaleItem } from './sales';
 
 const inHours = (h: number, from: number | null | undefined, to: number | null | undefined) => {
   if (from == null || to == null) return true;
@@ -242,86 +245,122 @@ export class InitiativeMeasure {
     };
   }
 
-  /** Sales of the offer, product or promo tied to the action since it started. */
-  async linkedSale(kind: string, id: string, from: Date, to: Date) {
+  /**
+   * What one tool brought since the action started: each sale is an item with a key
+   * (visit, abonnement, order, ticket…) so a sale reached by two tools counts once.
+   */
+  async linkedSale(kind: string, id: string, from: Date, to: Date): Promise<LinkedSale | null> {
     if (kind === 'PRICE') {
       const [price, visits, abos] = await Promise.all([
         this.prisma.price.findUnique({ where: { id }, select: { name: true } }),
         this.prisma.journal.findMany({
           where: { priceId: id, registredTime: { gte: from, lte: to }, isReservation: false },
-          select: { isPayed: true, payedAmount: true },
+          select: { id: true, isPayed: true, payedAmount: true },
         }),
         this.prisma.abonnement.findMany({
           where: { priceId: id, createdAt: { gte: from, lte: to }, isReservation: false },
-          select: { amountDue: true, payedAmount: true },
+          select: { id: true, amountDue: true, payedAmount: true },
         }),
       ]);
-      const revenue =
-        visits.reduce((a, v) => a + (v.isPayed ? v.payedAmount || 0 : 0), 0) +
-        abos.reduce((a, x) => a + (x.amountDue ?? x.payedAmount ?? 0), 0);
-      return {
-        kind,
-        label: price?.name ?? 'Offre supprimée',
-        count: visits.length + abos.length,
-        revenue: round1(revenue),
-        margin: round1(revenue),
-        discount: 0,
-      };
+      const items = [
+        ...visits.map((v) => ({ key: `j:${v.id}`, amount: v.isPayed ? v.payedAmount || 0 : 0 })),
+        ...abos.map((a) => ({ key: `a:${a.id}`, amount: a.amountDue ?? a.payedAmount ?? 0 })),
+      ];
+      return sale(kind, id, price?.name ?? 'Offre supprimée', items, 0, [{ label: 'Ventes', value: items.length }]);
     }
     if (kind === 'PRODUCT') {
       const [product, rows] = await Promise.all([
         this.prisma.product.findUnique({ where: { id }, select: { name: true } }),
         this.prisma.dailyProduct.findMany({
           where: { productId: id, createdAt: { gte: from, lte: to }, status: { notIn: ['PENDING', 'CANCELLED'] } },
-          select: { quantite: true, unitPrice: true, product: { select: { sellingPrice: true, purchasePrice: true } } },
+          select: { id: true, quantite: true, unitPrice: true, product: { select: { sellingPrice: true, purchasePrice: true } } },
         }),
       ]);
+      // A product brings its margin, not its price
+      const items = rows.map((r) => ({
+        key: `o:${r.id}`,
+        amount: (orderUnitPrice(r) - (r.product?.purchasePrice || 0)) * (r.quantite || 0),
+      }));
       const qty = rows.reduce((a, r) => a + (r.quantite || 0), 0);
-      const revenue = rows.reduce((a, r) => a + orderUnitPrice(r) * (r.quantite || 0), 0);
-      const cost = rows.reduce((a, r) => a + (r.product?.purchasePrice || 0) * (r.quantite || 0), 0);
-      return {
-        kind,
-        label: product?.name ?? 'Produit supprimé',
-        count: qty,
-        revenue: round1(revenue),
-        margin: round1(revenue - cost),
-        discount: 0,
-      };
+      return sale(kind, id, product?.name ?? 'Produit supprimé', items, 0, [{ label: 'Vendus', value: qty }], qty);
     }
     if (kind === 'PROMOTION') {
       const [promo, uses] = await Promise.all([
-        this.prisma.promotion.findUnique({ where: { id }, select: { title: true } }),
+        this.prisma.promotion.findUnique({ where: { id }, select: { title: true, views: true, clicks: true } }),
         this.prisma.promotionUse.findMany({
           where: { promotionId: id, createdAt: { gte: from, lte: to } },
-          select: { amount: true, discount: true },
+          select: { id: true, amount: true, discount: true, journalId: true, dailyProductId: true },
         }),
       ]);
-      const revenue = uses.reduce((a, u) => a + u.amount, 0);
-      return {
-        kind,
-        label: promo?.title ?? 'Promo supprimée',
-        count: uses.length,
-        revenue: round1(revenue),
-        margin: round1(revenue),
-        discount: round1(uses.reduce((a, u) => a + u.discount, 0)),
-      };
+      const items = uses.map((u) => ({
+        key: u.journalId ? `j:${u.journalId}` : u.dailyProductId ? `o:${u.dailyProductId}` : `pu:${u.id}`,
+        amount: u.amount,
+      }));
+      const discount = uses.reduce((a, u) => a + u.discount, 0);
+      return sale(kind, id, promo?.title ?? 'Promo supprimée', items, discount, [
+        { label: 'Vues', value: promo?.views ?? 0 },
+        { label: 'Clics', value: promo?.clicks ?? 0 },
+        { label: 'Utilisées', value: uses.length },
+      ]);
     }
     if (kind === 'EVENT') {
       const event = await this.prisma.event.findUnique({
         where: { id },
-        select: { title: true, price: true, registrations: { select: { status: true, paidAmount: true, paidAt: true } } },
+        select: { title: true, price: true, startAt: true, registrations: { select: { id: true, status: true, paidAmount: true, paidAt: true } } },
       });
       const regs = (event?.registrations ?? []).filter((r) => r.status !== 'CANCELLED');
       const paid = regs.filter((r) => r.paidAt);
-      const revenue = paid.reduce((a, r) => a + (r.paidAmount ?? event?.price ?? 0), 0);
-      return {
-        kind,
-        label: event?.title ?? 'Événement supprimé',
-        count: event?.price ? paid.length : regs.length,
-        revenue: round1(revenue),
-        margin: round1(revenue),
-        discount: 0,
-      };
+      const items = paid.map((r) => ({ key: `r:${r.id}`, amount: r.paidAmount ?? event?.price ?? 0 }));
+      const held = !!event && event.startAt <= new Date();
+      return sale(kind, id, event?.title ?? 'Événement supprimé', items, 0, [
+        { label: 'Inscrits', value: regs.length },
+        ...(event?.price ? [{ label: 'Payés', value: paid.length }] : []),
+        { label: 'Venus', value: held ? regs.filter((r) => r.status === 'ATTENDED').length : null },
+      ], event?.price ? paid.length : regs.length);
+    }
+    if (kind === 'SURVEY') {
+      const [survey, visits, responses] = await Promise.all([
+        this.prisma.survey.findUnique({ where: { id }, select: { title: true } }),
+        this.prisma.surveyVisit.count({ where: { surveyId: id, firstSeenAt: { gte: from, lte: to } } }),
+        this.prisma.surveyResponse.findMany({
+          where: { surveyId: id, createdAt: { gte: from, lte: to }, flagged: false, supersededAt: null },
+          select: { memberId: true, createdAt: true },
+        }),
+      ]);
+      // A respondent becomes a client: what they paid after answering counts
+      const firstAnswer = new Map<string, Date>();
+      for (const r of responses) {
+        if (!r.memberId) continue;
+        const cur = firstAnswer.get(r.memberId);
+        if (!cur || r.createdAt < cur) firstAnswer.set(r.memberId, r.createdAt);
+      }
+      const ids = [...firstAnswer.keys()];
+      const [jv, ab] = ids.length
+        ? await Promise.all([
+            this.prisma.journal.findMany({
+              where: { memberID: { in: ids }, registredTime: { gte: from, lte: to }, isPayed: true },
+              select: { id: true, memberID: true, registredTime: true, payedAmount: true },
+            }),
+            this.prisma.abonnement.findMany({
+              where: { memberID: { in: ids }, createdAt: { gte: from, lte: to }, isReservation: false },
+              select: { id: true, memberID: true, createdAt: true, amountDue: true, payedAmount: true },
+            }),
+          ])
+        : [[], []];
+      const after = (m: string | null, d: Date | null) => !!m && !!d && d >= (firstAnswer.get(m) ?? to);
+      const items = [
+        ...jv.filter((v) => after(v.memberID, v.registredTime)).map((v) => ({ key: `j:${v.id}`, amount: v.payedAmount || 0 })),
+        ...ab.filter((a) => after(a.memberID, a.createdAt)).map((a) => ({ key: `a:${a.id}`, amount: a.amountDue ?? a.payedAmount ?? 0 })),
+      ];
+      const clients = new Set([
+        ...jv.filter((v) => after(v.memberID, v.registredTime)).map((v) => v.memberID),
+        ...ab.filter((a) => after(a.memberID, a.createdAt)).map((a) => a.memberID),
+      ]).size;
+      return sale(kind, id, survey?.title ?? 'Enquête supprimée', items, 0, [
+        { label: 'Ouvertures', value: visits },
+        { label: 'Réponses', value: responses.length },
+        { label: 'Devenus clients', value: clients },
+      ], responses.length);
     }
     return null;
   }

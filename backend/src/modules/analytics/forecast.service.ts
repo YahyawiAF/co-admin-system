@@ -412,6 +412,12 @@ export class ForecastService {
   }
 
   async levers(facilityId?: string) {
+    const { map } = await this.leversWithFacts(facilityId);
+    return map;
+  }
+
+  /** The lever map and the facts behind it (the Conseil IA bilan reuses both). */
+  async leversWithFacts(facilityId?: string) {
     const s = await this.performance.settings(facilityId);
     const now = new Date();
     const d30 = subDays(now, 30);
@@ -446,8 +452,9 @@ export class ForecastService {
     const outreach = new Map<string, number>();
     for (const c of contacts) outreach.set(c.reason, (outreach.get(c.reason) ?? 0) + c._count._all);
     for (const c of campaigns) outreach.set(c.segment, (outreach.get(c.segment) ?? 0) + c.memberIds.length);
+    const defs = coworkingLevers(facts);
     const map = evaluateLevers(
-      coworkingLevers(facts),
+      defs,
       actions,
       [...outreach].map(([reason, n]) => ({ reason, contacts: n })),
       now,
@@ -465,6 +472,6 @@ export class ForecastService {
     map.missing = map.missing.filter((m) => !refused(m.leverId, m.title)).slice(0, 3);
     map.counts = { WORKING: 0, IN_PROGRESS: 0, MISSING: 0, NO_DATA: 0, OK: 0 };
     for (const g of map.groups) for (const l of g.levers) map.counts[l.status] += 1;
-    return { generatedAt: now.toISOString(), ...map };
+    return { map: { generatedAt: now.toISOString(), ...map }, facts, defs, facilityId: s.facilityId };
   }
 }

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { AREAS, TOOL_KINDS } from './tools';
 
 export const ADVISOR_MODEL = process.env.ADVISOR_MODEL || 'claude-opus-5-5';
 
@@ -58,6 +59,14 @@ export type AdvisorRecommendation = {
   leverId?: string;
   /** ai = written by the AI, rules = added because the AI left a strong lever empty */
   source?: 'ai' | 'rules';
+  /** Health-check point it improves ('none' = none, e.g. fixing data) */
+  area?: string;
+  /** Prudent DT per month, start cost, goal in DT over 4 weeks */
+  gainAmount?: number;
+  cost?: number;
+  goalAmount?: number;
+  /** App features prepared for the steps (checked by the server before use) */
+  tools?: unknown[];
 };
 
 export type AdvisorResult = {
@@ -75,6 +84,37 @@ export type AdvisorResult = {
 };
 
 const str = { type: 'string' };
+
+/** One app feature prepared by the AI ('' / 0 / [] = not set): same shape for every kind. */
+export const TOOL_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind', 'step', 'label', 'draft'],
+  properties: {
+    kind: { type: 'string', enum: [...TOOL_KINDS] },
+    step: { type: 'integer' },
+    label: str,
+    draft: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['title', 'text', 'price', 'discountPct', 'date', 'days', 'fromHour', 'toHour', 'capacity', 'segment', 'items'],
+      properties: {
+        title: str,
+        text: str,
+        price: { type: 'number' },
+        discountPct: { type: 'number' },
+        date: str,
+        days: { type: 'array', items: { type: 'integer' } },
+        fromHour: { type: 'integer' },
+        toHour: { type: 'integer' },
+        capacity: { type: 'integer' },
+        segment: str,
+        items: { type: 'array', items: str },
+      },
+    },
+  },
+};
+
 export const RESULT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -113,9 +153,19 @@ export const RESULT_SCHEMA = {
           'target',
           'outreach',
           'leverId',
+          'area',
+          'gainAmount',
+          'cost',
+          'goalAmount',
+          'tools',
         ],
         properties: {
           category: { type: 'string', enum: [...RECOMMENDATION_CATEGORIES] },
+          area: { type: 'string', enum: [...AREAS, 'none'] },
+          gainAmount: { type: 'number' },
+          cost: { type: 'number' },
+          goalAmount: { type: 'number' },
+          tools: { type: 'array', items: TOOL_SCHEMA },
           leverId: str,
           priority: { type: 'string', enum: ['high', 'medium', 'low'] },
           effort: { type: 'string', enum: ['low', 'medium', 'high'] },
@@ -218,11 +268,14 @@ Règles :
 - measure : l'indicateur à suivre en quelques mots (ex. « visites du mardi après-midi »).
 - metric : le chiffre que l'app mesurera avant / après (revenuePerDay revenu par jour, visitsPerDay visites par jour, revenueCafe café, cafeAttachRatePct % de visites avec café, avgStayHours durée moyenne, newMembers nouveaux membres, revenueSubscriptions revenu abonnements, avgOccupancyPct occupation). targetPct : la hausse attendue de ce chiffre, prudente (ex. 15) : en points pour cafeAttachRatePct et avgOccupancyPct, en % pour les autres. L'app la mesure sur la cible, comparée au reste.
 - target : qui est visé, pour ne mesurer que ça. SLOT = un créneau : days (0 = dimanche … 6 = samedi, vide = tous les jours), fromHour et toHour (ex. 18 et 24 ; 0 et 0 = toute la journée). LIST = les clients de outreach.segment. ALL = tout l'espace, seulement si l'action touche vraiment tout le monde.
+- Le propriétaire voit tes idées rangées par point du bilan : area = le point que l'idée améliore (cafe : % de visites avec café ; abos : renouvellement des abonnements ; creux : jour ou créneau calme ; nouveaux : nouveaux clients ; retour : nouveaux qui reviennent ; impayes : impayés ; none si aucun, par ex. corriger des données).
+- gainAmount : le même gain prudent qu'expectedImpact, en DT par mois. cost : ce que l'idée coûte pour démarrer, en DT (0 si rien). goalAmount : l'objectif prudent en DT sur 4 semaines, que l'app comptera.
+- tools : les fonctions de l'app qui réalisent les actions, préparées pour que le propriétaire n'ait qu'à valider (0 à 2 par idée). kind PROMOTION = promo (title, discountPct ou price = prix d'une formule, items = noms exacts de produits du catalogue, days, fromHour/toHour, date de début) ; EVENT = événement (title, text = description, date AAAA-MM-JJ à venir, fromHour, toHour, price, capacity) ; SURVEY = enquête (title, text = intro, items = 3 à 6 questions courtes) ; CAMPAIGN = relance (segment = une liste d'outreachLists non vide, text = le message WhatsApp, comme outreach) ; PRICE = nouveau tarif (title = nom, price, fromHour/toHour pour un tarif de créneau) ; PRODUCT = nouveau produit (title, price). step = l'index de l'action (dans actions) que l'outil réalise ; label = texte court du bouton. Champs inutiles : '' / 0 / []. Chaque vente faite par un outil est comptée pour l'idée : c'est la meilleure preuve, préfère une idée mesurable par un outil.
 - Ne répète pas les recommandations de previousAdvice, sauf si les chiffres justifient d'insister ; dans ce cas dis pourquoi.
 - Pour chaque initiative ayant des données avant/après, donne un verdict dans initiativeReviews (too_early s'il y a moins de 14 jours de données ou trop peu de visites).
 - initiatives = ce que le propriétaire a vraiment fait après tes conseils : description (ce qu'il a fait), cost (ce que ça lui a coûté en DT), metric et targetPct (le chiffre suivi et l'objectif), impact (avant / après sur la même durée), campaign (résultat de la relance liée), notes (ce qui s'est passé, écrit par lui), ownerVerdict (son avis), disturbances (jours fériés ou périodes pendant la mesure, qui faussent la comparaison). Ce sont les faits les plus importants : ils disent ce qui marche dans CET espace.
 - Affine à partir de ces résultats : si une action marche, propose l'étape suivante (l'élargir, l'appliquer à un autre créneau, monter un peu le prix) ; si elle ne marche pas, propose une variante qui change UNE seule chose (prix, heure, public, message) et dis laquelle ; si c'est trop tôt, ne la remplace pas. Ne repropose jamais une action déjà faite sans dire ce qui change.
-- Chaque initiative a une cible (target : un créneau jours + heures, une liste de clients, ou tout l'espace) et result : before / after sur la cible, comparison (le même chiffre sur un groupe témoin : autres heures, autres jours ou autres clients), effect (variation de la cible moins variation du témoin, en % ou en points), sale (ventes de l'offre, du produit ou de la promo liée : preuve directe), gain, cost, netGain. Juge sur effect et sale, pas sur le revenu global.
+- Chaque initiative a une cible (target : un créneau jours + heures, une liste de clients, ou tout l'espace) et result : before / after sur la cible, comparison (le même chiffre sur un groupe témoin : autres heures, autres jours ou autres clients), effect (variation de la cible moins variation du témoin, en % ou en points), sale (ventes des outils liés — promo, événement, enquête, relance, tarif, produit — chaque vente comptée une fois : preuve directe), toolLinks (le détail par outil), goalAmount (objectif en DT sur 4 semaines) et goalPct, gain, cost, netGain. Juge sur sale, goalAmount et effect, pas sur le revenu global.
 - dataIssues : problèmes dans les données (prix aberrant, sorties non pointées, impayés, charges absentes). Ne bâtis aucun conseil sur un chiffre touché. Si un problème bloque une catégorie (blocksCategories), mets en premier une recommandation OPERATIONS pour le corriger et n'en fais pas dans cette catégorie.
 - Dans initiativeReviews, compare au targetPct quand il existe et tiens compte du coût (gain net = gain − coût) et des disturbances.
 - Chaque initiative a aussi : objective (le but), hypothesis (pourquoi le propriétaire pense que ça marche), channels (où il en parle), steps (les étapes prévues, done = fait ou pas), funnel (l'entonnoir : seen vues Instagram saisies, opened ouvertures du lien suivi, registered inscrits, paid payés, came venus, contacted / won pour une relance ; value null = inconnu, pending = pas encore possible) et diagnosis (calculé par l'app : status NOT_TESTED / MISSING_DATA / TOO_EARLY / BOTTLENECK / ON_TRACK, stage, brokenStep, known, unproven, next). Prends diagnosis comme un fait.
@@ -310,6 +363,11 @@ export function parseAdvisorResult(raw: unknown): AdvisorResult {
           : { segment: 'NONE' as const, message: '' },
       leverId: typeof x.leverId === 'string' ? x.leverId : '',
       source: x.source === 'rules' ? ('rules' as const) : ('ai' as const),
+      area: typeof x.area === 'string' ? x.area : undefined,
+      gainAmount: typeof x.gainAmount === 'number' ? x.gainAmount : undefined,
+      cost: typeof x.cost === 'number' ? x.cost : undefined,
+      goalAmount: typeof x.goalAmount === 'number' ? x.goalAmount : undefined,
+      tools: Array.isArray(x.tools) ? x.tools : [],
     })),
     initiativeReviews: Array.isArray(r.initiativeReviews)
       ? r.initiativeReviews.map((x) => ({ ...x, brokenStep: typeof x?.brokenStep === 'string' ? x.brokenStep : '' }))

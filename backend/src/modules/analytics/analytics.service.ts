@@ -118,12 +118,10 @@ export class AnalyticsService {
 
     const [journals, abonnements, dailyProducts, dailyExpenses] =
       await Promise.all([
+        // Money: every paid journal (reservations too); visits: walk-ins only
         this.prisma.journal.findMany({
-          where: {
-            registredTime: { gte: start, lte: end },
-            isReservation: false,
-          },
-          select: { registredTime: true, payedAmount: true, isPayed: true },
+          where: { registredTime: { gte: start, lte: end } },
+          select: { registredTime: true, payedAmount: true, isPayed: true, isReservation: true },
         }),
         this.prisma.abonnementPayment.findMany({
           where: abonnementPaymentsInRange(start, end),
@@ -173,7 +171,7 @@ export class AnalyticsService {
 
     for (const j of journals) {
       const row = ensure(j.registredTime);
-      row.visits += 1;
+      if (!j.isReservation) row.visits += 1;
       if (j.isPayed) row.revenueJournal += j.payedAmount || 0;
     }
     for (const p of abonnements) {

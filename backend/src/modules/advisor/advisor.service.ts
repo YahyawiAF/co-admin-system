@@ -8,10 +8,14 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
-import { subMinutes } from 'date-fns';
+import { startOfDay, subMinutes } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
 import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
-import { parsePauses, pause, resume } from './pauses';
+import { activeWindow, parsePauses, pause, resume } from './pauses';
+import { AREAS, parseTools, type RawTool, sanitizeTool, TOOL_KINDS, type ToolKind } from './tools';
+import { MAX_RUNNING } from './health';
+import { HealthService } from './health.service';
+import { adaptSolution, type AdaptInput } from './adapt';
 import { CampaignService, type CampaignSegment } from '../analytics/campaign.service';
 import { PerformanceService } from '../analytics/performance.service';
 import {
@@ -68,6 +72,13 @@ type InitiativeBody = {
   paused?: boolean;
   /** "Pas pour moi" with a reason; null = put the action back */
   drop?: { reason?: string } | null;
+  /** Goal in DT over the 4 weeks */
+  goalAmount?: number | null;
+  /** Health-check point (cafe, abos…) and lever it works on */
+  area?: string | null;
+  leverId?: string | null;
+  /** Feature drafts (promo, event…) prepared for the objectives */
+  tools?: unknown[];
 };
 
 const TARGET_KINDS = ['ALL', 'SLOT', 'LIST'];
@@ -96,7 +107,24 @@ export class AdvisorService {
     private readonly snapshots: SnapshotService,
     private readonly context: ContextService,
     private readonly campaigns: CampaignService,
+    private readonly healthService: HealthService,
   ) {}
+
+  /** Conseil IA bilan: six points with their number, colour and solutions (rules + last AI report). */
+  async health(facilityId?: string) {
+    return this.healthService.health(await this.facilityId(facilityId));
+  }
+
+  /** Actions still being measured (not stopped, not dropped, under 28 active days). */
+  private async runningCount(facilityId: string) {
+    const now = new Date();
+    const rows = await this.prisma.businessInitiative.findMany({
+      where: { facilityId, endDate: null, droppedAt: null, startDate: { lte: now } },
+      select: { startDate: true, pauses: true },
+    });
+    const today = localDayKey(now);
+    return rows.filter((r) => activeWindow(startOfDay(r.startDate), 28, now, parsePauses(r.pauses), today).activeDays < 28).length;
+  }
 
   async dataCheck(facilityId?: string) {
     return this.snapshots.dataCheck(await this.facilityId(facilityId));
@@ -227,7 +255,7 @@ export class AdvisorService {
     }
     const id = await this.facilityId(facilityId);
     const snapshot = await this.snapshots.build(id, this.days(body?.days));
-    result = this.covered(result, snapshot);
+    result = await this.checkedTools(this.covered(result, snapshot));
     const report = await this.prisma.advisorReport.create({
       data: {
         facilityId: id,
@@ -248,6 +276,19 @@ export class AdvisorService {
   private covered<T extends Parameters<typeof ensureCoverage>[0]>(result: T, snapshot: unknown): T {
     const snap = snapshot as { levers?: { missing?: MissingLever[] } | null; dismissedIdeas?: DismissedIdea[] };
     return ensureCoverage(result, { missing: snap.levers?.missing, dismissed: snap.dismissedIdeas }) as T;
+  }
+
+  /** The AI's feature drafts are only kept when they can pre-fill a real form (known products, future dates…). */
+  private async checkedTools<T extends { recommendations: Array<{ actions?: string[]; tools?: unknown[] }> }>(result: T): Promise<T> {
+    const products = await this.prisma.product.findMany({ select: { id: true, name: true }, take: 300 });
+    const now = new Date();
+    for (const r of result.recommendations) {
+      r.tools = (r.tools ?? [])
+        .map((t) => sanitizeTool(t as RawTool, { steps: r.actions?.length ?? 0, now, products }))
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+    return result;
   }
 
   private days(days?: number) {
@@ -290,7 +331,7 @@ export class AdvisorService {
   private async complete(client: Anthropic, reportId: string, snapshot: unknown) {
     try {
       const out = await runAdvisor(client, snapshot);
-      out.result = this.covered(out.result, snapshot);
+      out.result = await this.checkedTools(this.covered(out.result, snapshot));
       await this.prisma.advisorReport.update({
         where: { id: reportId },
         data: {
@@ -494,6 +535,20 @@ export class AdvisorService {
       if (n != null && (!Number.isFinite(n) || n < 0 || n > 100000)) throw new BadRequestException('Nombre invalide');
       data.interested = n;
     }
+    if (body.goalAmount !== undefined) {
+      const g = optionalNumber(body.goalAmount, 'Objectif');
+      if (g !== null && (g <= 0 || g > 1_000_000)) throw new BadRequestException('Objectif en DT : un montant positif');
+      data.goalAmount = g;
+    }
+    if (body.area !== undefined) {
+      if (body.area && !(AREAS as readonly string[]).includes(body.area)) throw new BadRequestException('Point du bilan inconnu');
+      data.area = body.area || null;
+    }
+    if (body.leverId !== undefined) data.leverId = body.leverId?.slice(0, 40) || null;
+    if (body.tools !== undefined) {
+      if (!Array.isArray(body.tools) || body.tools.length > 8) throw new BadRequestException('Outils invalides');
+      data.tools = parseTools(body.tools) as unknown as Prisma.InputJsonValue;
+    }
     if (body.manualFunnel !== undefined) {
       if (!Array.isArray(body.manualFunnel) || body.manualFunnel.length > 50) {
         throw new BadRequestException('Chiffres invalides');
@@ -512,6 +567,10 @@ export class AdvisorService {
   async createInitiative(facilityId: string | undefined, body: InitiativeBody) {
     if (!body.title) throw new BadRequestException('Titre requis');
     const id = await this.facilityId(facilityId);
+    // Focus: a few solutions at a time, each measured properly
+    if ((await this.runningCount(id)) >= MAX_RUNNING) {
+      throw new BadRequestException(`${MAX_RUNNING} solutions en cours : finissez-en une ou arrêtez-en une d'abord.`);
+    }
     const data = {
       ...this.initiativeData({ startDate: new Date().toISOString(), ...body }),
       ...(await this.targetData(id, body)),
@@ -519,6 +578,9 @@ export class AdvisorService {
     const created = await this.prisma.businessInitiative.create({
       data: { ...(data as Prisma.BusinessInitiativeUncheckedCreateInput), facilityId: id },
     });
+    if (created.linkedKind && created.linkedId) {
+      await this.addTool(created.id, { kind: created.linkedKind, targetId: created.linkedId });
+    }
     return this.withImpact(created.id);
   }
 
@@ -599,17 +661,18 @@ export class AdvisorService {
     if (!CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
     const i = await this.prisma.businessInitiative.findUnique({
       where: { id: initiativeId },
-      select: { facilityId: true, linkedKind: true, linkedId: true },
+      select: { facilityId: true, linkedKind: true, linkedId: true, links: { where: { kind: 'EVENT' }, select: { targetId: true }, take: 1 } },
     });
     if (!i) throw new NotFoundException('Initiative introuvable');
-    if (i.linkedKind !== 'EVENT' || !i.linkedId) {
+    const eventId = i.linkedKind === 'EVENT' && i.linkedId ? i.linkedId : i.links[0]?.targetId;
+    if (!eventId) {
       throw new BadRequestException("Liez d'abord l'action à un événement");
     }
     for (let attempt = 0; attempt < 5; attempt++) {
       const code = randomCode();
       const created = await this.prisma.shareLink
         .create({
-          data: { code, facilityId: i.facilityId, initiativeId, kind: 'EVENT', targetId: i.linkedId, channel },
+          data: { code, facilityId: i.facilityId, initiativeId, kind: 'EVENT', targetId: eventId, channel },
         })
         .catch(() => null);
       if (created) return this.withImpact(initiativeId);
@@ -622,6 +685,94 @@ export class AdvisorService {
     if (!link || link.initiativeId !== initiativeId) throw new NotFoundException('Lien introuvable');
     await this.prisma.shareLink.delete({ where: { id: linkId } });
     return this.withImpact(initiativeId);
+  }
+
+  // ---------- tools: the app features a solution uses ----------
+
+  /** Checks the promo / event / survey… exists in this facility. */
+  private async toolExists(facilityId: string, kind: ToolKind, id: string) {
+    switch (kind) {
+      case 'PROMOTION':
+        return !!(await this.prisma.promotion.findFirst({ where: { id, facilityId }, select: { id: true } }));
+      case 'EVENT':
+        return !!(await this.prisma.event.findFirst({ where: { id, facilityId }, select: { id: true } }));
+      case 'SURVEY':
+        return !!(await this.prisma.survey.findFirst({ where: { id, facilityId }, select: { id: true } }));
+      case 'CAMPAIGN':
+        return !!(await this.prisma.outreachCampaign.findFirst({ where: { id, facilityId }, select: { id: true } }));
+      case 'PRICE':
+        return !!(await this.prisma.price.findUnique({ where: { id }, select: { id: true } }));
+      case 'PRODUCT':
+        return !!(await this.prisma.product.findUnique({ where: { id }, select: { id: true } }));
+    }
+  }
+
+  /**
+   * Links a feature to a solution: its sales count for it from now on, and the
+   * objective it fulfils is ticked.
+   */
+  async addTool(initiativeId: string, body: { kind?: string; targetId?: string; stepIndex?: number | null }) {
+    const kind = body.kind as ToolKind;
+    if (!(TOOL_KINDS as readonly string[]).includes(kind)) throw new BadRequestException('Outil inconnu');
+    if (!body.targetId) throw new BadRequestException('Choisissez quoi lier');
+    const i = await this.prisma.businessInitiative.findUnique({
+      where: { id: initiativeId },
+      select: { facilityId: true, steps: true },
+    });
+    if (!i) throw new NotFoundException('Solution introuvable');
+    if (!(await this.toolExists(i.facilityId, kind, body.targetId))) throw new BadRequestException('Introuvable');
+    const steps = parseSteps(i.steps);
+    const stepIndex =
+      body.stepIndex != null && Number.isInteger(body.stepIndex) && body.stepIndex >= 0 && body.stepIndex < steps.length
+        ? body.stepIndex
+        : null;
+    await this.prisma.initiativeLink.upsert({
+      where: { initiativeId_kind_targetId: { initiativeId, kind, targetId: body.targetId } },
+      create: { initiativeId, kind, targetId: body.targetId, stepIndex },
+      update: stepIndex != null ? { stepIndex } : {},
+    });
+    // A relance measured for this solution: its results come back here
+    if (kind === 'CAMPAIGN') {
+      await this.prisma.outreachCampaign.update({ where: { id: body.targetId }, data: { initiativeId } });
+    }
+    if (stepIndex != null && !steps[stepIndex].done) {
+      const today = localDayKey(new Date());
+      await this.prisma.businessInitiative.update({
+        where: { id: initiativeId },
+        data: { steps: steps.map((s, k) => (k === stepIndex ? { ...s, done: true, doneAt: today } : s)) },
+      });
+    }
+    return this.withImpact(initiativeId);
+  }
+
+  async removeTool(initiativeId: string, linkId: string) {
+    if (linkId.startsWith('legacy-')) {
+      await this.prisma.businessInitiative.update({ where: { id: initiativeId }, data: { linkedKind: null, linkedId: null } });
+      return this.withImpact(initiativeId);
+    }
+    const link = await this.prisma.initiativeLink.findUnique({ where: { id: linkId } });
+    if (!link || link.initiativeId !== initiativeId) throw new NotFoundException('Lien introuvable');
+    await this.prisma.initiativeLink.delete({ where: { id: linkId } });
+    const i = await this.prisma.businessInitiative.findUnique({ where: { id: initiativeId }, select: { linkedKind: true, linkedId: true } });
+    if (i?.linkedKind === link.kind && i.linkedId === link.targetId) {
+      await this.prisma.businessInitiative.update({ where: { id: initiativeId }, data: { linkedKind: null, linkedId: null } });
+    }
+    if (link.kind === 'CAMPAIGN') {
+      await this.prisma.outreachCampaign.updateMany({ where: { id: link.targetId, initiativeId }, data: { initiativeId: null } });
+    }
+    return this.withImpact(initiativeId);
+  }
+
+  /** « Adapter » with the AI: rewrites one solution following the owner's sentence. Nothing is saved. */
+  async adapt(facilityId: string | undefined, body: AdaptInput) {
+    const client = this.anthropic();
+    const id = await this.facilityId(facilityId);
+    const products = await this.prisma.product.findMany({ select: { id: true, name: true }, take: 200 });
+    try {
+      return await adaptSolution(client, { ...body, products, facilityId: id });
+    } catch (err) {
+      throw new BadRequestException(this.errorMessage(err));
+    }
   }
 
   private withImpact(id: string) {

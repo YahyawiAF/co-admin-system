@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { organizationsApi, surveysApi } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { getAdminOrganizationId } from "@/lib/admin-org";
 import { surveyUrl, type LearningSession, type SurveyDetail, type SurveyStatus } from "@/lib/surveys";
 import { copyWithToast, QrDialog, selectClass, sessionUrl, StatusPill } from "@/components/admin/learn-share/shared";
@@ -48,6 +49,11 @@ function LearnShare() {
   const tabParam = params.get("tab");
   const tab: Tab = TABS.some(([k]) => k === tabParam) ? (tabParam as Tab) : "resultats";
   const [creating, setCreating] = useState(false);
+  // Opened from Conseil IA (« Préparer l'enquête »)
+  const conseil = useConseilDraft("SURVEY");
+  useEffect(() => {
+    if (conseil.draft) setCreating(true);
+  }, [conseil.draft]);
   const [qrOpen, setQrOpen] = useState(false);
   const [sessionFor, setSessionFor] = useState<string | null | undefined>(undefined);
   const [created, setCreated] = useState<LearningSession | null>(null);
@@ -204,9 +210,13 @@ function LearnShare() {
       <NewSurveyDialog
         open={creating}
         current={survey ?? null}
+        initial={conseil.draft as ConseilSurvey | null}
         onClose={(id) => {
           setCreating(false);
           if (id) go({ survey: id, tab: "questions" });
+          // Linked to the solution; the owner stays here to check and publish it
+          if (id && conseil.active) void conseil.linked(id, { stay: true });
+          else if (conseil.active) conseil.dismiss();
         }}
       />
       {survey && publicUrl ? (
@@ -264,24 +274,46 @@ function StatusActions({ survey, pending, onStatus }: { survey: SurveyDetail; pe
   );
 }
 
-function NewSurveyDialog({ open, current, onClose }: { open: boolean; current: SurveyDetail | null; onClose: (id?: string) => void }) {
+/** Survey prepared by Conseil IA: title, intro and short questions. */
+type ConseilSurvey = { title?: string; intro?: string; questions?: string[] };
+
+function NewSurveyDialog({
+  open,
+  current,
+  onClose,
+  initial,
+}: {
+  open: boolean;
+  current: SurveyDetail | null;
+  onClose: (id?: string) => void;
+  initial?: ConseilSurvey | null;
+}) {
   const qc = useQueryClient();
-  const [from, setFrom] = useState<"template" | "blank" | "copy">("template");
+  const [from, setFrom] = useState<"template" | "blank" | "copy" | "conseil">("template");
   const [title, setTitle] = useState("");
   const { data: templates = [] } = useQuery({ queryKey: ["survey-templates"], queryFn: surveysApi.templates, enabled: open });
   useEffect(() => {
     if (open) {
-      setFrom("template");
-      setTitle("");
+      setFrom(initial?.questions?.length ? "conseil" : "template");
+      setTitle(initial?.title ?? "");
     }
-  }, [open]);
+  }, [open, initial]);
   const create = useMutation({
-    mutationFn: () =>
-      surveysApi.create({
+    mutationFn: async () => {
+      const created = await surveysApi.create({
         ...(from === "template" && { templateCode: templates[0]?.code ?? "learn_share" }),
         ...(from === "copy" && current && { duplicateOf: current.id }),
         ...(title.trim() && { title: title.trim() }),
-      }),
+      });
+      // The AI's questions, as short free answers the owner can edit in « Questions »
+      if (from === "conseil" && initial?.questions?.length) {
+        await surveysApi.update(created.id, {
+          ...(initial.intro ? { intro: initial.intro } : {}),
+          questions: initial.questions.map((label, k) => ({ id: `q${k + 1}`, section: "main", type: "short" as const, label, required: false })),
+        });
+      }
+      return created;
+    },
     onSuccess: (s) => {
       qc.invalidateQueries({ queryKey: ["surveys"] });
       toast.success("Sondage créé en brouillon");
@@ -290,6 +322,9 @@ function NewSurveyDialog({ open, current, onClose }: { open: boolean; current: S
     onError: (e: Error) => toast.error(e.message),
   });
   const options: Array<[typeof from, string, string, boolean]> = [
+    ...(initial?.questions?.length
+      ? ([["conseil", "Préparé par Conseil IA", `${initial.questions.length} questions courtes : ${initial.questions.slice(0, 2).join(" · ")}…`, true]] as Array<[typeof from, string, string, boolean]>)
+      : []),
     ["template", templates[0]?.name ?? "Collabora Learn & Share", `Modèle prêt : ${templates[0]?.questions ?? 12} questions, rôle d’abord, contact WhatsApp optionnel.`, true],
     ["blank", "Sondage vierge", "Sans question. Vous ajoutez les vôtres.", true],
     ["copy", current ? `Copie de « ${current.title} »` : "Copier un sondage", "Mêmes questions et réglages, sans les réponses ni les liens.", !!current],
