@@ -19,12 +19,12 @@ const abo = (memberID: string, from: string, to: string, priceId = 'month', pric
 });
 
 describe('renewalOf', () => {
-  it('counts a renewal with another offer (Ayen Bedoui case)', () => {
-    const old = abo('ayen', '2026-10-01', '2026-10-31', 'month');
-    const next = abo('ayen', '2026-11-01', '2026-11-07', 'week', 45);
+  it('counts a renewal with another offer', () => {
+    const old = abo('m1', '2026-10-01', '2026-10-31', 'month');
+    const next = abo('m1', '2026-11-01', '2026-11-07', 'week', 45);
     expect(renewalOf(old, byMember([old, next]))?.id).toBe(next.id);
     const r = recentRenewals([old, next], new Date('2026-10-20'));
-    expect(r).toEqual([expect.objectContaining({ name: 'ayen', from: 'Mois', to: 'Semaine', sameOffer: false })]);
+    expect(r).toEqual([expect.objectContaining({ name: 'm1', from: 'Mois', to: 'Semaine', sameOffer: false })]);
   });
 
   it('counts an early renewal and ignores one too late', () => {
