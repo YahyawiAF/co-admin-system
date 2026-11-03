@@ -2235,6 +2235,15 @@ export const advisorApi = {
   },
 };
 
+/** Café price for one member / visit: best café promo (every unit) and the tarif gift (first unit). */
+export type CafePrice = {
+  productId: string;
+  unitPrice: number | null;
+  label: string | null;
+  giftPrice: number | null;
+  giftLabel: string | null;
+};
+
 export const promotionsApi = {
   list() {
     return http.get<Promotion[]>("/promotions");
@@ -2263,6 +2272,13 @@ export const promotionsApi = {
       `/mobile/promotions/vouchers?memberId=${encodeURIComponent(memberId)}`,
       { skipAuth: true }
     );
+  },
+  /** Reception: café promo / tarif gift prices for one member or visit (only products with a deal) */
+  cafePrices(opts: { memberId?: string | null; journalId?: string | null }) {
+    const q = new URLSearchParams();
+    if (opts.memberId) q.set("memberId", opts.memberId);
+    if (opts.journalId) q.set("journalId", opts.journalId);
+    return http.get<CafePrice[]>(`/promotions/cafe-prices?${q}`);
   },
   journalVouchers(journalId: string) {
     return http.get<PromotionVoucher[]>(

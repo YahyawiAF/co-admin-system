@@ -30,6 +30,7 @@ import {
   mobileApi,
   orderUnitPrice,
   productsApi,
+  promotionsApi,
   type DailyProduct,
 } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,22 @@ export function JournalCoffeeCell({
     staleTime: 60_000,
   });
 
+  /** Promo / gift prices for this member or visit (tarif gift, auto tier included) */
+  const { data: cafePrices = [] } = useQuery({
+    queryKey: ["cafe-prices", memberId, journalId],
+    queryFn: () => promotionsApi.cafePrices({ memberId, journalId }),
+    enabled: open && (!!memberId || !!journalId),
+    staleTime: 15_000,
+  });
+  const dealOf = useMemo(() => new Map(cafePrices.map((c) => [c.productId, c])), [cafePrices]);
+  /** What `qty` units cost: the gift covers the first one, else the café promo (mirrors the backend). */
+  const priceFor = (p: { id: string; sellingPrice: number }, n: number) => {
+    const d = dealOf.get(p.id);
+    if (d?.giftPrice != null) return { total: d.giftPrice + (n - 1) * p.sellingPrice, tag: d.giftLabel, gift: true };
+    if (d?.unitPrice != null) return { total: d.unitPrice * n, tag: d.label, gift: false };
+    return { total: p.sellingPrice * n, tag: null, gift: false };
+  };
+
   const sorted = useMemo(
     () =>
       [...products].sort(
@@ -136,6 +153,7 @@ export function JournalCoffeeCell({
     queryClient.invalidateQueries({ queryKey: ["daily-products"] });
     queryClient.invalidateQueries({ queryKey: ["product-orders"] });
     queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: ["cafe-prices"] });
     queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
     queryClient.invalidateQueries({ queryKey: ["visitor-day"] });
   };
@@ -370,6 +388,7 @@ export function JournalCoffeeCell({
                       const out = p.stock < qty;
                       const busy =
                         add.isPending && add.variables?.productId === p.id;
+                      const dealPrice = priceFor(p, qty);
                       return (
                         <button
                           key={p.id}
@@ -405,6 +424,16 @@ export function JournalCoffeeCell({
                                 <Check className="h-5 w-5 text-white" />
                               </div>
                             ) : null}
+                            {dealPrice.tag ? (
+                              <span
+                                className={cn(
+                                  "absolute left-1 top-1 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none text-white shadow animate-in fade-in-0 zoom-in-95 duration-200 motion-reduce:animate-none",
+                                  dealPrice.gift ? "bg-gradient-to-r from-amber-500 to-rose-500" : "bg-emerald-600"
+                                )}
+                              >
+                                {dealPrice.tag}
+                              </span>
+                            ) : null}
                             {p.stock <= 5 ? (
                               <Badge
                                 variant={out ? "destructive" : "secondary"}
@@ -418,9 +447,18 @@ export function JournalCoffeeCell({
                             <p className="truncate text-xs font-semibold leading-tight">
                               {p.name}
                             </p>
-                            <p className="text-[11px] font-medium text-primary">
-                              {(p.sellingPrice * qty).toFixed(1)} DT
-                            </p>
+                            {dealPrice.tag ? (
+                              <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                <s className="mr-1 font-normal text-muted-foreground">
+                                  {(p.sellingPrice * qty).toFixed(1)}
+                                </s>
+                                {dealPrice.total.toFixed(1)} DT
+                              </p>
+                            ) : (
+                              <p className="text-[11px] font-medium text-primary">
+                                {(p.sellingPrice * qty).toFixed(1)} DT
+                              </p>
+                            )}
                           </div>
                         </button>
                       );
@@ -464,7 +502,18 @@ export function JournalCoffeeCell({
                               {o.product?.name || "Produit"}
                             </p>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              {lineAmount(o).toFixed(1)} DT
+                              {o.promotionId && o.product?.sellingPrice != null ? (
+                                <>
+                                  <s className="mr-1">
+                                    {(o.product.sellingPrice * (o.quantite || 0)).toFixed(1)}
+                                  </s>
+                                  <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                                    {lineAmount(o).toFixed(1)} DT · promo
+                                  </span>
+                                </>
+                              ) : (
+                                <>{lineAmount(o).toFixed(1)} DT</>
+                              )}
                               {o.createdAt
                                 ? ` · ${format(new Date(o.createdAt), "HH:mm")}`
                                 : ""}

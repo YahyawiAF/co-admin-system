@@ -39,6 +39,12 @@ export class PromotionController {
     return memberId ? this.promotions.vouchersForMember(memberId) : [];
   }
 
+  /** Reception: café prices with promos / tarif gift for one member or visit (Journal « add a drink »). */
+  @Get('promotions/cafe-prices')
+  cafePrices(@Query('memberId') memberId?: string, @Query('journalId') journalId?: string) {
+    return this.promotions.cafePrices({ memberId: memberId || null, journalId: journalId || null });
+  }
+
   /** Reception: vouchers of one visit. */
   @Get('promotions/vouchers')
   journalVouchers(@Query('journalId') journalId?: string) {
