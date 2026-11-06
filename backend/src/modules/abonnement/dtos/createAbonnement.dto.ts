@@ -89,4 +89,19 @@ export class AddAbonnementDto {
   @IsNumber()
   @ApiProperty({ required: false, nullable: true })
   public offeredAmount?: number | null;
+
+  /** Day the money was really collected (late entry). Defaults to now; counted in that day's caisse. */
+  @IsOptional()
+  @IsDate()
+  @Type(() => Date)
+  @ApiProperty({ required: false })
+  public paymentDate?: Date;
+}
+
+export class UpdateAbonnementPaymentDto {
+  @IsNotEmpty()
+  @IsDate()
+  @Type(() => Date)
+  @ApiProperty()
+  public paidAt: Date;
 }

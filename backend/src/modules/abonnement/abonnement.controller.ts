@@ -10,7 +10,10 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AbonnementService } from './abonnement.service';
-import { AddAbonnementDto } from './dtos/createAbonnement.dto';
+import {
+  AddAbonnementDto,
+  UpdateAbonnementPaymentDto,
+} from './dtos/createAbonnement.dto';
 import { UpdateAbonnementDto } from './dtos/updateAbonnement.dto';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { AbonnementEntity } from './entities/abonnement.entity';
@@ -109,6 +112,16 @@ export class AbonnementController {
     @Body() updateAbonnementDto: UpdateAbonnementDto,
   ) {
     return this.abonnementService.update(id, updateAbonnementDto);
+  }
+
+  @Patch(':id/payments/:paymentId')
+  @ApiOperation({ summary: 'Change the day a payment was collected' })
+  updatePaymentDate(
+    @Param('id') id: string,
+    @Param('paymentId') paymentId: string,
+    @Body() dto: UpdateAbonnementPaymentDto,
+  ) {
+    return this.abonnementService.updatePaymentDate(id, paymentId, dto.paidAt);
   }
 
   @Delete(':id')

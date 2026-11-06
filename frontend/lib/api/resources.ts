@@ -1043,6 +1043,10 @@ export const abonnementsApi = {
   remove(id: string) {
     return http.delete<void>(`/abonnements/${id}`);
   },
+  /** Move one payment to the day the money was really collected. */
+  updatePaymentDate(id: string, paymentId: string, paidAt: string) {
+    return http.patch<Abonnement>(`/abonnements/${id}/payments/${paymentId}`, { paidAt });
+  },
 };
 
 export const productsApi = {

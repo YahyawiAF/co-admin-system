@@ -407,6 +407,8 @@ export interface Abonnement {
   offeredAmount?: number | null;
   /** Each amount collected (advance, remainder…) — revenue is counted on its paidAt */
   payments?: { id: string; amount: number; paidAt: string }[];
+  /** Sent only: day the new money was collected (late entry, ISO) */
+  paymentDate?: string;
 }
 
 export type ProductOrderStatus = "PENDING" | "CONFIRMED" | "CANCELLED";
