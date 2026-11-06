@@ -1,7 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
-import { useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,10 +14,25 @@ import {
   format,
   parse,
   startOfDay,
+  startOfMonth,
+  endOfMonth,
+  subDays,
+  subMonths,
   subMilliseconds,
 } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Pencil, MapPin, MoreHorizontal, Banknote, RefreshCw } from "lucide-react";
+import {
+  Pencil,
+  MapPin,
+  MoreHorizontal,
+  Banknote,
+  RefreshCw,
+  CalendarDays,
+  ChevronDown,
+  Layers,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +42,9 @@ import {
   type MemberLock,
 } from "@/components/admin/MemberSearchSelect";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -74,7 +93,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { abonnementsApi, membersApi, pricesApi } from "@/lib/api/resources";
+import { abonnementsApi, caisseApi, membersApi, pricesApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import {
   PriceCategory,
@@ -115,6 +134,8 @@ const schema = z.object({
   registredDate: z.string().min(1),
   leaveDate: z.string().optional(),
   paymentRemindAt: z.string().optional(),
+  /** Day the money was collected (late entry → counted in that day's caisse) */
+  paymentDate: z.string().optional(),
   isPayed: z.boolean(),
   payedAmount: z.coerce.number().min(0),
   hoursUsed: z.coerce.number().min(0).optional(),
@@ -135,6 +156,45 @@ function renewalStart(a: Abonnement) {
   return a.leaveDate
     ? addDays(startOfDay(new Date(a.leaveDate)), 1)
     : startOfDay(new Date());
+}
+
+const todayKey = () => format(new Date(), "yyyy-MM-dd");
+
+/** Local noon of a past day (stays on that day in the caisse); undefined for today. */
+function paymentDayIso(key?: string) {
+  if (!key || key === todayKey()) return undefined;
+  const d = parseLocalDay(key);
+  d.setHours(12, 0, 0, 0);
+  return d.toISOString();
+}
+
+/** Money collected for an abonnement, each amount on its own day. */
+function paymentsOf(a: Abonnement) {
+  if (a.payments) return a.payments;
+  return a.payedAmount > 0
+    ? [{ id: a.id, amount: a.payedAmount, paidAt: a.paidAt ?? a.registredDate }]
+    : [];
+}
+
+type DateField = "start" | "end" | "paid";
+
+const DATE_FIELDS: { id: DateField; label: string }[] = [
+  { id: "start", label: "Début" },
+  { id: "end", label: "Fin" },
+  { id: "paid", label: "Payé le" },
+];
+
+function datePresets() {
+  const today = new Date();
+  const k = (d: Date) => format(d, "yyyy-MM-dd");
+  const lastMonth = subMonths(today, 1);
+  return [
+    { label: "Aujourd’hui", from: k(today), to: k(today) },
+    { label: "Hier", from: k(subDays(today, 1)), to: k(subDays(today, 1)) },
+    { label: "7 jours", from: k(subDays(today, 6)), to: k(today) },
+    { label: "Ce mois", from: k(startOfMonth(today)), to: k(today) },
+    { label: "Mois dernier", from: k(startOfMonth(lastMonth)), to: k(endOfMonth(lastMonth)) },
+  ];
 }
 
 function shortDay(d: Date) {
@@ -174,6 +234,7 @@ function AbonnementsInner() {
   const { can } = useStaffAccess();
   const mayDelete = can("abonnements", "delete");
   const queryClient = useQueryClient();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const focusMember = searchParams.get("memberId");
   const focusFilter = searchParams.get("filter");
@@ -201,6 +262,13 @@ function AbonnementsInner() {
   const [deleting, setDeleting] = useState<Abonnement | null>(null);
   const [clearingAll, setClearingAll] = useState(false);
   const [ledgerAbo, setLedgerAbo] = useState<Abonnement | null>(null);
+  /** Formules shown (empty = all) */
+  const [formulaIds, setFormulaIds] = useState<string[]>([]);
+  const [dateField, setDateField] = useState<DateField>("start");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  /** Payments of the abonnement being edited (their day can be corrected) */
+  const [editPayments, setEditPayments] = useState<Abonnement["payments"]>([]);
 
   const { data: raw } = useQuery({
     queryKey: queryKeys.abonnements,
@@ -388,6 +456,44 @@ function AbonnementsInner() {
     },
   ];
 
+  /** Formules that have abonnements, most used first */
+  const formulaOptions = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    for (const a of rows) {
+      const cur = map.get(a.priceId);
+      if (cur) cur.count += 1;
+      else
+        map.set(a.priceId, {
+          id: a.priceId,
+          name: a.price?.name || a.priceId.slice(0, 8),
+          count: 1,
+        });
+    }
+    return [...map.values()].sort((x, y) => y.count - x.count || x.name.localeCompare(y.name));
+  }, [rows]);
+
+  const dateRange = useMemo(() => {
+    if (!dateFrom && !dateTo) return null;
+    const from = dateFrom ? startOfDay(parseLocalDay(dateFrom)) : null;
+    const to = dateTo ? endOfDay(parseLocalDay(dateTo)) : null;
+    return {
+      inRange: (iso?: string | null) => {
+        if (!iso) return false;
+        const d = new Date(iso);
+        return (!from || d >= from) && (!to || d <= to);
+      },
+    };
+  }, [dateFrom, dateTo]);
+
+  /** A date range looks at past abonnements too: leave the default "Actifs" chip. */
+  const setRange = (from: string, to: string) => {
+    if (!dateFrom && !dateTo && (from || to) && quickFilter === "active") {
+      setQuickFilter("all");
+    }
+    setDateFrom(from);
+    setDateTo(to);
+  };
+
   const filtered = useMemo(() => {
     let list = rows;
     const q = search.trim().toLowerCase();
@@ -423,8 +529,40 @@ function AbonnementsInner() {
     } else if (quickFilter === "full_day") {
       list = list.filter((a) => subKind(a) === "full_day");
     }
+    if (formulaIds.length) {
+      list = list.filter((a) => formulaIds.includes(a.priceId));
+    }
+    if (dateRange) {
+      const { inRange } = dateRange;
+      list = list.filter((a) =>
+        dateField === "start"
+          ? inRange(a.registredDate)
+          : dateField === "end"
+            ? inRange(a.leaveDate)
+            : paymentsOf(a).some((p) => inRange(p.paidAt)),
+      );
+    }
     return list;
-  }, [rows, search, quickFilter]);
+  }, [rows, search, quickFilter, formulaIds, dateRange, dateField]);
+
+  /** Money collected in the date range by the listed abonnements (to check against the caisse). */
+  const collectedInRange = useMemo(() => {
+    if (!dateRange || dateField !== "paid") return null;
+    let amount = 0;
+    let count = 0;
+    for (const a of filtered) {
+      for (const p of paymentsOf(a)) {
+        if (dateRange.inRange(p.paidAt)) {
+          amount += p.amount;
+          count += 1;
+        }
+      }
+    }
+    return { amount: Math.round(amount * 100) / 100, count };
+  }, [filtered, dateRange, dateField]);
+
+  const filterKey = `${quickFilter}|${search}|${formulaIds.join(",")}|${dateField}|${dateFrom}|${dateTo}`;
+  const paged = usePaged(filtered, undefined, filterKey);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -435,6 +573,7 @@ function AbonnementsInner() {
       leaveDate: "",
       paymentRemindAt: "",
       isPayed: true,
+      paymentDate: todayKey(),
       payedAmount: 0,
       hoursUsed: 0,
       reservedSeatLabel: "",
@@ -515,6 +654,7 @@ function AbonnementsInner() {
       leaveDate: "",
       paymentRemindAt: "",
       isPayed: true,
+      paymentDate: todayKey(),
       payedAmount: 0,
       hoursUsed: 0,
       reservedSeatLabel: a.reservedSeatLabel || "",
@@ -542,6 +682,7 @@ function AbonnementsInner() {
       leaveDate: "",
       paymentRemindAt: "",
       isPayed: true,
+      paymentDate: todayKey(),
       payedAmount: 0,
       hoursUsed: 0,
       reservedSeatLabel: "",
@@ -553,6 +694,7 @@ function AbonnementsInner() {
   const openEdit = (a: Abonnement) => {
     setPassCredit(0);
     setEditing(a);
+    setEditPayments(a.payments || []);
     setRenewFrom(null);
     form.reset({
       memberID: a.memberID,
@@ -563,6 +705,7 @@ function AbonnementsInner() {
         ? format(new Date(a.paymentRemindAt), "yyyy-MM-dd")
         : "",
       isPayed: a.isPayed,
+      paymentDate: todayKey(),
       payedAmount: a.payedAmount,
       hoursUsed: a.hoursUsed || 0,
       reservedSeatLabel: a.reservedSeatLabel || "",
@@ -634,6 +777,12 @@ function AbonnementsInner() {
           payedAmount = catalog;
         }
       }
+      // New money only: a late entry is counted in the caisse of the day it was collected
+      const newMoney = Math.round((payedAmount - (editing?.payedAmount || 0)) * 100) / 100;
+      if (newMoney > 0.009 && v.paymentDate && v.paymentDate > todayKey()) {
+        throw new Error("La date de paiement ne peut pas être dans le futur");
+      }
+      const paymentDate = newMoney > 0.009 ? paymentDayIso(v.paymentDate) : undefined;
       const payload = {
         memberID: v.memberID,
         priceId: v.priceId,
@@ -653,12 +802,15 @@ function AbonnementsInner() {
         reservedSeatSpaceId: v.reservedSeatSpaceId?.trim() || null,
         ...(!editing && passCredit > 0 ? { passCredit } : {}),
         ...(gift > 0 || (editing?.offeredAmount || 0) > 0 ? { offeredAmount: gift } : {}),
+        ...(paymentDate ? { paymentDate } : {}),
       };
       return editing
         ? abonnementsApi.update(editing.id, payload)
         : abonnementsApi.create(payload);
     },
-    onSuccess: () => {
+    onSuccess: (_res, v) => {
+      const lateDay = v.paymentDate && v.paymentDate !== todayKey() ? v.paymentDate : null;
+      if (lateDay && payDayCaisse?.session?.closedAt) warnClosedCaisse([lateDay]);
       toast.success(
         editing
           ? "Abonnement mis à jour"
@@ -679,6 +831,53 @@ function AbonnementsInner() {
       queryClient.invalidateQueries({ queryKey: queryKeys.debtors });
       setOpen(false);
       setEditing(null);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  /** Caisse of the chosen payment day (late entry): is it already closed? */
+  const payDay = form.watch("paymentDate") || todayKey();
+  const { data: payDayCaisse } = useQuery({
+    queryKey: ["caisse-summary", payDay],
+    queryFn: () => caisseApi.summary(payDay),
+    enabled: open && payDay !== todayKey() && payDay < todayKey(),
+  });
+
+  /** A closed caisse does not include money added afterwards: it must be reopened and recounted. */
+  const warnClosedCaisse = (days: string[]) => {
+    const label = days.map((d) => shortDay(parseLocalDay(d))).join(", ");
+    toast.warning(`Caisse du ${label} déjà clôturée : rouvrez-la et recomptez.`, {
+      duration: 10000,
+      action: {
+        label: "Voir la caisse",
+        onClick: () => router.push(`/finance?tab=caisse&date=${days[0]}`),
+      },
+    });
+  };
+
+  const movePayment = useMutation({
+    mutationFn: async ({ paymentId, day }: { paymentId: string; day: string; from: string }) => {
+      if (!editing) throw new Error("Aucun abonnement");
+      if (day > todayKey()) throw new Error("La date de paiement ne peut pas être dans le futur");
+      const d = parseLocalDay(day);
+      d.setHours(12, 0, 0, 0);
+      return abonnementsApi.updatePaymentDate(editing.id, paymentId, d.toISOString());
+    },
+    onSuccess: async (res, { day, from }) => {
+      setEditPayments(res.payments || []);
+      toast.success(`Paiement déplacé au ${shortDay(parseLocalDay(day))}`);
+      invalidateAbo();
+      queryClient.invalidateQueries({ queryKey: ["caisse-summary"] });
+      // Both days change: warn if one of them was already closed
+      const days = [...new Set([from, day])].filter((d) => d !== todayKey());
+      const closed: string[] = [];
+      for (const d of days) {
+        const sum = await queryClient
+          .fetchQuery({ queryKey: ["caisse-summary", d], queryFn: () => caisseApi.summary(d) })
+          .catch(() => null);
+        if (sum?.session?.closedAt) closed.push(d);
+      }
+      if (closed.length) warnClosedCaisse(closed);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1064,6 +1263,106 @@ function AbonnementsInner() {
                     );
                   })()}
                 </div>
+                {(() => {
+                  const received = Number(form.watch("payedAmount") || 0);
+                  const newMoney =
+                    Math.round((received - (editing?.payedAmount || 0)) * 100) / 100;
+                  const show = newMoney > 0.009;
+                  const late = payDay !== todayKey();
+                  const closed = late && !!payDayCaisse?.session?.closedAt;
+                  return (
+                    <div
+                      className={cn(
+                        "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+                        show ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                      )}
+                      aria-hidden={!show}
+                    >
+                      <div className="overflow-hidden">
+                        <div className="space-y-2 pb-0.5">
+                          <Label htmlFor="abo-payment-date">
+                            {editing ? `Ces ${newMoney} DT reçus le` : "Payé le"}
+                          </Label>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              id="abo-payment-date"
+                              type="date"
+                              max={todayKey()}
+                              className="w-44"
+                              tabIndex={show ? undefined : -1}
+                              {...form.register("paymentDate")}
+                            />
+                            {late ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 text-xs animate-in fade-in-0 duration-150 motion-reduce:animate-none"
+                                onClick={() => form.setValue("paymentDate", todayKey())}
+                              >
+                                Aujourd’hui
+                              </Button>
+                            ) : null}
+                          </div>
+                          {!late ? (
+                            <p className="text-xs text-muted-foreground">
+                              Compté dans la caisse d’aujourd’hui. Oublié un autre jour ? Choisissez ce jour-là.
+                            </p>
+                          ) : closed ? (
+                            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2 text-xs text-amber-900 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:bg-amber-950/40 dark:text-amber-200">
+                              <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                              <span>
+                                La caisse du {shortDay(parseLocalDay(payDay))} est déjà clôturée : elle
+                                aura un écart de +{newMoney} DT. Rouvrez-la et recomptez.{" "}
+                                <Link
+                                  href={`/finance?tab=caisse&date=${payDay}`}
+                                  className="font-medium underline"
+                                >
+                                  Voir la caisse
+                                </Link>
+                              </span>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Compté dans la caisse du{" "}
+                              <span className="font-medium text-foreground">
+                                {shortDay(parseLocalDay(payDay))}
+                              </span>
+                              , pas dans celle d’aujourd’hui.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                {editing && (editPayments?.length || 0) > 0 ? (
+                  <div className="space-y-2 rounded-lg border px-3 py-2">
+                    <div>
+                      <Label>Paiements reçus</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Mauvais jour ? Corrigez la date : le montant passe dans la caisse de ce jour.
+                      </p>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {editPayments!.map((p) => (
+                        <PaymentDayRow
+                          key={`${p.id}-${p.paidAt}`}
+                          amount={p.amount}
+                          paidAt={p.paidAt}
+                          busy={movePayment.isPending}
+                          onMove={(day) =>
+                            movePayment.mutate({
+                              paymentId: p.id,
+                              day,
+                              from: format(new Date(p.paidAt), "yyyy-MM-dd"),
+                            })
+                          }
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 {!form.watch("isPayed") ? (
                   <div className="space-y-2">
                     <Label>Date de relance</Label>
@@ -1190,6 +1489,145 @@ function AbonnementsInner() {
             </button>
           ) : null}
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "h-9 gap-1.5 transition-colors",
+                  formulaIds.length > 0 && "border-primary bg-primary/5 text-primary",
+                )}
+              >
+                <Layers className="h-4 w-4" />
+                {formulaIds.length === 0
+                  ? "Toutes les formules"
+                  : formulaIds.length === 1
+                    ? formulaOptions.find((f) => f.id === formulaIds[0])?.name || "1 formule"
+                    : `${formulaIds.length} formules`}
+                <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-2">
+              <div className="flex items-center justify-between px-1 pb-1.5">
+                <p className="text-xs font-medium text-muted-foreground">Formules</p>
+                {formulaIds.length ? (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground underline"
+                    onClick={() => setFormulaIds([])}
+                  >
+                    Toutes
+                  </button>
+                ) : null}
+              </div>
+              <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+                {formulaOptions.map((f) => {
+                  const checked = formulaIds.includes(f.id);
+                  return (
+                    <li key={f.id}>
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted",
+                          checked && "bg-primary/5",
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(v) =>
+                            setFormulaIds((ids) =>
+                              v ? [...ids, f.id] : ids.filter((x) => x !== f.id),
+                            )
+                          }
+                        />
+                        <span className="min-w-0 flex-1 truncate">{f.name}</span>
+                        <span className="text-xs tabular-nums text-muted-foreground">{f.count}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex h-9 items-center gap-1 rounded-md border bg-background px-1.5">
+            <CalendarDays className="ml-1 h-4 w-4 text-muted-foreground" />
+            <div className="flex rounded-md bg-muted p-0.5" role="radiogroup" aria-label="Date filtrée">
+              {DATE_FIELDS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={dateField === f.id}
+                  onClick={() => setDateField(f.id)}
+                  className={cn(
+                    "rounded px-2 py-0.5 text-xs font-medium transition-[background-color,color,box-shadow] duration-150 motion-reduce:transition-none",
+                    dateField === f.id
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <Input
+              type="date"
+              value={dateFrom}
+              max={dateTo || undefined}
+              onChange={(e) => setRange(e.target.value, dateTo)}
+              className="h-7 w-36 border-0 px-1.5 text-xs shadow-none focus-visible:ring-1"
+              aria-label="Du"
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(e) => setRange(dateFrom, e.target.value)}
+              className="h-7 w-36 border-0 px-1.5 text-xs shadow-none focus-visible:ring-1"
+              aria-label="Au"
+            />
+            {dateFrom || dateTo ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 animate-in fade-in-0 zoom-in-90 duration-150 motion-reduce:animate-none"
+                aria-label="Effacer les dates"
+                onClick={() => setRange("", "")}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {datePresets().map((p) => {
+              const on = dateFrom === p.from && dateTo === p.to;
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  data-active={on}
+                  onClick={() => (on ? setRange("", "") : setRange(p.from, p.to))}
+                  className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-muted data-[active=true]:border-primary data-[active=true]:bg-primary data-[active=true]:text-primary-foreground motion-reduce:transition-none"
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
+          {collectedInRange ? (
+            <span
+              key={`${dateFrom}|${dateTo}`}
+              className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:bg-emerald-950/40 dark:text-emerald-300"
+            >
+              {collectedInRange.amount} DT encaissés · {collectedInRange.count} paiement
+              {collectedInRange.count !== 1 ? "s" : ""}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <Card>
@@ -1208,7 +1646,7 @@ function AbonnementsInner() {
                 <TableHead />
               </TableRow>
             </TableHeader>
-            <TableBody key={quickFilter}>
+            <TableBody key={`${filterKey}|${paged.page}`}>
               {!filtered.length ? (
                 <TableRow>
                   <TableCell
@@ -1216,11 +1654,13 @@ function AbonnementsInner() {
                     className="py-10 text-center text-muted-foreground"
                   >
                     Aucun abonnement
-                    {quickFilter !== "all" || search ? " pour ce filtre" : ""}
+                    {quickFilter !== "all" || search || formulaIds.length || dateRange
+                      ? " pour ce filtre"
+                      : ""}
                   </TableCell>
                 </TableRow>
               ) : (
-                filtered.map((a, i) => {
+                paged.pageItems.map((a, i) => {
                   const left = daysLeft(a);
                   const hLeft = hoursLeft(a);
                   const active = isActiveSub(a);
@@ -1526,6 +1966,12 @@ function AbonnementsInner() {
               )}
             </TableBody>
           </Table>
+          <ListPager
+            page={paged.page}
+            lastPage={paged.lastPage}
+            total={paged.total}
+            onPage={paged.setPage}
+          />
         </CardContent>
       </Card>
 
@@ -1707,6 +2153,7 @@ function AbonnementsInner() {
                     leaveDate: "",
                     paymentRemindAt: "",
                     isPayed: true,
+                    paymentDate: todayKey(),
                     payedAmount: 0,
                     hoursUsed: 0,
                     reservedSeatLabel: "",
@@ -1747,5 +2194,53 @@ function AbonnementsInner() {
         />
       ) : null}
     </div>
+  );
+}
+
+/** One received payment: its amount and the day it is counted in the caisse (editable). */
+function PaymentDayRow({
+  amount,
+  paidAt,
+  busy,
+  onMove,
+}: {
+  amount: number;
+  paidAt: string;
+  busy: boolean;
+  onMove: (day: string) => void;
+}) {
+  const saved = format(new Date(paidAt), "yyyy-MM-dd");
+  const [day, setDay] = useState(saved);
+  const changed = !!day && day !== saved;
+  return (
+    <li className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="w-20 font-medium tabular-nums">{amount} DT</span>
+      <span className="text-xs text-muted-foreground">le</span>
+      <Input
+        type="date"
+        max={todayKey()}
+        value={day}
+        onChange={(e) => setDay(e.target.value)}
+        className="h-8 w-40"
+        aria-label={`Date du paiement de ${amount} DT`}
+      />
+      {changed ? (
+        <span className="flex items-center gap-1 animate-in fade-in-0 slide-in-from-left-1 duration-150 motion-reduce:animate-none">
+          <Button type="button" size="sm" className="h-8 text-xs" disabled={busy} onClick={() => onMove(day)}>
+            Déplacer
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            aria-label="Annuler"
+            onClick={() => setDay(saved)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </span>
+      ) : null}
+    </li>
   );
 }
