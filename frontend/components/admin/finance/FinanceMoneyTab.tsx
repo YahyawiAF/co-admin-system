@@ -16,7 +16,7 @@ import { QUESTIONS_KEY, QuestionsTab } from "./MoneyQuestions";
  * Finance › Argent: how much to keep, how much can be invested (caisse + coffre + banque
  * − charges − réserve), and the few answers that make the calculation right.
  */
-export function FinanceMoneyTab() {
+export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void } = {}) {
   const qc = useQueryClient();
   const [view, setView] = useState<"calcul" | "questions">("calcul");
   const questions = useQuery({ queryKey: QUESTIONS_KEY, queryFn: managerApi.questions });
@@ -79,7 +79,7 @@ export function FinanceMoneyTab() {
       </div>
       <div key={view} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
         {view === "calcul" ? (
-          <MoneyTab onAnswer={() => setView("questions")} onStartTest={(idea) => start.mutate(idea)} />
+          <MoneyTab onAnswer={() => setView("questions")} onStartTest={(idea) => start.mutate(idea)} onGoTab={onGoTab} />
         ) : (
           <QuestionsTab onShowMoney={() => setView("calcul")} />
         )}

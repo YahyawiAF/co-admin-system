@@ -18,7 +18,10 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
+  caisseApi,
   dailyExpensesApi,
+  EXPENSE_CATEGORIES,
+  type ExpenseCategory,
   type ExpenseSource,
 } from "@/lib/api/resources";
 import { EXPENSE_SOURCE_LABEL, dt, invalidateMoney } from "@/lib/finance-queries";
@@ -32,6 +35,22 @@ const SOURCES: Array<{ id: ExpenseSource; label: string; hint: string }> = [
 ];
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Same guess as the server, so the right chip lights up while typing. */
+const GUESS: Array<[ExpenseCategory, RegExp]> = [
+  ["LOYER", /lou(e|é)r|loyer|location|rent/i],
+  ["ENERGIE", /steg|sonede|[ée]lectri|gaz\b|facture d.?eau/i],
+  ["INTERNET", /internet|connexion|connection|wifi|fibre|ooredoo|topnet|orange/i],
+  ["SALAIRES", /salaire|cnss|paie/i],
+  ["STOCK_CAFE", /caf(e|é)|coffee|lait|milk|sucre|gobelet|goubl|eau\b|water|cake|brownie|g[aâ]teau|soda|jus/i],
+  ["MENAGE", /clean|m[ée]nage|nettoy|air fresh|savon|javel|produit/i],
+  ["EQUIPEMENT", /chaise|table|rallonge|[ée]quipement|lampe|clim|imprim|papier|plomb/i],
+];
+const guessCategory = (label: string): ExpenseCategory => GUESS.find(([, re]) => re.test(label))?.[0] ?? "AUTRE";
+
+const monthKey = (d: Date) => format(d, "yyyy-MM");
+const monthName = (key: string) => format(new Date(`${key}-15T12:00:00`), "MMMM yyyy", { locale: fr });
+const SPREADS = [3, 6, 12];
 
 /** Add one-off expenses for a day: build the amount with +1/+2/+5…, write what it was, done. */
 export function QuickExpenseDialog({
@@ -48,6 +67,9 @@ export function QuickExpenseDialog({
   const [amount, setAmount] = useState("");
   const [label, setLabel] = useState("");
   const [source, setSource] = useState<ExpenseSource>("CAISSE");
+  const [category, setCategory] = useState<ExpenseCategory | null>(null);
+  /** "this" | "last" | number of months to spread over */
+  const [forWhen, setForWhen] = useState<"this" | "last" | number>("this");
   const labelRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -55,7 +77,18 @@ export function QuickExpenseDialog({
     setAmount("");
     setLabel("");
     setSource("CAISSE");
+    setCategory(null);
+    setForWhen("this");
   }, [open]);
+
+  const thisMonth = date.slice(0, 7);
+  const lastMonth = monthKey(new Date(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 2, 1));
+  const cat = category ?? guessCategory(label);
+  const { data: coffre } = useQuery({
+    queryKey: ["coffre"],
+    queryFn: () => caisseApi.coffre(),
+    enabled: open && source === "COFFRE",
+  });
 
   const { data: dayRows = [] } = useQuery({
     queryKey: ["expenses-day", date],
@@ -82,12 +115,18 @@ export function QuickExpenseDialog({
         date,
         source,
         kind: "JOURNALIER",
+        category: cat,
+        forMonth: forWhen === "last" ? lastMonth : thisMonth,
+        spreadMonths: typeof forWhen === "number" ? forWhen : 1,
       }),
     onSuccess: (row) => {
       toast.success(`${row.label} · −${dt(row.amount)}`);
       setAmount("");
       setLabel("");
+      setCategory(null);
+      setForWhen("this");
       invalidateMoney(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["coffre"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -114,7 +153,7 @@ export function QuickExpenseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-rose-500" />
@@ -209,6 +248,57 @@ export function QuickExpenseDialog({
           </div>
 
           <div className="space-y-2">
+            <Label>Catégorie</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {EXPENSE_CATEGORIES.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setCategory(c.id)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200",
+                    cat === c.id ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted/60",
+                  )}
+                >
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Pour quel mois ?</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  ["this", `Ce mois (${monthName(thisMonth)})`],
+                  ["last", `Mois dernier (${monthName(lastMonth)})`],
+                  ...SPREADS.map((n) => [n, `Répartir sur ${n} mois`] as const),
+                ] as Array<readonly ["this" | "last" | number, string]>
+              ).map(([k, text]) => (
+                <button
+                  key={String(k)}
+                  type="button"
+                  onClick={() => setForWhen(k)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200",
+                    forWhen === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted/60",
+                  )}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {forWhen === "last"
+                ? `Compte dans le bénéfice de ${monthName(lastMonth)}, pas de ce mois. L’argent sort quand même aujourd’hui.`
+                : typeof forWhen === "number" && value > 0
+                  ? `${dt(value / forWhen, 2)} par mois pendant ${forWhen} mois, à partir de ${monthName(thisMonth)}.`
+                  : "Le loyer du mois dernier payé aujourd’hui ? Choisissez « mois dernier »."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label>Payé avec</Label>
             <div className="grid grid-cols-3 gap-1.5">
               {SOURCES.map((s) => (
@@ -228,6 +318,11 @@ export function QuickExpenseDialog({
                 </button>
               ))}
             </div>
+            {source === "COFFRE" && coffre ? (
+              <p className={cn("text-xs", coffre.balance - (value || 0) < 0 ? "text-rose-600" : "text-muted-foreground")}>
+                Coffre après : <b className="tabular-nums">{dt(coffre.balance - (value || 0), 2)}</b> (aujourd’hui {dt(coffre.balance, 2)})
+              </p>
+            ) : null}
           </div>
 
           <Button type="submit" size="lg" className="w-full" disabled={add.isPending}>
@@ -250,6 +345,8 @@ export function QuickExpenseDialog({
                     <div className="truncate font-medium">{r.label}</div>
                     <div className="text-xs text-muted-foreground">
                       {r.kind === "MENSUEL" ? "Charge du mois · " : ""}
+                      {r.categoryLabel ? `${r.categoryLabel} · ` : ""}
+                      {r.otherMonth && r.months?.length ? `pour ${r.months.length > 1 ? `${r.months.length} mois` : monthName(r.months[0])} · ` : ""}
                       {EXPENSE_SOURCE_LABEL[r.source]} · {format(new Date(r.createdAt), "HH:mm")}
                     </div>
                   </div>

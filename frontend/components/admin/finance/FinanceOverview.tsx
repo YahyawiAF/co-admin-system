@@ -43,8 +43,9 @@ import { cn } from "@/lib/utils";
 import { analyticsApi, facilityApi } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
 import { WEEKDAY_LABELS, WEEKDAYS_MON_FIRST } from "@/lib/traffic-utils";
+import { FinanceSummary, Fold } from "./FinanceSummary";
 import { BreakEvenCard } from "./BreakEvenCard";
-import { ChangeQuestions, ForecastBlock, LeverMapCard } from "./FinanceForecast";
+import { ChangeQuestions, LeverMapCard } from "./FinanceForecast";
 import type {
   AbonnementMonth,
   InsightSeverity,
@@ -893,9 +894,11 @@ function AbonnementsMonthCard({ a, isCurrent }: { a: AbonnementMonth; isCurrent:
 export function FinanceOverview({
   monthKey,
   onMonthChange,
+  onGoTab,
 }: {
   monthKey: string;
   onMonthChange: (key: string) => void;
+  onGoTab?: (tab: string) => void;
 }) {
   const year = Number(monthKey.slice(0, 4));
   const month = Number(monthKey.slice(5, 7));
@@ -972,10 +975,16 @@ export function FinanceOverview({
         </Button>
       </div>
 
-      {data ? <TargetCard data={data} onEdit={() => setTargetOpen(true)} /> : <Skeleton className="h-40" />}
-      <ForecastBlock year={year} month={month} facilityId={facilityId} abonnements={data?.abonnements ?? null} />
+      {data && !data.period.isFuture ? <FinanceSummary data={data} year={year} month={month} onGoTab={onGoTab} /> : null}
       {data?.period.isCurrent ? <ChangeQuestions /> : null}
 
+      {data ? (
+        <Fold title="Objectif du mois" hint="votre but en DT et où vous en êtes">
+          <TargetCard data={data} onEdit={() => setTargetOpen(true)} />
+        </Fold>
+      ) : null}
+
+      <Fold title="Indicateurs du mois" hint="CA, dépenses, occupation, visites, abonnements">
       {isLoading || !data ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
@@ -1069,7 +1078,10 @@ export function FinanceOverview({
           {data.abonnements ? <AbonnementsMonthCard a={data.abonnements} isCurrent={data.period.isCurrent} /> : null}
         </>
       )}
+      {data && !data.period.isFuture ? <WeekdayPerformance data={data} /> : null}
+      </Fold>
 
+      <Fold title="Ce que vous devriez faire" hint={insights.length ? `${insights.length} action${insights.length > 1 ? "s" : ""}` : undefined}>
       <LeverMapCard />
 
       <Card className="shadow-none">
@@ -1094,8 +1106,7 @@ export function FinanceOverview({
           )}
         </CardContent>
       </Card>
-
-      {data && !data.period.isFuture ? <WeekdayPerformance data={data} /> : null}
+      </Fold>
 
       {data && data.period.isCurrent ? (
         <p className="text-xs text-muted-foreground">

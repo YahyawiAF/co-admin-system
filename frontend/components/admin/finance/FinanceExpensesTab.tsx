@@ -45,10 +45,15 @@ import {
 } from "@/lib/api/resources";
 import { EXPENSE_SOURCE_LABEL, dt, invalidateMoney } from "@/lib/finance-queries";
 import { QuickExpenseDialog } from "./QuickExpenseDialog";
+import { ExpenseMonthList } from "./ExpenseMonthList";
+import { InfoButton } from "./InfoModal";
 
 type Charge = ExpenseMonthOverview["recurring"][number];
 
 const todayKey = () => format(new Date(), "yyyy-MM-dd");
+const shiftMonth = (key: string, by: number) => format(new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1 + by, 1), "yyyy-MM");
+const monthName = (key: string) => format(new Date(`${key}-15T12:00:00`), "MMMM yyyy", { locale: fr });
+
 const dayLabel = (key: string) =>
   format(new Date(`${key}T12:00:00`), "EEEE d MMM", { locale: fr });
 
@@ -96,13 +101,15 @@ function PayChargeDialog({
   const [label, setLabel] = useState("");
   const [date, setDate] = useState(todayKey());
   const [source, setSource] = useState<ExpenseSource>("AUTRE");
+  const [forMonth, setForMonth] = useState(monthKey);
 
   useEffect(() => {
     if (!open) return;
     setAmount(charge ? String(charge.amount) : "");
     setLabel(charge?.name ?? "");
-    const today = todayKey();
-    setDate(today.startsWith(monthKey) ? today : charge?.dueDate ?? `${monthKey}-01`);
+    // The day the money leaves; the month it is for is chosen apart
+    setDate(todayKey());
+    setForMonth(monthKey);
     setSource("AUTRE");
   }, [open, charge, monthKey]);
 
@@ -116,6 +123,7 @@ function PayChargeDialog({
         date,
         source,
         kind: "MENSUEL",
+        forMonth,
       }),
     onSuccess: () => {
       toast.success(charge ? `${charge.name} payé` : "Charge ajoutée");
@@ -127,7 +135,7 @@ function PayChargeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{charge ? `Payer · ${charge.name}` : "Charge ponctuelle du mois"}</DialogTitle>
           <DialogDescription>
@@ -163,6 +171,25 @@ function PayChargeDialog({
               <Label>Date</Label>
               <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Pour quel mois ?</Label>
+            <div className="flex flex-wrap gap-1.5">
+              {[shiftMonth(monthKey, -1), monthKey, shiftMonth(monthKey, 1)].map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setForMonth(k)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-200",
+                    forMonth === k ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted/60",
+                  )}
+                >
+                  {monthName(k)}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Compte dans le bénéfice de {monthName(forMonth)}, quel que soit le jour où vous payez.</p>
           </div>
           <div className="space-y-1.5">
             <Label>Payé avec</Label>
@@ -368,10 +395,16 @@ export function FinanceExpensesTab({
           <div className="grid gap-3 sm:grid-cols-3">
             <Card className="shadow-none">
               <CardContent className="space-y-1 p-4">
-                <div className="text-xs font-medium text-muted-foreground">Dépensé ce mois</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-muted-foreground">Dépenses de ce mois</div>
+                  <InfoButton title="Dépenses de ce mois">
+                    <p>Ce qui compte dans le bénéfice du mois : les dépenses <b>pour</b> ce mois, même payées avant ou après.</p>
+                    <p>Payé ce mois pour un autre mois : {dt(data.totals.paidForOtherMonths ?? 0)} (pas compté ici).</p>
+                  </InfoButton>
+                </div>
                 <div className="text-2xl font-semibold tabular-nums">{dt(data.totals.spent)}</div>
                 <div className="text-xs text-muted-foreground">
-                  Petites dépenses {dt(data.totals.daily)} · Charges {dt(data.totals.chargesPaid)}
+                  Achats du jour {dt(data.totals.daily)} · Charges {dt(data.totals.chargesPaid)}
                 </div>
               </CardContent>
             </Card>
@@ -392,7 +425,7 @@ export function FinanceExpensesTab({
             </Card>
             <Card className="shadow-none">
               <CardContent className="space-y-1 p-4">
-                <div className="text-xs font-medium text-muted-foreground">Payé depuis</div>
+                <div className="text-xs font-medium text-muted-foreground">Sorti ce mois depuis</div>
                 <div className="space-y-0.5 pt-1 text-sm">
                   {(Object.keys(EXPENSE_SOURCE_LABEL) as ExpenseSource[]).map((s) => (
                     <div key={s} className="flex justify-between tabular-nums">
@@ -538,13 +571,33 @@ export function FinanceExpensesTab({
             </CardContent>
           </Card>
 
+          <ExpenseMonthList data={data} monthKey={monthKey} />
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Card className="shadow-none">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Où part l&apos;argent</CardTitle>
-                <p className="text-sm text-muted-foreground">Petites dépenses du mois, par description.</p>
+                <p className="text-sm text-muted-foreground">Par catégorie, puis les achats du jour par description.</p>
               </CardHeader>
               <CardContent className="space-y-2">
+                {data.totals.byCategory?.length ? (
+                  <div className="mb-3 space-y-2 border-b pb-3">
+                    {data.totals.byCategory.map((c) => (
+                      <div key={c.category} className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="font-medium">{c.label}</span>
+                          <span className="tabular-nums text-muted-foreground">{dt(c.total, 2)} · {c.count}×</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary transition-[width] duration-500 motion-reduce:transition-none"
+                            style={{ width: `${(c.total / Math.max(1, data.totals.byCategory![0].total)) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {data.daily.byLabel.length ? (
                   data.daily.byLabel.slice(0, 10).map((l) => (
                     <div key={l.label} className="space-y-1">
