@@ -17,7 +17,7 @@ import { fr } from 'date-fns/locale';
 import { MemberService } from '../member/member.service';
 import { ExpensesService } from '../expense/expense.service';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
-import { expenseAmount } from '../expense/expense-amount';
+import { expenseAmount, expensesInPeriod } from '../expense/expense-amount';
 import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
 import { openHoursForDay, paidJournalsIn, visitsIn } from './money-rules';
@@ -110,11 +110,16 @@ export class PerformanceService {
     avgTicket: number | null,
     projected: number | null,
   ) {
-    const m = await this.expenses.monthOverview(year, month);
+    const [m, perDay] = await Promise.all([
+      this.expenses.monthOverview(year, month),
+      this.expenses.dailyAverage(28),
+    ]);
+    // Every expense counts in the month it is for (« pour quel mois »), not the day it is paid
     const fixed = m.totals.chargesPaid + m.totals.chargesRemaining;
+    // Daily purchases still to come = the average day of the last 4 weeks, not the first days × 30
     const dailyProjected =
-      elapsedDays > 0.5 && elapsedDays < daysInMonth
-        ? (m.totals.daily / elapsedDays) * daysInMonth
+      remainingDays > 0 && elapsedDays < daysInMonth
+        ? m.totals.daily + perDay * remainingDays
         : m.totals.daily;
     const total = round1(fixed + dailyProjected);
     const remaining = round1(Math.max(0, total - revenue));
@@ -124,6 +129,8 @@ export class PerformanceService {
       fixed: round1(fixed),
       fixedRemaining: round1(m.totals.chargesRemaining),
       dailyProjected: round1(dailyProjected),
+      dailyPerDay: perDay,
+      paidForOtherMonths: m.totals.paidForOtherMonths,
       total,
       covered: round1(Math.min(revenue, total)),
       coveredPct: total > 0 ? round1(Math.min(100, (revenue / total) * 100)) : null,
@@ -315,9 +322,10 @@ export class PerformanceService {
             product: { select: { sellingPrice: true } },
           },
         }),
+        // « Pour quel mois »: rows paid before or after the period can count in it
         this.prisma.dailyExpense.findMany({
-          where: { date: { gte: start, lte: end } },
-          select: { amount: true, expense: { select: { amount: true } } },
+          where: { OR: [{ date: { gte: start, lte: end } }, { forMonth: { not: null } }, { spreadMonths: { gt: 1 } }] },
+          select: { amount: true, date: true, createdAt: true, forMonth: true, spreadMonths: true, expense: { select: { amount: true } } },
         }),
         this.prisma.journal.findMany({
           where: visitsIn(start, end),
@@ -357,7 +365,7 @@ export class PerformanceService {
       products += v;
       addDay(productsByDay, dp.date, v);
     }
-    const expenses = dailyExpenses.reduce((a, de) => a + expenseAmount(de), 0);
+    const expenses = expensesInPeriod(dailyExpenses, start, end);
     // Paid event places count as revenue, kept apart from the passes + café curve
     const events = eventRegs.reduce((a, r) => a + (r.paidAmount ?? 0), 0);
     const revenue = journalRevenue + abonnements + products + events;
@@ -544,7 +552,7 @@ export class PerformanceService {
       : !isCurrent
         ? revenue
         : forecast
-          ? round1(Math.max(revenue, forecast.projectedAll.current))
+          ? round1(Math.max(revenue, forecast.projectedAll.pace))
           : elapsedDays > 0.5
             ? round1((revenue / elapsedDays) * daysInMonth)
             : null;

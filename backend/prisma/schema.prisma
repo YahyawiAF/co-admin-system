@@ -564,6 +564,12 @@ model DailyExpense {
   kind          ExpenseType  @default(JOURNALIER)
   /// Where the money came from: CAISSE (cash drawer) | COFFRE | AUTRE (bank, card…)
   source        String       @default("CAISSE")
+  /// Month the expense is for (yyyy-MM), e.g. last month's rent paid today. Null = month of `date`.
+  forMonth      String?
+  /// Spread over this many months from `forMonth` (equipment…). 1 = one month.
+  spreadMonths  Int          @default(1)
+  /// LOYER | ENERGIE | INTERNET | SALAIRES | STOCK_CAFE | MENAGE | EQUIPEMENT | AUTRE
+  category      String?
   coffreEntry   CoffreEntry?
   externalOrgId String?
   externalRef   String?
@@ -572,6 +578,7 @@ model DailyExpense {
   updatedAt     DateTime     @updatedAt
 
   @@index([date])
+  @@index([forMonth])
 }
 
 enum JournalPricingMode {
