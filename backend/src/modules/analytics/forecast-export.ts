@@ -32,10 +32,10 @@ export function toCsv(rows: Array<Record<string, unknown>>) {
 
 export const HOW_IT_WORKS = {
   curve: 'Chaque jour : passes et café = moyenne du même jour de semaine sur les jours habituels de la base × l’effet du calendrier. Abonnements le jour où ceux en cours finissent, événements le jour de l’événement.',
-  base: 'Jusqu’à 4 jours habituels de chaque jour de semaine dans les 8 semaines avant le mois. Jours fériés, périodes du calendrier et leur veille/lendemain exclus.',
+  base: 'Le mois précédent (jours ouverts), moyenne par jour de semaine, les derniers jours comptant jusqu’à 3× plus que les premiers. Moins de 14 jours ouverts : jusqu’à 4 jours habituels de chaque jour de semaine dans les 8 semaines avant le mois. Café = visites prévues × DT par visite depuis le dernier changement d’habitude.',
   calendarFactor: 'Passes + café des fois précédentes du même type de date ÷ les mêmes jours de semaine habituels les plus proches. Jamais mesuré = 1, fourchette plus large.',
   projectionCurrent: 'Passes + café réels des jours finis + prévu des jours restants + le plus grand entre abonnements déjà payés et prévus + événements (payés + places réservées).',
-  projectionPace: 'Pareil, mais les jours restants bougent avec l’écart déjà vu : × (1 + écart % × jours vécus ÷ (jours vécus + 7)), entre 50 % et 150 %.',
+  projectionPace: 'Prévision principale. Pareil, mais les jours restants bougent avec l’écart déjà vu : × (1 + écart % × jours vécus ÷ (jours vécus + 3)), entre 50 % et 150 %.',
   abonnements: 'Valeur des abonnements qui finissent ce mois × taux de renouvellement + nouveaux abonnés au rythme des 28 jours avant le mois.',
   previous: 'Mois dernier : passes et café rejoués sur les jours de semaine de ce mois, abonnements et événements à la même date.',
   objectif: 'Objectif CA = tout ce qui est encaissé. Objectif net = CA − dépenses.',

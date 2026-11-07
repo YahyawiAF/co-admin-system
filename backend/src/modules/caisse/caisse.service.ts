@@ -16,7 +16,7 @@ import {
   parseLocalDay,
 } from '../../../common/parse-local-day';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
-import { expenseAmount, expenseLabel } from '../expense/expense-amount';
+import { expenseAmount, expenseLabel, expensesInPeriod } from '../expense/expense-amount';
 
 /** Gap (DT) above which closing needs an explanation. */
 const GAP_NEEDS_NOTE = 0.5;
@@ -560,7 +560,7 @@ export class CaisseService {
         include: { product: true },
       }),
       this.prisma.dailyExpense.findMany({
-        where: { date: { gte: start, lte: end } },
+        where: { OR: [{ date: { gte: start, lte: end } }, { forMonth: { not: null } }, { spreadMonths: { gt: 1 } }] },
         include: { expense: true },
       }),
       this.prisma.caisseSession.findMany({
@@ -580,12 +580,9 @@ export class CaisseService {
     const revenueProducts = dailyProducts
       .filter((dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED')
       .reduce((a, dp) => a + orderUnitPrice(dp) * dp.quantite, 0);
-    const expensesDaily = dailyExpenses
-      .filter((de) => de.kind === 'JOURNALIER')
-      .reduce((a, de) => a + expenseAmount(de), 0);
-    const expensesMonthly = dailyExpenses
-      .filter((de) => de.kind === 'MENSUEL')
-      .reduce((a, de) => a + expenseAmount(de), 0);
+    // Each expense counts in the month it is for (« pour quel mois »)
+    const expensesDaily = expensesInPeriod(dailyExpenses.filter((de) => de.kind === 'JOURNALIER'), start, end);
+    const expensesMonthly = expensesInPeriod(dailyExpenses.filter((de) => de.kind === 'MENSUEL'), start, end);
     const expenses = expensesDaily + expensesMonthly;
     const coffreIn = coffre
       .filter((c) => c.type === 'IN')

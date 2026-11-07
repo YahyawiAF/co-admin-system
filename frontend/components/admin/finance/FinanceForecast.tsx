@@ -148,7 +148,8 @@ export function ForecastBlock({
     queryKey: ["performance", "forecast", year, month],
     queryFn: () => analyticsApi.performanceForecast(year, month),
   });
-  const [pace, setPace] = useState(false);
+  // « Rythme du mois » is the main forecast; the old rule stays one click away
+  const [pace, setPace] = useState(true);
   const [whyMode, setWhyMode] = useState<"previous" | "expected">("previous");
 
   if (isLoading || !f) {

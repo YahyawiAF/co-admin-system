@@ -121,6 +121,9 @@ import type {
   PerformanceOverview,
   ForecastAccuracy,
   MonthForecast,
+  UnusualDays,
+  SchoolYear,
+  CafeMonth,
   AdvisorDismissal,
   PerformanceChange,
   LeverMap,
@@ -206,7 +209,33 @@ export type DailyExpense = {
   Summary?: string | null;
   createdAt: string;
   expense?: Expense | null;
+  /** yyyy-MM it is for (null = month of the date) */
+  forMonth?: string | null;
+  spreadMonths?: number;
+  category?: ExpenseCategory;
+  categoryLabel?: string;
+  /** Months it counts in (yyyy-MM) */
+  months?: string[];
+  /** Paid in a month, counted in another */
+  otherMonth?: boolean;
+  /** In a month overview: the part of the expense that counts in this month */
+  share?: number;
+  /** In a month overview: the full amount paid */
+  paidAmount?: number;
 };
+
+export type ExpenseCategory = "LOYER" | "ENERGIE" | "INTERNET" | "SALAIRES" | "STOCK_CAFE" | "MENAGE" | "EQUIPEMENT" | "AUTRE";
+
+export const EXPENSE_CATEGORIES: Array<{ id: ExpenseCategory; label: string }> = [
+  { id: "LOYER", label: "Loyer" },
+  { id: "ENERGIE", label: "Électricité & eau" },
+  { id: "INTERNET", label: "Internet" },
+  { id: "SALAIRES", label: "Salaires" },
+  { id: "STOCK_CAFE", label: "Stock café" },
+  { id: "MENAGE", label: "Ménage" },
+  { id: "EQUIPEMENT", label: "Équipement" },
+  { id: "AUTRE", label: "Autre" },
+];
 
 export type ExpenseSuggestion = { label: string; lastAmount: number; count: number };
 
@@ -238,8 +267,13 @@ export type ExpenseMonthOverview = {
     chargesPaid: number;
     chargesRemaining: number;
     chargesPlanned: number;
+    /** Money that left the caisse / coffre / bank this month (whatever month it is for) */
     bySource: Record<ExpenseSource, number>;
+    byCategory?: Array<{ category: ExpenseCategory; label: string; total: number; count: number }>;
+    /** Paid this month for another month */
+    paidForOtherMonths?: number;
   };
+  paidForOther?: Array<{ id: string; label: string; amount: number; share: number; months: string[]; date: string; source: ExpenseSource }>;
 };
 
 export const journalApi = {
@@ -638,6 +672,22 @@ export const analyticsApi = {
       data,
     );
   },
+  unusualDays(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<UnusualDays>(`/analytics/performance/unusual-days${q}`);
+  },
+  answerUnusualDay(data: { day: string; reason: string; note?: string }) {
+    return http.post<{ ok: boolean }>("/analytics/performance/unusual-days/answer", data);
+  },
+  schoolYear(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<SchoolYear>(`/analytics/performance/school-year${q}`);
+  },
+  cafe(year: number, month: number, facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month) });
+    if (facilityId) q.set("facilityId", facilityId);
+    return http.get<CafeMonth>(`/analytics/performance/cafe?${q.toString()}`);
+  },
   performanceLevers(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
     return http.get<LeverMap>(`/analytics/performance/levers${q}`);
@@ -1003,6 +1053,10 @@ export type DailyExpenseInput = {
   /** Paying a recurring charge */
   expenseId?: string;
   Summary?: string;
+  /** yyyy-MM the expense is for (null = month of the date) */
+  forMonth?: string | null;
+  spreadMonths?: number;
+  category?: ExpenseCategory | null;
 };
 
 export const dailyExpensesApi = {

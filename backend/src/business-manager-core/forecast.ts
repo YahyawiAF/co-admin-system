@@ -2,9 +2,11 @@
  * Monthly forecast and the "why the gap" split. Plain TypeScript, no database.
  *
  * Rules:
- * - Passes and café follow the weekday: each day gets the average of the same
- *   weekday over the weeks before the month, leaving out holidays and periods
- *   (exams, vacations, Ramadan…).
+ * - Passes follow the weekday: each day gets the average of the same weekday
+ *   over the base (the previous month), the most recent days weighing up to
+ *   3 times more than its first days.
+ * - Café follows the visits: expected visits × DT per visit since the last
+ *   change of habit (new product, outside drinks banned…).
  * - Days inside a calendar period get the effect measured the last times that
  *   kind of period happened. Unknown effect = usual day, wider range.
  * - Abonnements are never spread over days: one expected amount for the month.
@@ -67,8 +69,14 @@ export type DayFactor = {
 };
 
 export type ForecastInput = {
-  /** Usual days before the month (special days left out). */
+  /** Days of the base (oldest first). */
   base: DayFact[];
+  /** Weight of the base's last day vs its first (1 = all equal, default). */
+  recentWeight?: number;
+  /** Café = expected visits × this rate, from `from` on (else the weekday average). */
+  cafe?: { perVisit: number; from: string } | null;
+  /** « Rythme du mois » speed: weight = days ÷ (days + paceDays). Default 7. */
+  paceDays?: number;
   /** Consecutive days for the weakest / strongest week (default: base). */
   bandBase?: DayFact[];
   /** Every day of the month to forecast. */
@@ -238,12 +246,21 @@ function keysBetween(start: string, end: string) {
   return Array.from({ length: b - a + 1 }, (_, i) => dayKeyOf(a + i));
 }
 
-/** Daily average per weekday of a set of days. */
-export function weekdayAverages(base: DayFact[]) {
+/** Linear weights for days oldest first: 1 for the first, `last` for the last. */
+export function recencyWeights(n: number, last = 1) {
+  if (n <= 1 || last === 1) return Array.from({ length: n }, () => 1);
+  return Array.from({ length: n }, (_, i) => 1 + ((last - 1) * i) / (n - 1));
+}
+
+/** Daily average per weekday of a set of days (optionally weighted, same order as `base`). */
+export function weekdayAverages(base: DayFact[], weights?: number[]) {
   return Array.from({ length: 7 }, (_, weekday) => {
-    const rows = base.filter((d) => d.weekday === weekday);
+    const idx = base.map((d, i) => i).filter((i) => base[i].weekday === weekday);
+    const rows = idx.map((i) => base[i]);
     const n = rows.length;
-    const avg = (f: (r: DayFact) => number) => (n ? sum(rows, f) / n : 0);
+    const w = idx.map((i) => weights?.[i] ?? 1);
+    const wSum = sum(w, (x) => x);
+    const avg = (f: (r: DayFact) => number) => (n && wSum ? rows.reduce((a, r, k) => a + f(r) * w[k], 0) / wSum : 0);
     return {
       weekday,
       samples: n,
@@ -433,18 +450,21 @@ export function splitGap(ref: Totals, cmp: Totals, opts: { subscriptions?: boole
 
 /**
  * How much the gap on the days lived moves the days left: weight = days ÷
- * (days + 7), so one good weekend barely counts and two good weeks count a lot.
+ * (days + paceDays). With 3: 3 days lived → 50 %, 9 days → 75 %.
  * The multiplier stays within 50 %–150 %.
  */
-export function paceOf(daysLived: number, expected: number, actual: number) {
-  const weight = daysLived > 0 ? daysLived / (daysLived + 7) : 0;
+export function paceOf(daysLived: number, expected: number, actual: number, paceDays = 7) {
+  const weight = daysLived > 0 ? daysLived / (daysLived + paceDays) : 0;
   if (!(expected > 0)) return { weight, multiplier: 1 };
   const multiplier = Math.max(0.5, Math.min(1.5, 1 + ((actual - expected) / expected) * weight));
   return { weight, multiplier };
 }
 
 export function buildForecast(input: ForecastInput): Forecast {
-  const avg = weekdayAverages(input.base);
+  const avg = weekdayAverages(input.base, recencyWeights(input.base.length, input.recentWeight ?? 1));
+  const cafe = input.cafe && input.cafe.perVisit >= 0 ? input.cafe : null;
+  /** Café expected on a day (before the factor) */
+  const productsOn = (d: MonthDay) => (cafe && d.key >= cafe.from ? avg[d.weekday].visits * cafe.perVisit : avg[d.weekday].products);
   const band = weekBand(input.bandBase ?? input.base);
   const factors = input.dayFactors ?? {};
   const subsExp = input.subscriptionsExpected;
@@ -459,7 +479,7 @@ export function buildForecast(input: ForecastInput): Forecast {
   const days: ForecastDay[] = input.month.map((m) => {
     const a = avg[m.weekday];
     const f = factors[m.key];
-    const expected = (a.revenueVisits + a.products) * mult(m.key);
+    const expected = (a.revenueVisits + productsOn(m)) * mult(m.key);
     const unknown = f && !f.known;
     expCum += expected;
     lowCum += expected * band.low * (unknown ? 0.6 : 1);
@@ -489,7 +509,7 @@ export function buildForecast(input: ForecastInput): Forecast {
       revenueVisits: sum(subset, (d) => avg[d.weekday].revenueVisits * k(d)),
       visits: sum(subset, (d) => avg[d.weekday].visits * k(d)),
       newVisitors: sum(subset, (d) => avg[d.weekday].newVisitors * k(d)),
-      products: sum(subset, (d) => avg[d.weekday].products * k(d)),
+      products: sum(subset, (d) => productsOn(d) * k(d)),
       subscriptions: 0,
     };
   };
@@ -543,7 +563,7 @@ export function buildForecast(input: ForecastInput): Forecast {
     const a = act.revenueVisits + act.products;
     const projectedVariable = a + (variableTotal - e);
     const projectedSubscriptions = Math.max(subsActual, subsExp);
-    const pace = paceOf(completeDays.length, e, a);
+    const pace = paceOf(completeDays.length, e, a, input.paceDays);
     const paceVariable = a + (variableTotal - e) * pace.multiplier;
     toDate = {
       days: completeDays.length,
@@ -691,5 +711,122 @@ export function detectChanges(
       });
     }
   }
+  return out;
+}
+
+export type CafeRate = {
+  /** DT of café per visit used for the days to come */
+  perVisit: number;
+  /** First day of the rate (the change, or the start of the window) */
+  from: string;
+  /** Day the habit changed (null = no clear change in the window) */
+  changedOn: string | null;
+  /** DT per visit before the change */
+  before: number | null;
+  /** Complete days behind the rate */
+  days: number;
+};
+
+/**
+ * Café per visit, learned again every evening. A change of habit (new
+ * product, outside drinks banned…) is a day after which café ÷ visits stays
+ * at least 1.5× higher (or 1.5× lower) than the 14 days before, for at least
+ * `minDays` complete days. With a change, only the days since count; without
+ * one, the last 14 days. `days` = complete days, oldest first.
+ */
+export function cafeRate(days: DayFact[], opts: { minDays?: number; window?: number; minVisits?: number } = {}): CafeRate | null {
+  const minDays = opts.minDays ?? 3;
+  const recent = days.slice(-(opts.window ?? 28));
+  // A rate needs enough visits behind it (a quiet day with one big order is not a habit)
+  const minVisits = opts.minVisits ?? 15;
+  const ratio = (rows: DayFact[]) => {
+    const v = sum(rows, (d) => d.visits);
+    return v >= minVisits ? sum(rows, (d) => d.products) / v : null;
+  };
+  let best: { i: number; score: number; after: number; before: number } | null = null;
+  for (let i = 1; i <= recent.length - minDays; i++) {
+    const after = ratio(recent.slice(i));
+    const before = ratio(recent.slice(Math.max(0, i - 14), i));
+    if (after == null || before == null) continue;
+    // Floor of 0,10 DT per visit: going from « no café yet » to a little café is not the biggest change
+    const score = Math.abs(Math.log(Math.max(after, 0.1) / Math.max(before, 0.1)));
+    if (score >= Math.log(1.5) && (!best || score > best.score)) best = { i, score, after, before };
+  }
+  if (best) {
+    return {
+      perVisit: r2(best.after),
+      from: recent[best.i].key,
+      changedOn: recent[best.i].key,
+      before: r2(best.before),
+      days: recent.length - best.i,
+    };
+  }
+  const last = recent.slice(-14);
+  const r = ratio(last);
+  if (r == null) return null;
+  return { perVisit: r2(r), from: last[0].key, changedOn: null, before: null, days: last.length };
+}
+
+export type UnusualDay = {
+  key: string;
+  weekday: number;
+  actual: number;
+  expected: number;
+  /** +60 = 60 % above a usual day */
+  changePct: number;
+  direction: 'up' | 'down';
+};
+
+/**
+ * Days that rose or fell well beyond a usual same weekday, with no calendar
+ * entry to explain them: ≥ +50 % or ≤ −40 %, and at least `minAbs` DT apart.
+ * A usual day = weighted average of the same weekday over the 28 days before
+ * (special days left out). `days` consecutive, oldest first.
+ */
+export function unusualDays(
+  days: DayFact[],
+  special: Set<string>,
+  opts: { from?: string; minAbs?: number; up?: number; down?: number } = {},
+): UnusualDay[] {
+  const minAbs = opts.minAbs ?? 40;
+  const up = opts.up ?? 0.5;
+  const down = opts.down ?? 0.4;
+  const out: UnusualDay[] = [];
+  days.forEach((d, i) => {
+    if (opts.from && d.key < opts.from) return;
+    // Closed days (nobody came) are not « unusual », and do not make a usual day
+    const open = (x: DayFact) => x.visits > 0 || variable(x) > 0;
+    if (special.has(d.key) || !open(d)) return;
+    const before = days.slice(Math.max(0, i - 28), i).filter((x) => !special.has(x.key) && x.weekday === d.weekday && open(x));
+    if (before.length < 2) return;
+    const w = recencyWeights(before.length, 2);
+    const expected = before.reduce((a, x, k) => a + variable(x) * w[k], 0) / sum(w, (x) => x);
+    const actual = variable(d);
+    if (expected <= 0 || Math.abs(actual - expected) < minAbs) return;
+    const change = (actual - expected) / expected;
+    if (change >= up || change <= -down) {
+      out.push({ key: d.key, weekday: d.weekday, actual: r1(actual), expected: r1(expected), changePct: Math.round(change * 100), direction: change > 0 ? 'up' : 'down' });
+    }
+  });
+  return out;
+}
+
+/** 3 unusual days in a row (same direction, ≤ 1 day apart) = a lasting change. */
+export function lastingChanges(list: UnusualDay[], run = 3) {
+  const out: Array<{ from: string; to: string; direction: 'up' | 'down'; days: number }> = [];
+  let cur: UnusualDay[] = [];
+  const flush = () => {
+    if (cur.length >= run) out.push({ from: cur[0].key, to: cur[cur.length - 1].key, direction: cur[0].direction, days: cur.length });
+    cur = [];
+  };
+  for (const d of list) {
+    const last = cur[cur.length - 1];
+    if (last && last.direction === d.direction && dayNumber(d.key) - dayNumber(last.key) <= 2) cur.push(d);
+    else {
+      flush();
+      cur = [d];
+    }
+  }
+  flush();
   return out;
 }

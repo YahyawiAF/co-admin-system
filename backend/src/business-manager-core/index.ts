@@ -4,6 +4,10 @@ export { computeMoneyPlan, ideaFit, DEFAULT_RESERVE_MONTHS } from './money';
 export { featureIdeas, ticketMarkdown, type FeatureIdea } from './features';
 export {
   buildForecast,
+  cafeRate,
+  lastingChanges,
+  recencyWeights,
+  unusualDays,
   calendarEffects,
   calendarEqual,
   calendarKeys,
@@ -18,6 +22,8 @@ export {
   weekdayAverages,
 } from './forecast';
 export type {
+  CafeRate,
+  UnusualDay,
   CalendarEffect,
   CalendarEntry,
   ChangeMetric,

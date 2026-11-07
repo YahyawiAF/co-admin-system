@@ -20,10 +20,17 @@ import {
   parseLocalDay,
 } from '../../../common/parse-local-day';
 import {
+  CATEGORY_LABEL,
   expenseAmount,
   expenseLabel,
+  expenseMonths,
+  monthKeyOf,
+  normalizeCategory,
   normalizeSource,
+  shareIn,
+  type ExpenseCategory,
 } from './expense-amount';
+import { addMonths, subMonths } from 'date-fns';
 
 type Tx = Prisma.TransactionClient;
 
@@ -35,7 +42,26 @@ export type QuickExpenseInput = {
   kind?: ExpenseType | null;
   source?: string | null;
   Summary?: string | null;
+  /** yyyy-MM the expense is for (null = month of the date) */
+  forMonth?: string | null;
+  /** Spread over N months from forMonth */
+  spreadMonths?: number | null;
+  category?: string | null;
 };
+
+/** « Pour quel mois » input: yyyy-MM or null; throws on anything else. */
+function monthInput(v: string | null | undefined) {
+  if (v == null || v === '') return null;
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(v)) throw new BadRequestException('Mois invalide (aaaa-mm)');
+  return v;
+}
+
+function spreadInput(v: number | null | undefined) {
+  if (v == null) return 1;
+  const n = Math.round(Number(v));
+  if (!Number.isFinite(n) || n < 1 || n > 36) throw new BadRequestException('Répartition : 1 à 36 mois');
+  return n;
+}
 
 const withExpense = { expense: true, coffreEntry: { select: { id: true } } } as const;
 
@@ -63,8 +89,21 @@ export class ExpensesService {
     return expenses.map((expense) => new ExpenseEntity(expense));
   }
 
-  private present<T extends Parameters<typeof expenseAmount>[0]>(de: T) {
-    return { ...de, amount: expenseAmount(de), label: expenseLabel(de) };
+  private present<T extends Parameters<typeof expenseAmount>[0] & { date?: Date | null; createdAt?: Date | null; forMonth?: string | null; spreadMonths?: number | null; category?: string | null }>(de: T) {
+    const label = expenseLabel(de);
+    const months = expenseMonths(de);
+    const category = normalizeCategory(de.category, label);
+    return {
+      ...de,
+      amount: expenseAmount(de),
+      label,
+      category,
+      categoryLabel: CATEGORY_LABEL[category],
+      /** Months it counts in (yyyy-MM) */
+      months,
+      /** Paid in a month, counted in another */
+      otherMonth: months[0] !== monthKeyOf(de.date ?? de.createdAt ?? new Date()) || months.length > 1,
+    };
   }
 
   /** Keeps the coffre OUT line in step with an expense paid from the coffre. */
@@ -110,6 +149,9 @@ export class ExpensesService {
           kind,
           source,
           Summary: data.Summary?.trim() || null,
+          forMonth: monthInput(data.forMonth),
+          spreadMonths: spreadInput(data.spreadMonths),
+          category: data.category ? normalizeCategory(data.category, label) : null,
         },
       });
       await this.syncCoffre(tx, de);
@@ -134,6 +176,9 @@ export class ExpensesService {
           label: data.label != null ? data.label.trim() || 'Dépense' : undefined,
           source: data.source != null ? normalizeSource(data.source) : undefined,
           Summary: data.Summary !== undefined ? data.Summary?.trim() || null : undefined,
+          forMonth: data.forMonth !== undefined ? monthInput(data.forMonth) : undefined,
+          spreadMonths: data.spreadMonths !== undefined ? spreadInput(data.spreadMonths) : undefined,
+          category: data.category !== undefined ? (data.category ? normalizeCategory(data.category, data.label ?? current.label) : null) : undefined,
         },
       });
       await this.syncCoffre(tx, de);
@@ -175,6 +220,17 @@ export class ExpensesService {
     return rows.map((r) => this.present(r));
   }
 
+  /** Daily purchases per day over the last `days` complete days (for the end-of-month estimate). */
+  async dailyAverage(days = 28, now = new Date()) {
+    const to = subDays(startOfDay(now), 1);
+    const from = subDays(to, days - 1);
+    const rows = await this.prisma.dailyExpense.findMany({
+      where: { kind: 'JOURNALIER', date: { gte: from, lte: endOfDay(to) } },
+      include: { expense: true },
+    });
+    return round2(rows.reduce((a, r) => a + expenseAmount(r), 0) / days);
+  }
+
   /** Recent quick-expense descriptions (typing help only — nothing is saved as a template). */
   async suggestions() {
     const rows = await this.prisma.dailyExpense.findMany({
@@ -204,13 +260,23 @@ export class ExpensesService {
         where: { type: 'MENSUEL' },
         orderBy: [{ dueDay: 'asc' }, { name: 'asc' }],
       }),
+      // Paid up to 3 years before (spread) or a year after (paid late) can count in this month
       this.prisma.dailyExpense.findMany({
-        where: { date: { gte: start, lte: end } },
+        where: { date: { gte: subMonths(start, 36), lte: addMonths(end, 13) } },
         include: withExpense,
         orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       }),
     ]);
-    const rows = rawRows.map((r) => this.present(r));
+    const monthKey = monthKeyOf(start);
+    const all = rawRows.map((r) => ({ ...this.present(r), share: shareIn(r, monthKey) }));
+    // Rows that count in this month: their share replaces the amount in every total
+    const rows = all.filter((r) => r.share > 0).map((r) => ({ ...r, paidAmount: r.amount, amount: r.share }));
+    /** Paid this month, for another month (cash out, not this month's bénéfice) */
+    const inMonth = (r: (typeof all)[number]) => {
+      const d = r.date ?? r.createdAt;
+      return d >= start && d <= end;
+    };
+    const paidForOther = all.filter((r) => inMonth(r) && r.share < r.amount);
     const days = getDaysInMonth(start);
 
     const recurring = templates.map((t) => {
@@ -257,7 +323,14 @@ export class ExpensesService {
       byDay.set(key, cur);
     }
     const bySource = { CAISSE: 0, COFFRE: 0, AUTRE: 0 } as Record<string, number>;
-    for (const r of rows) bySource[r.source] = round2((bySource[r.source] || 0) + r.amount);
+    for (const r of all.filter(inMonth)) bySource[r.source] = round2((bySource[r.source] || 0) + r.amount);
+    const byCategory = new Map<ExpenseCategory, { category: ExpenseCategory; label: string; total: number; count: number }>();
+    for (const r of rows) {
+      const cur = byCategory.get(r.category) ?? { category: r.category, label: r.categoryLabel, total: 0, count: 0 };
+      cur.total = round2(cur.total + r.amount);
+      cur.count += 1;
+      byCategory.set(r.category, cur);
+    }
 
     const dailyTotal = round2(daily.reduce((a, r) => a + r.amount, 0));
     const chargesPaid = round2(
@@ -284,8 +357,13 @@ export class ExpensesService {
         chargesPaid,
         chargesRemaining,
         chargesPlanned: round2(templates.reduce((a, t) => a + t.amount, 0)),
+        /** Money that left the caisse / coffre / bank this month (whatever month it is for) */
         bySource,
+        byCategory: [...byCategory.values()].sort((a, b) => b.total - a.total),
+        /** Paid this month for another month */
+        paidForOtherMonths: round2(paidForOther.reduce((a, r) => a + r.amount - r.share, 0)),
       },
+      paidForOther: paidForOther.map((r) => ({ id: r.id, label: r.label, amount: r.amount, share: r.share, months: r.months, date: localDayKey(r.date ?? r.createdAt), source: r.source })),
     };
   }
 
