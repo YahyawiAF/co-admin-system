@@ -16,10 +16,13 @@ import { GlassChip, dt, signedDt } from "@/components/admin/stock/stock-ui";
 import { IngredientsTab, ProductsTab, PurchasesTab } from "@/components/admin/stock/StockTabs";
 import { PurchaseDialog } from "@/components/admin/stock/PurchaseDialog";
 import { ProductDialog } from "@/components/admin/stock/ProductDialog";
+import { LotsTab, RevenueTab } from "@/components/admin/stock/SalesTabs";
 import { CountDialog, ItemDialog } from "@/components/admin/stock/ItemDialogs";
 
-type Tab = "produits" | "ingredients" | "achats";
+type Tab = "revenus" | "paquets" | "produits" | "ingredients" | "achats";
 const TABS: { id: Tab; label: string }[] = [
+  { id: "revenus", label: "Revenus & coûts" },
+  { id: "paquets", label: "Par paquet" },
   { id: "produits", label: "Produits" },
   { id: "ingredients", label: "Ingrédients" },
   { id: "achats", label: "Achats" },
@@ -27,7 +30,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("produits");
+  const [tab, setTab] = useState<Tab>("revenus");
   const [buyOpen, setBuyOpen] = useState(false);
   const [buyItem, setBuyItem] = useState<string | null>(null);
   const [product, setProduct] = useState<StockProductRow | null>(null);
@@ -81,6 +84,8 @@ export default function ProductsPage() {
 
   const t = overview?.totals;
   const counts: Record<Tab, number> = {
+    revenus: 0,
+    paquets: overview?.purchases.reduce((a, p) => a + p.lots.length, 0) ?? 0,
     produits: overview?.products.length ?? 0,
     ingredients: overview?.items.length ?? 0,
     achats: overview?.purchases.length ?? 0,
@@ -249,14 +254,14 @@ export default function ProductsPage() {
               )}
             >
               {x.label}
-              <span
+              {x.id === "revenus" ? null : <span
                 className={cn(
                   "rounded-full px-1.5 text-[11px] tabular-nums transition-colors duration-200",
                   on ? "bg-white/20" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
                 )}
               >
                 {counts[x.id]}
-              </span>
+              </span>}
             </button>
           );
         })}
@@ -270,7 +275,11 @@ export default function ProductsPage() {
         </div>
       ) : (
         <div key={tab} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
-          {tab === "produits" ? (
+          {tab === "revenus" ? (
+            <RevenueTab overview={overview} />
+          ) : tab === "paquets" ? (
+            <LotsTab overview={overview} />
+          ) : tab === "produits" ? (
             <ProductsTab
               overview={overview}
               onOpen={(p) => {

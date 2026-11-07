@@ -1,7 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ProductOrderStatus, StockItemKind } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
-import { computeStock, type RecipeLine } from '../../business-manager-core/stock-lots';
+import { computeStock, monthOf, type RecipeLine } from '../../business-manager-core/stock-lots';
+import { orderUnitPrice } from '../product/order-price';
 import { parseLocalDay } from '../../../common/parse-local-day';
 import { ExpensesService } from '../expense/expense.service';
 import { EventsGateway } from '../webSocket/events.gateway';
@@ -109,6 +110,9 @@ export class StockService {
   async overview(organizationId?: string) {
     const { items, purchases, products, adjustments, result, orders } = await this.compute(organizationId);
     const itemById = new Map(items.map((i) => [i.id, i]));
+    const productName = new Map(products.map((p) => [p.id, p.name]));
+    const now = new Date();
+    const DAY = 86_400_000;
 
     const soldSince = new Map<string, number>();
     for (const o of orders) soldSince.set(o.productId, (soldSince.get(o.productId) ?? 0) + o.quantite);
@@ -118,6 +122,9 @@ export class StockService {
         const lots = pu.lots.map((l) => {
           const r = result.lots.get(l.id)!;
           const item = itemById.get(l.stockItemId);
+          const ir = result.items.get(l.stockItemId);
+          const end = r.finishedAt ?? now;
+          const usedNet = Math.max(0, r.used - r.lost);
           return {
             id: l.id,
             stockItemId: l.stockItemId,
@@ -131,6 +138,17 @@ export class StockService {
             result: round2(r.result),
             status: r.status,
             finishedAt: r.finishedAt,
+            /** Days from purchase to the end (or today) */
+            days: Math.max(1, Math.round((end.getTime() - pu.date.getTime()) / DAY)),
+            /** Products made with this lot (fractions when one spans two lots) */
+            gave: r.gave
+              .map((g) => ({ productId: g.productId, name: productName.get(g.productId) ?? '?', units: round2(g.units), quantity: round3(g.quantity), recovered: round2(g.recovered) }))
+              .sort((a, b) => b.units - a.units),
+            sold: round3(usedNet),
+            lost: round3(r.lost),
+            /** Open lot: day it should run out at the recent pace */
+            endsAround:
+              r.status === 'OPEN' && ir && ir.dailyUse > 1e-9 ? new Date(now.getTime() + (r.left / ir.dailyUse) * DAY) : null,
           };
         });
         const invested = lots.reduce((s, l) => s + l.price, 0);
@@ -220,7 +238,62 @@ export class StockService {
       (s, i) => s + purchaseRows.reduce((ss, p) => ss + p.lots.filter((l) => l.stockItemId === i.id).reduce((x, l) => x + (l.left * l.price) / (l.quantity || 1), 0), 0),
       0,
     );
+    // Sales, cost and margin of every product, month by month (12 months).
+    // Recipe products: cost of the lots really used. Others: purchase price × qty (estimate).
+    const since = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+    const sold = await this.prisma.dailyProduct.findMany({
+      where: {
+        productId: { in: products.map((p) => p.id) },
+        status: { notIn: [ProductOrderStatus.PENDING, ProductOrderStatus.CANCELLED] },
+        OR: [{ date: { gte: since } }, { date: null, createdAt: { gte: since } }],
+      },
+      select: { productId: true, quantite: true, unitPrice: true, date: true, createdAt: true, product: { select: { sellingPrice: true } } },
+    });
+    const unitCostOf = new Map(productRows.map((p) => [p.id, p.unitCost]));
+    const sales = new Map<string, Map<string, { qty: number; revenue: number; cost: number; estimated: boolean }>>();
+    for (const o of sold) {
+      const key = monthOf(o.date ?? o.createdAt);
+      const byMonth = sales.get(o.productId) ?? new Map();
+      const m = byMonth.get(key) ?? { qty: 0, revenue: 0, cost: 0, estimated: false };
+      m.qty += o.quantite;
+      m.revenue += orderUnitPrice(o) * o.quantite;
+      byMonth.set(key, m);
+      sales.set(o.productId, byMonth);
+    }
+    for (const [pid, byMonth] of sales) {
+      const real = result.productMonths.get(pid);
+      for (const [key, m] of byMonth) {
+        const r = real?.get(key);
+        // Real FIFO cost for the units the lots covered; the rest at today's cost
+        const covered = r ? Math.min(r.qty, m.qty) : 0;
+        m.cost = (r ? r.cost * (covered / (r.qty || 1)) : 0) + (m.qty - covered) * (unitCostOf.get(pid) ?? 0);
+        m.estimated = covered < m.qty;
+      }
+    }
+    const monthKeys = Array.from({ length: 12 }, (_, i) => monthOf(new Date(now.getFullYear(), now.getMonth() - 11 + i, 1)));
+    const purchasesByMonth: Record<string, number> = {};
+    for (const p of purchaseRows) {
+      const k = monthOf(new Date(p.date));
+      purchasesByMonth[k] = round2((purchasesByMonth[k] ?? 0) + p.invested);
+    }
+    const salesRows = products
+      .map((p) => {
+        const byMonth = sales.get(p.id) ?? new Map();
+        return {
+          id: p.id,
+          name: p.name,
+          sellingPrice: p.sellingPrice,
+          unitCost: unitCostOf.get(p.id) ?? p.purchasePrice,
+          tracked: result.products.has(p.id),
+          months: Object.fromEntries(
+            [...byMonth.entries()].map(([k, m]) => [k, { qty: m.qty, revenue: round2(m.revenue), cost: round2(m.cost), estimated: m.estimated }]),
+          ) as Record<string, { qty: number; revenue: number; cost: number; estimated: boolean }>,
+        };
+      })
+      .filter((p) => Object.keys(p.months).length);
+
     return {
+      sales: { months: monthKeys, products: salesRows, purchasesByMonth },
       totals: {
         invested: round2(invested),
         recovered: round2(recovered),

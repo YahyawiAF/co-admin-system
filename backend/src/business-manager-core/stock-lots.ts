@@ -27,6 +27,8 @@ export type SaleInput = { productId: string; date: Date; qty: number; unitPrice:
 export type AdjustmentInput = { id: string; itemId: string; date: Date; quantity: number };
 
 export type LotStatus = 'OPEN' | 'RESERVE' | 'DONE';
+/** What a lot fed: product units made with it (fractions when a unit spans two lots). */
+export type LotGave = { productId: string; units: number; quantity: number; recovered: number };
 export type LotResult = {
   id: string;
   used: number;
@@ -35,7 +37,13 @@ export type LotResult = {
   result: number;
   status: LotStatus;
   finishedAt: Date | null;
+  /** Products made with this lot */
+  gave: LotGave[];
+  /** Base units thrown away / lost (inventory counts) */
+  lost: number;
 };
+/** One product in one month (yyyy-MM): units sold, money, cost of the lots really used. */
+export type ProductMonth = { qty: number; revenue: number; cost: number };
 export type ItemResult = {
   id: string;
   left: number;
@@ -57,7 +65,11 @@ export type StockResult = {
   items: Map<string, ItemResult>;
   products: Map<string, ProductResult>;
   losses: LossResult[];
+  /** productId → month (yyyy-MM) → sales and cost (recipe products only) */
+  productMonths: Map<string, Map<string, ProductMonth>>;
 };
+
+export const monthOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 const EPS = 1e-9;
 const DAY = 86_400_000;
@@ -83,13 +95,13 @@ export function computeStock(input: {
   }
   for (const arr of lotsByItem.values()) arr.sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  type LotState = { lot: StockLotInput; used: number; recovered: number; finishedAt: Date | null };
+  type LotState = { lot: StockLotInput; used: number; recovered: number; finishedAt: Date | null; gave: Map<string, LotGave>; lost: number };
   type ItemState = { lots: LotState[]; firstDay: number; uncovered: number; recentUse: number };
   const state = new Map<string, ItemState>();
   for (const item of input.items) {
     const arr = lotsByItem.get(item.id) ?? [];
     state.set(item.id, {
-      lots: arr.map((lot) => ({ lot, used: 0, recovered: 0, finishedAt: null })),
+      lots: arr.map((lot) => ({ lot, used: 0, recovered: 0, finishedAt: null, gave: new Map(), lost: 0 })),
       firstDay: arr.length ? startOfDay(arr[0].date).getTime() : Infinity,
       uncovered: 0,
       recentUse: 0,
@@ -101,8 +113,11 @@ export function computeStock(input: {
     const open = st.lots.find((s) => s.lot.quantity - s.used > EPS) ?? st.lots[st.lots.length - 1];
     return open ? unit(open.lot) : 0;
   };
-  /** Takes `need` from the lots first in first out. Returns DT of stock used (for losses). */
-  const consume = (st: ItemState, need: number, date: Date, revenue: number) => {
+  /**
+   * Takes `need` from the lots first in first out. Returns DT of stock used.
+   * `product` = the sale it is for (with the recipe dose), null for a loss.
+   */
+  const consume = (st: ItemState, need: number, date: Date, revenue: number, product: { id: string; dose: number } | null = null) => {
     const total = need;
     let value = 0;
     for (const s of st.lots) {
@@ -112,6 +127,15 @@ export function computeStock(input: {
       const take = Math.min(need, room);
       s.used += take;
       s.recovered += (revenue * take) / total;
+      if (product) {
+        const g = s.gave.get(product.id) ?? { productId: product.id, units: 0, quantity: 0, recovered: 0 };
+        g.units += product.dose > 0 ? take / product.dose : 0;
+        g.quantity += take;
+        g.recovered += (revenue * take) / total;
+        s.gave.set(product.id, g);
+      } else {
+        s.lost += take;
+      }
       value += take * unit(s.lot);
       if (s.lot.quantity - s.used <= EPS) s.finishedAt = date;
       need -= take;
@@ -134,6 +158,7 @@ export function computeStock(input: {
 
   const losses: LossResult[] = [];
   const paceFrom = asOf.getTime() - paceDays * DAY;
+  const productMonths = new Map<string, Map<string, ProductMonth>>();
 
   for (const e of timeline) {
     const t = e.date.getTime();
@@ -148,12 +173,20 @@ export function computeStock(input: {
       const costs = lines.map(({ r, st }) => r.quantity * costNow(st));
       const totalCost = costs.reduce((a, b) => a + b, 0);
       const money = e.sale.qty * e.sale.unitPrice;
+      let cost = 0;
       lines.forEach(({ r, st }, i) => {
         const share = totalCost > EPS ? costs[i] / totalCost : 1 / lines.length;
         const need = e.sale.qty * r.quantity;
         if (t >= paceFrom) st.recentUse += need;
-        consume(st, need, e.date, money * share);
+        cost += consume(st, need, e.date, money * share, { id: e.sale.productId, dose: r.quantity });
       });
+      const byMonth = productMonths.get(e.sale.productId) ?? new Map<string, ProductMonth>();
+      const m = byMonth.get(monthOf(e.date)) ?? { qty: 0, revenue: 0, cost: 0 };
+      m.qty += e.sale.qty;
+      m.revenue += money;
+      m.cost += cost;
+      byMonth.set(monthOf(e.date), m);
+      productMonths.set(e.sale.productId, byMonth);
       continue;
     }
     const st = state.get(e.adj.itemId);
@@ -192,6 +225,8 @@ export function computeStock(input: {
         result: s.recovered - s.lot.price,
         status,
         finishedAt: status === 'DONE' ? s.finishedAt : null,
+        gave: [...s.gave.values()],
+        lost: s.lost,
       });
     }
     const left = st.lots.reduce((sum, s) => sum + Math.max(0, s.lot.quantity - s.used), 0);
@@ -231,5 +266,5 @@ export function computeStock(input: {
     });
   }
 
-  return { lots, items, products, losses };
+  return { lots, items, products, losses, productMonths };
 }

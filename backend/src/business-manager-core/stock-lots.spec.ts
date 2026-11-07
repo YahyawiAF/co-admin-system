@@ -156,4 +156,30 @@ describe('computeStock', () => {
     // the cost shown stays the lot in use until it runs out
     expect(after.items.get('lait')!.unitCost).toBeCloseTo(9.6 / 6000);
   });
+
+  it('a lot says what it made, and each product has its month of sales and cost', () => {
+    const small = [{ id: 'c1', itemId: 'cafe', purchaseId: 'A1', date: d(1), quantity: 40, price: 2 }, ...lots.slice(1)];
+    const r = computeStock({
+      items,
+      lots: [...small, { id: 'c2', itemId: 'cafe', purchaseId: 'A2', date: d(5), quantity: 1000, price: 48 }],
+      recipes,
+      sales: [
+        { productId: 'express', date: d(2), qty: 3, unitPrice: 1.5 },
+        { productId: 'direct', date: d(3), qty: 4, unitPrice: 2 },
+      ],
+      adjustments: [],
+      asOf: d(10),
+    });
+    // 40 g = 5 doses: 3 express + 2 direct; the 2 other direct come from the next lot
+    const c1 = r.lots.get('c1')!;
+    expect(c1.status).toBe('DONE');
+    expect(c1.gave.find((g) => g.productId === 'express')!.units).toBeCloseTo(3);
+    expect(c1.gave.find((g) => g.productId === 'direct')!.units).toBeCloseTo(2);
+    expect(r.lots.get('c2')!.gave[0].units).toBeCloseTo(2);
+    const oct = r.productMonths.get('direct')!.get('2026-10')!;
+    expect(oct.qty).toBe(4);
+    expect(oct.revenue).toBe(8);
+    // cost = 16 g at 0.05 then 16 g at 0.048 + milk + cups
+    expect(oct.cost).toBeCloseTo(16 * 0.05 + 16 * 0.048 + 480 * 0.0016 + 4 * 0.08);
+  });
 });

@@ -1124,6 +1124,21 @@ export type StockLotRow = {
   result: number;
   status: StockLotStatus;
   finishedAt: string | null;
+  /** Days from purchase to the end (or today) */
+  days?: number;
+  /** Products made with this lot */
+  gave?: Array<{ productId: string; name: string; units: number; quantity: number; recovered: number }>;
+  /** Used by sales / lost in counts (base unit) */
+  sold?: number;
+  lost?: number;
+  /** Open lot: day it should run out */
+  endsAround?: string | null;
+};
+export type StockProductMonth = { qty: number; revenue: number; cost: number; estimated: boolean };
+export type StockSales = {
+  months: string[];
+  products: Array<{ id: string; name: string; sellingPrice: number; unitCost: number; tracked: boolean; months: Record<string, StockProductMonth> }>;
+  purchasesByMonth: Record<string, number>;
 };
 export type StockPurchaseRow = {
   id: string;
@@ -1148,6 +1163,7 @@ export type StockLossRow = {
   note: string | null;
 };
 export type StockOverview = {
+  sales?: StockSales;
   totals: {
     invested: number;
     recovered: number;
