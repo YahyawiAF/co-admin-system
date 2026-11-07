@@ -1,4 +1,4 @@
-/** Shared points catalog (mirrors backend). Earn: 1 DT → 50 pts · Redeem: 100 pts = 1 DT. */
+/** Shared points catalog (mirrors backend). Earn: 1 DT → 50 pts · Redeem: 1000 pts = 1 DT (whole blocks). */
 
 export type PointEvent =
   | "CAFE_ORDER"
@@ -26,9 +26,9 @@ export const PROFILE_MISSION_TOTAL =
   PROFILE_DETAILS_POINTS + PROFILE_AVATAR_POINTS;
 export const PROFILE_COMPLETE_TROPHY_ID = "profile_complete";
 
-export const POINTS_PER_DT = 100;
+export const POINTS_PER_DT = 1000;
 
-/** Earn rate: 1 DT spent → 50 pts (redeem stays 100 pts = 1 DT) */
+/** Earn rate: 1 DT spent → 50 pts (redeem: 1000 pts = 1 DT) */
 export const EARN_POINTS_PER_DT = 50;
 
 /** Earn: floor(amount_DT × 50). Example: 3.5 DT → 175 pts */
@@ -37,7 +37,7 @@ export function dtToPoints(amount: number): number {
   return Math.floor(amount * EARN_POINTS_PER_DT);
 }
 
-/** Redeem: points / 100 → DT. Example: 350 pts → 3.5 DT */
+/** Points value in DT: points / 1000. Example: 3500 pts → 3.5 DT */
 export function pointsToDt(points: number): number {
   if (!Number.isFinite(points) || points <= 0) return 0;
   return Math.round((points / POINTS_PER_DT) * 100) / 100;
@@ -47,6 +47,16 @@ export function pointsToDt(points: number): number {
 export function dtToRedeemPoints(amount: number): number {
   if (!Number.isFinite(amount) || amount <= 0) return 0;
   return Math.ceil(amount * POINTS_PER_DT);
+}
+
+/**
+ * Points usable to pay `dueDt`: whole blocks of 1000 pts (1 DT) only,
+ * never more than the balance or the amount due. 1200 pts → 1000 pts.
+ */
+export function redeemablePoints(balance: number, dueDt: number): number {
+  if (!Number.isFinite(balance) || !Number.isFinite(dueDt)) return 0;
+  const blocks = Math.floor(Math.min(balance / POINTS_PER_DT, dueDt + 1e-9));
+  return Math.max(0, blocks) * POINTS_PER_DT;
 }
 
 /** Paliers that spark during score count-up */
@@ -94,21 +104,21 @@ export const TROPHY_CATALOG: TrophyDef[] = [
   {
     id: "points_500",
     name: "Collectionneur",
-    description: "Atteindre 500 points (5 DT)",
+    description: "Atteindre 500 points (0,5 DT)",
     tier: "bronze",
     icon: "cup",
   },
   {
     id: "points_2500",
     name: "Explorateur",
-    description: "Atteindre 2 500 points (25 DT)",
+    description: "Atteindre 2 500 points (2,5 DT)",
     tier: "silver",
     icon: "cup",
   },
   {
     id: "points_10000",
     name: "Champion",
-    description: "Atteindre 10 000 points (100 DT)",
+    description: "Atteindre 10 000 points (10 DT)",
     tier: "gold",
     icon: "cup",
   },

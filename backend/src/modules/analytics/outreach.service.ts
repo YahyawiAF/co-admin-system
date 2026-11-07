@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 import {
   addDays,
@@ -800,22 +800,83 @@ export class OutreachService {
     return { contacted: contacts.length, won, revenue: round1(revenue), byReason, byChannel };
   }
 
-  async log(body: { memberId?: string; reason?: string; channel?: string; message?: string }) {
+  async log(body: {
+    memberId?: string;
+    reason?: string;
+    channel?: string;
+    message?: string;
+    /** "Relance passée": the day it was really done (yyyy-MM-dd, up to SUIVI_DAYS back) */
+    contactedAt?: string | null;
+  }) {
     const reason = body.reason as OutreachReason;
     const channel = body.channel as OutreachChannel;
     if (!body.memberId) throw new BadRequestException('memberId requis');
     if (!OUTREACH_REASONS.includes(reason)) throw new BadRequestException('Motif invalide');
     if (!OUTREACH_CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
+    const past = body.contactedAt ? this.pastDay(body.contactedAt) : null;
+    if (past && channel === 'SKIP') throw new BadRequestException('Canal invalide');
     const row = await this.prisma.memberOutreach.create({
       data: {
         memberId: body.memberId,
         reason,
         channel,
         message: body.message?.slice(0, 2000) || null,
+        ...(past ? { createdAt: past } : {}),
       },
     });
-    if (channel !== 'SKIP') await this.replaceOpen(body.memberId, row.id);
-    return row;
+    if (channel !== 'SKIP') {
+      if (past) {
+        // A past relance only takes over older open ones, never a newer contact
+        await this.prisma.memberOutreach.updateMany({
+          where: {
+            memberId: body.memberId,
+            id: { not: row.id },
+            closedAt: null,
+            channel: { not: 'SKIP' },
+            campaignId: null,
+            createdAt: { lt: past },
+          },
+          data: { closedAt: new Date(), closedResult: 'REPLACED' },
+        });
+        // Abonnement already taken since that day → counted as converted right away
+        await this.autoClose(startOfDay(new Date()));
+      } else {
+        await this.replaceOpen(body.memberId, row.id);
+      }
+    }
+    return this.prisma.memberOutreach.findUniqueOrThrow({ where: { id: row.id } });
+  }
+
+  /** A day in the past (not today's future), at most SUIVI_DAYS ago. */
+  private pastDay(input: string) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.slice(0, 10))) throw new BadRequestException('Date invalide');
+    const day = parseLocalDay(input.slice(0, 10));
+    const today = startOfDay(new Date());
+    if (day > today) throw new BadRequestException('La date ne peut pas être dans le futur');
+    if (differenceInCalendarDays(today, day) > SUIVI_DAYS) {
+      throw new BadRequestException(`Au plus ${SUIVI_DAYS} jours en arrière`);
+    }
+    return day;
+  }
+
+  /** "Relance passée": the first abonnement this member took after that day, if any. */
+  async pastCheck(memberId?: string, date?: string) {
+    if (!memberId || !date) throw new BadRequestException('Membre et date requis');
+    const day = this.pastDay(date);
+    const abo = await this.prisma.abonnement.findFirst({
+      where: { memberID: memberId, isReservation: false, hiddenAt: null, createdAt: { gt: day } },
+      orderBy: { createdAt: 'asc' },
+      select: { createdAt: true, amountDue: true, payedAmount: true, serviceName: true, price: { select: { name: true } } },
+    });
+    return {
+      abonnement: abo
+        ? {
+            name: abo.serviceName || abo.price?.name || 'Abonnement',
+            at: abo.createdAt!.toISOString(),
+            amount: round1(abo.amountDue ?? abo.payedAmount ?? 0),
+          }
+        : null,
+    };
   }
 
   /** One channel for several people at once (a WhatsApp status, a word to everyone at the desk…). */
@@ -833,6 +894,83 @@ export class OutreachService {
     const list = await this.list(facilityId);
     const items = list.todo.filter((i) => i.memberId === memberId && !i.snoozed);
     return { items };
+  }
+
+  /**
+   * Relances modal: who the member is, every contact (relances and campaigns) with the answer,
+   * last visit and current abonnement.
+   */
+  async history(memberId: string) {
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, firstName: true, lastName: true, phone: true },
+    });
+    if (!member) throw new NotFoundException('Membre introuvable');
+    const today = startOfDay(new Date());
+    const [rows, push, lastVisit, visits30, abo] = await Promise.all([
+      this.prisma.memberOutreach.findMany({
+        where: { memberId },
+        orderBy: { createdAt: 'desc' },
+        take: 30,
+      }),
+      this.prisma.pushSubscription.count({ where: { memberId } }),
+      this.prisma.journal.findFirst({
+        where: { memberID: memberId, isReservation: false },
+        orderBy: { registredTime: 'desc' },
+        select: { registredTime: true },
+      }),
+      this.prisma.journal.count({
+        where: { memberID: memberId, isReservation: false, registredTime: { gte: subDays(today, 29) } },
+      }),
+      this.prisma.abonnement.findFirst({
+        where: { memberID: memberId, isReservation: false, hiddenAt: null },
+        orderBy: { registredDate: 'desc' },
+        select: { registredDate: true, leaveDate: true, serviceName: true, price: { select: { name: true } } },
+      }),
+    ]);
+    const campaignIds = [...new Set(rows.map((r) => r.campaignId).filter((c): c is string => !!c))];
+    const campaigns = campaignIds.length
+      ? await this.prisma.outreachCampaign.findMany({ where: { id: { in: campaignIds } }, select: { id: true, title: true } })
+      : [];
+    const title = new Map(campaigns.map((c) => [c.id, c.title]));
+    const contacts = rows.filter((r) => r.channel !== 'SKIP');
+    return {
+      memberId: member.id,
+      name: [member.firstName, member.lastName].filter(Boolean).join(' ') || 'Client',
+      firstName: member.firstName?.trim() || '',
+      phone: member.phone,
+      whatsapp: whatsappNumber(member.phone),
+      hasPush: this.push.isEnabled() && push > 0,
+      lastVisit: lastVisit?.registredTime.toISOString() ?? null,
+      visits30,
+      abonnement: abo
+        ? {
+            name: abo.serviceName || abo.price?.name || 'Abonnement',
+            from: abo.registredDate.toISOString(),
+            until: abo.leaveDate?.toISOString() ?? null,
+            active: !abo.leaveDate || abo.leaveDate >= today,
+          }
+        : null,
+      /** Times the member was reached without answering */
+      noAnswer: contacts.filter((r) => r.outcome === 'NO_ANSWER').length,
+      /** Contact the next answer will fill (relances only, last 30 days, no answer yet) */
+      openContactId:
+        contacts.find(
+          (r) => !r.campaignId && !r.outcome && !r.closedAt && r.createdAt >= subDays(today, 30),
+        )?.id ?? null,
+      contacts: rows.map((r) => ({
+        id: r.id,
+        at: r.createdAt.toISOString(),
+        reason: r.reason,
+        channel: r.channel,
+        outcome: r.outcome,
+        note: r.note,
+        followUpAt: r.followUpAt?.toISOString() ?? null,
+        closedResult: r.closedResult,
+        closedAuto: r.closedAuto,
+        campaign: r.campaignId ? title.get(r.campaignId) ?? 'Campagne' : null,
+      })),
+    };
   }
 
   /** One open Suivi per member: a newer contact takes over the older ones. */
@@ -909,6 +1047,22 @@ export class OutreachService {
       where: { id },
       data: { closedAt: new Date(), closedResult: result, closedAuto: false },
     });
+  }
+
+  /** Undo a hand-made "Converti" / "Non converti": the relance goes back to the Suivi. */
+  async reopen(id: string) {
+    const row = await this.prisma.memberOutreach.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException('Relance introuvable');
+    if (!row.closedAt || row.closedResult === 'REPLACED') throw new BadRequestException("Cette relance n'est pas clôturée");
+    if (row.closedAuto) {
+      throw new BadRequestException('Clôturée toute seule (abonnement ou paiement enregistré) : rien à annuler');
+    }
+    const reopened = await this.prisma.memberOutreach.update({
+      where: { id },
+      data: { closedAt: null, closedResult: null, closedAuto: false },
+    });
+    await this.replaceOpen(row.memberId, id);
+    return reopened;
   }
 
   /** Open relances close themselves when the member takes an abonnement (or pays, for impayés). */
@@ -1007,9 +1161,16 @@ export class OutreachService {
         select: { id: true, firstName: true, lastName: true, phone: true },
       }),
       this.prisma.abonnement.findMany({
-        where: { memberID: { in: ids }, isReservation: false, createdAt: { gt: since } },
-        select: { memberID: true, createdAt: true, serviceName: true, price: { select: { name: true } } },
-        orderBy: { createdAt: 'asc' },
+        where: { memberID: { in: ids }, isReservation: false, hiddenAt: null },
+        select: {
+          memberID: true,
+          createdAt: true,
+          registredDate: true,
+          priceId: true,
+          serviceName: true,
+          price: { select: { name: true } },
+        },
+        orderBy: { registredDate: 'asc' },
       }),
       this.prisma.journal.findMany({
         where: { memberID: { in: ids }, isReservation: false, registredTime: { gt: since } },
@@ -1022,7 +1183,11 @@ export class OutreachService {
       rows: slice.map((r) => {
         const p = person.get(r.memberId);
         const until = r.closedAt ?? now;
-        const abo = abos.find((a) => a.memberID === r.memberId && a.createdAt > r.createdAt && a.createdAt <= until);
+        const myAbos = abos.filter((a) => a.memberID === r.memberId);
+        const abo = myAbos.find((a) => !!a.createdAt && a.createdAt > r.createdAt && a.createdAt <= until);
+        // The abonnement it renews (any offer counts as a renewal)
+        const before = abo ? [...myAbos].reverse().find((a) => a.registredDate < abo.registredDate) : undefined;
+        const aboName = (a: (typeof abos)[number]) => a.serviceName || a.price?.name || 'Abonnement';
         const mine = visits.filter(
           (v) => v.memberID === r.memberId && v.registredTime > r.createdAt && v.registredTime <= until,
         );
@@ -1045,7 +1210,14 @@ export class OutreachService {
           closedResult: r.closedResult,
           closedAuto: r.closedAuto,
           since: {
-            abonnement: abo ? { name: abo.serviceName || abo.price?.name || 'Abonnement', at: abo.createdAt.toISOString() } : null,
+            abonnement: abo
+              ? {
+                  name: aboName(abo),
+                  at: abo.createdAt!.toISOString(),
+                  previousName: before ? aboName(before) : null,
+                  otherOffer: !!before && before.priceId !== abo.priceId,
+                }
+              : null,
             visits: mine.length,
             spent: round1(mine.reduce((a, v) => a + (v.payedAmount || 0), 0)),
             lastVisit: lastVisit?.toISOString() ?? null,

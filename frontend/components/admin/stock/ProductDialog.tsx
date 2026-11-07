@@ -27,6 +27,8 @@ export function ProductDialog({
   product,
   overview,
   onDone,
+  draft,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -34,6 +36,10 @@ export function ProductDialog({
   product: StockProductRow | null;
   overview: StockOverview;
   onDone: () => void;
+  /** Pre-filled name / price for a new product (Conseil IA « Préparer le produit ») */
+  draft?: { name?: string; price?: number } | null;
+  /** Called with the new product's id after a creation */
+  onCreated?: (id: string) => void;
 }) {
   const ingredients = overview.items.filter((i) => i.kind === "INGREDIENT");
   const itemById = useMemo(() => new Map(overview.items.map((i) => [i.id, i])), [overview.items]);
@@ -50,8 +56,8 @@ export function ProductDialog({
 
   useEffect(() => {
     if (!open) return;
-    setName(product?.name ?? "");
-    setPrice(product ? String(product.sellingPrice).replace(".", ",") : "");
+    setName(product?.name ?? draft?.name ?? "");
+    setPrice(product ? String(product.sellingPrice).replace(".", ",") : draft?.price != null ? String(draft.price).replace(".", ",") : "");
     setDescription(product?.description ?? "");
     setImg(product?.img ?? "");
     const m = modeOf(product);
@@ -108,10 +114,13 @@ export function ProductDialog({
         ? await productsApi.update(product.id, base)
         : await productsApi.create({ ...base, stock: mode === "NONE" ? base.stock ?? 0 : 0 });
       await stockApi.setRecipe(saved.id, { mode, lines: mode === "RECIPE" ? recipe : undefined });
+      return saved;
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(product ? "Produit mis à jour" : "Produit créé");
       onDone();
+      // Before closing: closing forgets the Conseil IA draft
+      if (!product && saved?.id) onCreated?.(saved.id);
       onOpenChange(false);
     },
     onError: (e: Error) => toast.error(e.message),

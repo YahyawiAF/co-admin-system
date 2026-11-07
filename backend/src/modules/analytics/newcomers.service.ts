@@ -139,12 +139,16 @@ export class NewcomersService {
     // KPIs
     const monthStart = startOfMonth(now);
     const prevMonthStart = startOfMonth(subMonths(now, 1));
-    const sameDayPrev = addDays(prevMonthStart, differenceInCalendarDays(now, monthStart));
+    // Same weekdays 4 weeks earlier (1–2 Nov Sun–Mon ↔ 4–5 Oct Sun–Mon), not the same dates
+    const fourWeeksFrom = subDays(monthStart, 28);
+    const fourWeeksTo = subDays(now, 28);
     const judged = all.filter((n) => n.judged && n.first >= subDays(now, 60));
     const weekStart = startOfWeek(now, { weekStartsOn: 1 });
     const kpis = {
       thisMonth: all.filter((n) => n.first >= monthStart).length,
-      prevMonthSamePoint: all.filter((n) => n.first >= prevMonthStart && n.first <= sameDayPrev).length,
+      sameWeekdaysBefore: all.filter((n) => n.first >= fourWeeksFrom && n.first <= fourWeeksTo).length,
+      sameWeekdaysFrom: localDayKey(fourWeeksFrom),
+      sameWeekdaysTo: localDayKey(fourWeeksTo),
       prevMonth: all.filter((n) => n.first >= prevMonthStart && n.first < monthStart).length,
       thisWeek: all.filter((n) => n.first >= weekStart).length,
       returnPct: rate(judged.filter((n) => n.back).length, judged.length),

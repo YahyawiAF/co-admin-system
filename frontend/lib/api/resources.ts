@@ -26,6 +26,11 @@ import type {
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
+  AdaptedSolution,
+  AdvisorHealth,
+  HealthAreaId,
+  ToolDraft,
+  ToolKind,
   StaffActionRow,
   StaffMember,
   StaffPermissions,
@@ -50,6 +55,7 @@ import type {
   LinkedKind,
   TargetKind,
   CampaignInput,
+  CampaignCandidate,
   CampaignSegment,
   OutreachCampaign,
   OutreachCampaignDetail,
@@ -113,6 +119,7 @@ import type {
   LateBillingMode,
   PerformanceSettings,
   PerformanceOverview,
+  ForecastAccuracy,
   MonthForecast,
   AdvisorDismissal,
   PerformanceChange,
@@ -124,6 +131,7 @@ import type {
   OutreachReason,
   OutreachChannel,
   OutreachItem,
+  OutreachHistory,
   OutreachOutcome,
   SuiviList,
 } from "@/lib/types";
@@ -576,6 +584,7 @@ export const analyticsApi = {
     year: number;
     month: number;
     revenue: number | null;
+    netRevenue?: number | null;
     occupancyPct?: number | null;
   }) {
     return http.put<MonthlyTarget | null>("/analytics/performance/targets", data);
@@ -587,9 +596,37 @@ export const analyticsApi = {
       `/analytics/performance/overview?${q.toString()}`,
     );
   },
-  performanceForecast(year: number, month: number) {
+  performanceForecast(year: number, month: number, facilityId?: string) {
     const q = new URLSearchParams({ year: String(year), month: String(month) });
+    if (facilityId) q.set("facilityId", facilityId);
     return http.get<MonthForecast>(`/analytics/performance/forecast?${q.toString()}`);
+  },
+  /** The forecast and every number behind it, saved as a file (needs the auth header, so fetched as a blob). */
+  async downloadForecast(year: number, month: number, format: "csv" | "json", facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month), format });
+    if (facilityId) q.set("facilityId", facilityId);
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const org = getAdminOrganizationId();
+    const res = await fetch(`${API_BASE_URL}/analytics/performance/forecast/export?${q.toString()}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(org && { "X-Organization-Id": org }),
+      },
+    });
+    if (!res.ok) throw new Error("Export impossible");
+    const name =
+      /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] ||
+      `prevision-${year}-${String(month).padStart(2, "0")}${format === "csv" ? "-jours.csv" : ".json"}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
+  performanceForecastAccuracy(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<ForecastAccuracy>(`/analytics/performance/forecast/accuracy${q}`);
   },
   performanceChanges(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
@@ -627,6 +664,8 @@ export const outreachApi = {
     reason: OutreachReason;
     channel: OutreachChannel;
     message?: string;
+    /** "Relance passée": yyyy-MM-dd of the real contact */
+    contactedAt?: string;
   }) {
     return http.post("/analytics/outreach/log", data);
   },
@@ -654,6 +693,10 @@ export const outreachApi = {
   forMember(memberId: string) {
     return http.get<{ items: OutreachItem[] }>(`/analytics/outreach/member/${memberId}`);
   },
+  /** Relances modal: member, contacts with answers, last visit, abonnement */
+  history(memberId: string) {
+    return http.get<OutreachHistory>(`/analytics/outreach/member/${memberId}/history`);
+  },
   suivi(params: { status: "OPEN" | "CLOSED"; page: number; perPage?: number }) {
     return http.get<SuiviList>(
       `/analytics/outreach/suivi?status=${params.status}&page=${params.page}${params.perPage ? `&perPage=${params.perPage}` : ""}`,
@@ -661,6 +704,10 @@ export const outreachApi = {
   },
   close(id: string, result: "WON" | "LOST") {
     return http.post(`/analytics/outreach/${id}/close`, { result });
+  },
+  /** Undo a hand-made Converti / Non converti */
+  reopen(id: string) {
+    return http.post(`/analytics/outreach/${id}/reopen`);
   },
   /** Why the member stopped coming; "révise à la maison" schedules a recall before exams */
   awayReason(data: { memberId: string; reason: AwayReason | null; recallAt?: string | null }) {
@@ -691,6 +738,28 @@ export const outreachApi = {
   },
   logCampaign(id: string, data: { memberId: string; channel: OutreachChannel; message?: string }) {
     return http.post(`/analytics/outreach/campaigns/${id}/log`, data);
+  },
+  /** The member's answer inside a campaign (same answers as Relances) */
+  answerCampaign(
+    id: string,
+    data: { memberId: string; outcome: OutreachOutcome | null; note?: string | null; followUpAt?: string | null },
+  ) {
+    return http.post(`/analytics/outreach/campaigns/${id}/answer`, data);
+  },
+  campaignMembers(id: string, data: { add?: string[]; remove?: string[] }) {
+    return http.post<{ total: number; added: number }>(`/analytics/outreach/campaigns/${id}/members`, data);
+  },
+  /** People of a list, to tick one by one */
+  candidates(segment: CampaignSegment, groupId?: string | null) {
+    const q = new URLSearchParams({ segment });
+    if (groupId) q.set("groupId", groupId);
+    return http.get<CampaignCandidate[]>(`/analytics/outreach/candidates?${q}`);
+  },
+  /** "Relance passée": abonnement taken since that day? */
+  pastCheck(memberId: string, date: string) {
+    return http.get<{ abonnement: { name: string; at: string; amount: number } | null }>(
+      `/analytics/outreach/past-check?memberId=${encodeURIComponent(memberId)}&date=${encodeURIComponent(date)}`,
+    );
   },
 };
 
@@ -973,6 +1042,10 @@ export const abonnementsApi = {
   },
   remove(id: string) {
     return http.delete<void>(`/abonnements/${id}`);
+  },
+  /** Move one payment to the day the money was really collected. */
+  updatePaymentDate(id: string, paymentId: string, paidAt: string) {
+    return http.patch<Abonnement>(`/abonnements/${id}/payments/${paymentId}`, { paidAt });
   },
 };
 
@@ -1782,7 +1855,14 @@ export const mobileApi = {
       message: string;
     }>("/mobile/admin/points/adjust", data);
   },
-  redeemVisitPoints(data: { journalId: string; points: number }) {
+  redeemVisitPoints(data: {
+    journalId: string;
+    points: number;
+    /** Amount due shown in the Régler dialog */
+    dueDt?: number;
+    /** false = only debit the points, the visit is marked paid separately */
+    settle?: boolean;
+  }) {
     return http.post<{
       journalId: string;
       pointsApplied: number;
@@ -2206,6 +2286,20 @@ export const advisorApi = {
   initiatives() {
     return http.get<BusinessInitiative[]>("/advisor/initiatives");
   },
+  /** Bilan: six points with number, colour and solutions */
+  health() {
+    return http.get<AdvisorHealth>("/advisor/health");
+  },
+  /** « Adapter » a solution with the AI (nothing saved) */
+  adapt(data: { solution: Partial<AdaptedSolution>; instruction: string }) {
+    return http.post<AdaptedSolution>("/advisor/solutions/adapt", data);
+  },
+  addTool(initiativeId: string, data: { kind: ToolKind; targetId: string; stepIndex?: number | null }) {
+    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools`, data);
+  },
+  removeTool(initiativeId: string, linkId: string) {
+    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools/${linkId}`);
+  },
   createInitiative(data: {
     title: string;
     description?: string;
@@ -2227,6 +2321,10 @@ export const advisorApi = {
     hypothesis?: string | null;
     channels?: InitiativeChannel[];
     steps?: InitiativeStep[];
+    goalAmount?: number | null;
+    area?: HealthAreaId | null;
+    leverId?: string | null;
+    tools?: ToolDraft[];
   }) {
     return http.post<BusinessInitiative>("/advisor/initiatives", data);
   },
@@ -2246,6 +2344,8 @@ export const advisorApi = {
       interested: number | null;
       paused: boolean;
       drop: { reason: string } | null;
+      goalAmount: number | null;
+      tools: ToolDraft[];
     }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
@@ -2303,6 +2403,15 @@ export const advisorApi = {
   },
 };
 
+/** Café price for one member / visit: best café promo (every unit) and the tarif gift (first unit). */
+export type CafePrice = {
+  productId: string;
+  unitPrice: number | null;
+  label: string | null;
+  giftPrice: number | null;
+  giftLabel: string | null;
+};
+
 export const promotionsApi = {
   list() {
     return http.get<Promotion[]>("/promotions");
@@ -2331,6 +2440,13 @@ export const promotionsApi = {
       `/mobile/promotions/vouchers?memberId=${encodeURIComponent(memberId)}`,
       { skipAuth: true }
     );
+  },
+  /** Reception: café promo / tarif gift prices for one member or visit (only products with a deal) */
+  cafePrices(opts: { memberId?: string | null; journalId?: string | null }) {
+    const q = new URLSearchParams();
+    if (opts.memberId) q.set("memberId", opts.memberId);
+    if (opts.journalId) q.set("journalId", opts.journalId);
+    return http.get<CafePrice[]>(`/promotions/cafe-prices?${q}`);
   },
   journalVouchers(journalId: string) {
     return http.get<PromotionVoucher[]>(

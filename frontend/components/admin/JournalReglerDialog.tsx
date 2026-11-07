@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { LateBillingChoice } from "@/components/admin/LateBillingChoice";
-import { membersApi, mobileApi } from "@/lib/api/resources";
+import { membersApi, mobileApi, promotionsApi } from "@/lib/api/resources";
+import { bestDeal, indexTarifPromos } from "@/lib/tarif-promos";
 import { queryKeys } from "@/lib/query-client";
 import {
   amountIfPaidNow,
@@ -26,6 +27,7 @@ import {
   isAnonymousVisit,
   lateAmountForMode,
   priceOf,
+  promoShare,
   rowPricing,
   rowPricingAt,
   visitAmountDue,
@@ -33,6 +35,7 @@ import {
   visitorLabel,
 } from "@/lib/journal-utils";
 import { computeSessionPricing, formatDt, ladderFor, type PricingTier } from "@/lib/session-pricing";
+import { POINTS_PER_DT, redeemablePoints } from "@/lib/points-catalog";
 import type { Journal, LateBillingMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -49,12 +52,10 @@ export function JournalReglerDialog({
   row,
   tiers,
   onOpenChange,
-  onPayWithPoints,
 }: {
   row: Journal | null;
   tiers: PricingTier[];
   onOpenChange: (open: boolean) => void;
-  onPayWithPoints?: (row: Journal) => void;
 }) {
   const queryClient = useQueryClient();
   const open = !!row;
@@ -73,6 +74,8 @@ export function JournalReglerDialog({
   /** "Offert": staff gives part of the visit away — collected less, no debt */
   const [offerOn, setOfferOn] = useState(false);
   const [received, setReceived] = useState("");
+  /** Pay part of the visit with loyalty points (whole 1000-pt blocks) */
+  const [usePoints, setUsePoints] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
@@ -87,6 +90,7 @@ export function JournalReglerDialog({
     setSkipDebt(new Set());
     setOfferOn(false);
     setReceived("");
+    setUsePoints(false);
   }, [row?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: ledger } = useQuery({
@@ -102,6 +106,24 @@ export function JournalReglerDialog({
       ),
     [ledger, row?.id]
   );
+
+  /** Live tarif promos, for a visit that had none and moves to a pass on promo */
+  const { data: promotions = [] } = useQuery({
+    queryKey: ["promotions"],
+    queryFn: () => promotionsApi.list(),
+    enabled: open && !paid,
+    staleTime: 60_000,
+  });
+  const promosOf = useMemo(() => indexTarifPromos(promotions), [promotions]);
+  /** The visit's promo follows the pass at the same share (−20 % on 2h → −20 % on 4h) */
+  const share = row ? promoShare(row) : 0;
+  /** Price of a pass for this visit: member discount, then the promo (mirrors the backend). */
+  const tierPrice = (t: PricingTier) => {
+    const list = round3(t.price * (1 - (row?.pricing?.discountPercent || 0) / 100));
+    if (share > 0) return { list, final: round3(list * (1 - share)), label: row?.promoLabel ?? "Promo" };
+    const deal = bestDeal(promosOf(t.priceId).deals, list);
+    return deal ? { list, final: round3(deal.final), label: deal.promo.label } : { list, final: list, label: null };
+  };
 
   // Same kind of pass as the visit (day / open space), one per duration
   const passCategory = row && pricing?.mode === "FIXED" ? priceOf(row)?.category ?? null : null;
@@ -139,7 +161,8 @@ export function JournalReglerDialog({
     const billAt = leaveAtMs ?? nowMs;
     if (pickedTier && row.pricing) {
       const p = row.pricing;
-      const amount = round3(pickedTier.price * (1 - (p.discountPercent || 0) / 100));
+      // Promo already inside the pass price
+      const amount = tierPrice(pickedTier).final;
       const res = computeSessionPricing({
         mode: "FIXED",
         registredTime: row.registredTime,
@@ -155,26 +178,43 @@ export function JournalReglerDialog({
           category: pickedTier.category ?? null,
         },
       });
-      return round3(Math.max(0, (res?.amountDue ?? amount) - (row.promoDiscount || 0)));
+      return round3(Math.max(0, res?.amountDue ?? amount));
     }
     if (late) return lateAmountForMode(late, lateMode);
     if (present && row.pricing) {
       return rowPricingAt(row, billAt)?.amountDue ?? visitAmountDue(row, billAt);
     }
     return visitAmountDue(row, billAt);
-  }, [row, paid, leaveAtMs, nowMs, pickedTier, tiers, late, lateMode, present]);
+  }, [row, paid, leaveAtMs, nowMs, pickedTier, tiers, late, lateMode, present, share, promosOf]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Promo inside the visit amount: the picked pass's, else the visit's own. */
+  const promoLine = (() => {
+    if (!row || paid) return null;
+    if (pickedTier) {
+      const t = tierPrice(pickedTier);
+      return t.label && t.list - t.final > 0.0005 ? { label: t.label, off: round3(t.list - t.final) } : null;
+    }
+    return (row.promoDiscount ?? 0) > 0.0005
+      ? { label: row.promoLabel || "Promo", off: row.promoDiscount! }
+      : null;
+  })();
 
   const alreadyPaid = row && !paid ? visitPaidAmount(row) : 0;
   const visitDue = Math.max(0, round3(visitAmount - alreadyPaid));
   const debtTotal = round3(
     debts.filter((d) => !skipDebt.has(d.id)).reduce((s, d) => s + d.amount, 0)
   );
-  const total = round3(visitDue + debtTotal);
+  const balance = Number((row?.members || row?.member)?.points ?? 0);
+  /** Points that can go to the visit: 1000 pts = 1 DT, 1200 pts → 1000 pts */
+  const usablePoints = !paid && memberId ? redeemablePoints(balance, visitDue) : 0;
+  const pointsUsed = usePoints ? usablePoints : 0;
+  const pointsDt = pointsUsed / POINTS_PER_DT;
+  const total = round3(visitDue + debtTotal - pointsDt);
   const receivedNum = Number(String(received).replace(",", "."));
   /** Given away: only the visit, never older debts. */
   const offered =
     offerOn && received.trim() !== "" && Number.isFinite(receivedNum)
-      ? round3(Math.min(visitDue, Math.max(0, total - receivedNum)))
+      ? round3(Math.min(visitDue - pointsDt, Math.max(0, total - receivedNum)))
       : 0;
   const toCollect = round3(total - offered);
 
@@ -198,6 +238,15 @@ export function JournalReglerDialog({
   const collect = useMutation({
     mutationFn: async () => {
       await applyTier();
+      if (pointsUsed > 0) {
+        // Points first, while the visit is still unpaid; the rest is collected below
+        await mobileApi.redeemVisitPoints({
+          journalId: row!.id,
+          points: pointsUsed,
+          dueDt: visitDue,
+          settle: false,
+        });
+      }
       if (present) {
         if (leaveAtMs == null) await mobileApi.setPayment(row!.id, true, undefined, offered);
         else
@@ -221,7 +270,9 @@ export function JournalReglerDialog({
     },
     onSuccess: () =>
       done(
-        `Encaissé · ${formatDt(toCollect)}${offered > 0 ? ` · offert ${formatDt(offered)}` : ""}`
+        `Encaissé · ${formatDt(toCollect)}${
+          pointsUsed > 0 ? ` · ${pointsUsed.toLocaleString("fr-FR")} pts (${formatDt(pointsDt)})` : ""
+        }${offered > 0 ? ` · offert ${formatDt(offered)}` : ""}`
       ),
     onError: (e: Error) => toast.error(e.message),
   });
@@ -263,8 +314,6 @@ export function JournalReglerDialog({
       ? `Auto · ${pricing.currentTier.name}`
       : pricing.fixedServiceName || price?.name || "Forfait"
     : price?.name || "—";
-  const member = row?.members || row?.member;
-  const points = Number(member?.points ?? 0);
 
   const departOptions: { id: Depart; label: string; hint?: string; hidden?: boolean }[] = [
     { id: "now", label: "Part maintenant", hint: format(nowMs, "HH:mm") },
@@ -325,23 +374,34 @@ export function JournalReglerDialog({
                     <span className="font-semibold">Garder</span>{" "}
                     <span className="opacity-75">· {tariffLabel}</span>
                   </Choice>
-                  {sortedTiers.map((t) => (
-                    <Choice
-                      key={t.priceId}
-                      active={tierId === t.priceId}
-                      onClick={() => setTierId(t.priceId === currentTierId ? null : t.priceId)}
-                      compact
-                    >
-                      <span className="font-semibold">{t.name}</span>{" "}
-                      <span className="tabular-nums opacity-75">
-                        {formatDt(round3(t.price * (1 - (row.pricing?.discountPercent || 0) / 100)))}
-                      </span>
-                    </Choice>
-                  ))}
+                  {sortedTiers.map((t) => {
+                    const tp = tierPrice(t);
+                    const promo = tp.final < tp.list - 0.0005;
+                    return (
+                      <Choice
+                        key={t.priceId}
+                        active={tierId === t.priceId}
+                        onClick={() => setTierId(t.priceId === currentTierId ? null : t.priceId)}
+                        compact
+                      >
+                        <span className="font-semibold">{t.name}</span>{" "}
+                        {promo ? (
+                          <s className="tabular-nums text-[11px] opacity-60">{formatDt(tp.list)}</s>
+                        ) : null}{" "}
+                        <span className={cn("tabular-nums", promo ? "font-semibold text-emerald-700 dark:text-emerald-400" : "opacity-75")}>
+                          {formatDt(tp.final)}
+                        </span>
+                      </Choice>
+                    );
+                  })}
                 </div>
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
                   Resté moins (ou plus) longtemps ? Choisissez le pass : le montant est recalculé
-                  {present ? "" : " à l’heure de départ"}.
+                  {present ? "" : " à l’heure de départ"}
+                  {share > 0
+                    ? ` · la promo (−${Math.round(share * 100)} %) suit le nouveau pass`
+                    : ""}
+                  .
                 </p>
               </Section>
             ) : null}
@@ -381,6 +441,34 @@ export function JournalReglerDialog({
                     </label>
                   ))}
                 </div>
+              </Section>
+            ) : null}
+
+            {!paid && memberId && balance > 0 && visitDue > 0.0005 ? (
+              <Section title="Points fidélité" icon={<Wallet className="h-3.5 w-3.5" />}>
+                {usablePoints > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    <Choice active={!usePoints} onClick={() => setUsePoints(false)} compact>
+                      <span className="font-semibold">Sans points</span>
+                    </Choice>
+                    <Choice active={usePoints} onClick={() => setUsePoints(true)} compact>
+                      <span className="font-semibold">
+                        Utiliser {usablePoints.toLocaleString("fr-FR")} pts
+                      </span>{" "}
+                      <span className="opacity-75">· −{formatDt(usablePoints / POINTS_PER_DT)}</span>
+                    </Choice>
+                  </div>
+                ) : null}
+                <p className="pt-1.5 text-[11px] text-muted-foreground">
+                  Solde {balance.toLocaleString("fr-FR")} pts · par tranche de 1 000 pts = 1 DT
+                  {usablePoints <= 0
+                    ? balance < POINTS_PER_DT
+                      ? " · pas encore 1 000 pts"
+                      : " · moins de 1 DT à payer"
+                    : balance > usablePoints && usePoints
+                      ? ` · il garde ${(balance - usablePoints).toLocaleString("fr-FR")} pts`
+                      : ""}
+                </p>
               </Section>
             ) : null}
 
@@ -453,10 +541,24 @@ export function JournalReglerDialog({
                       muted
                     />
                   ) : null}
+                  {promoLine ? (
+                    <Line
+                      label={`${promoLine.label} incluse · −${formatDt(promoLine.off)} DT`}
+                      value=""
+                      tone="gift"
+                    />
+                  ) : null}
                   {alreadyPaid > 0.0005 ? (
                     <Line label="Déjà payé" value={`− ${formatDt(alreadyPaid)}`} muted />
                   ) : null}
                   {debtTotal > 0.0005 ? <Line label="Dettes" value={`+ ${formatDt(debtTotal)}`} /> : null}
+                  {pointsUsed > 0 ? (
+                    <Line
+                      label={`Points · ${pointsUsed.toLocaleString("fr-FR")} pts`}
+                      value={`− ${formatDt(pointsDt)}`}
+                      tone="points"
+                    />
+                  ) : null}
                   {offered > 0 ? (
                     <Line label="Offert" value={`− ${formatDt(offered)}`} tone="gift" />
                   ) : null}
@@ -469,21 +571,6 @@ export function JournalReglerDialog({
         ) : null}
 
         <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-          {row && !paid && memberId && points > 0 && onPayWithPoints ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto gap-1.5"
-              disabled={busy}
-              onClick={() => {
-                onOpenChange(false);
-                onPayWithPoints(row);
-              }}
-            >
-              <Wallet className="h-4 w-4" />
-              Points
-            </Button>
-          ) : null}
           {paid ? (
             <>
               <Button variant="outline" disabled={busy} onClick={() => unpay.mutate()}>
@@ -512,7 +599,9 @@ export function JournalReglerDialog({
                 onClick={() => collect.mutate()}
               >
                 <Check className="h-4 w-4" />
-                Encaisser {formatDt(toCollect)}
+                {toCollect <= 0.0005 && pointsUsed > 0
+                  ? "Payer en points"
+                  : `Encaisser ${formatDt(toCollect)}`}
               </Button>
             </>
           )}
@@ -605,7 +694,7 @@ function Line({
   value: string;
   strong?: boolean;
   muted?: boolean;
-  tone?: "gift";
+  tone?: "gift" | "points";
 }) {
   return (
     <div
@@ -614,7 +703,9 @@ function Line({
         strong && "text-base font-bold",
         muted && "text-xs text-muted-foreground",
         tone === "gift" &&
-          "font-medium text-emerald-700 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:text-emerald-400"
+          "font-medium text-emerald-700 animate-in fade-in-0 duration-200 motion-reduce:animate-none dark:text-emerald-400",
+        tone === "points" &&
+          "font-medium text-indigo-600 animate-in fade-in-0 slide-in-from-top-1 duration-200 motion-reduce:animate-none dark:text-indigo-400"
       )}
     >
       <span>{label}</span>

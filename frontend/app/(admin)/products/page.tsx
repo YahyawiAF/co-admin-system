@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,6 +35,14 @@ export default function ProductsPage() {
   const [item, setItem] = useState<StockItemRow | null>(null);
   const [itemOpen, setItemOpen] = useState(false);
   const [countItem, setCountItem] = useState<StockItemRow | null>(null);
+  // Opened from Conseil IA (« Préparer le produit »): name and price ready to check
+  const conseil = useConseilDraft("PRODUCT");
+  const conseilDraft = conseil.draft as { name?: string; price?: number } | null;
+  useEffect(() => {
+    if (!conseilDraft) return;
+    setProduct(null);
+    setProductOpen(true);
+  }, [conseilDraft]);
 
   const { data: overview, isLoading } = useQuery({
     queryKey: ["stock-overview"],
@@ -291,7 +300,18 @@ export default function ProductsPage() {
       {overview ? (
         <>
           <PurchaseDialog open={buyOpen} onOpenChange={setBuyOpen} overview={overview} preselect={buyItem} onDone={refresh} />
-          <ProductDialog open={productOpen} onOpenChange={setProductOpen} product={product} overview={overview} onDone={refresh} />
+          <ProductDialog
+            open={productOpen}
+            onOpenChange={(o) => {
+              setProductOpen(o);
+              if (!o && conseil.active) conseil.dismiss();
+            }}
+            product={product}
+            overview={overview}
+            onDone={refresh}
+            draft={product ? null : conseilDraft}
+            onCreated={(id) => conseil.active && void conseil.linked(id)}
+          />
         </>
       ) : null}
       <ItemDialog open={itemOpen} onOpenChange={setItemOpen} item={item} onDone={refresh} />

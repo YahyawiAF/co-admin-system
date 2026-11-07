@@ -93,7 +93,9 @@ export function FinanceNewcomers() {
   }
 
   const k = data.kpis;
-  const vsPrev = k.thisMonth - k.prevMonthSamePoint;
+  // Same weekdays 4 weeks earlier, not the same dates (a Sunday is not a Thursday)
+  const vsPrev = k.thisMonth - k.sameWeekdaysBefore;
+  const sameDays = `${format(new Date(`${k.sameWeekdaysFrom}T12:00:00`), "d", { locale: fr })}–${format(new Date(`${k.sameWeekdaysTo}T12:00:00`), "d MMM", { locale: fr })}`;
 
   return (
     <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
@@ -101,7 +103,7 @@ export function FinanceNewcomers() {
         <Kpi
           label="Nouveaux ce mois"
           value={String(k.thisMonth)}
-          hint={`${vsPrev >= 0 ? "+" : ""}${vsPrev} vs même jour du mois dernier · ${k.prevMonth} le mois dernier`}
+          hint={`${vsPrev >= 0 ? "+" : ""}${vsPrev} vs mêmes jours il y a 4 semaines (${sameDays}) · ${k.prevMonth} le mois dernier`}
         />
         <Kpi
           label="Reviennent en 14 j"

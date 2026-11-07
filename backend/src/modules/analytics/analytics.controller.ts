@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
@@ -49,6 +50,7 @@ export class AnalyticsController {
       year: number;
       month: number;
       revenue?: number | null;
+      netRevenue?: number | null;
       occupancyPct?: number | null;
     },
   ) {
@@ -69,8 +71,36 @@ export class AnalyticsController {
   }
 
   @Get('performance/forecast')
-  performanceForecast(@Query('year') year?: string, @Query('month') month?: string) {
-    return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined });
+  performanceForecast(
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('facilityId') facilityId?: string,
+  ) {
+    return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined, facilityId });
+  }
+
+  /** Download the forecast and the numbers behind it: `format=csv` (day by day) or json (everything). */
+  @Get('performance/forecast/export')
+  async performanceForecastExport(
+    @Res() res: Response,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('format') format?: string,
+    @Query('facilityId') facilityId?: string,
+  ) {
+    const x = await this.forecasts.exportForecast({ year: Number(year) || undefined, month: Number(month) || undefined, format, facilityId });
+    res.setHeader('Content-Type', x.type);
+    res.setHeader('Content-Disposition', `attachment; filename="${x.filename}"`);
+    // The admin app runs on another origin: let it read the file name
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(x.body);
+  }
+
+  /** Stored predictions of the last finished months against what happened. */
+  @Get('performance/forecast/accuracy')
+  performanceForecastAccuracy(@Query('facilityId') facilityId?: string) {
+    return this.forecasts.accuracy(facilityId);
   }
 
   @Get('performance/changes')
@@ -138,7 +168,7 @@ export class AnalyticsController {
 
   @Post('outreach/log')
   outreachLog(
-    @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string },
+    @Body() body: { memberId?: string; reason?: string; channel?: string; message?: string; contactedAt?: string | null },
   ) {
     return this.outreach.log(body);
   }
@@ -152,6 +182,12 @@ export class AnalyticsController {
   }
 
   /** Check-in: the relance to do with this member, if any. */
+  /** Relances modal: member, contacts with answers, last visit, abonnement. */
+  @Get('outreach/member/:memberId/history')
+  outreachHistory(@Param('memberId') memberId: string) {
+    return this.outreach.history(memberId);
+  }
+
   @Get('outreach/member/:memberId')
   outreachForMember(@Param('memberId') memberId: string, @Query('facilityId') facilityId?: string) {
     return this.outreach.forMember(memberId, facilityId);
@@ -190,10 +226,32 @@ export class AnalyticsController {
     return this.outreach.close(id, body.result);
   }
 
+  /** Relances → Suivi: undo a hand-made close. */
+  @Post('outreach/:id/reopen')
+  outreachReopen(@Param('id') id: string) {
+    return this.outreach.reopen(id);
+  }
+
   /** Saved relances (e.g. from an AI suggestion) with their progress. */
   @Get('outreach/campaigns')
   campaignList(@Query('facilityId') facilityId?: string) {
     return this.campaigns.list(facilityId);
+  }
+
+  /** People of a list, to pick one by one. */
+  @Get('outreach/candidates')
+  campaignCandidates(
+    @Query('facilityId') facilityId?: string,
+    @Query('segment') segment?: string,
+    @Query('groupId') groupId?: string,
+  ) {
+    return this.campaigns.candidates(facilityId, segment, groupId || null);
+  }
+
+  /** "Relance passée": abonnement taken since that day? */
+  @Get('outreach/past-check')
+  outreachPastCheck(@Query('memberId') memberId?: string, @Query('date') date?: string) {
+    return this.outreach.pastCheck(memberId, date);
   }
 
   @Get('outreach/segments')
@@ -233,6 +291,19 @@ export class AnalyticsController {
     @Body() body: { memberId?: string; channel?: string; message?: string },
   ) {
     return this.campaigns.log(id, body);
+  }
+
+  @Post('outreach/campaigns/:id/members')
+  campaignMembers(@Param('id') id: string, @Body() body: { add?: string[]; remove?: string[] }) {
+    return this.campaigns.members(id, body);
+  }
+
+  @Post('outreach/campaigns/:id/answer')
+  campaignAnswer(
+    @Param('id') id: string,
+    @Body() body: { memberId?: string; outcome?: string | null; note?: string | null; followUpAt?: string | null },
+  ) {
+    return this.campaigns.answer(id, body);
   }
 
   @Post('outreach/push')

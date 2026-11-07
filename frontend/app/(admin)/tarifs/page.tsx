@@ -2,6 +2,7 @@
 
 import { creneauLabel, DAY_SHORT, hasCreneau } from "@/lib/price-availability";
 import { useEffect, useMemo, useState } from "react";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -132,11 +133,16 @@ function PriceFormDialog({
   trigger,
   open: controlledOpen,
   onOpenChange,
+  initial,
+  onCreated,
 }: {
   price?: Price | null;
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (o: boolean) => void;
+  /** Pre-filled by Conseil IA (« Préparer le tarif ») */
+  initial?: { name?: string; price?: number; fromHour?: number; toHour?: number } | null;
+  onCreated?: (id: string) => void;
 }) {
   const [internal, setInternal] = useState(false);
   const open = controlledOpen ?? internal;
@@ -215,8 +221,18 @@ function PriceFormDialog({
       availableFromHour: price?.availableFromHour ?? 8,
       availableToHour: price?.availableToHour ?? 12,
       availableDays: price?.availableDays ?? [],
+      // A new tarif prepared by Conseil IA: name, price and its time slot
+      ...(!price && initial
+        ? {
+            name: initial.name ?? "",
+            price: initial.price ?? 0,
+            ...(initial.fromHour != null && initial.toHour != null
+              ? { creneau: true, availableFromHour: initial.fromHour, availableToHour: Math.min(24, initial.toHour) }
+              : {}),
+          }
+        : {}),
     });
-  }, [open, price]);
+  }, [open, price, initial]);
 
   const billingUnit = form.watch("billingUnit");
   const categories = form.watch("categories") || [];
@@ -293,8 +309,9 @@ function PriceFormDialog({
       if (price?.id) return pricesApi.update(price.id, body);
       return pricesApi.create(body);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(price ? "Service mis à jour" : "Service créé");
+      if (!price?.id && saved?.id) onCreated?.(saved.id);
       queryClient.invalidateQueries({ queryKey: queryKeys.prices });
       if (price?.id) {
         queryClient.invalidateQueries({ queryKey: ["price-history", price.id] });
@@ -679,6 +696,9 @@ function PriceFormDialog({
 export default function TarifsPage() {
   const queryClient = useQueryClient();
   const [edit, setEdit] = useState<Price | null>(null);
+  // Opened from Conseil IA: the AI's tarif, ready to check and save
+  const conseil = useConseilDraft("PRICE");
+  const conseilPrice = conseil.draft as { name?: string; price?: number; fromHour?: number; toHour?: number } | null;
   const [globalDraft, setGlobalDraft] = useState<{
     active: boolean;
     valueKind: PromoValueKind;
@@ -1425,6 +1445,14 @@ export default function TarifsPage() {
         open={!!edit}
         onOpenChange={(o) => {
           if (!o) setEdit(null);
+        }}
+      />
+      <PriceFormDialog
+        open={!!conseilPrice}
+        initial={conseilPrice}
+        onCreated={(id) => void conseil.linked(id)}
+        onOpenChange={(o) => {
+          if (!o && conseil.active) conseil.dismiss();
         }}
       />
     </div>

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-export type QuestTone = "brand" | "violet" | "gold" | "emerald";
+export type QuestTone = "brand" | "violet" | "gold" | "emerald" | "rose";
 
 const TONE: Record<QuestTone, { bg: string; text: string; soft: string }> = {
   brand: {
@@ -32,6 +32,11 @@ const TONE: Record<QuestTone, { bg: string; text: string; soft: string }> = {
     bg: "bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-500",
     text: "text-white",
     soft: "text-emerald-50",
+  },
+  rose: {
+    bg: "bg-gradient-to-br from-rose-800 via-rose-600 to-rose-400",
+    text: "text-white",
+    soft: "text-rose-50",
   },
 };
 

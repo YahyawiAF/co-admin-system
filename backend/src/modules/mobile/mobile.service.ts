@@ -64,7 +64,8 @@ import {
   levelForSessions,
   nextTrophyThreshold,
   pointsToDt,
-  dtToRedeemPoints,
+  redeemablePoints,
+  POINTS_PER_DT,
   PROFILE_DETAILS_POINTS,
   PROFILE_AVATAR_POINTS,
 } from './points';
@@ -100,6 +101,7 @@ import {
   memberDiscountPercent,
   pricingPayload,
   PricedJournalRow,
+  promoShare,
 } from './session-pricing-context';
 import {
   LateBillingMode,
@@ -2717,30 +2719,44 @@ export class MobileService {
     const percent = memberDiscountPercent(journal.members, price);
     const listAmount = this.applyPercentOff(price.price, percent);
 
-    // Tarif promo (golden card / promo du jour) on the new pass; the previous pass's one is dropped
-    const hadFlash = await this.prisma.promotionUse.count({
+    // The visit's promo follows the pass at the same share (−20 % on 2h → −20 % on 4h);
+    // a visit without one gets the live tarif promo of the new pass, if any.
+    const prevUse = await this.prisma.promotionUse.findFirst({
       where: { journalId, dailyProductId: null },
+      orderBy: { createdAt: 'desc' },
+      select: { promotionId: true },
     });
+    const share = promoShare(journal);
     await this.promotions.clearJournalPriceUses(journalId);
-    const deal = await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
+    const deal =
+      share > 0
+        ? {
+            promotionId: prevUse?.promotionId ?? null,
+            amount: Math.round(listAmount * (1 - share) * 1000) / 1000,
+            label: journal.promoLabel,
+          }
+        : await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
     let amount = listAmount;
     let promoData: {
       priceBeforePromo?: number | null;
       promoDiscount?: number | null;
       promoLabel?: string | null;
     } = {};
-    if (deal) {
+    if (deal && deal.amount < listAmount - 0.0005) {
+      // Promo inside the pass price (fixedAmount), like at check-in
       const off = Math.round((listAmount - deal.amount) * 1000) / 1000;
       amount = deal.amount;
       promoData = { priceBeforePromo: listAmount, promoDiscount: off, promoLabel: deal.label };
-      await this.promotions.recordUse({
-        promotionId: deal.promotionId,
-        memberId: journal.memberID,
-        journalId,
-        amount: deal.amount,
-        discount: off,
-      });
-    } else if (hadFlash) {
+      if (deal.promotionId) {
+        await this.promotions.recordUse({
+          promotionId: deal.promotionId,
+          memberId: journal.memberID,
+          journalId,
+          amount: deal.amount,
+          discount: off,
+        });
+      }
+    } else if (journal.promoDiscount || prevUse) {
       promoData = { priceBeforePromo: null, promoDiscount: null, promoLabel: null };
     }
 
@@ -2773,11 +2789,8 @@ export class MobileService {
         ctx,
         updated.leaveTime,
       );
-      // A tarif promo is already in fixedAmount; an older install promo is not
-      const billed =
-        Math.round(
-          Math.max(0, (due ?? amount) - (deal ? 0 : updated.promoDiscount || 0)) * 1000,
-        ) / 1000;
+      // The promo is already in fixedAmount
+      const billed = Math.round(Math.max(0, due ?? amount) * 1000) / 1000;
       updated = await this.prisma.journal.update({
         where: { id: journalId },
         data: { payedAmount: billed, amountAtCheckout: billed },
@@ -5521,10 +5534,14 @@ export class MobileService {
   }
 
   async listOrders(memberId: string) {
+    // Refused / cancelled orders stay visible for a day, so the member sees the answer
+    const since = new Date(Date.now() - 24 * 3600_000);
     const rows = await this.prisma.dailyProduct.findMany({
       where: {
-        OR: [{ memberId }, { externalRef: memberId }],
-        status: { not: ProductOrderStatus.CANCELLED },
+        AND: [
+          { OR: [{ memberId }, { externalRef: memberId }] },
+          { OR: [{ status: { not: ProductOrderStatus.CANCELLED } }, { updatedAt: { gte: since } }] },
+        ],
       },
       include: { product: true },
       orderBy: { createdAt: 'desc' },
@@ -7092,14 +7109,22 @@ export class MobileService {
   }
 
   /**
-   * Redeem points against a journal visit (100 pts = 1 DT).
-   * Full cover → isPayed; partial → remainder unpaid (no visit earn on redeemed DT).
+   * Redeem points against a journal visit (1000 pts = 1 DT, whole blocks only:
+   * 1200 pts → 1000 pts used). Full cover → isPayed; partial → remainder unpaid
+   * (no visit earn on redeemed DT). `settle: false` only debits the points —
+   * the Régler dialog collects the rest and marks the visit paid itself.
    */
-  async adminRedeemVisitPoints(dto: { journalId: string; points: number }) {
+  async adminRedeemVisitPoints(dto: {
+    journalId: string;
+    points: number;
+    dueDt?: number;
+    settle?: boolean;
+  }) {
     const points = Math.floor(Number(dto.points));
     if (!Number.isFinite(points) || points <= 0) {
       throw new BadRequestException('Nombre de points invalide');
     }
+    const settle = dto.settle !== false;
 
     const journal = await this.prisma.journal.findUnique({
       where: { id: dto.journalId },
@@ -7120,21 +7145,28 @@ export class MobileService {
       throw new BadRequestException('Visite déjà payée');
     }
 
-    const due = Math.max(0, Number(journal.payedAmount || 0));
+    const clientDue = Number(dto.dueDt);
+    const due = Math.max(
+      0,
+      Number.isFinite(clientDue) && clientDue > 0
+        ? clientDue
+        : Number(journal.payedAmount || 0),
+    );
     if (due <= 0) {
       throw new BadRequestException('Montant dû invalide');
     }
 
-    const maxPts = dtToRedeemPoints(due);
     const member = await this.prisma.member.findUnique({
       where: { id: journal.memberID },
       select: { points: true },
     });
     if (!member) throw new NotFoundException('Membre introuvable');
 
-    const apply = Math.min(points, maxPts, member.points);
+    const apply = redeemablePoints(Math.min(points, member.points), due);
     if (apply <= 0) {
-      throw new BadRequestException('Solde points insuffisant');
+      throw new BadRequestException(
+        `Il faut au moins ${POINTS_PER_DT.toLocaleString('fr-FR')} pts (1 DT) et 1 DT à payer`,
+      );
     }
 
     const debit = await debitPoints(this.prisma, {
@@ -7148,12 +7180,12 @@ export class MobileService {
     const fullyCovered = coveredDt + 1e-9 >= due;
     const updated = await this.prisma.journal.update({
       where: { id: journal.id },
-      data: fullyCovered ? { isPayed: true } : {},
+      data: fullyCovered && settle ? { isPayed: true } : {},
       include: { members: true, prices: true },
     });
 
     // Full cover: maybeAward yields 0 earnable after redeem subtraction.
-    if (fullyCovered) {
+    if (fullyCovered && settle) {
       await this.maybeAwardVisitPaidPoints(updated.id);
     }
 
@@ -7161,7 +7193,7 @@ export class MobileService {
       type: 'journal_redeem_points',
       journalId: journal.id,
       points: apply,
-      isPayed: fullyCovered,
+      isPayed: fullyCovered && settle,
     });
 
     return {
@@ -7169,7 +7201,7 @@ export class MobileService {
       pointsApplied: apply,
       dtCovered: coveredDt,
       fullyCovered,
-      isPayed: fullyCovered,
+      isPayed: fullyCovered && settle,
       remainingDue: fullyCovered
         ? 0
         : Math.round((due - coveredDt) * 100) / 100,

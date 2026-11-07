@@ -12,7 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { advisorApi, analyticsApi } from "@/lib/api/resources";
+import { CompareCard, ExportCard, SourceCurveCard } from "./ForecastSources";
 import type {
+  AbonnementMonth,
   AdviceMetric,
   AdvisorCategory,
   ForecastDriver,
@@ -32,104 +34,33 @@ const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${fmt(Math.abs
 const dayLabel = (key: string) => format(new Date(`${key}T12:00:00`), "d MMM", { locale: fr });
 
 const DRIVER_UI: Record<ForecastDriverKey, { label: string; sub: string; money?: boolean; decimals?: boolean }> = {
+  calendar: { label: "Calendrier", sub: "nombre de chaque jour de semaine", money: true },
+  periods: { label: "Périodes du calendrier", sub: "examens, vacances, jours fériés", money: true },
   newVisitors: { label: "Nouveaux visiteurs", sub: "1ʳᵉ visite" },
   otherVisits: { label: "Visites des habitués", sub: "déjà venus + sans compte" },
+  conversions: { label: "Passés en abonnement", sub: "leurs passes deviennent un abonnement" },
   ticket: { label: "Ticket moyen", sub: "par visite", money: true, decimals: true },
-  subscriptions: { label: "Abonnements", sub: "paiements reçus", money: true },
+  subscriptions: { label: "Abonnements", sub: "total du mois", money: true },
   products: { label: "Café et produits", sub: "ventes enregistrées", money: true },
+  goodStart: { label: "Les jours déjà vécus", sub: "réel au-dessus / en dessous du prévu", money: true },
+  events: { label: "Événements", sub: "places payées et réservées", money: true },
 };
+
+const RATE_SOURCE: Record<MonthForecast["subscriptions"]["renewalRateSource"], string> = {
+  LAST_MONTH: "renouvelés le mois dernier",
+  CAREFUL: "taux prudent : le plus bas entre le mois dernier et tout l'historique",
+  HISTORY: "renouvelés sur tout l'historique",
+  ASSUMED: "pas assez d'historique",
+};
+
+const pctLabel = (factor: number) => `${factor >= 1 ? "+" : "−"}${Math.round(Math.abs(factor - 1) * 100)} %`;
+const rangeLabel = (from: string, to: string) =>
+  from === to ? dayLabel(from) : `${format(new Date(`${from}T12:00:00`), "d", { locale: fr })}–${dayLabel(to)}`;
 
 function driverValue(d: ForecastDriver, v: number) {
   const ui = DRIVER_UI[d.key];
   const n = ui.decimals ? v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : fmt(v);
   return ui.money ? `${n} DT` : n;
-}
-
-// ---------------------------------------------------------------------------
-// Curve: expected (dashed + band) vs real, cumulative
-// ---------------------------------------------------------------------------
-
-function ForecastCurve({ f, previousTotal }: { f: MonthForecast; previousTotal: number | null }) {
-  const W = 640;
-  const H = 260;
-  const pl = 44;
-  const pr = 16;
-  const pt = 16;
-  const pb = 28;
-  const n = f.days.length;
-  const lived = f.days.filter((d) => d.actualCum != null);
-  const top = Math.max(f.expected.high, previousTotal ?? 0, lived.at(-1)?.actualCum ?? 0) * 1.08 || 1;
-  const step = top > 8000 ? 2000 : top > 3000 ? 1000 : top > 1200 ? 500 : 200;
-  const max = Math.ceil(top / step) * step;
-  const x = (i: number) => pl + ((W - pl - pr) * i) / Math.max(1, n - 1);
-  const y = (v: number) => pt + (H - pt - pb) * (1 - v / max);
-  const line = (pts: Array<[number, number]>) => pts.map(([a, b]) => `${a.toFixed(1)},${b.toFixed(1)}`).join(" ");
-  const band = [
-    ...f.days.map((d, i) => [x(i), y(d.highCum)] as [number, number]),
-    ...[...f.days].reverse().map((d, i) => [x(n - 1 - i), y(d.lowCum)] as [number, number]),
-  ];
-  const ticks = [1, 8, 15, 22, n];
-  const last = lived.at(-1);
-  const lastIdx = last ? f.days.indexOf(last) : -1;
-
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Encaissé cumulé : prévu et réel">
-      {Array.from({ length: max / step + 1 }, (_, k) => k * step).map((g) => (
-        <g key={g}>
-          <line x1={pl} x2={W - pr} y1={y(g)} y2={y(g)} className="stroke-border" />
-          <text x={pl - 6} y={y(g) + 4} textAnchor="end" fontSize={11} className="fill-muted-foreground">
-            {g >= 1000 ? `${g / 1000}k` : g}
-          </text>
-        </g>
-      ))}
-      {ticks.map((d) => (
-        <text key={d} x={x(d - 1)} y={H - 8} textAnchor="middle" fontSize={11} className="fill-muted-foreground">
-          {dayLabel(f.days[d - 1].key)}
-        </text>
-      ))}
-      {previousTotal != null ? (
-        <g>
-          <line x1={pl} x2={W - pr} y1={y(previousTotal)} y2={y(previousTotal)} strokeDasharray="2 4" className="stroke-muted-foreground" />
-          <text x={W - pr} y={y(previousTotal) - 6} textAnchor="end" fontSize={11} className="fill-muted-foreground">
-            {f.period.previousLabel} {fmt(previousTotal)}
-          </text>
-        </g>
-      ) : null}
-      <polygon points={line(band)} className="fill-indigo-500/10" />
-      <polyline
-        points={line(f.days.map((d, i) => [x(i), y(d.expectedCum)]))}
-        fill="none"
-        strokeWidth={2}
-        strokeDasharray="5 4"
-        className="stroke-indigo-500"
-      />
-      <text x={x(n - 1) - 4} y={y(f.expected.total) + 16} textAnchor="end" fontSize={11.5} fontWeight={700} className="fill-indigo-600">
-        prévu {fmt(r50(f.expected.total))}
-      </text>
-      {lived.length ? (
-        <g className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
-          <polyline
-            points={line(lived.map((d) => [x(f.days.indexOf(d)), y(d.actualCum!)]))}
-            fill="none"
-            strokeWidth={2.6}
-            strokeLinejoin="round"
-            className="stroke-foreground"
-          />
-          <circle cx={x(lastIdx)} cy={y(last!.actualCum!)} r={4.5} className="fill-foreground" />
-          <text
-            x={x(lastIdx) + (lastIdx > n / 2 ? -8 : 8)}
-            y={y(last!.actualCum!) - 10}
-            textAnchor={lastIdx > n / 2 ? "end" : "start"}
-            fontSize={12}
-            fontWeight={700}
-            className="fill-foreground"
-          >
-            {fmt(last!.actualCum!)} DT
-          </text>
-        </g>
-      ) : null}
-    </svg>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -202,32 +133,62 @@ function verdictText(f: MonthForecast): string {
 // Forecast block
 // ---------------------------------------------------------------------------
 
-export function ForecastBlock({ year, month }: { year: number; month: number }) {
+export function ForecastBlock({
+  year,
+  month,
+  facilityId,
+  abonnements,
+}: {
+  year: number;
+  month: number;
+  facilityId?: string;
+  abonnements?: AbonnementMonth | null;
+}) {
   const { data: f, isLoading } = useQuery({
     queryKey: ["performance", "forecast", year, month],
     queryFn: () => analyticsApi.performanceForecast(year, month),
   });
+  const [pace, setPace] = useState(false);
+  const [whyMode, setWhyMode] = useState<"previous" | "expected">("previous");
 
   if (isLoading || !f) {
     return (
       <div className="grid gap-4">
         <Skeleton className="h-28" />
-        <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-          <Skeleton className="h-80" />
-          <Skeleton className="h-80" />
-        </div>
+        <Skeleton className="h-96" />
+        <Skeleton className="h-72" />
       </div>
     );
   }
 
   const t = f.toDate;
-  const prevTotal = f.versusPrevious?.previousTotal ?? null;
-  const vsPrev = prevTotal != null ? f.expected.total - prevTotal : null;
-  const subsDriver = f.versusPrevious?.drivers.find((d) => d.key === "subscriptions");
-  const ahead = t ? t.gap >= 0 : null;
+  const ev = f.events;
+  const prevTotal = f.versusPrevious ? f.versusPrevious.previousTotal + ev.previousMonth : null;
+  const calendarDriver = f.versusPrevious?.drivers.find((d) => d.key === "calendar");
   const lastComplete = t ? f.days[t.days - 1] : null;
   const showsPast = !f.period.isCurrent && !f.period.isFuture;
+  const ahead = t ? t.gap >= 0 : null;
   const s = f.subscriptions;
+  const subsPaid = t?.subscriptions.actual ?? null;
+  const projectedVariable = t ? (pace ? t.pace.projectedVariable : t.projectedVariable) : f.expected.variable;
+  const projectedSubs = t ? t.projectedSubscriptions : f.expected.subscriptions;
+  const projected = pace ? f.projectedAll.pace : f.projectedAll.current;
+  const monthDone = showsPast && t ? t.actual + t.subscriptions.actual + ev.paid : null;
+
+  // Why vs last month: the expected month's drivers, then what the days lived,
+  // the abonnements paid above the expected and the events add
+  const whyPrevious: ForecastDriver[] = f.versusPrevious
+    ? [
+        ...f.versusPrevious.drivers.map((d) =>
+          d.key === "subscriptions" && t ? { ...d, to: projectedSubs, effect: d.effect + (projectedSubs - f.expected.subscriptions) } : d,
+        ),
+        ...(t ? [{ key: "goodStart" as const, from: f.expected.variable, to: projectedVariable, effect: projectedVariable - f.expected.variable }] : []),
+        ...(ev.projected || ev.previousMonth
+          ? [{ key: "events" as const, from: ev.previousMonth, to: ev.projected, effect: ev.projected - ev.previousMonth }]
+          : []),
+      ]
+    : [];
+  const showExpected = whyMode === "expected" && t;
 
   return (
     <div className="grid gap-4">
@@ -238,7 +199,7 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
               <div className="grid content-start gap-1.5">
                 <span
                   className={cn(
-                    "justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors",
+                    "justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors duration-300",
                     ahead ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
                   )}
                 >
@@ -246,7 +207,7 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 </span>
                 <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(t.actual)}</div>
                 <p className="text-sm text-muted-foreground">
-                  encaissés {showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete.key)}`} · prévu{" "}
+                  passes + café {showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete.key)}`} · prévu{" "}
                   <b className="text-foreground">{dt(t.expected)}</b>
                 </p>
               </div>
@@ -254,17 +215,29 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 label="Écart vs prévu"
                 value={`${signed(t.gap)} DT`}
                 tone={t.gap >= 0 ? "good" : "bad"}
-                sub={t.gapPct != null ? `${signed(t.gapPct)} %` : undefined}
+                sub={t.gapPct != null ? `${signed(t.gapPct)} % · mêmes jours de semaine` : undefined}
               />
               <Kpi
-                label={showsPast ? "Prévu pour le mois" : "Fin de mois estimée"}
-                value={dt(showsPast ? f.expected.total : r50(t.projected))}
-                sub={showsPast ? `fourchette ${fmt(r50(f.expected.low))} – ${fmt(r50(f.expected.high))}` : `si la suite suit le prévu · prévu ${fmt(r50(f.expected.total))}`}
+                label={showsPast ? "Mois complet" : `Fin de mois estimée${pace ? " · rythme du mois" : ""}`}
+                value={dt(monthDone ?? r50(projected))}
+                sub={
+                  showsPast
+                    ? `prévu ${fmt(r50(f.expected.total))} · abonnements ${fmt(t.subscriptions.actual)} DT`
+                    : `passes + café ${fmt(r50(projectedVariable))} + abonnements ${fmt(r50(projectedSubs))}${
+                        ev.projected ? ` + événements ${fmt(ev.projected)}` : ""
+                      }`
+                }
               />
               <Kpi
                 label={`vs ${f.period.previousLabel}`}
                 value={prevTotal != null ? dt(prevTotal) : "—"}
-                sub={prevTotal != null ? `${signed((showsPast ? t.actual : t.projected) - prevTotal)} DT` : undefined}
+                sub={
+                  prevTotal != null
+                    ? `${signed((monthDone ?? projected) - prevTotal)} DT${
+                        calendarDriver && Math.abs(calendarDriver.effect) >= 20 ? ` · dont calendrier ${signed(calendarDriver.effect)}` : ""
+                      }`
+                    : undefined
+                }
               />
             </>
           ) : (
@@ -273,99 +246,116 @@ export function ForecastBlock({ year, month }: { year: number; month: number }) 
                 <span className="justify-self-start rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
                   {f.period.label} prévu
                 </span>
-                <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(r50(f.expected.total))}</div>
+                <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(r50(f.expected.total + ev.projected))}</div>
                 <p className="text-sm text-muted-foreground">
-                  Fourchette {fmt(r50(f.expected.low))} – {fmt(r50(f.expected.high))} DT.
+                  Passes + café {fmt(r50(f.expected.variable))} + abonnements {fmt(r50(f.expected.subscriptions))}
+                  {ev.projected ? ` + événements ${fmt(ev.projected)}` : ""} · fourchette {fmt(r50(f.expected.low))} –{" "}
+                  {fmt(r50(f.expected.high))} DT.
                   {f.period.isCurrent ? " Le réel se remplit chaque soir." : ""}
                 </p>
               </div>
               <Kpi
                 label={`vs ${f.period.previousLabel}`}
-                value={vsPrev != null ? `${signed(vsPrev)} DT` : "—"}
-                tone={vsPrev == null ? "neutral" : vsPrev >= 0 ? "good" : "bad"}
-                sub={prevTotal != null ? `${f.period.previousLabel} : ${fmt(prevTotal)} DT${subsDriver && Math.abs(subsDriver.effect) >= 50 ? ` · abonnements ${signed(subsDriver.effect)}` : ""}` : undefined}
+                value={prevTotal != null ? `${signed(f.expected.total + ev.projected - prevTotal)} DT` : "—"}
+                tone={prevTotal == null ? "neutral" : f.expected.total + ev.projected - prevTotal >= 0 ? "good" : "bad"}
+                sub={prevTotal != null ? `${f.period.previousLabel} : ${fmt(prevTotal)} DT` : undefined}
               />
               <Kpi
                 label={`Repère du ${dayLabel(f.checkpoints[0].key)}`}
                 value={dt(r50(f.checkpoints[0].expectedCum))}
-                sub={`en dessous de ${fmt(r50(f.checkpoints[0].expectedCum * 0.9))} DT → lancer une idée`}
+                sub={`passes + café · en dessous de ${fmt(r50(f.checkpoints[0].expectedCum * 0.9))} DT → lancer une idée`}
               />
-              <Kpi
-                label="Nouveaux attendus"
-                value={fmt(f.expected.newVisitors)}
-                sub={`${fmt(f.expected.visitCount)} visites au total`}
-              />
+              <Kpi label="Nouveaux attendus" value={fmt(f.expected.newVisitors)} sub={`${fmt(f.expected.visitCount)} visites au total`} />
             </>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[1.35fr_1fr]">
-        <Card className="min-w-0 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">{f.period.label} : prévu jour par jour</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Chaque jour reçoit la moyenne du même jour de semaine sur les 4 semaines avant le mois ({dayLabel(f.period.base.from)} →{" "}
-              {dayLabel(f.period.base.to)}). Zone = ta semaine la plus faible → la plus forte.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <ForecastCurve f={f} previousTotal={prevTotal} />
-            <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1.5"><i className="inline-block h-0.5 w-4 border-t-2 border-dashed border-indigo-500" />Prévu</span>
-              <span className="flex items-center gap-1.5"><i className="inline-block h-0.5 w-4 bg-foreground" />Réel</span>
-              <span className="flex items-center gap-1.5"><i className="inline-block h-2.5 w-4 rounded-sm bg-indigo-500/15" />Fourchette</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {f.checkpoints.slice(-4).map((c) => {
-                const ok = c.actualCum == null ? null : c.actualCum >= c.expectedCum * 0.97;
-                return (
-                  <div
-                    key={c.key}
-                    className={cn(
-                      "grid gap-0.5 rounded-lg px-3 py-2 transition-colors duration-300",
-                      ok == null ? "bg-muted/60" : ok ? "bg-emerald-50 dark:bg-emerald-950/40" : "bg-amber-50 dark:bg-amber-950/40",
-                    )}
-                  >
-                    <span className="text-[11px] font-semibold text-muted-foreground">Au {dayLabel(c.key)}</span>
-                    <b className="tabular-nums">{dt(r50(c.expectedCum))}</b>
-                    <span className="text-[11px] text-muted-foreground">{c.actualCum != null ? `réel ${fmt(c.actualCum)}` : "prévu"}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Abonnements prévus {dt(s.expected)} : {s.endingCount} finissent ce mois ({dt(s.endingValue)}) ×{" "}
-              {s.renewalRatePct != null ? `${s.renewalRatePct} % renouvelés le mois dernier` : "40 % (pas assez d'historique)"}, plus{" "}
-              {dt(s.newPace)} de nouveaux abonnés au rythme récent.
-            </p>
-          </CardContent>
-        </Card>
+      <SourceCurveCard f={f} pace={pace} onPace={setPace} />
 
-        <Card className="min-w-0 shadow-none">
-          <CardHeader className="pb-2">
+      {f.period.isFuture ? null : <CompareCard f={f} pace={pace} abonnements={abonnements ?? null} />}
+
+      <Card className="min-w-0 shadow-none">
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 pb-2">
+          <div className="min-w-0">
             <CardTitle className="text-base">
-              {t ? `Pourquoi l'écart ${showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete!.key)}`}` : `${f.period.previousLabel} → ${f.period.label} prévu`}
+              {showExpected
+                ? `Pourquoi l'écart ${showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete!.key)}`}`
+                : `Pourquoi ${f.period.label} ${showsPast ? "" : "probable "}vs ${f.period.previousLabel}`}
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              {t
-                ? "Prévu contre réel, moteur par moteur. Barre = ce que ce moteur a ajouté ou retiré."
-                : `Chaque moteur du chiffre d'affaires, ${f.period.previousLabel} réel contre ${f.period.label} prévu.`}
+              {showExpected
+                ? "Passes + café, prévu contre réel sur les mêmes jours. Barre = ce que ce moteur a ajouté ou retiré."
+                : `${f.period.previousLabel} ${prevTotal != null ? dt(prevTotal) : ""} → ${f.period.label} ${dt(monthDone ?? projected)}. « Calendrier » = le nombre de chaque jour de semaine, le reste est comparé à calendrier égal.`}
             </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {t ? (
+          </div>
+          {t ? (
+            <div className="inline-flex rounded-lg bg-muted p-1 text-sm" role="group" aria-label="Comparer à">
+              {(["previous", "expected"] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={whyMode === m}
+                  onClick={() => setWhyMode(m)}
+                  className={cn(
+                    "rounded-md px-3 py-1 font-medium transition-all duration-200",
+                    whyMode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m === "previous" ? `vs ${f.period.previousLabel}` : "vs prévu"}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div key={whyMode} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
+            {showExpected ? (
               <Drivers drivers={t.drivers} fromLabel="Prévu" toLabel="Réel" />
-            ) : f.versusPrevious ? (
-              <Drivers drivers={f.versusPrevious.drivers} fromLabel={f.period.previousLabel} toLabel="Prévu" />
+            ) : whyPrevious.length ? (
+              <Drivers drivers={whyPrevious} fromLabel={f.period.previousLabel} toLabel={showsPast ? f.period.label : "Probable"} />
             ) : null}
-            <p className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-100">
-              <b>À retenir : </b>
-              {verdictText(f)}
+          </div>
+          <p className="rounded-lg bg-indigo-50 px-3 py-2 text-sm text-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-100">
+            <b>À retenir : </b>
+            {verdictText(f)}
+            {t && !pace && t.gap > 0 && t.days < 14
+              ? ` Le bon début ne compte que pour ${t.days} jour${t.days > 1 ? "s" : ""} : avec « + rythme du mois », la fin de mois serait ${dt(r50(f.projectedAll.pace))}.`
+              : ""}
+          </p>
+          {f.periods.length ? (
+            <ul className="space-y-1 text-xs text-muted-foreground">
+              {f.periods.map((p) => (
+                <li key={`${p.label}-${p.from}`}>
+                  <b className="text-foreground">{p.label}</b> ({rangeLabel(p.from, p.to)}) :{" "}
+                  {p.known ? (
+                    <>
+                      {pctLabel(p.factor)} vs un jour habituel, mesuré les fois précédentes → {signed(p.effect)} DT
+                    </>
+                  ) : (
+                    <>effet inconnu (jamais mesuré), compté comme un jour habituel avec une fourchette plus large</>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            <b className="text-foreground">Abonnements</b> : {dt(s.expected)} prévus
+            {subsPaid != null ? `, ${fmt(subsPaid)} DT encaissés` : ""}. {s.endingCount} finissent ce mois ({dt(s.endingValue)}) ×{" "}
+            {s.renewalRatePct != null ? `${s.renewalRatePct} %` : "40 %"} ({RATE_SOURCE[s.renewalRateSource]}), plus {dt(s.newPace)} de
+            nouveaux abonnés au rythme récent.
+            {ev.projected ? ` Événements : ${dt(ev.paid)} encaissés + ${dt(ev.upcoming)} de places réservées.` : ""}
+          </p>
+          {f.bookings.thisMonth || f.bookings.lastMonthSamePoint ? (
+            <p className="text-xs text-muted-foreground">
+              Réservations pour {f.period.label} : <b className="text-foreground">{f.bookings.thisMonth}</b> (à la même date le mois
+              dernier : {f.bookings.lastMonthSamePoint}).
             </p>
-          </CardContent>
-        </Card>
-      </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <ExportCard year={year} month={month} facilityId={facilityId} />
     </div>
   );
 }
@@ -498,12 +488,16 @@ function ideaPayload(idea: MissingIdea) {
     channels: p.channels,
     metric: p.metric,
     targetPct: p.targetPct ?? null,
-    targetKind: p.targetKind,
+    // A slot needs days: without them the whole space is measured
+    targetKind: p.targetKind === "SLOT" && !p.targetDays?.length ? "ALL" : p.targetKind,
     targetDays: p.targetDays,
     hypothesis: idea.why.slice(0, 300),
     recommendationTitle: idea.title,
     startDate: format(new Date(), "yyyy-MM-dd"),
     steps: idea.steps.map((text) => ({ text, done: false })),
+    // Same as « Je m'en occupe » in Conseil IA: a goal in DT, tied to its lever
+    leverId: idea.leverId,
+    goalAmount: Math.max(50, Math.round(idea.gain / 10) * 10),
   };
 }
 
@@ -520,7 +514,9 @@ export function LeverMapCard() {
     mutationFn: (idea: MissingIdea) => advisorApi.createInitiative(ideaPayload(idea)),
     onSuccess: (_r, idea) => {
       setAdded((s) => new Set(s).add(idea.leverId));
-      toast.success("Ajoutée au plan : suivie dans Conseiller → Actions");
+      toast.success("Solution lancée : suivez-la dans Conseil IA", {
+        action: { label: "Ouvrir", onClick: () => window.location.assign("/conseiller") },
+      });
       void queryClient.invalidateQueries({ queryKey: ["advisor"] });
     },
     onError: (e: Error) => toast.error(e.message || "Erreur"),

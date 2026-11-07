@@ -237,7 +237,7 @@ export function PointsCard({
                 </span>
                 <span className="text-xs font-semibold text-slate-400">pts</span>
                 <span className="ml-auto text-[10px] text-slate-400">
-                  100 pts = 1 DT
+                  1 000 pts = 1 DT
                 </span>
               </span>
               {next ? (

@@ -13,7 +13,7 @@ import { EventsGateway } from '../webSocket/events.gateway';
 import { saleSnapshotFromPrice } from '../mobile/sale-snapshot';
 import { switchOpenSessionToSubscription } from '../mobile/session-to-subscription';
 import { syncAbonnementPayments } from './abonnement-revenue';
-import { endOfDay, startOfDay } from 'date-fns';
+import { endOfDay, isSameDay, startOfDay } from 'date-fns';
 import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
 
 const PAYMENTS_INCLUDE = {
@@ -114,6 +114,7 @@ export class AbonnementService {
         createAbonnementDto.payedAmount,
         discount.amountDue,
       );
+      const paidOn = this.paymentMoment(createAbonnementDto.paymentDate);
 
       const created = await this.prisma.abonnement.create({
         data: {
@@ -121,7 +122,7 @@ export class AbonnementService {
           registredDate: createAbonnementDto.registredDate,
           leaveDate: createAbonnementDto.leaveDate,
           isPayed: payment.isPayed,
-          paidAt: payment.isPayed ? new Date() : null,
+          paidAt: payment.isPayed ? paidOn : null,
           isReservation: createAbonnementDto.isReservation,
           payedAmount: payment.payedAmount,
           discountPercent: discount.discountPercent,
@@ -146,7 +147,13 @@ export class AbonnementService {
           price: true,
         },
       });
-      await syncAbonnementPayments(this.prisma, created.id, 0, created.payedAmount);
+      await syncAbonnementPayments(
+        this.prisma,
+        created.id,
+        0,
+        created.payedAmount,
+        paidOn,
+      );
       await this.syncOutbox.enqueue('abonnement', created.id, 'CREATE');
       await this.syncReservedSeat(
         created.memberID,
@@ -368,8 +375,10 @@ export class AbonnementService {
         reservedSeatSpaceId,
         passCredit: _credit,
         offeredAmount: _offered,
+        paymentDate,
         ...rest
       } = updateAbonnementDto;
+      const paidOn = this.paymentMoment(paymentDate);
       // Moving the end date back to today or later undoes a termination
       const reopened =
         rest.terminatedAt === undefined &&
@@ -388,8 +397,8 @@ export class AbonnementService {
                 paidAt: !payment.isPayed
                   ? null
                   : current.isPayed
-                    ? current.paidAt ?? current.createdAt ?? new Date()
-                    : new Date(),
+                    ? current.paidAt ?? current.createdAt ?? paidOn
+                    : paidOn,
               }
             : {}),
           ...(reopened ? { terminatedAt: null } : {}),
@@ -410,6 +419,7 @@ export class AbonnementService {
         updated.id,
         current.payedAmount,
         updated.payedAmount,
+        paidOn,
       );
       await this.syncReservedSeat(
         updated.memberID,
@@ -482,6 +492,68 @@ export class AbonnementService {
       });
     }
     return deleted;
+  }
+
+  /**
+   * Moves one recorded payment to the day the money was really collected,
+   * so it is counted in that day's caisse instead of the day it was typed.
+   */
+  async updatePaymentDate(abonnementId: string, paymentId: string, paidAt: Date) {
+    const payment = await this.prisma.abonnementPayment.findFirst({
+      where: { id: paymentId, abonnementId },
+    });
+    if (!payment) {
+      throw new GeneralException(
+        HttpStatus.NOT_FOUND,
+        ErrorCode.NOT_FOUND,
+        'Paiement introuvable.',
+      );
+    }
+    const at = this.paymentMoment(paidAt);
+    await this.prisma.abonnementPayment.update({
+      where: { id: paymentId },
+      data: { paidAt: at },
+    });
+    const abo = await this.prisma.abonnement.findUnique({
+      where: { id: abonnementId },
+      include: { payments: { orderBy: { paidAt: 'desc' }, take: 1 } },
+    });
+    if (abo?.isPayed && abo.payments[0]) {
+      // Fully paid on the day of the last payment
+      await this.prisma.abonnement.update({
+        where: { id: abonnementId },
+        data: { paidAt: abo.payments[0].paidAt },
+      });
+    }
+    this.eventsGateway.sendTableUpdates({
+      type: 'abonnement_updated',
+      memberId: abo?.memberID,
+      abonnementId,
+    });
+    await this.syncOutbox.enqueue('abonnement', abonnementId, 'UPDATE');
+    return this.findOne(abonnementId);
+  }
+
+  /**
+   * When the money was collected: now, or the chosen past day (late entry).
+   * A past day keeps its date at noon so it lands in that day's caisse.
+   */
+  private paymentMoment(day?: Date | string | null) {
+    const now = new Date();
+    if (!day) return now;
+    const d = new Date(day);
+    if (Number.isNaN(d.getTime())) return now;
+    if (d > endOfDay(now)) {
+      throw new GeneralException(
+        HttpStatus.BAD_REQUEST,
+        ErrorCode.INVALID_INPUT,
+        'La date de paiement ne peut pas être dans le futur.',
+      );
+    }
+    if (isSameDay(d, now)) return now;
+    const noon = startOfDay(d);
+    noon.setHours(12);
+    return noon;
   }
 
   /** Member (or group) abonnement discount and the resulting price owed. */

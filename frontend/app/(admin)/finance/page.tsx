@@ -33,12 +33,14 @@ import { FinanceDayAnalysis } from "@/components/admin/finance/FinanceDayAnalysi
 import { FinanceCaisseTab } from "@/components/admin/finance/FinanceCaisseTab";
 import { FinanceExpensesTab } from "@/components/admin/finance/FinanceExpensesTab";
 import { FinanceCoffreTab } from "@/components/admin/finance/FinanceCoffreTab";
+import { FinanceMoneyTab } from "@/components/admin/finance/FinanceMoneyTab";
 
 const FINANCE_TABS = [
   "apercu",
   "caisse",
   "depenses",
   "coffre",
+  "argent",
   "jour",
   "mois",
   "frequentation",
@@ -97,6 +99,7 @@ function FinanceInner() {
           <TabsTrigger value="caisse">Caisse</TabsTrigger>
           <TabsTrigger value="depenses">Dépenses</TabsTrigger>
           <TabsTrigger value="coffre">Coffre</TabsTrigger>
+          <TabsTrigger value="argent">Argent</TabsTrigger>
           <TabsTrigger value="jour">Jour</TabsTrigger>
           <TabsTrigger value="mois">Mois</TabsTrigger>
           <TabsTrigger value="frequentation">Fréquentation</TabsTrigger>
@@ -121,6 +124,10 @@ function FinanceInner() {
 
         <TabsContent value="coffre" className="mt-4">
           {tab === "coffre" ? <FinanceCoffreTab /> : null}
+        </TabsContent>
+
+        <TabsContent value="argent" className="mt-4">
+          {tab === "argent" ? <FinanceMoneyTab /> : null}
         </TabsContent>
 
         <TabsContent value="jour" className="mt-4">

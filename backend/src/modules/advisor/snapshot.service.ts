@@ -16,6 +16,7 @@ import { localDayKey } from '../../../common/parse-local-day';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { PerformanceService } from '../analytics/performance.service';
 import { hoursOnSite, round1, visitEnd } from '../analytics/traffic';
+import { occupancy, visitsIn } from '../analytics/money-rules';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
 import { expenseAmount } from '../expense/expense-amount';
 import { ContextService } from './context.service';
@@ -26,6 +27,8 @@ import { dataIssues } from './data-check';
 import { InitiativeMeasure, RATE_METRICS, slotLabel } from './initiative-measure';
 import { buildFunnel, diagnose, parseManualFunnel, parseSteps } from './funnel';
 import { activeWindow, openPause, parsePauses } from './pauses';
+import { parseTools } from './tools';
+import { type LinkedSale, sumSales } from './sales';
 
 const WEEKDAYS = [
   'dimanche',
@@ -144,6 +147,8 @@ export class SnapshotService {
       dismissals,
       changeAnswers,
       relanceResults,
+      forecastAccuracy,
+      abonnementsView,
     ] = await Promise.all([
       this.periodMetrics(start, end, seats),
       this.periodMetrics(prevStart, prevEnd, seats),
@@ -165,7 +170,7 @@ export class SnapshotService {
       this.campaigns.list(facilityId).catch(() => []),
       this.recentDays(now),
       this.forecasts.levers(facilityId).catch(() => null),
-      this.forecasts.forecast({}).catch(() => null),
+      this.forecasts.forecast({ facilityId }).catch(() => null),
       this.forecasts.changes(facilityId).catch(() => ({ changes: [] })),
       this.forecasts.newcomersBySource(8).catch(() => []),
       this.prisma.advisorDismissal.findMany({ where: { facilityId }, orderBy: { createdAt: 'desc' }, take: 50 }),
@@ -175,6 +180,8 @@ export class SnapshotService {
         take: 20,
       }),
       this.outreach.list(facilityId).then((l) => l.results).catch(() => null),
+      this.forecasts.accuracy(facilityId).catch(() => ({ months: [] })),
+      this.forecasts.abonnementsOverview(now).catch(() => null),
     ]);
 
     const trend = (key: keyof PeriodMetrics) =>
@@ -313,13 +320,33 @@ export class SnapshotService {
       monthForecast: monthForecast
         ? {
             month: monthForecast.period.label,
+            rules: {
+              passesAndCafe:
+                'chaque jour = moyenne du même jour de semaine sur les semaines avant le mois, sans les jours fériés, périodes et leurs veilles/lendemains',
+              calendar:
+                "un jour dans une période du calendrier = jour habituel × l'effet mesuré les fois précédentes (known=false : jamais mesuré, fourchette élargie)",
+              subscriptions:
+                'abonnements qui finissent ce mois × taux de renouvellement (renewalRateSource) + nouveaux abonnés au rythme des 4 dernières semaines ; jamais répartis par jour',
+              previousMonth: 'comparé à calendrier égal : moyennes par jour de semaine du mois dernier rejouées sur les jours de ce mois (driver calendar)',
+            },
             expected: monthForecast.expected,
             basedOn: monthForecast.period.base,
+            perWeekdayPassesAndCafe: monthForecast.perWeekday.map((w) => ({
+              weekday: w.weekday,
+              amount: Math.round((w.revenueVisits + w.products) * 10) / 10,
+              samples: w.samples,
+            })),
+            calendarPeriods: monthForecast.periods,
+            calendarEffects: monthForecast.calendar.effects,
             subscriptionsOutlook: monthForecast.subscriptions,
+            bookingsForTheMonth: monthForecast.bookings,
             versusPreviousMonth: monthForecast.versusPrevious,
             toDate: monthForecast.toDate,
           }
         : null,
+      forecastAccuracy: forecastAccuracy.months,
+      abonnementsThisMonth: abonnementsView?.month ?? null,
+      recentRenewals: abonnementsView?.recentRenewals ?? [],
       dismissedIdeas: [
         ...dismissals.map((d) => ({ title: d.title, leverId: d.leverId, reason: d.reason, on: localDayKey(d.createdAt) })),
         ...initiatives
@@ -438,13 +465,10 @@ export class SnapshotService {
     if (skip) for (let d = startOfDay(start); d <= effectiveEnd; d = addDays(d, 1)) if (skip(d)) skipped += 1;
     const days = Math.max(1, differenceInCalendarDays(effectiveEnd, start) + 1 - skipped);
 
-    const [allJournals, allProducts, allAboPayments, allExpenses, newMemberRows] =
+    const [allJournals, allProducts, allAboPayments, allExpenses, newMemberRows, paidReservations, hours] =
       await Promise.all([
         this.prisma.journal.findMany({
-          where: {
-            registredTime: { gte: start, lte: end },
-            isReservation: false,
-          },
+          where: visitsIn(start, end),
           select: {
             id: true,
             registredTime: true,
@@ -484,6 +508,12 @@ export class SnapshotService {
           where: { createdAt: { gte: start, lte: end } },
           select: { createdAt: true },
         }),
+        // Same money rule as Finance: paid room reservations are money too (not visits)
+        this.prisma.journal.findMany({
+          where: { registredTime: { gte: start, lte: end }, isReservation: true, isPayed: true },
+          select: { registredTime: true, payedAmount: true },
+        }),
+        this.performance.settings().catch(() => ({ alwaysOpen: false, openHour: 8, closeHour: 20 })),
       ]);
     // Paused days of an action are left out of its measure
     const keep = (d: Date | null | undefined) => !skip || !d || !skip(d);
@@ -494,10 +524,11 @@ export class SnapshotService {
     const newMembers = newMemberRows.filter((m) => keep(m.createdAt)).length;
 
     const visits = journals.length;
-    const revenueVisits = journals.reduce(
-      (a, j) => a + (j.isPayed ? j.payedAmount || 0 : 0),
-      0,
-    );
+    const revenueReservations = paidReservations
+      .filter((j) => keep(j.registredTime))
+      .reduce((a, j) => a + (j.payedAmount || 0), 0);
+    const revenueVisits =
+      journals.reduce((a, j) => a + (j.isPayed ? j.payedAmount || 0 : 0), 0) + revenueReservations;
     const revenueSubscriptions = aboPayments.reduce((a, p) => a + p.amount, 0);
     let revenueCafe = 0;
     let cafeCost = 0;
@@ -556,15 +587,9 @@ export class SnapshotService {
       occupancyPct: seats > 0 ? Math.round((p / days / seats) * 100) : null,
     }));
     const openHours = occupancyByHour.filter((h) => h.avgPresent > 0);
-    const avgOccupancyPct =
-      seats > 0 && openHours.length
-        ? Math.round(
-            (openHours.reduce((a, h) => a + h.avgPresent, 0) /
-              openHours.length /
-              seats) *
-              100,
-          )
-        : null;
+    // Same formula as Finance: seat-hours used ÷ (seats × hours open)
+    const occ = occupancy(journals, seats, hours, start, effectiveEnd, now, skip).occupancyPct;
+    const avgOccupancyPct = occ == null ? null : Math.round(occ);
     const revenueTotal = revenueVisits + revenueSubscriptions + revenueCafe;
 
     return {
@@ -577,6 +602,7 @@ export class SnapshotService {
       revenueTotal: round1(revenueTotal),
       revenuePerDay: round1(revenueTotal / days),
       revenueVisits: round1(revenueVisits),
+      revenueReservations: round1(revenueReservations),
       revenueSubscriptions: round1(revenueSubscriptions),
       revenueCafe: round1(revenueCafe),
       cafeMargin: round1(revenueCafe - cafeCost),
@@ -816,11 +842,11 @@ export class SnapshotService {
   }
 
   /** Each initiative: same-length windows before and after its start date. */
-  async initiativesWithImpact(facilityId: string, seats?: number) {
+  async initiativesWithImpact(facilityId: string, seats?: number, take = 10) {
     const list = await this.prisma.businessInitiative.findMany({
       where: { facilityId },
       orderBy: { startDate: 'desc' },
-      take: 10,
+      take,
     });
     if (!list.length) return [];
     const [capacity, campaigns] = await Promise.all([
@@ -895,13 +921,31 @@ export class SnapshotService {
       pauses?: unknown;
       droppedAt?: Date | null;
       dropReason?: string | null;
+      goalAmount?: number | null;
+      area?: string | null;
+      leverId?: string | null;
+      tools?: unknown;
     },
     seats: number,
     campaigns: Campaigns = [],
   ) {
     const now = new Date();
-    const campaign = campaigns.find((c) => c.initiativeId === i.id) ?? null;
     const start = startOfDay(i.startDate);
+    // Tools used by the action (promo, event, survey, relance, tarif, product); the old single link counts too
+    const linkRows = await this.prisma.initiativeLink.findMany({
+      where: { initiativeId: i.id },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true, kind: true, targetId: true, stepIndex: true },
+    });
+    if (i.linkedKind && i.linkedId && !linkRows.some((l) => l.kind === i.linkedKind && l.targetId === i.linkedId)) {
+      linkRows.unshift({ id: `legacy-${i.id}`, kind: i.linkedKind, targetId: i.linkedId, stepIndex: null });
+    }
+    const myCampaigns = campaigns.filter(
+      (c) => c.initiativeId === i.id || linkRows.some((l) => l.kind === 'CAMPAIGN' && l.targetId === c.id),
+    );
+    const campaign = myCampaigns[0] ?? null;
+    // The funnel follows the main event or promo
+    const primary = linkRows.find((l) => l.kind === 'EVENT' || l.kind === 'PROMOTION') ?? null;
     // Planned steps, funnel and where it breaks: rules only, shown as is and sent to the AI
     const steps = parseSteps(i.steps);
     const manualFunnel = parseManualFunnel(i.manualFunnel);
@@ -912,7 +956,7 @@ export class SnapshotService {
       orderBy: { createdAt: 'asc' },
     });
     const { input: funnelInput, price } = await this.measure.funnelInput(
-      i,
+      { ...i, linkedKind: primary?.kind ?? null, linkedId: primary?.targetId ?? null },
       reach,
       links,
       campaign
@@ -933,6 +977,40 @@ export class SnapshotService {
     const afterEnd = win.end ?? endOfDay(start);
     const daysAfter = win.activeDays;
     const skip = pauses.length ? win.skip : undefined;
+    const sales: Array<LinkedSale | null> = start > now
+      ? []
+      : await Promise.all(
+          linkRows.map(async (l): Promise<LinkedSale | null> => {
+            if (l.kind !== 'CAMPAIGN') return this.measure.linkedSale(l.kind, l.targetId, start, afterEnd);
+            const c = myCampaigns.find((x) => x.id === l.targetId);
+            if (!c) return null;
+            return {
+              kind: 'CAMPAIGN',
+              id: c.id,
+              label: c.title,
+              count: c.progress.won,
+              revenue: c.progress.revenue,
+              margin: c.progress.revenue,
+              discount: 0,
+              items: [{ key: `c:${c.id}`, amount: c.progress.revenue }],
+              stages: [
+                { label: 'Contactés', value: c.progress.contacted },
+                { label: 'Revenus', value: c.progress.won },
+              ],
+            };
+          }),
+        );
+    const toolLinks = linkRows.map((l, k) => ({
+      id: l.id,
+      kind: l.kind,
+      targetId: l.targetId,
+      stepIndex: l.stepIndex,
+      label: sales[k]?.label ?? null,
+      count: sales[k]?.count ?? 0,
+      revenue: sales[k]?.margin ?? 0,
+      stages: sales[k]?.stages ?? [],
+    }));
+    const linkedTotal = linkRows.length ? sumSales(sales) : null;
     const base = {
       id: i.id,
       title: i.title,
@@ -963,6 +1041,11 @@ export class SnapshotService {
               : "Tout l'espace",
       },
       linked: i.linkedKind && i.linkedId ? { kind: i.linkedKind, id: i.linkedId } : null,
+      goalAmount: i.goalAmount ?? null,
+      area: i.area ?? null,
+      leverId: i.leverId ?? null,
+      tools: parseTools(i.tools),
+      toolLinks,
       objective: i.objective ?? null,
       hypothesis: i.hypothesis ?? null,
       channels: i.channels ?? [],
@@ -996,7 +1079,7 @@ export class SnapshotService {
     const beforeStart = startOfDay(subDays(start, daysAfter));
     const beforeEnd = endOfDay(subDays(start, 1));
     const metric = i.metric || 'revenuePerDay';
-    const [before, after, disturbances, targeted, sale] = await Promise.all([
+    const [before, after, disturbances, targeted] = await Promise.all([
       this.periodMetrics(beforeStart, beforeEnd, seats),
       this.periodMetrics(start, afterEnd, seats, skip),
       this.disturbances(i.facilityId, beforeStart, afterEnd),
@@ -1006,9 +1089,6 @@ export class SnapshotService {
         { from: beforeStart, to: beforeEnd },
         { from: start, to: afterEnd, skip },
       ),
-      i.linkedKind && i.linkedId
-        ? this.measure.linkedSale(i.linkedKind, i.linkedId, start, afterEnd)
-        : Promise.resolve(null),
     ]);
     const pick = (m: PeriodMetrics) => ({
       visitsPerDay: m.visitsPerDay,
@@ -1046,8 +1126,8 @@ export class SnapshotService {
       },
       result: this.initiativeResult(i, before, after, daysAfter, disturbances, {
         targeted,
-        sale,
-        campaignRevenue: campaign?.progress.revenue ?? null,
+        linked: linkedTotal,
+        campaignRevenue: campaign && !linkRows.length ? campaign.progress.revenue : null,
       }),
     };
   }
@@ -1057,20 +1137,21 @@ export class SnapshotService {
    * the money it brought (linked sales first), the net gain and whether it can be judged yet.
    */
   private initiativeResult(
-    i: { metric?: string | null; targetPct?: number | null; cost?: number | null; targetKind?: string | null },
+    i: { metric?: string | null; targetPct?: number | null; cost?: number | null; targetKind?: string | null; goalAmount?: number | null },
     before: PeriodMetrics,
     after: PeriodMetrics,
     days: number,
     disturbances: string[],
     extra: {
       targeted: Awaited<ReturnType<InitiativeMeasure['measure']>>;
-      sale: Awaited<ReturnType<InitiativeMeasure['linkedSale']>>;
+      /** Sales of the tools used (each sale once) */
+      linked: ReturnType<typeof sumSales> | null;
       campaignRevenue: number | null;
     },
   ) {
     const key = i.metric || 'revenuePerDay';
     const rate = RATE_METRICS.includes(key);
-    const { targeted, sale, campaignRevenue } = extra;
+    const { targeted, linked, campaignRevenue } = extra;
     const num = (m: PeriodMetrics) => {
       const v = m[key as keyof PeriodMetrics];
       return typeof v === 'number' ? v : null;
@@ -1088,25 +1169,31 @@ export class SnapshotService {
     const effect =
       targetMove == null ? null : round1(targetMove - (comparisonMove ?? 0));
 
-    const gainSource = sale ? 'sale' : campaignRevenue != null ? 'campaign' : targeted ? 'target' : 'global';
+    const gainSource = linked ? 'sale' : campaignRevenue != null ? 'campaign' : targeted ? 'target' : 'global';
     const gain =
-      sale != null
-        ? sale.kind === 'PRODUCT'
-          ? sale.margin
-          : sale.revenue
+      linked != null
+        ? linked.total
         : campaignRevenue != null
           ? campaignRevenue
           : targeted
             ? targeted.gain
             : round1(after.revenueTotal - before.revenueTotal);
-    const cost = round1((i.cost ?? 0) + (sale?.discount ?? 0));
+    const cost = round1((i.cost ?? 0) + (linked?.discount ?? 0));
     const visits = targeted ? targeted.targetVisits : before.visits + after.visits;
     // A client list is small by nature: judge it on time only
     const tooEarly =
       days < MIN_DAYS_TO_JUDGE || (targeted?.mode !== 'list' && visits < MIN_VISITS_TO_JUDGE);
     const goal = i.targetPct ?? null;
-    const status = tooEarly
+    // A goal in DT is judged on the money counted: reached even early
+    const goalAmount = i.goalAmount ?? null;
+    const status = goalAmount != null && gain >= goalAmount
+      ? 'goal_reached'
+      : tooEarly
       ? 'too_early'
+      : goalAmount != null
+        ? gain > 0
+          ? 'below_goal'
+          : 'no_effect'
       : goal != null && effect != null
         ? effect >= goal
           ? 'goal_reached'
@@ -1133,7 +1220,9 @@ export class SnapshotService {
       effect,
       changePct: change(t.after, t.before),
       targetPct: goal,
-      sale,
+      goalAmount,
+      goalPct: goalAmount ? Math.max(0, Math.min(100, Math.round((gain / goalAmount) * 100))) : null,
+      sale: linked ? { count: linked.count, revenue: linked.total, discount: linked.discount } : null,
       gainSource,
       gain,
       cost,
