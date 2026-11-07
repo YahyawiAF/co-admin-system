@@ -6,6 +6,7 @@ import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
 import { NewcomersService } from './newcomers.service';
 import { ForecastService } from './forecast.service';
+import { FinanceYearService } from './finance-year.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -16,6 +17,7 @@ export class AnalyticsController {
     private readonly campaigns: CampaignService,
     private readonly newcomers: NewcomersService,
     private readonly forecasts: ForecastService,
+    private readonly financeYear: FinanceYearService,
   ) {}
 
   @Get('performance/settings')
@@ -114,6 +116,29 @@ export class AnalyticsController {
     @Body() body: { metric?: string; direction?: string; from?: string; to?: string; cause?: string; note?: string },
   ) {
     return this.forecasts.answerChange(facilityId, body);
+  }
+
+  /** Days that peaked or dropped with no known reason (last 60 days). */
+  @Get('performance/unusual-days')
+  unusualDays(@Query('facilityId') facilityId?: string) {
+    return this.financeYear.unusual(facilityId);
+  }
+
+  @Post('performance/unusual-days/answer')
+  answerUnusualDay(@Query('facilityId') facilityId: string | undefined, @Body() body: { day?: string; reason?: string; note?: string }) {
+    return this.financeYear.answerUnusual(facilityId, body);
+  }
+
+  /** The school year (September → August) as one curve, rent per month and the summer reserve. */
+  @Get('performance/school-year')
+  schoolYear(@Query('facilityId') facilityId?: string) {
+    return this.financeYear.schoolYear(facilityId);
+  }
+
+  /** Café of a month: DT per visit, change of habit, days, products. */
+  @Get('performance/cafe')
+  cafe(@Query('year') year?: string, @Query('month') month?: string, @Query('facilityId') facilityId?: string) {
+    return this.financeYear.cafe(facilityId, Number(year) || undefined, Number(month) || undefined);
   }
 
   @Get('performance/levers')

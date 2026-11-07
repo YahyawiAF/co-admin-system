@@ -22,6 +22,7 @@ import { localDayKey } from '../../../common/parse-local-day';
 import { orderUnitPrice } from '../product/order-price';
 import {
   buildForecast,
+  cafeRate,
   calendarEffects,
   calendarKeys,
   dayFactorsFor,
@@ -513,7 +514,15 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
   const startKey = localDayKey(start);
   const before = history.filter((d) => d.key < startKey);
   const { all: special } = calendarKeys(calendar);
-  const base = usualDays(before.slice(-56), special, 4);
+  // Base = the previous month (days open), recent days weighing up to 3×.
+  // A young space with less than 14 open days falls back to the usual days of the last 8 weeks.
+  const prevKeyStart = localDayKey(prevStart);
+  const prevMonthOpen = before.filter((d) => d.key >= prevKeyStart && (d.visits > 0 || d.revenueVisits > 0));
+  const useMonth = prevMonthOpen.length >= 14;
+  const base = useMonth ? prevMonthOpen : usualDays(before.slice(-56), special, 4);
+  // Café per visit, learned again every evening on the complete days
+  const cafeDays = history.filter((d) => d.key < (isCurrent ? localDayKey(now) : isFuture ? localDayKey(now) : localDayKey(addDays(end, 1))));
+  const cafe = cafeRate(cafeDays.slice(-28));
   const bandBase = before.slice(-28);
   const monthDays = Array.from({ length: getDaysInMonth(start) }, (_, i) => {
     const d = addDays(start, i);
@@ -556,6 +565,9 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
   const subsActual = actual.reduce((a, d) => a + d.subscriptions, 0);
   const f = buildForecast({
     base,
+    recentWeight: useMonth ? 3 : 1,
+    paceDays: 3,
+    cafe: cafe ? { perVisit: cafe.perVisit, from: cafe.changedOn && cafe.changedOn > startKey ? cafe.changedOn : startKey } : null,
     bandBase,
     month: monthDays,
     actual,
@@ -597,7 +609,13 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
       previousLabel: format(prevStart, 'MMMM', { locale: fr }),
       isCurrent,
       isFuture,
-      base: { from: base[0]?.key ?? localDayKey(subDays(start, 28)), to: localDayKey(subDays(start, 1)), days: base.length },
+      base: {
+        from: base[0]?.key ?? localDayKey(subDays(start, 28)),
+        to: localDayKey(subDays(start, 1)),
+        days: base.length,
+        kind: useMonth ? ('PREVIOUS_MONTH' as const) : ('USUAL_DAYS' as const),
+        recentWeight: useMonth ? 3 : 1,
+      },
     },
     subscriptions: subs,
     calendar: {
@@ -610,6 +628,8 @@ async function computeMonthForecastUncached(prisma: PrismaService, facilityId: s
     conversionsToDate: conversions,
     sources,
     events,
+    /** Café = visits × DT per visit (null = not enough café yet) */
+    cafe,
     ...f,
     /** Everything this month: passes + café + abonnements + events (current method and « rythme du mois ») */
     projectedAll: {

@@ -10,11 +10,12 @@ import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
 import { NewcomersService } from './newcomers.service';
 import { ForecastService } from './forecast.service';
+import { FinanceYearService } from './finance-year.service';
 
 @Module({
   imports: [MemberModule, ExpensesModule, PushModule],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, PrismaService],
-  exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService],
+  providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService, PrismaService],
+  exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService],
 })
 export class AnalyticsModule {}

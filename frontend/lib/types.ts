@@ -1042,6 +1042,10 @@ export interface BreakEven {
   fixedRemaining: number;
   /** Small daily expenses projected to month end. */
   dailyProjected: number;
+  /** Average daily purchases of the last 4 weeks */
+  dailyPerDay?: number;
+  /** Paid this month for another month (not counted) */
+  paidForOtherMonths?: number;
   total: number;
   covered: number;
   coveredPct: number | null;
@@ -2379,8 +2383,10 @@ export interface MonthForecast {
     previousLabel: string;
     isCurrent: boolean;
     isFuture: boolean;
-    base: { from: string; to: string; days: number };
+    base: { from: string; to: string; days: number; kind?: "PREVIOUS_MONTH" | "USUAL_DAYS"; recentWeight?: number };
   };
+  /** Café = visits × DT per visit, learned every evening */
+  cafe?: CafeRate | null;
   subscriptions: {
     expected: number;
     endingCount: number;
@@ -2520,4 +2526,78 @@ export interface AdvisorDismissal {
   leverId: string | null;
   reason: string;
   createdAt: string;
+}
+
+
+/** Café per visit since the last change of habit (or the last 14 days). */
+export interface CafeRate {
+  perVisit: number;
+  from: string;
+  changedOn: string | null;
+  before: number | null;
+  days: number;
+}
+
+export interface UnusualDay {
+  key: string;
+  weekday: number;
+  actual: number;
+  expected: number;
+  changePct: number;
+  direction: "up" | "down";
+  label: string;
+  answer: { label: string; note: string | null } | null;
+}
+
+export interface UnusualDays {
+  rules: { up: number; down: number; minAbs: number; window: number };
+  days: UnusualDay[];
+  toAnswer: number;
+  lasting: Array<{ from: string; to: string; direction: "up" | "down"; days: number }>;
+  reasons: Array<{ code: string; label: string; learns: boolean }>;
+}
+
+export interface SchoolYearWeek {
+  from: string;
+  to: string;
+  label: string;
+  actual: number | null;
+  expected: number;
+  normal: number;
+  period: string | null;
+  periodType: string | null;
+  known: boolean;
+  current: boolean;
+}
+
+export interface SchoolYear {
+  from: string;
+  to: string;
+  label: string;
+  weeks: SchoolYearWeek[];
+  months: Array<{ key: string; label: string; rent: number | null; rentPaid: number; revenue: number; past: boolean }>;
+  calendar: Array<{ type: string; label: string; start: string; end: string; effect: number | null }>;
+  effects: Array<{ type: string; label: string; factor: number; days: number; occurrences: number }>;
+  year: { done: number; toCome: number; total: number };
+  normalWeek: { now: number; first: number | null; firstFrom: string | null };
+  summer: { goal: number | null; weeksLeft: number; perWeek: number | null; rentPerMonth: number | null };
+  who: { PUPIL: number; STUDENT: number; PRO: number; UNKNOWN: number; total: number };
+  todayKey: string;
+  yesterdayKey: string;
+}
+
+export interface CafeMonth {
+  period: { year: number; month: number; label: string; isCurrent: boolean };
+  rate: CafeRate | null;
+  actual: number;
+  expected: number;
+  toCome: number;
+  visitsLeft: number;
+  visits: number;
+  perVisitMonth: number | null;
+  daysWithOrders: number;
+  daily: Array<{ key: string; products: number; visits: number; perVisit: number | null }>;
+  products: Array<{ id: string; name: string; qty: number; revenue: number; offered: number; offeredValue: number; unpaid: number; unpaidQty: number }>;
+  offered: { qty: number; value: number };
+  unpaid: { qty: number; value: number };
 }

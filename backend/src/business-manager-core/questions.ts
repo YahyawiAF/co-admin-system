@@ -34,7 +34,8 @@ const DEFS: Def[] = [
     key: 'bank',
     short: 'Banque',
     weight: 100,
-    maxAgeDays: 30,
+    // A bank balance moves every week: « à revoir » after 7 days
+    maxAgeDays: 7,
     known: (f) => !!f.bank,
     build: (_f, prev) => ({
       title:
