@@ -2425,6 +2425,12 @@ export default function JournalClient() {
       <JournalReglerDialog
         row={reglerRow}
         tiers={pricingCtx?.allTiers ?? []}
+        products={dailyProducts}
+        visitIds={
+          reglerRow
+            ? [reglerRow.id, ...((reglerRow as JournalListRow).passages?.map((p) => p.id) ?? [])]
+            : undefined
+        }
         onOpenChange={(o) => {
           if (!o) setReglerRow(null);
         }}
@@ -2638,8 +2644,8 @@ function PayStateButton({
         onClick={onClick}
         title="Payé — cliquer pour modifier"
         className={cn(
-          "inline-flex items-center gap-1 rounded-full bg-emerald-100 font-semibold text-emerald-800 transition-colors duration-150 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300",
-          small ? "h-6 px-2 text-[10px]" : "h-7 px-2.5 text-xs"
+          "inline-flex items-center gap-1 rounded-xl bg-emerald-100 font-bold text-emerald-800 ring-1 ring-emerald-200 transition-colors duration-150 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:ring-emerald-900",
+          small ? "h-7 px-2.5 text-[11px]" : "h-8 px-3 text-xs"
         )}
       >
         <Check className="h-3 w-3" />
@@ -2652,8 +2658,8 @@ function PayStateButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full font-semibold text-white shadow-sm transition-[background-color,transform] duration-150 active:scale-[.97] motion-reduce:transition-none",
-        small ? "h-6 px-2 text-[10px]" : "h-7 px-3 text-xs",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl font-bold text-white shadow-sm transition-[background-color,transform,box-shadow] duration-150 hover:shadow-md active:scale-[.97] motion-reduce:transition-none",
+        small ? "h-7 px-2.5 text-[11px]" : "h-8 px-3.5 text-xs",
         leftUnpaid ? "bg-orange-600 hover:bg-orange-700" : "bg-rose-600 hover:bg-rose-700"
       )}
     >
