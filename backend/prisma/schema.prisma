@@ -500,6 +500,8 @@ model Product {
   organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   description    String?
+  /// Free label to group products: Boisson, Gâteau, Désodorisant…
+  category       String?
   purchasePrice  Float               @map("prix_achat")
   sellingPrice   Float               @map("prix_vente")
   stock          Int

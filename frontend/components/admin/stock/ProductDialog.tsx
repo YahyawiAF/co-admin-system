@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { ImageUpload } from "@/components/admin/ImageUpload";
 import { cn } from "@/lib/utils";
 import { productsApi, stockApi, type StockOverview, type StockProductRow, type StockUnit } from "@/lib/api/resources";
-import { ChoiceCard, GlassChip, GradientHeader, SectionTitle, dt3, gradientDialogClass, parseNum, qty } from "./stock-ui";
+import { ChoiceCard, GlassChip, GradientHeader, SectionTitle, dt3, gradientDialogClass, parseNum, productCategories, qty } from "./stock-ui";
 
 type Mode = "RECIPE" | "UNIT" | "NONE";
 type Line = { key: number; stockItemId: string; quantity: string };
@@ -46,6 +46,8 @@ export function ProductDialog({
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [customCategory, setCustomCategory] = useState(false);
   const [img, setImg] = useState("");
   const [mode, setMode] = useState<Mode>("RECIPE");
   const [lines, setLines] = useState<Line[]>([]);
@@ -59,6 +61,8 @@ export function ProductDialog({
     setName(product?.name ?? draft?.name ?? "");
     setPrice(product ? String(product.sellingPrice).replace(".", ",") : draft?.price != null ? String(draft.price).replace(".", ",") : "");
     setDescription(product?.description ?? "");
+    setCategory(product?.category ?? "");
+    setCustomCategory(false);
     setImg(product?.img ?? "");
     const m = modeOf(product);
     setMode(m);
@@ -79,8 +83,12 @@ export function ProductDialog({
   const sell = parseNum(price) || 0;
   const recipeCost = lines.reduce((s, l) => s + (parseNum(l.quantity) || 0) * (itemById.get(l.stockItemId)?.unitCost ?? 0), 0);
   const unitItem = product?.recipe.find((r) => r.kind === "UNIT");
+  const unitRow = unitItem ? itemById.get(unitItem.stockItemId) : undefined;
+  // « À l'unité »: the bought pack sets the cost; before any purchase the price is typed here
+  const unitFromLots = !!unitRow?.hasLots && unitRow.unitCost > 0;
   const cost =
-    mode === "RECIPE" ? recipeCost : mode === "UNIT" ? (unitItem ? itemById.get(unitItem.stockItemId)?.unitCost ?? 0 : 0) : parseNum(manualCost) || 0;
+    mode === "RECIPE" ? recipeCost : mode === "UNIT" && unitFromLots ? unitRow!.unitCost : parseNum(manualCost) || 0;
+  const categories = productCategories(overview.products);
   const margin = sell - cost;
   const set = (key: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
@@ -106,6 +114,7 @@ export function ProductDialog({
         name: name.trim(),
         sellingPrice: sell,
         description: description || undefined,
+        category: category.trim() || null,
         img: img || undefined,
         purchasePrice: Math.round(cost * 1000) / 1000,
         ...(mode === "NONE" ? { stock: Math.max(0, Math.floor(Number(manualStock) || 0)) } : {}),
@@ -161,6 +170,53 @@ export function ProductDialog({
               Prix de vente (DT)
               <Input inputMode="decimal" className="mt-0.5 h-10 tabular-nums" value={price} onChange={(e) => setPrice(e.target.value)} />
             </label>
+          </section>
+
+          <section>
+            <SectionTitle aside="pour filtrer et ranger">Catégorie</SectionTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              {categories.map((c) => {
+                const on = !customCategory && category.toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => {
+                      setCustomCategory(false);
+                      setCategory(on ? "" : c);
+                    }}
+                    className={cn(
+                      "rounded-full border px-3 py-1 text-sm font-semibold transition-all duration-200 motion-reduce:transition-none",
+                      on ? "border-indigo-600 bg-indigo-600 text-white shadow-sm" : "bg-card text-muted-foreground hover:border-indigo-300"
+                    )}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+              {customCategory ? (
+                <Input
+                  autoFocus
+                  aria-label="Nouvelle catégorie"
+                  className="h-8 w-44 animate-in fade-in-0 duration-200 motion-reduce:animate-none"
+                  placeholder="Ex. Glace, Papeterie…"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomCategory(true);
+                    setCategory("");
+                  }}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed px-3 py-1 text-sm font-semibold text-muted-foreground transition-colors duration-200 hover:border-indigo-300 hover:text-indigo-600"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Autre
+                </button>
+              )}
+            </div>
           </section>
 
           <section>
@@ -270,10 +326,26 @@ export function ProductDialog({
               ) : null}
             </section>
           ) : mode === "UNIT" ? (
-            <p key="unit" className="animate-in fade-in-0 rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground duration-200 motion-reduce:animate-none">
-              Le stock vient des achats de « {name.trim() || "ce produit"} » (par exemple un pack de 24 bouteilles).
-              {unitItem ? ` Il en reste ${qty(itemById.get(unitItem.stockItemId)?.left ?? 0, "pc")}.` : " Il apparaîtra dans « Nouvel achat » après l’enregistrement."}
-            </p>
+            <section key="unit" className="grid animate-in fade-in-0 gap-3 duration-200 motion-reduce:animate-none sm:grid-cols-[1fr_180px]">
+              <p className="rounded-xl bg-muted/60 px-4 py-3 text-sm text-muted-foreground">
+                Le stock vient des achats de « {name.trim() || "ce produit"} » (par exemple un pack de 24 bouteilles).
+                {unitItem ? ` Il en reste ${qty(unitRow?.left ?? 0, "pc")}.` : " Il apparaîtra dans « Nouvel achat » après l’enregistrement."}
+              </p>
+              <label className="text-[11px] font-semibold text-muted-foreground">
+                Prix d’achat (DT / pièce)
+                {unitFromLots ? (
+                  <>
+                    <Input className="mt-0.5 h-10 tabular-nums" value={dt3(unitRow!.unitCost)} disabled />
+                    <span className="mt-1 block font-normal">Vient du paquet en cours. Pour le changer, corrige l’achat dans « Achats ».</span>
+                  </>
+                ) : (
+                  <>
+                    <Input inputMode="decimal" className="mt-0.5 h-10 tabular-nums" value={manualCost} onChange={(e) => setManualCost(e.target.value)} />
+                    <span className="mt-1 block font-normal">Utilisé tant qu’aucun achat n’est enregistré.</span>
+                  </>
+                )}
+              </label>
+            </section>
           ) : (
             <section key="none" className="grid animate-in fade-in-0 grid-cols-2 gap-3 duration-200 motion-reduce:animate-none">
               <label className="text-[11px] font-semibold text-muted-foreground">
@@ -286,6 +358,9 @@ export function ProductDialog({
               </label>
             </section>
           )}
+          {mode === "RECIPE" ? (
+            <p className="-mt-2 text-xs text-muted-foreground">Le prix d’achat est la somme des ingrédients ci-dessus (prix de leur paquet en cours).</p>
+          ) : null}
 
           <section className="space-y-3">
             <label className="block text-[11px] font-semibold text-muted-foreground">

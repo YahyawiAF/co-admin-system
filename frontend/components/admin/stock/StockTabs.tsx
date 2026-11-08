@@ -19,6 +19,8 @@ import {
 } from "@/lib/api/resources";
 import { Bar, SOURCE_LABEL, StatusPill, buyUnit, dt, dt3, qty, signedDt } from "./stock-ui";
 
+const NO_CATEGORY = "__none__";
+
 const day = (d: string) => format(new Date(d), "d MMM", { locale: fr });
 const grid = "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
 /** Light stagger on cards that mount */
@@ -30,13 +32,55 @@ const enter = (i: number) => ({
 // ---------- Produits ----------
 
 export function ProductsTab({ overview, onOpen }: { overview: StockOverview; onOpen: (p: StockProductRow) => void }) {
-  const paged = usePaged(overview.products);
+  const [cat, setCat] = useState<string | null>(null);
+  // Categories actually used, with how many products each
+  const cats = new Map<string, { label: string; n: number }>();
+  for (const p of overview.products) {
+    const label = p.category?.trim() || "";
+    const key = label ? label.toLowerCase() : NO_CATEGORY;
+    const c = cats.get(key) ?? { label: label || "Sans catégorie", n: 0 };
+    c.n++;
+    cats.set(key, c);
+  }
+  const filtered = cat
+    ? overview.products.filter((p) => (p.category?.trim().toLowerCase() || NO_CATEGORY) === cat)
+    : overview.products;
+  const paged = usePaged(filtered, undefined, cat);
   if (!overview.products.length) {
     return <Empty>Aucun produit. Clique sur « + Produit » pour créer ton premier.</Empty>;
   }
+  const chips: { key: string | null; label: string; n: number }[] = [
+    { key: null, label: "Tous", n: overview.products.length },
+    ...[...cats.entries()]
+      .sort(([a], [b]) => (a === NO_CATEGORY ? 1 : b === NO_CATEGORY ? -1 : a.localeCompare(b)))
+      .map(([key, c]) => ({ key, ...c })),
+  ];
   return (
     <div>
-      <div className={grid}>
+      {cats.size > 1 || !cats.has(NO_CATEGORY) ? (
+        <div className="mb-3 flex flex-wrap gap-1.5" role="tablist" aria-label="Catégories">
+          {chips.map((c) => {
+            const on = cat === c.key;
+            return (
+              <button
+                key={c.key ?? "all"}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setCat(c.key)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-all duration-200 motion-reduce:transition-none",
+                  on ? "border-violet-600 bg-violet-600 text-white shadow-sm" : "bg-card text-muted-foreground hover:border-violet-300"
+                )}
+              >
+                {c.label}
+                <span className={cn("rounded-full px-1.5 tabular-nums transition-colors duration-200", on ? "bg-white/20" : "bg-muted")}>{c.n}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      <div key={cat ?? "all"} className={grid}>
         {paged.pageItems.map((p, i) => {
           const margin = p.sellingPrice - p.unitCost;
           const pct = p.sellingPrice > 0 ? Math.round((margin / p.sellingPrice) * 100) : 0;
@@ -64,7 +108,14 @@ export function ProductsTab({ overview, onOpen }: { overview: StockOverview; onO
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-bold">{p.name}</p>
+                  <p className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate text-base font-bold">{p.name}</span>
+                    {p.category ? (
+                      <span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+                        {p.category}
+                      </span>
+                    ) : null}
+                  </p>
                   <p className="truncate text-xs text-muted-foreground">
                     {!p.tracked ? "Stock à la main" : unit ? "Acheté à l’unité" : p.recipe.map((r) => r.itemName).join(" · ")}
                   </p>

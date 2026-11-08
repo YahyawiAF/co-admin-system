@@ -4,7 +4,7 @@ import {
   IsString,
   IsNumber,
   IsOptional,
-  IsPositive,
+  Min,
 } from 'class-validator';
 
 export class CreateProductDto {
@@ -22,16 +22,21 @@ export class CreateProductDto {
   @IsString()
   description?: string;
 
+  @ApiProperty({ example: 'Boisson', required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  category?: string | null;
+
   @ApiProperty({ example: 899.99, required: true })
   @IsNotEmpty()
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   purchasePrice: number;
 
   @ApiProperty({ example: 1299.99, required: true })
   @IsNotEmpty()
   @IsNumber()
-  @IsPositive()
+  @Min(0)
   sellingPrice: number;
 
   @ApiProperty({ example: 10, required: true })

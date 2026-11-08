@@ -144,6 +144,8 @@ export type Product = {
   id: string;
   name: string;
   description?: string;
+  /** Boisson, Gâteau, Désodorisant… (free text) */
+  category?: string | null;
   purchasePrice: number;
   sellingPrice: number;
   stock: number;
@@ -1153,6 +1155,7 @@ export type StockProductRow = {
   id: string;
   name: string;
   description?: string | null;
+  category?: string | null;
   img?: string | null;
   sellingPrice: number;
   purchasePrice: number;
