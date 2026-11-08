@@ -226,3 +226,15 @@ export function StepPills({ steps, current, onPick }: { steps: string[]; current
     </div>
   );
 }
+
+/** Suggested product categories; any other name can be typed */
+export const PRODUCT_CATEGORIES = ["Boisson", "Gâteau", "Snack", "Désodorisant"];
+
+/** Suggested + already used categories, without duplicates */
+export function productCategories(products: { category?: string | null }[]) {
+  const seen = new Map<string, string>();
+  for (const c of [...PRODUCT_CATEGORIES, ...products.map((p) => p.category?.trim() ?? "")]) {
+    if (c && !seen.has(c.toLowerCase())) seen.set(c.toLowerCase(), c);
+  }
+  return [...seen.values()];
+}
