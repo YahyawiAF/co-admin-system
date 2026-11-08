@@ -101,6 +101,7 @@ import {
   memberDiscountPercent,
   pricingPayload,
   PricedJournalRow,
+  promoShare,
 } from './session-pricing-context';
 import {
   LateBillingMode,
@@ -111,6 +112,7 @@ import {
 } from './visit-amount';
 import { appPromoUsage, GLOBAL_APP_PROMO_KEY } from './app-install-promo-usage';
 import { PromotionService } from '../promotion/promotion.service';
+import { StockService } from '../stock/stock.service';
 import { orderUnitPrice } from '../product/order-price';
 import { firstVisitTodayIds } from '../member/first-visit';
 
@@ -131,6 +133,7 @@ export class MobileService {
     private readonly eventsGateway: EventsGateway,
     private readonly pushService: PushService,
     private readonly promotions: PromotionService,
+    private readonly stock: StockService,
   ) {}
 
   @Cron(CronExpression.EVERY_10_MINUTES)
@@ -2716,30 +2719,44 @@ export class MobileService {
     const percent = memberDiscountPercent(journal.members, price);
     const listAmount = this.applyPercentOff(price.price, percent);
 
-    // Tarif promo (golden card / promo du jour) on the new pass; the previous pass's one is dropped
-    const hadFlash = await this.prisma.promotionUse.count({
+    // The visit's promo follows the pass at the same share (−20 % on 2h → −20 % on 4h);
+    // a visit without one gets the live tarif promo of the new pass, if any.
+    const prevUse = await this.prisma.promotionUse.findFirst({
       where: { journalId, dailyProductId: null },
+      orderBy: { createdAt: 'desc' },
+      select: { promotionId: true },
     });
+    const share = promoShare(journal);
     await this.promotions.clearJournalPriceUses(journalId);
-    const deal = await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
+    const deal =
+      share > 0
+        ? {
+            promotionId: prevUse?.promotionId ?? null,
+            amount: Math.round(listAmount * (1 - share) * 1000) / 1000,
+            label: journal.promoLabel,
+          }
+        : await this.promotions.priceDeal(price.id, listAmount, journal.memberID);
     let amount = listAmount;
     let promoData: {
       priceBeforePromo?: number | null;
       promoDiscount?: number | null;
       promoLabel?: string | null;
     } = {};
-    if (deal) {
+    if (deal && deal.amount < listAmount - 0.0005) {
+      // Promo inside the pass price (fixedAmount), like at check-in
       const off = Math.round((listAmount - deal.amount) * 1000) / 1000;
       amount = deal.amount;
       promoData = { priceBeforePromo: listAmount, promoDiscount: off, promoLabel: deal.label };
-      await this.promotions.recordUse({
-        promotionId: deal.promotionId,
-        memberId: journal.memberID,
-        journalId,
-        amount: deal.amount,
-        discount: off,
-      });
-    } else if (hadFlash) {
+      if (deal.promotionId) {
+        await this.promotions.recordUse({
+          promotionId: deal.promotionId,
+          memberId: journal.memberID,
+          journalId,
+          amount: deal.amount,
+          discount: off,
+        });
+      }
+    } else if (journal.promoDiscount || prevUse) {
       promoData = { priceBeforePromo: null, promoDiscount: null, promoLabel: null };
     }
 
@@ -2772,11 +2789,8 @@ export class MobileService {
         ctx,
         updated.leaveTime,
       );
-      // A tarif promo is already in fixedAmount; an older install promo is not
-      const billed =
-        Math.round(
-          Math.max(0, (due ?? amount) - (deal ? 0 : updated.promoDiscount || 0)) * 1000,
-        ) / 1000;
+      // The promo is already in fixedAmount
+      const billed = Math.round(Math.max(0, due ?? amount) * 1000) / 1000;
       updated = await this.prisma.journal.update({
         where: { id: journalId },
         data: { payedAmount: billed, amountAtCheckout: billed },
@@ -5300,6 +5314,7 @@ export class MobileService {
       }),
     ]);
     if (deal) await this.recordProductDeal(deal, order.id, dto.memberId, product.sellingPrice, qty);
+    void this.stock.syncProductStock();
     const mapped = this.mapOrder(order);
     const seat = await this.resolveSeatForMember(dto.memberId);
     const session = await this.getOpenSession(dto.memberId);
@@ -5429,6 +5444,7 @@ export class MobileService {
       }),
     ]);
     if (deal) await this.recordProductDeal(deal, order.id, memberId, product.sellingPrice, qty);
+    void this.stock.syncProductStock();
     if (!existing && dto.isPayed && memberId) {
       const awarded = await creditProductPaidPoints(this.prisma, order.id);
       if (awarded) {
@@ -5502,6 +5518,7 @@ export class MobileService {
         data: { stock: { decrement: diff } },
       }),
     ]);
+    void this.stock.syncProductStock();
     this.eventsGateway.sendProductOrder({
       type: 'product_order_updated',
       orderId: id,
@@ -5563,6 +5580,7 @@ export class MobileService {
         data: { stock: { decrement: diff } },
       }),
     ]);
+    void this.stock.syncProductStock();
     this.eventsGateway.sendProductOrder({
       type: 'product_order_updated',
       orderId: id,
@@ -5612,6 +5630,7 @@ export class MobileService {
       await revokeProductPaidPoints(this.prisma, id);
     }
     await this.promotions.releaseVoucher(id);
+    void this.stock.syncProductStock();
     const productName = updated.product?.name || order.product?.name || 'Commande';
     this.eventsGateway.sendProductOrder({
       type: 'product_order_cancelled',

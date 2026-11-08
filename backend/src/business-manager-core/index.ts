@@ -4,12 +4,17 @@ export { computeMoneyPlan, ideaFit, DEFAULT_RESERVE_MONTHS } from './money';
 export { featureIdeas, ticketMarkdown, type FeatureIdea } from './features';
 export {
   buildForecast,
+  cafeRate,
+  lastingChanges,
+  recencyWeights,
+  unusualDays,
   calendarEffects,
   calendarEqual,
   calendarKeys,
   dayFactorsFor,
   detectChanges,
   expectedShare,
+  paceOf,
   splitGap,
   totalsOf,
   usualDays,
@@ -17,6 +22,8 @@ export {
   weekdayAverages,
 } from './forecast';
 export type {
+  CafeRate,
+  UnusualDay,
   CalendarEffect,
   CalendarEntry,
   ChangeMetric,
@@ -33,3 +40,5 @@ export type {
 } from './forecast';
 export { evaluateLevers, LEVER_GROUP_LABEL, MISSING_FROM } from './levers';
 export type { ActionRecord, OutreachRecord, LeverDef, LeverGroup, LeverIdea, LeverMap, LeverResult, LeverStatus, MissingIdea } from './levers';
+export { computeStock } from './stock-lots';
+export type { StockResult, LotResult, ItemResult, ProductResult, LossResult, LotStatus, StockLotInput, RecipeLine, SaleInput, AdjustmentInput } from './stock-lots';

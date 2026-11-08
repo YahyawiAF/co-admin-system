@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -87,6 +88,26 @@ export default function AdminEventsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [code, setCode] = useState("");
+  // Opened from Conseil IA (« Préparer l'événement »): the AI's event, ready to check and save
+  const conseil = useConseilDraft("EVENT");
+  useEffect(() => {
+    const d = conseil.draft as
+      | { title?: string; description?: string; date?: string; fromHour?: number; toHour?: number; price?: number; capacity?: number | null }
+      | null;
+    if (!d) return;
+    const at = (h: number) => `${d.date}T${String(Math.min(23, h)).padStart(2, "0")}:${h >= 24 ? "59" : "00"}`;
+    setEdit(null);
+    setForm({
+      ...emptyForm,
+      title: d.title ?? "",
+      description: d.description ?? "",
+      startAt: d.date ? at(d.fromHour ?? 18) : "",
+      endAt: d.date ? at(d.toHour ?? (d.fromHour ?? 18) + 2) : "",
+      capacity: d.capacity ? String(d.capacity) : "",
+      price: d.price ? String(d.price) : "",
+    });
+    setFormOpen(true);
+  }, [conseil.draft]);
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: queryKeys.events,
@@ -121,11 +142,12 @@ export default function AdminEventsPage() {
         ? eventsApi.update(edit.id, payload)
         : eventsApi.create(payload);
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(edit ? "Événement mis à jour" : "Événement créé");
       setFormOpen(false);
       setEdit(null);
       invalidate();
+      if (!edit && conseil.active && saved?.id) void conseil.linked(saved.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -279,7 +301,13 @@ export default function AdminEventsPage() {
         </div>
       )}
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog
+        open={formOpen}
+        onOpenChange={(o) => {
+          setFormOpen(o);
+          if (!o && conseil.active && !save.isPending) conseil.dismiss();
+        }}
+      >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>

@@ -26,6 +26,11 @@ import type {
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
 import type {
+  AdaptedSolution,
+  AdvisorHealth,
+  HealthAreaId,
+  ToolDraft,
+  ToolKind,
   StaffActionRow,
   StaffMember,
   StaffPermissions,
@@ -116,6 +121,9 @@ import type {
   PerformanceOverview,
   ForecastAccuracy,
   MonthForecast,
+  UnusualDays,
+  SchoolYear,
+  CafeMonth,
   AdvisorDismissal,
   PerformanceChange,
   LeverMap,
@@ -201,7 +209,33 @@ export type DailyExpense = {
   Summary?: string | null;
   createdAt: string;
   expense?: Expense | null;
+  /** yyyy-MM it is for (null = month of the date) */
+  forMonth?: string | null;
+  spreadMonths?: number;
+  category?: ExpenseCategory;
+  categoryLabel?: string;
+  /** Months it counts in (yyyy-MM) */
+  months?: string[];
+  /** Paid in a month, counted in another */
+  otherMonth?: boolean;
+  /** In a month overview: the part of the expense that counts in this month */
+  share?: number;
+  /** In a month overview: the full amount paid */
+  paidAmount?: number;
 };
+
+export type ExpenseCategory = "LOYER" | "ENERGIE" | "INTERNET" | "SALAIRES" | "STOCK_CAFE" | "MENAGE" | "EQUIPEMENT" | "AUTRE";
+
+export const EXPENSE_CATEGORIES: Array<{ id: ExpenseCategory; label: string }> = [
+  { id: "LOYER", label: "Loyer" },
+  { id: "ENERGIE", label: "Électricité & eau" },
+  { id: "INTERNET", label: "Internet" },
+  { id: "SALAIRES", label: "Salaires" },
+  { id: "STOCK_CAFE", label: "Stock café" },
+  { id: "MENAGE", label: "Ménage" },
+  { id: "EQUIPEMENT", label: "Équipement" },
+  { id: "AUTRE", label: "Autre" },
+];
 
 export type ExpenseSuggestion = { label: string; lastAmount: number; count: number };
 
@@ -233,8 +267,13 @@ export type ExpenseMonthOverview = {
     chargesPaid: number;
     chargesRemaining: number;
     chargesPlanned: number;
+    /** Money that left the caisse / coffre / bank this month (whatever month it is for) */
     bySource: Record<ExpenseSource, number>;
+    byCategory?: Array<{ category: ExpenseCategory; label: string; total: number; count: number }>;
+    /** Paid this month for another month */
+    paidForOtherMonths?: number;
   };
+  paidForOther?: Array<{ id: string; label: string; amount: number; share: number; months: string[]; date: string; source: ExpenseSource }>;
 };
 
 export const journalApi = {
@@ -579,6 +618,7 @@ export const analyticsApi = {
     year: number;
     month: number;
     revenue: number | null;
+    netRevenue?: number | null;
     occupancyPct?: number | null;
   }) {
     return http.put<MonthlyTarget | null>("/analytics/performance/targets", data);
@@ -595,6 +635,29 @@ export const analyticsApi = {
     if (facilityId) q.set("facilityId", facilityId);
     return http.get<MonthForecast>(`/analytics/performance/forecast?${q.toString()}`);
   },
+  /** The forecast and every number behind it, saved as a file (needs the auth header, so fetched as a blob). */
+  async downloadForecast(year: number, month: number, format: "csv" | "json", facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month), format });
+    if (facilityId) q.set("facilityId", facilityId);
+    const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+    const org = getAdminOrganizationId();
+    const res = await fetch(`${API_BASE_URL}/analytics/performance/forecast/export?${q.toString()}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(org && { "X-Organization-Id": org }),
+      },
+    });
+    if (!res.ok) throw new Error("Export impossible");
+    const name =
+      /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] ||
+      `prevision-${year}-${String(month).padStart(2, "0")}${format === "csv" ? "-jours.csv" : ".json"}`;
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  },
   performanceForecastAccuracy(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
     return http.get<ForecastAccuracy>(`/analytics/performance/forecast/accuracy${q}`);
@@ -608,6 +671,22 @@ export const analyticsApi = {
       "/analytics/performance/changes/answer",
       data,
     );
+  },
+  unusualDays(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<UnusualDays>(`/analytics/performance/unusual-days${q}`);
+  },
+  answerUnusualDay(data: { day: string; reason: string; note?: string }) {
+    return http.post<{ ok: boolean }>("/analytics/performance/unusual-days/answer", data);
+  },
+  schoolYear(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
+    return http.get<SchoolYear>(`/analytics/performance/school-year${q}`);
+  },
+  cafe(year: number, month: number, facilityId?: string) {
+    const q = new URLSearchParams({ year: String(year), month: String(month) });
+    if (facilityId) q.set("facilityId", facilityId);
+    return http.get<CafeMonth>(`/analytics/performance/cafe?${q.toString()}`);
   },
   performanceLevers(facilityId?: string) {
     const q = facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : "";
@@ -974,6 +1053,10 @@ export type DailyExpenseInput = {
   /** Paying a recurring charge */
   expenseId?: string;
   Summary?: string;
+  /** yyyy-MM the expense is for (null = month of the date) */
+  forMonth?: string | null;
+  spreadMonths?: number;
+  category?: ExpenseCategory | null;
 };
 
 export const dailyExpensesApi = {
@@ -1014,6 +1097,10 @@ export const abonnementsApi = {
   remove(id: string) {
     return http.delete<void>(`/abonnements/${id}`);
   },
+  /** Move one payment to the day the money was really collected. */
+  updatePaymentDate(id: string, paymentId: string, paidAt: string) {
+    return http.patch<Abonnement>(`/abonnements/${id}/payments/${paymentId}`, { paidAt });
+  },
 };
 
 export const productsApi = {
@@ -1032,6 +1119,162 @@ export const productsApi = {
   },
   remove(id: string) {
     return http.delete<void>(`/products/${id}`);
+  },
+};
+
+/** g | ml | pc — quantities are stored in this base unit */
+export type StockUnit = "g" | "ml" | "pc";
+export type StockItemKind = "INGREDIENT" | "UNIT";
+export type StockLotStatus = "OPEN" | "RESERVE" | "DONE";
+export type StockItemRow = {
+  id: string;
+  name: string;
+  unit: StockUnit;
+  kind: StockItemKind;
+  left: number;
+  unitCost: number;
+  dailyUse: number;
+  daysLeft: number | null;
+  uncovered: number;
+  reserve: number;
+  hasLots: boolean;
+  currentLot: { id: string; quantity: number; left: number; price: number; purchaseDate: string } | null;
+  usedBy: string[];
+};
+export type StockRecipeLine = {
+  stockItemId: string;
+  quantity: number;
+  itemName: string;
+  unit: StockUnit;
+  kind: StockItemKind;
+  cost: number;
+};
+export type StockProductRow = {
+  id: string;
+  name: string;
+  description?: string | null;
+  img?: string | null;
+  sellingPrice: number;
+  purchasePrice: number;
+  stock: number;
+  /** Stock computed from ingredients */
+  tracked: boolean;
+  unitCost: number;
+  possible: number;
+  limitedBy: string | null;
+  soldSinceFirstPurchase: number;
+  recipe: StockRecipeLine[];
+};
+export type StockLotRow = {
+  id: string;
+  stockItemId: string;
+  itemName: string;
+  unit: StockUnit;
+  quantity: number;
+  price: number;
+  used: number;
+  left: number;
+  recovered: number;
+  result: number;
+  status: StockLotStatus;
+  finishedAt: string | null;
+  /** Days from purchase to the end (or today) */
+  days?: number;
+  /** Products made with this lot */
+  gave?: Array<{ productId: string; name: string; units: number; quantity: number; recovered: number }>;
+  /** Used by sales / lost in counts (base unit) */
+  sold?: number;
+  lost?: number;
+  /** Open lot: day it should run out */
+  endsAround?: string | null;
+};
+export type StockProductMonth = { qty: number; revenue: number; cost: number; estimated: boolean };
+export type StockSales = {
+  months: string[];
+  products: Array<{ id: string; name: string; sellingPrice: number; unitCost: number; tracked: boolean; months: Record<string, StockProductMonth> }>;
+  purchasesByMonth: Record<string, number>;
+};
+export type StockPurchaseRow = {
+  id: string;
+  date: string;
+  source: "CAISSE" | "COFFRE" | "AUTRE" | "NONE";
+  note: string | null;
+  dailyExpenseId: string | null;
+  invested: number;
+  recovered: number;
+  result: number;
+  done: boolean;
+  lots: StockLotRow[];
+};
+export type StockLossRow = {
+  id: string;
+  date: string;
+  stockItemId: string;
+  itemName: string;
+  unit: StockUnit;
+  quantity: number;
+  amount: number;
+  note: string | null;
+};
+export type StockOverview = {
+  sales?: StockSales;
+  totals: {
+    invested: number;
+    recovered: number;
+    result: number;
+    stockValue: number;
+    losses: number;
+    purchases: number;
+    firstPurchaseDate: string | null;
+  };
+  items: StockItemRow[];
+  products: StockProductRow[];
+  purchases: StockPurchaseRow[];
+  losses: StockLossRow[];
+};
+export type StockPurchaseInput = {
+  date?: string;
+  source: StockPurchaseRow["source"];
+  note?: string;
+  lines: { stockItemId: string; quantity: number; price: number }[];
+};
+
+export const stockApi = {
+  overview() {
+    return http.get<StockOverview>(withOrgQuery("/stock/overview"));
+  },
+  createItem(data: { name: string; unit: StockUnit; kind?: StockItemKind }) {
+    return http.post<{ id: string }>("/stock/items", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
+  },
+  updateItem(id: string, data: { name?: string; unit?: StockUnit }) {
+    return http.patch(`/stock/items/${id}`, data);
+  },
+  removeItem(id: string) {
+    return http.delete(`/stock/items/${id}`);
+  },
+  count(id: string, remaining: number, note?: string) {
+    return http.post<{ gap: number }>(withOrgQuery(`/stock/items/${id}/count`), { remaining, note });
+  },
+  removeAdjustment(id: string) {
+    return http.delete(`/stock/adjustments/${id}`);
+  },
+  setRecipe(
+    productId: string,
+    data: { mode: "RECIPE" | "UNIT" | "NONE"; lines?: { stockItemId: string; quantity: number }[] }
+  ) {
+    return http.put(`/stock/recipes/${productId}`, data);
+  },
+  createPurchase(data: StockPurchaseInput) {
+    return http.post<{ id: string; total: number; expenseId: string | null }>("/stock/purchases", {
+      ...data,
+      organizationId: getAdminOrganizationId() || undefined,
+    });
+  },
+  removePurchase(id: string) {
+    return http.delete(`/stock/purchases/${id}`);
   },
 };
 
@@ -2113,6 +2356,20 @@ export const advisorApi = {
   initiatives() {
     return http.get<BusinessInitiative[]>("/advisor/initiatives");
   },
+  /** Bilan: six points with number, colour and solutions */
+  health() {
+    return http.get<AdvisorHealth>("/advisor/health");
+  },
+  /** « Adapter » a solution with the AI (nothing saved) */
+  adapt(data: { solution: Partial<AdaptedSolution>; instruction: string }) {
+    return http.post<AdaptedSolution>("/advisor/solutions/adapt", data);
+  },
+  addTool(initiativeId: string, data: { kind: ToolKind; targetId: string; stepIndex?: number | null }) {
+    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools`, data);
+  },
+  removeTool(initiativeId: string, linkId: string) {
+    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools/${linkId}`);
+  },
   createInitiative(data: {
     title: string;
     description?: string;
@@ -2134,6 +2391,10 @@ export const advisorApi = {
     hypothesis?: string | null;
     channels?: InitiativeChannel[];
     steps?: InitiativeStep[];
+    goalAmount?: number | null;
+    area?: HealthAreaId | null;
+    leverId?: string | null;
+    tools?: ToolDraft[];
   }) {
     return http.post<BusinessInitiative>("/advisor/initiatives", data);
   },
@@ -2153,6 +2414,8 @@ export const advisorApi = {
       interested: number | null;
       paused: boolean;
       drop: { reason: string } | null;
+      goalAmount: number | null;
+      tools: ToolDraft[];
     }>,
   ) {
     return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
@@ -2210,6 +2473,15 @@ export const advisorApi = {
   },
 };
 
+/** Café price for one member / visit: best café promo (every unit) and the tarif gift (first unit). */
+export type CafePrice = {
+  productId: string;
+  unitPrice: number | null;
+  label: string | null;
+  giftPrice: number | null;
+  giftLabel: string | null;
+};
+
 export const promotionsApi = {
   list() {
     return http.get<Promotion[]>("/promotions");
@@ -2238,6 +2510,13 @@ export const promotionsApi = {
       `/mobile/promotions/vouchers?memberId=${encodeURIComponent(memberId)}`,
       { skipAuth: true }
     );
+  },
+  /** Reception: café promo / tarif gift prices for one member or visit (only products with a deal) */
+  cafePrices(opts: { memberId?: string | null; journalId?: string | null }) {
+    const q = new URLSearchParams();
+    if (opts.memberId) q.set("memberId", opts.memberId);
+    if (opts.journalId) q.set("journalId", opts.journalId);
+    return http.get<CafePrice[]>(`/promotions/cafe-prices?${q}`);
   },
   journalVouchers(journalId: string) {
     return http.get<PromotionVoucher[]>(

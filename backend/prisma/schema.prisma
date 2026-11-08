@@ -495,22 +495,111 @@ model Reservation {
 }
 
 model Product {
-  id             String         @id @default(uuid())
+  id             String              @id @default(uuid())
   organizationId String?
-  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   description    String?
-  purchasePrice  Float          @map("prix_achat")
-  sellingPrice   Float          @map("prix_vente")
+  purchasePrice  Float               @map("prix_achat")
+  sellingPrice   Float               @map("prix_vente")
   stock          Int
   img            String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
   dailyProducts  DailyProduct[]
   promotions     Promotion[]
+  /// Ingredients used per unit sold. Empty = stock typed by hand (old behaviour).
+  recipeLines    ProductRecipeLine[]
 
   @@index([organizationId])
   @@map("products")
+}
+
+enum StockItemKind {
+  /// Used by recipes (café grain, lait, gobelets…)
+  INGREDIENT
+  /// Sold as bought (bouteille d'eau, canette…): one item per product
+  UNIT
+}
+
+/// Something bought and kept in stock. Quantities are in the base unit: g, ml or pc.
+model StockItem {
+  id             String              @id @default(uuid())
+  organizationId String?
+  organization   Organization?       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  /// g | ml | pc
+  unit           String              @default("pc")
+  kind           StockItemKind       @default(INGREDIENT)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  lots           StockLot[]
+  recipeLines    ProductRecipeLine[]
+  adjustments    StockAdjustment[]
+
+  @@index([organizationId])
+  @@map("stock_items")
+}
+
+model ProductRecipeLine {
+  id          String    @id @default(uuid())
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  /// Amount of the item used for one unit sold (base unit)
+  quantity    Float
+
+  @@unique([productId, stockItemId])
+  @@map("product_recipe_lines")
+}
+
+/// One restock. Each line is a lot; the total is a DailyExpense (unless it is opening stock).
+model StockPurchase {
+  id             String        @id @default(uuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  date           DateTime
+  /// CAISSE | COFFRE | AUTRE | NONE (opening stock, already paid)
+  source         String        @default("CAISSE")
+  note           String?
+  dailyExpenseId String?       @unique
+  dailyExpense   DailyExpense? @relation(fields: [dailyExpenseId], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now())
+  lots           StockLot[]
+
+  @@index([organizationId, date])
+  @@map("stock_purchases")
+}
+
+model StockLot {
+  id          String        @id @default(uuid())
+  purchaseId  String
+  purchase    StockPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  stockItemId String
+  stockItem   StockItem     @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  /// Base unit (g, ml, pc)
+  quantity    Float
+  /// Price paid for the whole lot (DT)
+  price       Float
+  createdAt   DateTime      @default(now())
+
+  @@index([stockItemId])
+  @@map("stock_lots")
+}
+
+/// Inventory count correction: positive = missing (loss), negative = more than expected.
+model StockAdjustment {
+  id          String    @id @default(uuid())
+  stockItemId String
+  stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+  date        DateTime  @default(now())
+  quantity    Float
+  note        String?
+  createdAt   DateTime  @default(now())
+
+  @@index([stockItemId, date])
+  @@map("stock_adjustments")
 }
 
 model DailyProduct {
@@ -552,26 +641,34 @@ model Expense {
 /// One spent amount. Quick expenses have no template (amount + label only);
 /// paid recurring charges link their template.
 model DailyExpense {
-  id            String       @id @default(uuid())
+  id            String         @id @default(uuid())
   expenseId     String?
   Summary       String?
-  expense       Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+  expense       Expense?       @relation(fields: [expenseId], references: [id], onDelete: SetNull)
   date          DateTime?
   /// Amount spent (null on legacy rows = template amount)
   amount        Float?
   /// Description (null on legacy rows = template name)
   label         String?
-  kind          ExpenseType  @default(JOURNALIER)
+  kind          ExpenseType    @default(JOURNALIER)
   /// Where the money came from: CAISSE (cash drawer) | COFFRE | AUTRE (bank, card…)
-  source        String       @default("CAISSE")
+  source        String         @default("CAISSE")
+  /// Month the expense is for (yyyy-MM), e.g. last month's rent paid today. Null = month of `date`.
+  forMonth      String?
+  /// Spread over this many months from `forMonth` (equipment…). 1 = one month.
+  spreadMonths  Int            @default(1)
+  /// LOYER | ENERGIE | INTERNET | SALAIRES | STOCK_CAFE | MENAGE | EQUIPEMENT | AUTRE
+  category      String?
   coffreEntry   CoffreEntry?
+  stockPurchase StockPurchase?
   externalOrgId String?
   externalRef   String?
   syncedAt      DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([date])
+  @@index([forMonth])
 }
 
 enum JournalPricingMode {
@@ -607,6 +704,8 @@ model Organization {
   members        Member[]
   memberGroups   MemberGroup[]
   products       Product[]
+  stockItems     StockItem[]
+  stockPurchases StockPurchase[]
   prices         Price[]
   priceHistories PriceHistory[]
   memberships    OrganizationMembership[]
@@ -738,6 +837,8 @@ model MonthlyTarget {
   year         Int
   month        Int
   revenue      Float
+  /// Optional goal on net (revenue − expenses), shown next to the revenue goal
+  netRevenue   Float?
   occupancyPct Float?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -1310,13 +1411,13 @@ model AdvisorReport {
 
 /// A business change the owner started (e.g. "selling coffee"), tracked before/after
 model BusinessInitiative {
-  id                  String      @id @default(uuid())
+  id                  String           @id @default(uuid())
   facilityId          String
-  facility            Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  facility            Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   title               String
   description         String?
   /// NEW_REVENUE, PROMO, PRICING, CAFE, RETENTION, OPERATIONS
-  category            String      @default("NEW_REVENUE")
+  category            String           @default("NEW_REVENUE")
   startDate           DateTime
   endDate             DateTime?
   sourceReportId      String?
@@ -1331,17 +1432,17 @@ model BusinessInitiative {
   /// Owner's own conclusion: WORKING | MIXED | NOT_WORKING
   ownerVerdict        String?
   /// What happened, written by the owner: [{ date: "yyyy-MM-dd", text }]
-  notes               Json        @default("[]")
+  notes               Json             @default("[]")
   /// Who the action aims at — only that is measured: ALL | SLOT (days + hours) | LIST (clients)
-  targetKind          String      @default("ALL")
+  targetKind          String           @default("ALL")
   /// SLOT: 0 = Sunday … 6 = Saturday; empty = every day
-  targetDays          Int[]       @default([])
+  targetDays          Int[]            @default([])
   /// SLOT: hours [from, to); to ≤ from wraps past midnight; null = all day
   targetFromHour      Int?
   targetToHour        Int?
   /// LIST: the list chosen (campaign segment code) and its clients, frozen at start
   targetSegment       String?
-  targetMemberIds     String[]    @default([])
+  targetMemberIds     String[]         @default([])
   /// Sale tied to the action, counted directly: PRICE (service / offer) | PRODUCT | PROMOTION | EVENT
   linkedKind          String?
   linkedId            String?
@@ -1350,24 +1451,50 @@ model BusinessInitiative {
   /// Why it should work, one line
   hypothesis          String?
   /// INSTAGRAM_POST | INSTAGRAM_STORY | WHATSAPP | APP | PARTNER | WALK_IN
-  channels            String[]    @default([])
+  channels            String[]         @default([])
   /// Planned steps: [{ text, done, doneAt?: "yyyy-MM-dd" }]
-  steps               Json        @default("[]")
+  steps               Json             @default("[]")
   /// Figures typed from Instagram: [{ date: "yyyy-MM-dd", channel?, reach }]
-  manualFunnel        Json        @default("[]")
+  manualFunnel        Json             @default("[]")
   /// People who said they are interested (typed by the owner): funnel step between "seen" and "registered"
   interested          Int?
   /// Pauses: [{ from: "yyyy-MM-dd", to: "yyyy-MM-dd" | null }]; paused days are left out of the measure
-  pauses              Json        @default("[]")
+  pauses              Json             @default("[]")
   /// "Pas pour moi": the owner stopped it and does not want it proposed again
   droppedAt           DateTime?
   dropReason          String?
+  /// Goal in DT over the 4 weeks ("Gagner +300 DT"); the money is counted by the app
+  goalAmount          Float?
+  /// Health-check point the solution works on: cafe | abos | creux | nouveaux | retour | impayes
+  area                String?
+  /// Lever of the lever map it works on (e.g. "renew")
+  leverId             String?
+  /// Drafts of the app features to use, prepared by the AI: [{ kind, step, label, draft }]
+  tools               Json             @default("[]")
   shareLinks          ShareLink[]
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  links               InitiativeLink[]
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@index([facilityId, startDate])
   @@map("business_initiatives")
+}
+
+/// A promo, event, survey, relance, tarif or product used by a solution: its sales are counted for it
+model InitiativeLink {
+  id           String             @id @default(uuid())
+  initiativeId String
+  initiative   BusinessInitiative @relation(fields: [initiativeId], references: [id], onDelete: Cascade)
+  /// PROMOTION | EVENT | SURVEY | CAMPAIGN | PRICE | PRODUCT
+  kind         String
+  targetId     String
+  /// Objective (step) this tool fulfils; ticked when the link is made
+  stepIndex    Int?
+  createdAt    DateTime           @default(now())
+
+  @@unique([initiativeId, kind, targetId])
+  @@index([kind, targetId])
+  @@map("initiative_links")
 }
 
 /// Conseiller: an idea the owner does not want ("Pas pour moi"); the AI must not propose it again

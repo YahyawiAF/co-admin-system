@@ -4,9 +4,16 @@ import { PriceCategory, Prisma, PromoValueKind, PromotionVoucherStatus } from '@
 import { PrismaService } from 'database/prisma.service';
 import { round1 } from '../analytics/traffic';
 import { priceCategoriesFor } from '../mobile/space-occupy';
+import {
+  computeRowPricing,
+  loadPricingContext,
+  PricedJournalRow,
+} from '../mobile/session-pricing-context';
 
 export const PROMOTION_TARGETS = ['PRODUCT', 'PRICE', 'BUNDLE', 'OTHER'] as const;
 const PRICE_CATEGORIES = Object.values(PriceCategory) as string[];
+/** A gift the client can still use: said yes, or « Plus tard » at pass choice (it comes with the tarif). */
+const AVAILABLE: PromotionVoucherStatus[] = ['ACCEPTED', 'DECLINED'];
 export const PROMOTION_AUDIENCES = ['ALL', 'IN_SESSION', 'FIRST_VISIT'] as const;
 export const PROMOTION_STYLES = ['GOLD', 'VIOLET', 'GREEN'] as const;
 
@@ -570,7 +577,10 @@ export class PromotionService {
       : null;
   }
 
-  /** Accepted, unused voucher for this product on the visit (given journal, else the member's open one). */
+  /**
+   * Unused gift for this product on the visit (given journal, else the member's open one).
+   * « Plus tard » at pass choice still counts: the gift comes with the tarif.
+   */
   private async openVoucher(productId: string, memberId?: string | null, journalId?: string | null) {
     let jid = journalId ?? null;
     if (!jid && memberId) {
@@ -582,10 +592,11 @@ export class PromotionService {
       jid = open?.id ?? null;
     }
     if (!jid) return null;
+    await this.syncVisitGifts(jid);
     return this.prisma.promotionVoucher.findFirst({
       where: {
         journalId: jid,
-        status: 'ACCEPTED',
+        status: { in: AVAILABLE },
         // A voucher for this product, or one for « any product » of an offer that covers it
         OR: [{ productId }, { productId: null, promotion: productMatchWhere(productId) }],
       },
@@ -596,7 +607,7 @@ export class PromotionService {
 
   async markVoucherUsed(voucherId: string, dailyProductId: string) {
     await this.prisma.promotionVoucher.updateMany({
-      where: { id: voucherId, status: 'ACCEPTED' },
+      where: { id: voucherId, status: { in: AVAILABLE } },
       data: { status: 'USED', usedAt: new Date(), dailyProductId },
     });
   }
@@ -643,6 +654,122 @@ export class PromotionService {
       target: 'BUNDLE',
       AND: [HAS_PRODUCTS, priceMatchWhere(price)],
     });
+  }
+
+  /**
+   * The visit's tarif (day pass or abonnement) gives its gifts: offers the client never
+   * saw (pass chosen at the desk, abonnement visit) get a voucher. Only for today's
+   * visit and offers live now; a « Plus tard » answer stays as it is (still usable).
+   */
+  private async syncVisitGifts(journalId: string) {
+    const j = await this.prisma.journal.findUnique({
+      where: { id: journalId },
+      include: { prices: true, members: { include: { group: true } } },
+    });
+    if (!j?.priceId || j.isReservation || !isSameDay(j.registredTime, new Date())) return;
+    const tarifIds = await this.visitTarifIds(j);
+    const offers: Awaited<ReturnType<PromotionService['bundlesFor']>> = [];
+    for (const id of tarifIds) {
+      for (const o of await this.bundlesFor(id, j.memberID)) {
+        if (hasProducts(o) && !offers.some((x) => x.id === o.id)) offers.push(o);
+      }
+    }
+    if (!offers.length) return;
+    const have = await this.prisma.promotionVoucher.findMany({
+      where: { journalId },
+      select: { promotionId: true },
+    });
+    const done = new Set(have.map((v) => v.promotionId));
+    const missing = offers.filter((o) => !done.has(o.id));
+    if (!missing.length) return;
+    await this.prisma.promotionVoucher.createMany({
+      data: missing.map((o) => ({
+        promotionId: o.id,
+        journalId,
+        memberId: j.memberID ?? null,
+        productId: o.productId ?? null,
+        status: 'ACCEPTED' as const,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  /**
+   * Tarifs whose gifts the visit gets: its pass, and for an auto visit also the tier it
+   * has moved up to (2h → 4h: the 4h gift too).
+   */
+  private async visitTarifIds(
+    j: { priceId: string | null; pricingMode: string; leaveTime: Date | null; members: { organizationId: string } | null },
+  ) {
+    const ids = j.priceId ? [j.priceId] : [];
+    if (j.pricingMode !== 'AUTO') return ids;
+    const ctx = await loadPricingContext(this.prisma, j.members?.organizationId ?? null);
+    const tier = computeRowPricing(j as unknown as PricedJournalRow, ctx, j.leaveTime ?? new Date())
+      ?.currentTier.priceId;
+    return tier && !ids.includes(tier) ? [...ids, tier] : ids;
+  }
+
+  /**
+   * Café prices for one member / visit (reception adds a drink in the Journal): best live
+   * café promo per product, and the gift price of the visit's tarif (first unit).
+   */
+  async cafePrices(opts: { memberId?: string | null; journalId?: string | null }) {
+    const memberId = opts.memberId ?? null;
+    let jid = opts.journalId ?? null;
+    if (!jid && memberId) {
+      const open = await this.prisma.journal.findFirst({
+        where: { memberID: memberId, leaveTime: null, isReservation: false },
+        orderBy: { registredTime: 'desc' },
+        select: { id: true },
+      });
+      jid = open?.id ?? null;
+    }
+    if (jid) await this.syncVisitGifts(jid);
+    const facilityId = memberId ? await this.facilityOfMember(memberId) : await this.facilityId();
+    if (!facilityId) return [];
+    const [vouchers, promos, f] = await Promise.all([
+      jid
+        ? this.prisma.promotionVoucher.findMany({
+            where: { journalId: jid, status: { in: AVAILABLE } },
+            include: { promotion: true },
+            orderBy: { createdAt: 'asc' },
+          })
+        : Promise.resolve([]),
+      this.eligible(facilityId, memberId, { target: 'PRODUCT', ...HAS_PRODUCTS }),
+      this.prisma.facility.findUnique({ where: { id: facilityId }, select: { organizationId: true } }),
+    ]);
+    if (!vouchers.length && !promos.length) return [];
+    const products = await this.prisma.product.findMany({
+      where: f?.organizationId ? { organizationId: f.organizationId } : {},
+      select: { id: true, sellingPrice: true },
+    });
+    const covers = (r: ProductScope, id: string) =>
+      r.allProducts || r.productId === id || r.productIds.includes(id);
+    const out: {
+      productId: string;
+      /** Best café promo (every unit), null when none */
+      unitPrice: number | null;
+      label: string | null;
+      /** Gift of the visit's tarif (first unit), null when none */
+      giftPrice: number | null;
+      giftLabel: string | null;
+    }[] = [];
+    for (const p of products) {
+      const pick = this.best(
+        promos.filter((r) => covers(r, p.id)),
+        p.sellingPrice,
+      );
+      const v = vouchers.find((x) => x.productId === p.id || (!x.productId && covers(x.promotion, p.id)));
+      if (!pick && !v) continue;
+      out.push({
+        productId: p.id,
+        unitPrice: pick ? pick.amount : null,
+        label: pick ? promotionLabel(pick.row) : null,
+        giftPrice: v ? applyDiscount(p.sellingPrice, v.promotion.valueKind, v.promotion.value) : null,
+        giftLabel: v ? `Cadeau ${promotionLabel(v.promotion)}` : null,
+      });
+    }
+    return out;
   }
 
   /**
@@ -697,8 +824,9 @@ export class PromotionService {
   }
 
   async vouchersForJournal(journalId: string) {
+    await this.syncVisitGifts(journalId);
     const rows = await this.prisma.promotionVoucher.findMany({
-      where: { journalId, status: { in: ['ACCEPTED', 'USED'] } },
+      where: { journalId },
       include: { promotion: { include: INCLUDE } },
       orderBy: { createdAt: 'asc' },
     });
@@ -716,7 +844,10 @@ export class PromotionService {
         productId: v.productId,
         /** Products the voucher can be used on */
         productIds: v.productId ? [v.productId] : coveredProductIds(p, products),
-        status: v.status,
+        /** « Plus tard » at pass choice is still usable: shown as ACCEPTED */
+        status: v.status === 'USED' ? ('USED' as const) : ('ACCEPTED' as const),
+        /** The client said « Plus tard » when choosing the pass */
+        later: v.status === 'DECLINED',
         title: p.title,
         label: promotionLabel(p),
         valueKind: p.valueKind,

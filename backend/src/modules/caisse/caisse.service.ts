@@ -16,7 +16,7 @@ import {
   parseLocalDay,
 } from '../../../common/parse-local-day';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
-import { expenseAmount, expenseLabel } from '../expense/expense-amount';
+import { expenseAmount, expenseLabel, expensesInPeriod } from '../expense/expense-amount';
 
 /** Gap (DT) above which closing needs an explanation. */
 const GAP_NEEDS_NOTE = 0.5;
@@ -158,8 +158,10 @@ export class CaisseService {
     return { ok: true };
   }
 
-  async daySummary(date: string) {
-    await this.ensureOpenToday(date);
+  /** open: false = read only (Conseil, Argent): today's caisse is not opened by a read. */
+  async daySummary(date: string, opts: { open?: boolean } = {}) {
+    const readOnly = opts.open === false;
+    if (!readOnly) await this.ensureOpenToday(date);
     const day = parseLocalDay(date);
     const start = startOfDay(day);
     const end = endOfDay(day);
@@ -231,7 +233,8 @@ export class CaisseService {
       .filter((m) => m.type === 'OUT')
       .reduce((a, m) => a + m.amount, 0);
 
-    const openingFloat = session?.openingFloat || 0;
+    // Not opened yet (read only): it will open with yesterday's kept cash
+    const openingFloat = session ? session.openingFloat || 0 : readOnly ? await this.carriedFloat(day) : 0;
     const revenue = revenueJournal + revenueAbonnements + revenueProducts;
     const expectedClose = round2(
       openingFloat + revenue + movementsIn - expensesCash - movementsOut,
@@ -557,7 +560,7 @@ export class CaisseService {
         include: { product: true },
       }),
       this.prisma.dailyExpense.findMany({
-        where: { date: { gte: start, lte: end } },
+        where: { OR: [{ date: { gte: start, lte: end } }, { forMonth: { not: null } }, { spreadMonths: { gt: 1 } }] },
         include: { expense: true },
       }),
       this.prisma.caisseSession.findMany({
@@ -577,12 +580,9 @@ export class CaisseService {
     const revenueProducts = dailyProducts
       .filter((dp) => dp.status !== 'PENDING' && dp.status !== 'CANCELLED')
       .reduce((a, dp) => a + orderUnitPrice(dp) * dp.quantite, 0);
-    const expensesDaily = dailyExpenses
-      .filter((de) => de.kind === 'JOURNALIER')
-      .reduce((a, de) => a + expenseAmount(de), 0);
-    const expensesMonthly = dailyExpenses
-      .filter((de) => de.kind === 'MENSUEL')
-      .reduce((a, de) => a + expenseAmount(de), 0);
+    // Each expense counts in the month it is for (« pour quel mois »)
+    const expensesDaily = expensesInPeriod(dailyExpenses.filter((de) => de.kind === 'JOURNALIER'), start, end);
+    const expensesMonthly = expensesInPeriod(dailyExpenses.filter((de) => de.kind === 'MENSUEL'), start, end);
     const expenses = expensesDaily + expensesMonthly;
     const coffreIn = coffre
       .filter((c) => c.type === 'IN')

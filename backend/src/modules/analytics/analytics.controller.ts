@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
 import { NewcomersService } from './newcomers.service';
 import { ForecastService } from './forecast.service';
+import { FinanceYearService } from './finance-year.service';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -15,6 +17,7 @@ export class AnalyticsController {
     private readonly campaigns: CampaignService,
     private readonly newcomers: NewcomersService,
     private readonly forecasts: ForecastService,
+    private readonly financeYear: FinanceYearService,
   ) {}
 
   @Get('performance/settings')
@@ -49,6 +52,7 @@ export class AnalyticsController {
       year: number;
       month: number;
       revenue?: number | null;
+      netRevenue?: number | null;
       occupancyPct?: number | null;
     },
   ) {
@@ -77,6 +81,24 @@ export class AnalyticsController {
     return this.forecasts.forecast({ year: Number(year) || undefined, month: Number(month) || undefined, facilityId });
   }
 
+  /** Download the forecast and the numbers behind it: `format=csv` (day by day) or json (everything). */
+  @Get('performance/forecast/export')
+  async performanceForecastExport(
+    @Res() res: Response,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('format') format?: string,
+    @Query('facilityId') facilityId?: string,
+  ) {
+    const x = await this.forecasts.exportForecast({ year: Number(year) || undefined, month: Number(month) || undefined, format, facilityId });
+    res.setHeader('Content-Type', x.type);
+    res.setHeader('Content-Disposition', `attachment; filename="${x.filename}"`);
+    // The admin app runs on another origin: let it read the file name
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(x.body);
+  }
+
   /** Stored predictions of the last finished months against what happened. */
   @Get('performance/forecast/accuracy')
   performanceForecastAccuracy(@Query('facilityId') facilityId?: string) {
@@ -94,6 +116,29 @@ export class AnalyticsController {
     @Body() body: { metric?: string; direction?: string; from?: string; to?: string; cause?: string; note?: string },
   ) {
     return this.forecasts.answerChange(facilityId, body);
+  }
+
+  /** Days that peaked or dropped with no known reason (last 60 days). */
+  @Get('performance/unusual-days')
+  unusualDays(@Query('facilityId') facilityId?: string) {
+    return this.financeYear.unusual(facilityId);
+  }
+
+  @Post('performance/unusual-days/answer')
+  answerUnusualDay(@Query('facilityId') facilityId: string | undefined, @Body() body: { day?: string; reason?: string; note?: string }) {
+    return this.financeYear.answerUnusual(facilityId, body);
+  }
+
+  /** The school year (September → August) as one curve, rent per month and the summer reserve. */
+  @Get('performance/school-year')
+  schoolYear(@Query('facilityId') facilityId?: string) {
+    return this.financeYear.schoolYear(facilityId);
+  }
+
+  /** Café of a month: DT per visit, change of habit, days, products. */
+  @Get('performance/cafe')
+  cafe(@Query('year') year?: string, @Query('month') month?: string, @Query('facilityId') facilityId?: string) {
+    return this.financeYear.cafe(facilityId, Number(year) || undefined, Number(month) || undefined);
   }
 
   @Get('performance/levers')

@@ -21,6 +21,7 @@ import {
 import { AnalyticsService } from '../analytics/analytics.service';
 import { PerformanceService } from '../analytics/performance.service';
 import { CaisseService } from '../caisse/caisse.service';
+import { ExpensesService } from '../expense/expense.service';
 import { MemberService } from '../member/member.service';
 import { SnapshotService } from './snapshot.service';
 
@@ -45,6 +46,7 @@ export class ManagerService {
     private readonly caisse: CaisseService,
     private readonly members: MemberService,
     private readonly snapshot: SnapshotService,
+    private readonly expenses: ExpensesService,
   ) {}
 
   private async resolve(facilityId?: string) {
@@ -81,10 +83,12 @@ export class ManagerService {
 
   private async facts(facilityId: string, now = new Date()) {
     const today = localDayKey(now);
-    const [day, coffre, charges, months, debtors, target, visits, membersCount] = await Promise.all([
-      this.caisse.daySummary(today),
+    const [day, coffre, chargesMonth, months, debtors, target, visits, membersCount] = await Promise.all([
+      // Read only: looking at the money never opens today's caisse
+      this.caisse.daySummary(today, { open: false }),
       this.caisse.coffreList(),
-      this.prisma.expense.findMany({ where: { type: 'MENSUEL' }, select: { amount: true } }),
+      // Same charges as Finance (break-even): paid this month + still to pay
+      this.expenses.monthOverview(now.getFullYear(), now.getMonth() + 1),
       this.months(now),
       this.members.listDebtors(),
       this.prisma.monthlyTarget.findUnique({
@@ -100,7 +104,8 @@ export class ManagerService {
     const owed = debtors.members.reduce((a, m) => a + m.net, 0);
     const lastFull = months[1];
     const currentMonth = months[2];
-    const chargesMonthly = charges.reduce((a, c) => a + c.amount, 0);
+    const chargesMonthly = chargesMonth.totals.chargesPaid + chargesMonth.totals.chargesRemaining;
+    const charges = [...chargesMonth.recurring, ...chargesMonth.oneOff];
 
     const money: MoneyFacts = {
       asOf: now,
@@ -125,7 +130,7 @@ export class ManagerService {
       },
       {
         title: 'Charges fixes',
-        detail: charges.length ? `${charges.length} charges mensuelles` : 'Aucune saisie dans Finance',
+        detail: charges.length ? `${charges.length} charges ce mois (payées + à payer)` : 'Aucune saisie dans Finance',
         value: charges.length ? `${dt(chargesMonthly)} / mois` : undefined,
         source: 'Finance',
         warn: !charges.length,

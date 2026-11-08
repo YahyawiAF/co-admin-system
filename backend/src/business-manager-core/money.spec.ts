@@ -95,7 +95,7 @@ describe('questions', () => {
     expect(q.map((x) => x.key)).not.toContain('charges');
   });
 
-  it('asks the bank again after 30 days, quoting the old figure', () => {
+  it('asks the bank again after 7 days, quoting the old figure', () => {
     const old = new Date(2026, 8, 1);
     const q = pendingQuestions(facts(), ans([['bank', 5000, false, old]]));
     const bank = q.find((x) => x.key === 'bank')!;

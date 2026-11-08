@@ -24,6 +24,7 @@ import {
   abonnementMonth,
   type MonthForecastResult,
 } from './month-data';
+import { buildForecastExport } from './forecast-export';
 import { PerformanceService } from './performance.service';
 import { NewcomersService } from './newcomers.service';
 import { OutreachService } from './outreach.service';
@@ -105,6 +106,21 @@ export class ForecastService {
     // Only the month in progress is kept: a past month rebuilt today would already know the answer
     if (f.period.isCurrent) await this.keepSnapshot(s.facilityId, f).catch(() => undefined);
     return f;
+  }
+
+  /** The month forecast and every number behind it, as JSON or as the day-by-day CSV. */
+  async exportForecast(opts: { year?: number; month?: number; facilityId?: string; format?: string }) {
+    const now = new Date();
+    const year = opts.year || now.getFullYear();
+    const month = opts.month || now.getMonth() + 1;
+    if (month < 1 || month > 12) throw new BadRequestException('Mois invalide');
+    const s = await this.performance.settings(opts.facilityId);
+    const x = await buildForecastExport(this.prisma, s.facilityId, year, month, now);
+    if (opts.format === 'csv') {
+      return { filename: `prevision-${x.tag}-jours.csv`, type: 'text/csv; charset=utf-8', body: '\uFEFF' + x.csv.days };
+    }
+    const body = JSON.stringify({ ...x.json, csv: x.csv }, null, 2);
+    return { filename: `prevision-${x.tag}.json`, type: 'application/json; charset=utf-8', body };
   }
 
   // ---------- abonnements ----------
@@ -412,6 +428,12 @@ export class ForecastService {
   }
 
   async levers(facilityId?: string) {
+    const { map } = await this.leversWithFacts(facilityId);
+    return map;
+  }
+
+  /** The lever map and the facts behind it (the Conseil IA bilan reuses both). */
+  async leversWithFacts(facilityId?: string) {
     const s = await this.performance.settings(facilityId);
     const now = new Date();
     const d30 = subDays(now, 30);
@@ -446,8 +468,9 @@ export class ForecastService {
     const outreach = new Map<string, number>();
     for (const c of contacts) outreach.set(c.reason, (outreach.get(c.reason) ?? 0) + c._count._all);
     for (const c of campaigns) outreach.set(c.segment, (outreach.get(c.segment) ?? 0) + c.memberIds.length);
+    const defs = coworkingLevers(facts);
     const map = evaluateLevers(
-      coworkingLevers(facts),
+      defs,
       actions,
       [...outreach].map(([reason, n]) => ({ reason, contacts: n })),
       now,
@@ -465,6 +488,6 @@ export class ForecastService {
     map.missing = map.missing.filter((m) => !refused(m.leverId, m.title)).slice(0, 3);
     map.counts = { WORKING: 0, IN_PROGRESS: 0, MISSING: 0, NO_DATA: 0, OK: 0 };
     for (const g of map.groups) for (const l of g.levers) map.counts[l.status] += 1;
-    return { generatedAt: now.toISOString(), ...map };
+    return { map: { generatedAt: now.toISOString(), ...map }, facts, defs, facilityId: s.facilityId };
   }
 }

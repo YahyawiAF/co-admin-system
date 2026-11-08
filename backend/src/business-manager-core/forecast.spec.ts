@@ -6,6 +6,7 @@ import {
   dayFactorsFor,
   detectChanges,
   expectedShare,
+  paceOf,
   splitGap,
   usualDays,
   weekBand,
@@ -173,6 +174,29 @@ describe('expectedShare', () => {
     const f = buildForecast({ base, month: november, actual: [], subscriptionsExpected: 0 });
     // After Sunday 1 Nov: 300 of 5×300 + 25×100 = 4000
     expect(expectedShare(f.days, '2026-11-02', 0)).toBeCloseTo(300 / 4000, 4);
+  });
+});
+
+describe('pace (« rythme du mois »)', () => {
+  it('weighs the gap by the days lived', () => {
+    expect(paceOf(0, 100, 150)).toEqual({ weight: 0, multiplier: 1 });
+    const two = paceOf(2, 100, 125);
+    expect(two.weight).toBeCloseTo(2 / 9, 4);
+    expect(two.multiplier).toBeCloseTo(1 + 0.25 * (2 / 9), 4);
+    expect(paceOf(14, 100, 400).multiplier).toBe(1.5);
+    expect(paceOf(14, 100, 0).multiplier).toBe(0.5);
+  });
+
+  it('moves the days left, the current method does not', () => {
+    const base = days(new Date(2026, 9, 4), 28);
+    const actual = days(new Date(2026, 10, 1), 2, () => ({ revenueVisits: 150, products: 15 }));
+    const f = buildForecast({ base, month: november, actual, todayKey: '2026-11-03', subscriptionsExpected: 100 });
+    const t = f.toDate!;
+    // 2 days at +50 %: the current method adds only those 2 days' gap
+    expect(t.projectedVariable).toBeCloseTo(30 * 110 + 2 * 55, 0);
+    const mult = 1 + 0.5 * (2 / 9);
+    expect(t.pace.projectedVariable).toBeCloseTo(330 + 28 * 110 * mult, 0);
+    expect(t.pace.projected).toBeCloseTo(t.pace.projectedVariable + 100, 0);
   });
 });
 

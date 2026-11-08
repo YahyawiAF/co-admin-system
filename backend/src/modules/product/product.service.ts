@@ -5,6 +5,7 @@ import { ProductEntity } from './entities/product.entitie';
 import { UpdateProductDto } from './dtos/updateProduct';
 import { EventsGateway } from '../webSocket/events.gateway';
 import { SyncOutboxService } from '../erp-sync/sync-outbox.service';
+import { StockService } from '../stock/stock.service';
 
 @Injectable()
 export class ProductsService {
@@ -12,6 +13,7 @@ export class ProductsService {
     private prisma: PrismaService,
     private eventsGateway: EventsGateway,
     private readonly syncOutbox: SyncOutboxService,
+    private readonly stock: StockService,
   ) {}
 
   private emitStock(product: { id: string; name: string; stock: number }) {
@@ -66,6 +68,8 @@ export class ProductsService {
     });
     this.emitStock(updated);
     await this.syncOutbox.enqueue('product', updated.id, 'UPDATE');
+    // Products with a recipe keep the stock computed from their ingredients
+    await this.stock.syncProductStock();
     return new ProductEntity(updated);
   }
 
@@ -90,6 +94,7 @@ export class ProductsService {
       },
     });
     await this.syncOutbox.enqueue('dailyProduct', created.id, 'CREATE');
+    void this.stock.syncProductStock();
     return created;
   }
   async updateDailyProduct(
@@ -109,13 +114,16 @@ export class ProductsService {
       },
     });
     await this.syncOutbox.enqueue('dailyProduct', updated.id, 'UPDATE');
+    void this.stock.syncProductStock();
     return updated;
   }
 
   async removeDailyProduct(id: string) {
-    return this.prisma.dailyProduct.delete({
+    const deleted = await this.prisma.dailyProduct.delete({
       where: { id },
     });
+    void this.stock.syncProductStock();
+    return deleted;
   }
 
   async findAllDailyProduct() {

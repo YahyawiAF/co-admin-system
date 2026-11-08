@@ -33,11 +33,20 @@ import { FinanceDayAnalysis } from "@/components/admin/finance/FinanceDayAnalysi
 import { FinanceCaisseTab } from "@/components/admin/finance/FinanceCaisseTab";
 import { FinanceExpensesTab } from "@/components/admin/finance/FinanceExpensesTab";
 import { FinanceCoffreTab } from "@/components/admin/finance/FinanceCoffreTab";
+import { FinanceMoneyTab } from "@/components/admin/finance/FinanceMoneyTab";
+import { FinanceYearTab } from "@/components/admin/finance/FinanceYearTab";
+import { FinanceCafeTab } from "@/components/admin/finance/FinanceCafeTab";
+import { ForecastTab } from "@/components/admin/finance/FinanceSummary";
+import { ForecastBlock } from "@/components/admin/finance/FinanceForecast";
 
 const FINANCE_TABS = [
   "apercu",
-  "caisse",
+  "prevision",
   "depenses",
+  "argent",
+  "annee",
+  "cafe",
+  "caisse",
   "coffre",
   "jour",
   "mois",
@@ -94,8 +103,12 @@ function FinanceInner() {
       <Tabs value={tab} onValueChange={(v) => setTab(v)}>
         <TabsList className="flex h-auto flex-wrap">
           <TabsTrigger value="apercu">Vue d&apos;ensemble</TabsTrigger>
-          <TabsTrigger value="caisse">Caisse</TabsTrigger>
+          <TabsTrigger value="prevision">Prévision</TabsTrigger>
           <TabsTrigger value="depenses">Dépenses</TabsTrigger>
+          <TabsTrigger value="argent">Argent</TabsTrigger>
+          <TabsTrigger value="annee">Année</TabsTrigger>
+          <TabsTrigger value="cafe">Café</TabsTrigger>
+          <TabsTrigger value="caisse">Caisse</TabsTrigger>
           <TabsTrigger value="coffre">Coffre</TabsTrigger>
           <TabsTrigger value="jour">Jour</TabsTrigger>
           <TabsTrigger value="mois">Mois</TabsTrigger>
@@ -104,7 +117,38 @@ function FinanceInner() {
         </TabsList>
 
         <TabsContent value="apercu" className="mt-4">
-          <FinanceOverview monthKey={monthKey} onMonthChange={setMonthKey} />
+          <FinanceOverview monthKey={monthKey} onMonthChange={setMonthKey} onGoTab={(t) => setTab(t)} />
+        </TabsContent>
+        <TabsContent value="prevision" className="mt-4">
+          {tab === "prevision" ? (
+            <div className="animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+              <div className="mb-4 flex items-center gap-2">
+                <Label>Mois</Label>
+                <Input type="month" className="w-auto" value={monthKey} onChange={(e) => e.target.value && setMonthKey(e.target.value)} />
+              </div>
+              <ForecastTab year={year} month={month}>
+                <ForecastBlock year={year} month={month} />
+              </ForecastTab>
+            </div>
+          ) : null}
+        </TabsContent>
+        <TabsContent value="annee" className="mt-4">
+          {tab === "annee" ? (
+            <div className="animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+              <FinanceYearTab />
+            </div>
+          ) : null}
+        </TabsContent>
+        <TabsContent value="cafe" className="mt-4">
+          {tab === "cafe" ? (
+            <div className="animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+              <div className="mb-4 flex items-center gap-2">
+                <Label>Mois</Label>
+                <Input type="month" className="w-auto" value={monthKey} onChange={(e) => e.target.value && setMonthKey(e.target.value)} />
+              </div>
+              <FinanceCafeTab monthKey={monthKey} />
+            </div>
+          ) : null}
         </TabsContent>
 
         <TabsContent value="caisse" className="mt-4">
@@ -121,6 +165,10 @@ function FinanceInner() {
 
         <TabsContent value="coffre" className="mt-4">
           {tab === "coffre" ? <FinanceCoffreTab /> : null}
+        </TabsContent>
+
+        <TabsContent value="argent" className="mt-4">
+          {tab === "argent" ? <FinanceMoneyTab onGoTab={(t) => setTab(t)} /> : null}
         </TabsContent>
 
         <TabsContent value="jour" className="mt-4">

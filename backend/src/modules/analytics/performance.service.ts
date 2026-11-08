@@ -17,9 +17,10 @@ import { fr } from 'date-fns/locale';
 import { MemberService } from '../member/member.service';
 import { ExpensesService } from '../expense/expense.service';
 import { abonnementPaymentsInRange } from '../abonnement/abonnement-revenue';
-import { expenseAmount } from '../expense/expense-amount';
+import { expenseAmount, expensesInPeriod } from '../expense/expense-amount';
 import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { round1, visitEnd } from './traffic';
+import { openHoursForDay, paidJournalsIn, visitsIn } from './money-rules';
 import { computeOffers } from './offers';
 import { abonnementMonth, computeMonthForecast, loadAbonnements } from './month-data';
 import { expectedShare } from '../../business-manager-core';
@@ -109,11 +110,16 @@ export class PerformanceService {
     avgTicket: number | null,
     projected: number | null,
   ) {
-    const m = await this.expenses.monthOverview(year, month);
+    const [m, perDay] = await Promise.all([
+      this.expenses.monthOverview(year, month),
+      this.expenses.dailyAverage(28),
+    ]);
+    // Every expense counts in the month it is for (« pour quel mois »), not the day it is paid
     const fixed = m.totals.chargesPaid + m.totals.chargesRemaining;
+    // Daily purchases still to come = the average day of the last 4 weeks, not the first days × 30
     const dailyProjected =
-      elapsedDays > 0.5 && elapsedDays < daysInMonth
-        ? (m.totals.daily / elapsedDays) * daysInMonth
+      remainingDays > 0 && elapsedDays < daysInMonth
+        ? m.totals.daily + perDay * remainingDays
         : m.totals.daily;
     const total = round1(fixed + dailyProjected);
     const remaining = round1(Math.max(0, total - revenue));
@@ -123,6 +129,8 @@ export class PerformanceService {
       fixed: round1(fixed),
       fixedRemaining: round1(m.totals.chargesRemaining),
       dailyProjected: round1(dailyProjected),
+      dailyPerDay: perDay,
+      paidForOtherMonths: m.totals.paidForOtherMonths,
       total,
       covered: round1(Math.min(revenue, total)),
       coveredPct: total > 0 ? round1(Math.min(100, (revenue / total) * 100)) : null,
@@ -226,6 +234,7 @@ export class PerformanceService {
     year: number;
     month: number;
     revenue?: number | null;
+    netRevenue?: number | null;
     occupancyPct?: number | null;
   }) {
     const f = await this.facility(body.facilityId);
@@ -243,10 +252,13 @@ export class PerformanceService {
     const occ = body.occupancyPct == null ? null : Number(body.occupancyPct);
     const occupancyPct =
       occ != null && Number.isFinite(occ) && occ > 0 ? Math.min(100, occ) : null;
+    const net = body.netRevenue == null || body.netRevenue === ('' as unknown) ? null : Number(body.netRevenue);
+    // A net goal can be negative (a month planned at a loss) but must be a number
+    const netRevenue = net != null && Number.isFinite(net) ? round1(net) : null;
     return this.prisma.monthlyTarget.upsert({
       where: { facilityId_year_month: key },
-      create: { ...key, revenue, occupancyPct },
-      update: { revenue, occupancyPct },
+      create: { ...key, revenue, netRevenue, occupancyPct },
+      update: { revenue, netRevenue, occupancyPct },
     });
   }
 
@@ -281,21 +293,6 @@ export class PerformanceService {
     );
   }
 
-  /** Hours open on a day: configured window, widened when visits happened outside it. */
-  private openHoursForDay(
-    s: PerformanceSettings,
-    observed?: { first: number; last: number },
-  ) {
-    if (s.alwaysOpen) return 24;
-    let from = s.openHour;
-    let to = s.closeHour;
-    if (observed) {
-      from = Math.min(from, observed.first);
-      to = Math.max(to, observed.last);
-    }
-    return Math.min(24, Math.max(0, to - from));
-  }
-
   private async periodMetrics(
     s: PerformanceSettings,
     seats: number,
@@ -303,10 +300,10 @@ export class PerformanceService {
     end: Date,
     now: Date,
   ) {
-    const [journals, aboPayments, dailyProducts, dailyExpenses, visits] =
+    const [journals, aboPayments, dailyProducts, dailyExpenses, visits, eventRegs] =
       await Promise.all([
         this.prisma.journal.findMany({
-          where: { registredTime: { gte: start, lte: end }, isPayed: true },
+          where: paidJournalsIn(start, end),
           select: { registredTime: true, payedAmount: true },
         }),
         this.prisma.abonnementPayment.findMany({
@@ -325,12 +322,13 @@ export class PerformanceService {
             product: { select: { sellingPrice: true } },
           },
         }),
+        // « Pour quel mois »: rows paid before or after the period can count in it
         this.prisma.dailyExpense.findMany({
-          where: { date: { gte: start, lte: end } },
-          select: { amount: true, expense: { select: { amount: true } } },
+          where: { OR: [{ date: { gte: start, lte: end } }, { forMonth: { not: null } }, { spreadMonths: { gt: 1 } }] },
+          select: { amount: true, date: true, createdAt: true, forMonth: true, spreadMonths: true, expense: { select: { amount: true } } },
         }),
         this.prisma.journal.findMany({
-          where: { registredTime: { gte: start, lte: end }, isReservation: false },
+          where: visitsIn(start, end),
           select: {
             registredTime: true,
             leaveTime: true,
@@ -338,6 +336,10 @@ export class PerformanceService {
             isPayed: true,
             payedAmount: true,
           },
+        }),
+        this.prisma.eventRegistration.findMany({
+          where: { paidAt: { gte: start, lte: end } },
+          select: { paidAmount: true },
         }),
       ]);
 
@@ -363,8 +365,10 @@ export class PerformanceService {
       products += v;
       addDay(productsByDay, dp.date, v);
     }
-    const expenses = dailyExpenses.reduce((a, de) => a + expenseAmount(de), 0);
-    const revenue = journalRevenue + abonnements + products;
+    const expenses = expensesInPeriod(dailyExpenses, start, end);
+    // Paid event places count as revenue, kept apart from the passes + café curve
+    const events = eventRegs.reduce((a, r) => a + (r.paidAmount ?? 0), 0);
+    const revenue = journalRevenue + abonnements + products + events;
 
     const observed = new Map<string, { first: number; last: number }>();
     const visitsByDay = new Map<string, number>();
@@ -414,7 +418,7 @@ export class PerformanceService {
     }));
     for (let d = startOfDay(start); d <= lastDay; d = addDays(d, 1)) {
       const k = localDayKey(d);
-      let h = this.openHoursForDay(s, observed.get(k));
+      let h = openHoursForDay(s, observed.get(k));
       if (k === localDayKey(now)) {
         const sinceOpen = (now.getTime() - d.getTime()) / HOUR_MS - (s.alwaysOpen ? 0 : s.openHour);
         h = Math.max(0, Math.min(h, sinceOpen));
@@ -436,6 +440,7 @@ export class PerformanceService {
       revenueJournal: round1(journalRevenue),
       revenueAbonnements: round1(abonnements),
       revenueProducts: round1(products),
+      revenueEvents: round1(events),
       /** Passes + café: the money that follows the days */
       revenueVariable: round1(journalRevenue + products),
       expenses: round1(expenses),
@@ -525,7 +530,7 @@ export class PerformanceService {
     const cmpProducts = isCurrent ? previous.revenueProducts : replay((w) => w.avgProducts);
     const cmpVisits = isCurrent ? previous.visits : replay((w) => w.avgVisits);
     const cmpAbonnements = round1(aboPrev._sum.amount ?? 0);
-    const cmpRevenue = round1(cmpPasses + cmpProducts + cmpAbonnements);
+    const cmpRevenue = round1(cmpPasses + cmpProducts + cmpAbonnements + previous.revenueEvents);
 
     const openSpan = s.alwaysOpen ? 24 : Math.max(1, s.closeHour - s.openHour);
     const todayDone = isCurrent
@@ -547,11 +552,52 @@ export class PerformanceService {
       : !isCurrent
         ? revenue
         : forecast
-          ? round1(forecast.toDate?.projected ?? Math.max(revenue, forecast.expected.total))
+          ? round1(Math.max(revenue, forecast.projectedAll.pace))
           : elapsedDays > 0.5
             ? round1((revenue / elapsedDays) * daysInMonth)
             : null;
+    // « Rythme du mois »: the gap so far also moves the days left
+    const projectedPace = forecast && isCurrent ? round1(Math.max(revenue, forecast.projectedAll.pace)) : null;
     const remainingDays = isCurrent ? daysInMonth - now.getDate() + 1 : 0;
+
+    const breakEven = await this.breakEven(
+      year,
+      month,
+      revenue,
+      elapsedDays,
+      daysInMonth,
+      remainingDays,
+      current?.avgTicket ?? previous.avgTicket,
+      projected,
+    );
+    // Net goal: the revenue it takes (goal + the month's expenses) paced by
+    // weekday, minus what was already spent
+    const netGoal = target?.netRevenue ?? null;
+    const netNow = current?.net ?? 0;
+    const spent = current?.expenses ?? 0;
+    const netBlock =
+      target && netGoal != null
+        ? (() => {
+            const needCa = netGoal + breakEven.total;
+            const expectedByNow = round1(needCa * elapsedFraction - spent);
+            const projectedNet = projected != null ? round1(projected - breakEven.total) : null;
+            const left = round1(Math.max(0, needCa - revenue));
+            return {
+              revenue: netGoal,
+              now: round1(netNow),
+              expensesExpected: breakEven.total,
+              progressPct: netGoal > 0 ? round1((netNow / netGoal) * 100) : null,
+              expectedByNow,
+              expectedPct: netGoal > 0 ? round1((expectedByNow / netGoal) * 100) : null,
+              gap: round1(netNow - expectedByNow),
+              projected: projectedNet,
+              projectedPct: projectedNet != null && netGoal > 0 ? round1((projectedNet / netGoal) * 100) : null,
+              /** Revenue still to collect to reach the net goal */
+              remaining: left,
+              neededPerDay: remainingDays > 0 ? round1(left / remainingDays) : null,
+            };
+          })()
+        : null;
 
     const targetBlock = target
       ? {
@@ -571,6 +617,7 @@ export class PerformanceService {
           projectedPct:
             projected != null ? round1((projected / target.revenue) * 100) : null,
           pacedByWeekday: weekdayShare != null,
+          net: netBlock,
         }
       : null;
 
@@ -600,17 +647,6 @@ export class PerformanceService {
           revenueRaw: isCurrent ? null : this.delta(current.revenue, previous.revenue),
         }
       : null;
-
-    const breakEven = await this.breakEven(
-      year,
-      month,
-      revenue,
-      elapsedDays,
-      daysInMonth,
-      remainingDays,
-      current?.avgTicket ?? previous.avgTicket,
-      projected,
-    );
 
     // Last 7 days vs the 7 before: same weekdays by construction (passes + café)
     const weekEnd = now;
@@ -666,6 +702,7 @@ export class PerformanceService {
       },
       deltas,
       projected,
+      projectedPace,
       projection: forecast && isCurrent
         ? {
             method: 'WEEKDAYS' as const,

@@ -2,123 +2,21 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/components/admin/advisor/advice-ui";
-import { dt, managerApi, type MoneyIdea, type MoneyPlan, type MoneySourceKind, type MoneyView } from "@/lib/api/manager";
-import { MONEY_KEY, QUESTIONS_KEY } from "./QuestionsTab";
+import { dt, managerApi, type MoneyIdea, type MoneyPlan, type MoneyView } from "@/lib/api/manager";
+import { MONEY_KEY, QUESTIONS_KEY } from "./MoneyQuestions";
+import { ArgentPanel } from "./ArgentPanel";
 
 const chip = "inline-block whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold";
 
-const SOURCE: Record<MoneySourceKind, { label: string; cls: string }> = {
-  APP: { label: "app", cls: "bg-muted text-muted-foreground" },
-  APP_UNCONFIRMED: { label: "app · non confirmé", cls: "bg-muted text-muted-foreground" },
-  ANSWER: { label: "votre réponse", cls: "bg-primary/10 text-primary" },
-  DEFAULT: { label: "par défaut · à confirmer", cls: "bg-muted text-muted-foreground" },
-  MISSING: { label: "manque", cls: "bg-rose-100 text-rose-700" },
-  UNKNOWN: { label: "à vérifier", cls: "bg-amber-100 text-amber-800" },
-  CALC: { label: "calcul", cls: "bg-emerald-100 text-emerald-700" },
-};
 
-function StatePill({ plan }: { plan: MoneyPlan }) {
-  const [text, cls] =
-    plan.state === "UNKNOWN"
-      ? [`Inconnu · il manque ${plan.missing.length} réponse${plan.missing.length > 1 ? "s" : ""}`, "bg-rose-100 text-rose-700"]
-      : plan.state === "PARTIAL"
-        ? ["Presque · impôts à vérifier", "bg-amber-100 text-amber-800"]
-        : ["Calculé", "bg-emerald-100 text-emerald-700"];
-  return <span className={cn("rounded-full px-2.5 py-1 text-xs font-semibold transition-colors duration-300", cls)}>{text}</span>;
-}
 
-function Verdict({ plan, onAnswer }: { plan: MoneyPlan; onAnswer: () => void }) {
-  const v = plan.verdict;
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg bg-muted px-4 py-3 text-sm">
-      <p className="min-w-0 flex-1">
-        {v.kind === "MISSING" ? (
-          <>
-            <b>Je ne peux pas encore répondre.</b> Il me manque : {plan.missing.join(", ")}.
-          </>
-        ) : v.kind === "NO" ? (
-          <>
-            <b>Ce mois, n&apos;investissez pas.</b> Il manque {dt(v.shortfall)} pour couvrir les factures et{" "}
-            {plan.reserveMonths} mois de réserve.
-          </>
-        ) : v.kind === "SMALL_TEST" ? (
-          <>
-            <b>Vous pouvez investir jusqu&apos;à {dt(v.invest)}.</b> Mais l&apos;espace a encaissé {dt(v.income)} en{" "}
-            {v.incomeLabel} pour {dt(v.costs)} de charges : commencez par un petit test qui ramène des clients.
-          </>
-        ) : (
-          <>
-            <b>Vous pouvez investir jusqu&apos;à {dt(v.invest)}.</b> Le reste couvre vos factures et {plan.reserveMonths}{" "}
-            mois de réserve.
-          </>
-        )}
-      </p>
-      {v.kind === "MISSING" ? (
-        <Button size="sm" onClick={onAnswer}>
-          Répondre (1 min)
-        </Button>
-      ) : null}
-    </div>
-  );
-}
 
-function Tile({ label, value, sub, main, tone }: { label: string; value: string; sub: string; main?: boolean; tone?: string }) {
-  return (
-    <div className={cn("rounded-xl border bg-card px-4 py-3", main && "border-primary bg-primary/5")}>
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("mt-0.5 text-2xl font-bold tabular-nums tracking-tight transition-colors duration-300", tone)}>{value}</div>
-      <div className="text-xs text-muted-foreground">{sub}</div>
-    </div>
-  );
-}
 
-function Breakdown({ plan }: { plan: MoneyPlan }) {
-  const max = Math.max(plan.liquid ?? 0, plan.keep ?? 0, 1);
-  return (
-    <div className="mt-2 flex flex-col">
-      {plan.lines.map((l) => {
-        const total = l.key === "invest";
-        const color = total ? "bg-emerald-500" : l.sign > 0 ? "bg-primary" : l.key === "reserve" ? "bg-amber-500" : "bg-rose-500";
-        const src = SOURCE[l.source.kind];
-        return (
-          <div
-            key={l.key}
-            className={cn(
-              "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 border-t py-2.5 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto]",
-              total && "border-t-2 border-foreground",
-            )}
-          >
-            <div className="min-w-0">
-              <div className={cn("text-sm", total ? "font-bold" : "font-medium")}>{l.label}</div>
-              <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                {l.detail ? <span>{l.detail}</span> : null}
-                <span className={cn(chip, src.cls)}>
-                  {src.label}
-                  {l.source.at ? ` ${l.source.at}` : ""}
-                </span>
-              </div>
-            </div>
-            <div className="order-3 col-span-2 h-2.5 overflow-hidden rounded-full bg-muted sm:order-none sm:col-span-1">
-              <div
-                className={cn("h-full rounded-full transition-[width] duration-500 ease-out", color)}
-                style={{ width: `${l.amount == null ? 0 : Math.min(100, (l.amount / max) * 100)}%` }}
-              />
-            </div>
-            <div className={cn("text-right text-sm tabular-nums", total ? "font-bold" : "font-semibold")}>
-              {l.amount == null ? "?" : `${l.sign < 0 && l.amount > 0 ? "− " : ""}${dt(l.amount)}`}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 function MonthsChart({ view }: { view: MoneyView }) {
   const costs = view.plan.monthlyCosts ?? 0;
@@ -174,18 +72,10 @@ const FIT: Record<MoneyIdea["fit"], { label: string; cls: string }> = {
   OVER_BUDGET: { label: "au-dessus du budget", cls: "bg-amber-100 text-amber-800" },
 };
 
-export function MoneyTab({ onAnswer, onStartTest }: { onAnswer: () => void; onStartTest: (idea: MoneyIdea) => void }) {
+export function MoneyTab({ onAnswer, onStartTest, onGoTab }: { onAnswer: () => void; onStartTest: (idea: MoneyIdea) => void; onGoTab?: (tab: string) => void }) {
   const qc = useQueryClient();
   const data = useQuery({ queryKey: MONEY_KEY, queryFn: managerApi.money });
 
-  const reserve = useMutation({
-    mutationFn: (months: number) => managerApi.answer("reserve", { value: months, label: `${months} mois` }),
-    onSuccess: (res) => {
-      qc.setQueryData(QUESTIONS_KEY, res);
-      qc.invalidateQueries({ queryKey: MONEY_KEY });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
   const stage = useMutation({
     mutationFn: ({ key, stage }: { key: string; stage: "APPROVED" | "TICKET_READY" | "DEFERRED" }) =>
       managerApi.setFeatureStage(key, stage),
@@ -209,64 +99,12 @@ export function MoneyTab({ onAnswer, onStartTest }: { onAnswer: () => void; onSt
   if (!data.data) return <p className="text-sm text-destructive">Calcul indisponible : {data.error?.message}</p>;
   const view = data.data;
   const { plan } = view;
-  const unknown = plan.state === "UNKNOWN";
 
   return (
-    <div className="advisor-in grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+    <div className="advisor-in flex flex-col gap-5">
+      <ArgentPanel plan={plan} onGoTab={onGoTab} />
+    <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
       <div className="flex min-w-0 flex-col gap-4">
-        <Card className="shadow-none">
-          <CardContent className="p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-base font-semibold">Combien garder, combien investir</h2>
-              <StatePill plan={plan} />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Tile label="Argent disponible" value={plan.liquid == null ? "?" : dt(plan.liquid)} sub="caisse + coffre + banque" />
-              <Tile label="À garder" value={plan.keep == null ? "?" : dt(plan.keep)} sub="factures + impôts + réserve" />
-              <Tile
-                main
-                label="Vous pouvez investir"
-                value={plan.invest == null ? "?" : dt(plan.invest)}
-                sub={unknown ? "pas assez de données" : plan.state === "PARTIAL" ? "sans les impôts, à confirmer" : "après tout ce qu'il faut garder"}
-                tone={plan.invest == null ? "text-muted-foreground" : plan.invest > 0 ? "text-emerald-700" : "text-rose-700"}
-              />
-            </div>
-            <Verdict plan={plan} onAnswer={onAnswer} />
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-none">
-          <CardContent className="p-5">
-            <h2 className="text-base font-semibold">Le calcul, ligne par ligne</h2>
-            <p className="text-sm text-muted-foreground">Fait par l&apos;app, pas par l&apos;IA. Chaque chiffre dit d&apos;où il vient.</p>
-            <Breakdown plan={plan} />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm text-muted-foreground">Réserve de sécurité</span>
-              <div className="flex items-center gap-2">
-                {reserve.isPending ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
-                <div role="radiogroup" aria-label="Réserve de sécurité" className="inline-flex overflow-hidden rounded-lg border text-sm">
-                  {[1, 2, 3].map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      role="radio"
-                      aria-checked={plan.reserveMonths === m}
-                      disabled={reserve.isPending}
-                      onClick={() => reserve.mutate(m)}
-                      className={cn(
-                        "px-3 py-1.5 transition-colors duration-200 [&+&]:border-l",
-                        plan.reserveMonths === m ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
-                      )}
-                    >
-                      {m} mois
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card className="shadow-none">
           <CardContent className="p-5">
             <h2 className="text-base font-semibold">Idées d&apos;investissement</h2>
@@ -393,6 +231,7 @@ export function MoneyTab({ onAnswer, onStartTest }: { onAnswer: () => void; onSt
           </Card>
         ))}
       </div>
+    </div>
     </div>
   );
 }

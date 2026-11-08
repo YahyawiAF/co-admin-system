@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { cn } from "@/lib/utils";
+import { useConseilDraft } from "@/lib/hooks/use-conseil-draft";
 import { pricesApi, productsApi, promotionsApi } from "@/lib/api/resources";
 import { PromoGoldenCard } from "@/components/visitor/PromoGoldenCard";
 import { PriceCategory, type Promotion, type PromotionInput, type PromotionTarget } from "@/lib/types";
@@ -455,10 +456,15 @@ function PromotionDialog({
   editing,
   open,
   onClose,
+  initial,
+  onCreated,
 }: {
   editing: Promotion | null;
   open: boolean;
   onClose: () => void;
+  /** Pre-filled by Conseil IA (« Préparer la promo ») */
+  initial?: Partial<Form> | null;
+  onCreated?: (id: string) => void;
 }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<Form>(blank);
@@ -466,7 +472,7 @@ function PromotionDialog({
   const [search, setSearch] = useState("");
   useEffect(() => {
     if (!open) return;
-    setForm(editing ? fromPromo(editing) : blank());
+    setForm(editing ? fromPromo(editing) : { ...blank(), ...(initial ?? {}) });
     setStep("type");
     setSearch("");
   }, [open, editing]);
@@ -475,10 +481,11 @@ function PromotionDialog({
   const save = useMutation({
     mutationFn: () =>
       editing ? promotionsApi.update(editing.id, toInput(form)) : promotionsApi.create(toInput(form)),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success(editing ? "Offre mise à jour" : "Offre créée : elle apparaît dans l’app");
       qc.invalidateQueries({ queryKey: ["promotions"] });
       onClose();
+      if (!editing && saved?.id) onCreated?.(saved.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1509,6 +1516,31 @@ export default function PromotionsPage() {
   const filtered = useMemo(() => rows.filter((r) => inFilter(filter, r.key)).map((r) => r.p), [rows, filter]);
   const paged = usePaged(filtered, PER_PAGE, filter);
   const openNew = () => setDialog({ open: true, editing: null });
+  // Opened from Conseil IA: the AI's promo, ready to check and save
+  const conseil = useConseilDraft("PROMOTION");
+  const conseilForm = useMemo<Partial<Form> | null>(() => {
+    const d = conseil.draft as
+      | { title?: string; description?: string; valueKind?: Form["valueKind"]; value?: number; productIds?: string[]; daysOfWeek?: number[]; fromHour?: number; toHour?: number; startsAt?: string; endsAt?: string }
+      | null;
+    if (!d) return null;
+    return {
+      title: d.title ?? "",
+      description: d.description ?? "",
+      target: "PRODUCT",
+      productScope: d.productIds?.length ? "pick" : "all",
+      productIds: d.productIds ?? [],
+      valueKind: d.valueKind ?? "PERCENT",
+      value: d.value != null ? String(d.value) : "",
+      startsAt: d.startsAt ? toLocalInput(new Date(`${d.startsAt}T08:00:00`)) : toLocalInput(new Date()),
+      endsAt: d.endsAt ? toLocalInput(new Date(`${d.endsAt}T23:00:00`)) : "",
+      daysOfWeek: d.daysOfWeek ?? [],
+      fromHour: d.fromHour != null ? String(d.fromHour) : "",
+      toHour: d.toHour != null ? String(d.toHour) : "",
+    };
+  }, [conseil.draft]);
+  useEffect(() => {
+    if (conseilForm) setDialog({ open: true, editing: null });
+  }, [conseilForm]);
 
   return (
     <div className="space-y-5">
@@ -1622,7 +1654,12 @@ export default function PromotionsPage() {
       <PromotionDialog
         open={dialog.open}
         editing={dialog.editing}
-        onClose={() => setDialog({ open: false, editing: null })}
+        initial={dialog.editing ? null : conseilForm}
+        onCreated={conseil.active ? (id) => void conseil.linked(id) : undefined}
+        onClose={() => {
+          setDialog({ open: false, editing: null });
+          if (conseil.active) conseil.dismiss();
+        }}
       />
     </div>
   );

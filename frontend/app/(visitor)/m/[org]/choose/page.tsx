@@ -38,7 +38,7 @@ import { PromoPrice } from "@/components/visitor/PromoPrice";
 import { QuestBanner, QuestLabel } from "@/components/visitor/quest/QuestSheet";
 import { QuestOption } from "@/components/visitor/quest/QuestOption";
 import { useTarifPromos } from "@/components/visitor/PassPickerSheet";
-import { GiftAnswerLine, GiftOfferPanel } from "@/components/visitor/quest/GiftOffer";
+import { GiftAnswerLine, GiftIncludedLine, GiftOfferPanel } from "@/components/visitor/quest/GiftOffer";
 import { acceptedBundleIds, bestDeal, dealTag, giftTag } from "@/lib/tarif-promos";
 import { usePlayer } from "@/lib/hooks/use-player";
 import { dtToPoints } from "@/lib/points-catalog";
@@ -806,7 +806,8 @@ function ChooseInner() {
               {listed.map((o, i) => {
                 const priced = priceFor(o);
                 const tp = promosOf(o.id);
-                const giftPromo = !isSub ? (tp.bundles[0] ?? null) : null;
+                // Abonnement: the gift comes with it at each visit (no question)
+                const giftPromo = tp.bundles[0] ?? null;
                 const dealPromo = bestDeal(tp.deals, o.price)?.promo ?? null;
                 const answer = giftPromo ? giftAnswers[giftPromo.id] : undefined;
                 const pts = dtToPoints(priced.final);
@@ -822,7 +823,7 @@ function ChooseInner() {
                       disabled={create.isPending}
                       onClick={() => {
                         setSelectedId(o.id);
-                        setGiftOpenFor(giftPromo && answer === undefined ? o.id : null);
+                        setGiftOpenFor(giftPromo && !isSub && answer === undefined ? o.id : null);
                       }}
                       icon={
                         isSub ? (
@@ -853,7 +854,9 @@ function ChooseInner() {
                         dealPromo ? dealTag(dealPromo) : priced.hasPromo ? "Promo" : null
                       }
                     />
-                    {giftPromo && giftOpenFor === o.id ? (
+                    {giftPromo && isSub ? (
+                      <GiftIncludedLine promo={giftPromo} />
+                    ) : giftPromo && giftOpenFor === o.id ? (
                       <GiftOfferPanel
                         promo={giftPromo}
                         answer={answer}
