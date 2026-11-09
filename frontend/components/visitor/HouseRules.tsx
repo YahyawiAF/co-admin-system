@@ -105,9 +105,15 @@ type Ctx = {
   beforeForfait: (then: () => void) => void;
   /** Rules on screen: other popups wait. */
   showing: boolean;
+  /** The rules have been checked (loaded or failed): popups that come after may show. */
+  settled: boolean;
 };
 
-const HouseRulesContext = createContext<Ctx>({ beforeForfait: (then) => then(), showing: false });
+const HouseRulesContext = createContext<Ctx>({
+  beforeForfait: (then) => then(),
+  showing: false,
+  settled: true,
+});
 
 export function useHouseRules() {
   return useContext(HouseRulesContext);
@@ -120,7 +126,7 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const afterAccept = useRef<(() => void) | null>(null);
 
-  const { data } = useQuery({
+  const { data, isFetched } = useQuery({
     queryKey: ["house-rules", memberId],
     queryFn: () => mobileApi.houseRules(memberId!),
     enabled: !!memberId && onboarded,
@@ -205,7 +211,7 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   const dismissible = moment === "forfait";
 
   return (
-    <HouseRulesContext.Provider value={{ beforeForfait, showing: !!moment && !!data }}>
+    <HouseRulesContext.Provider value={{ beforeForfait, showing: !!moment && !!data, settled: isFetched }}>
       {children}
       <QuestSheet
         open={!!moment && !!data}
