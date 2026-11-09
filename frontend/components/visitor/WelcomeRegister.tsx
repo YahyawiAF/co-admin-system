@@ -25,6 +25,7 @@ import {
 } from "@/lib/visitor-qr-checkin";
 import type { Member } from "@/lib/types";
 import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
+import { markHouseRulesAfterSignup } from "@/components/visitor/HouseRules";
 
 function splitFullName(full: string): { firstName: string; lastName: string } {
   const parts = full.trim().split(/\s+/).filter(Boolean);
@@ -56,6 +57,7 @@ export function WelcomeRegister() {
     accessToken?: string,
     isNew = false,
   ) => {
+    if (isNew) markHouseRulesAfterSignup(member.id);
     confirm(member, accessToken);
     if (isNew) markInstallNudgePending(slug, member.id);
     // QR scan = pointage: start AUTO session right after first login / signup

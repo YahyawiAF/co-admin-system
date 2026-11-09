@@ -21,6 +21,7 @@ import { useApplyVisitorTheme } from "@/lib/visitor-theme";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
+import { HouseRulesProvider, useHouseRules } from "@/components/visitor/HouseRules";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 import { CommunityNotePopup } from "@/components/visitor/CommunityNotePopup";
 import { VisitorSpotlight, useUnseenEventCount } from "@/components/visitor/VisitorSpotlight";
@@ -92,6 +93,15 @@ function isGuestAllowed(rest: string) {
 }
 
 export function MobileShell({ children }: { children: ReactNode }) {
+  return (
+    <HouseRulesProvider>
+      <MobileShellInner>{children}</MobileShellInner>
+    </HouseRulesProvider>
+  );
+}
+
+function MobileShellInner({ children }: { children: ReactNode }) {
+  const { showing: rulesShowing } = useHouseRules();
   const params = useParams<{ org: string }>();
   const orgSlug = params.org;
   const pathname = usePathname();
@@ -216,8 +226,8 @@ export function MobileShell({ children }: { children: ReactNode }) {
           {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       )}
-      {showSpotlight ? <VisitorSpotlight /> : null}
-      {showCommunityNudge ? <CommunityNotePopup /> : null}
+      {showSpotlight && !rulesShowing ? <VisitorSpotlight /> : null}
+      {showCommunityNudge && !rulesShowing ? <CommunityNotePopup /> : null}
       <nav
         aria-hidden={keyboardOpen}
         className={cn(

@@ -22,6 +22,9 @@ import type {
   MemberOffer,
   MemberProfileType,
   OnboardingStatus,
+  HouseRulesSettings,
+  HouseRulesReaders,
+  MemberHouseRules,
 } from "@/lib/types";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
@@ -593,6 +596,22 @@ export const analyticsApi = {
     return http.get<DayTrafficResponse>(
       withOrgQuery(`/analytics/traffic/day?${q.toString()}`),
     );
+  },
+  houseRules(facilityId?: string) {
+    const q = facilityId ? `?facilityId=${facilityId}` : "";
+    return http.get<HouseRulesSettings>(`/analytics/house-rules${q}`);
+  },
+  updateHouseRules(
+    facilityId: string | undefined,
+    data: Partial<Omit<HouseRulesSettings, "facilityId" | "version">>,
+  ) {
+    const q = facilityId ? `?facilityId=${facilityId}` : "";
+    return http.patch<HouseRulesSettings>(`/analytics/house-rules${q}`, data);
+  },
+  houseRulesReaders(opts: { page: number; filter: "all" | "read" | "unread"; facilityId?: string }) {
+    const q = new URLSearchParams({ page: String(opts.page), filter: opts.filter });
+    if (opts.facilityId) q.set("facilityId", opts.facilityId);
+    return http.get<HouseRulesReaders>(`/analytics/house-rules/readers?${q.toString()}`);
   },
   performanceSettings(facilityId?: string) {
     const q = facilityId ? `?facilityId=${facilityId}` : "";
@@ -2032,6 +2051,18 @@ export const mobileApi = {
     return http.post<BookingRequest>("/mobile/booking-request", data, {
       skipAuth: true,
     });
+  },
+  houseRules(memberId: string) {
+    return http.get<MemberHouseRules>(`/mobile/house-rules/${memberId}`, {
+      skipAuth: true,
+    });
+  },
+  acceptHouseRules(memberId: string, version: number) {
+    return http.post<{ acceptedAt: string; acceptedVersion: number }>(
+      `/mobile/house-rules/${memberId}/accept`,
+      { version },
+      { skipAuth: true },
+    );
   },
   reviewPrompt(memberId: string) {
     return http.get<{ show: boolean; url: string | null; visits: number }>(

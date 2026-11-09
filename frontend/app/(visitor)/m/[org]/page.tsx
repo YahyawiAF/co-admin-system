@@ -57,11 +57,13 @@ import {
 } from "@/lib/visitor-qr-checkin";
 import { isStandalonePwa } from "@/lib/visitor-notify";
 import { BookingFeeNotice } from "@/components/visitor/BookingFeeNotice";
+import { useHouseRules } from "@/components/visitor/HouseRules";
 
 export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
+  const { beforeForfait } = useHouseRules();
   const { player } = usePlayer(memberId);
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
@@ -161,9 +163,12 @@ export default function MobileHomePage() {
       if (status.session) router.push(href("/session"));
       return;
     }
-    // the session screen opens the tarif modal right away (auto stays the default)
-    markTarifPrompt(slug);
-    startAuto.mutate();
+    // Rules first when the admin asks for them before a forfait; then the
+    // session screen opens the tarif modal right away (auto stays the default).
+    beforeForfait(() => {
+      markTarifPrompt(slug);
+      startAuto.mutate();
+    });
   };
 
   /**

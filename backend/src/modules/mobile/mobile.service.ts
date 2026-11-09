@@ -83,6 +83,7 @@ import {
 } from './visit-paid-points';
 import { claimReferral, referralSummary } from './referral';
 import { markReview, reviewPrompt } from './review-prompt';
+import { acceptHouseRules, houseRulesForMember } from './house-rules';
 import {
   assertPriceCanOccupy,
   linkedSpaceIds,
@@ -6384,6 +6385,14 @@ export class MobileService {
 
   markReview(memberId: string, action: 'click' | 'dismiss') {
     return markReview(this.prisma, memberId, action);
+  }
+
+  houseRules(memberId: string) {
+    return houseRulesForMember(this.prisma, memberId);
+  }
+
+  acceptHouseRules(memberId: string, version: number) {
+    return acceptHouseRules(this.prisma, memberId, version);
   }
 
   referral(memberId: string) {
