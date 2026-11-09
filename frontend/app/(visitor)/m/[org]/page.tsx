@@ -25,6 +25,7 @@ import { ReviewPromptCard } from "@/components/visitor/ReviewPromptCard";
 import { WifiCredentialsModal } from "@/components/visitor/WifiCredentialsModal";
 import { InstallAppButton } from "@/components/visitor/InstallAppButton";
 import { PlayerCard } from "@/components/visitor/PlayerCard";
+import { FirstStepsCard } from "@/components/visitor/AppGuide";
 import {
   BoostsRow,
   ReserveLaterCard,
@@ -434,6 +435,8 @@ export default function MobileHomePage() {
           onStart={startSession}
         />
       ) : null}
+
+      {idle && memberId ? <FirstStepsCard memberId={memberId} /> : null}
 
       {/* "À l’affiche": right under the check-in card, visible without scrolling */}
       {idle ? <EventSpotlight /> : null}

@@ -106,9 +106,15 @@ type Ctx = {
   beforeForfait: (then: () => void) => void;
   /** Rules on screen: other popups wait. */
   showing: boolean;
+  /** The rules have been checked (loaded or failed): popups that come after may show. */
+  settled: boolean;
 };
 
-const HouseRulesContext = createContext<Ctx>({ beforeForfait: (then) => then(), showing: false });
+const HouseRulesContext = createContext<Ctx>({
+  beforeForfait: (then) => then(),
+  showing: false,
+  settled: true,
+});
 
 export function useHouseRules() {
   return useContext(HouseRulesContext);
@@ -121,7 +127,7 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const afterAccept = useRef<(() => void) | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetched } = useQuery({
     queryKey: ["house-rules", memberId],
     queryFn: () => mobileApi.houseRules(memberId!),
     enabled: !!memberId && onboarded,
@@ -200,7 +206,7 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   const blocked = showing || (isLoading && !!memberId && onboarded);
 
   return (
-    <HouseRulesContext.Provider value={{ beforeForfait, showing }}>
+    <HouseRulesContext.Provider value={{ beforeForfait, showing, settled: isFetched }}>
       <ModalGateContext.Provider value={{ blocked }}>{children}</ModalGateContext.Provider>
       {/* The only way out is « J'ai lu » + « C'est compris ». */}
       <QuestSheet
