@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { Flame, Lock, Pencil, QrCode } from "lucide-react";
-import { LevelAvatar } from "@/components/visitor/PlayerCard";
+import { LevelAvatar, LevelLine } from "@/components/visitor/PlayerCard";
+import { levelLook } from "@/lib/level-look";
+import { cn } from "@/lib/utils";
 import { MemberQrSheet } from "@/components/visitor/MemberQrSheet";
-import { levelProgress, usePlayer } from "@/lib/hooks/use-player";
+import { usePlayer } from "@/lib/hooks/use-player";
 import { pointsToDt } from "@/lib/points-catalog";
 
-const LEVEL_IDS = ["nouveau", "habitue", "pilier", "legende"];
 const TILE = "rounded-[20px] bg-white px-3 py-2.5 shadow-sm ring-1 ring-slate-900/5";
 
 /** Profile header as a player card + "Mon QR" + the three stats. */
@@ -26,12 +27,11 @@ export function ProfileHero({
 }) {
   const [qrOpen, setQrOpen] = useState(false);
   const { player } = usePlayer(memberId);
-  const lp = levelProgress(player);
-  const levelIdx = Math.max(0, LEVEL_IDS.indexOf(player?.level?.id ?? "nouveau"));
+  const levelNumber = player?.level?.number ?? 1;
 
   return (
     <div className="space-y-2.5">
-      <section className="v-rise relative overflow-hidden rounded-3xl bg-[radial-gradient(120%_140%_at_100%_0%,rgb(var(--indigo-700))_0%,transparent_55%),linear-gradient(110deg,#0f172a_0%,rgb(var(--indigo-950))_100%)] p-3.5 text-white shadow-sm">
+      <section className={cn("lvl-card v-rise relative overflow-hidden rounded-3xl p-3.5 text-white shadow-sm", `lvl-${levelLook(levelNumber)}`)}>
         <div className="flex items-center gap-3.5">
           <button
             type="button"
@@ -40,7 +40,7 @@ export function ProfileHero({
             aria-label="Modifier mon profil"
             className="relative shrink-0 rounded-full disabled:cursor-default"
           >
-            <LevelAvatar name={name} src={avatarUrl} pct={lp.pct} level={levelIdx + 1} size={80} />
+            <LevelAvatar name={name} src={avatarUrl} level={levelNumber} size={80} />
             {onEdit ? (
               <span className="absolute -left-0.5 bottom-0 flex h-6 w-6 items-center justify-center rounded-full bg-white text-indigo-700 shadow">
                 <Pencil className="h-3 w-3" />
@@ -50,26 +50,18 @@ export function ProfileHero({
           <div className="min-w-0 flex-1">
             <p className="truncate text-xl font-black leading-tight">{name}</p>
             {subtitle ? (
-              <p className="truncate text-xs text-indigo-100">{subtitle}</p>
+              <p className="truncate text-xs text-white/75">{subtitle}</p>
             ) : null}
             {player ? (
               <>
-                <p className="mt-1 text-xs text-indigo-100">
-                  Niveau <strong className="text-amber-200">{player.level.name}</strong>
-                  {player.level.next ? ` → ${player.level.next.name}` : " · niveau max"}
+                <p className="mt-1 inline-flex max-w-full items-center truncate rounded-full bg-white/15 px-2 py-0.5 text-[11.5px] font-extrabold">
+                  <LevelLine level={levelNumber} />
                 </p>
                 {player.level.next ? (
-                  <>
-                    <span className="mt-1.5 block h-2 overflow-hidden rounded-full bg-white/20">
-                      <span
-                        className="v-bar-grow block h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-500"
-                        style={{ width: `${lp.pct}%` }}
-                      />
-                    </span>
-                    <p className="mt-1 text-[11px] text-indigo-100">
-                      {player.level.sessions}/{player.level.next.target} sessions
-                    </p>
-                  </>
+                  <p className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-white/80">
+                    <span className="rounded-md bg-white/15 px-1.5 py-px font-extrabold">+1</span>
+                    session payée → niveau {player.level.next.name}
+                  </p>
                 ) : null}
               </>
             ) : null}

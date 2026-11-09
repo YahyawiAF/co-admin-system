@@ -22,7 +22,7 @@ export type VisitorThemeId =
 
 /** What a locked theme needs (checked against the member's points snapshot). */
 export type ThemeLock =
-  | { kind: "level"; level: "habitue" | "pilier" | "legende"; label: string }
+  | { kind: "level"; minLevel: number; label: string }
   | { kind: "trophy"; trophyId: string; label: string };
 
 export type VisitorTheme = {
@@ -59,7 +59,7 @@ export const VISITOR_THEMES: VisitorTheme[] = [
     primary: ORANGE,
     secondary: ROSE,
     bg: "#fff7f2",
-    lock: { kind: "level", level: "habitue", label: "Niveau Habitué (10 sessions)" },
+    lock: { kind: "level", minLevel: 11, label: "Niveau 11 (10 sessions payées)" },
   },
   {
     id: "sakura",
@@ -75,21 +75,19 @@ export const VISITOR_THEMES: VisitorTheme[] = [
     primary: VIOLET,
     secondary: FUCHSIA,
     bg: "#f6f3ff",
-    lock: { kind: "level", level: "pilier", label: "Niveau Pilier (50 sessions)" },
+    lock: { kind: "level", minLevel: 51, label: "Niveau 51 (50 sessions payées)" },
   },
 ];
 
-const LEVEL_ORDER = ["nouveau", "habitue", "pilier", "legende"];
-
 export function isThemeUnlocked(
   theme: VisitorTheme,
-  player?: { level?: { id: string } | null; trophies?: { id: string; unlocked: boolean }[] } | null
+  player?: { level?: { number?: number } | null; trophies?: { id: string; unlocked: boolean }[] } | null
 ) {
   const lock = theme.lock;
   if (!lock) return true;
   if (!player) return false;
   if (lock.kind === "level") {
-    return LEVEL_ORDER.indexOf(player.level?.id ?? "nouveau") >= LEVEL_ORDER.indexOf(lock.level);
+    return (player.level?.number ?? 1) >= lock.minLevel;
   }
   return !!player.trophies?.some((t) => t.id === lock.trophyId && t.unlocked);
 }

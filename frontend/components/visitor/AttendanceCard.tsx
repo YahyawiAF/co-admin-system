@@ -95,7 +95,7 @@ export function AttendanceCard({
           </p>
           <p className="flex items-center gap-1 text-[11px] text-slate-500">
             <Medal className="h-3 w-3 text-indigo-500" />
-            Niveau {level.name} · {level.sessions} sessions
+            Niveau {level.name} · {level.sessions} session{level.sessions > 1 ? "s" : ""} payée{level.sessions > 1 ? "s" : ""}
           </p>
         </div>
         <button
@@ -109,18 +109,9 @@ export function AttendanceCard({
       </div>
 
       {level.next ? (
-        <div className="mt-2 flex items-center gap-2">
-          <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-200">
-            <span
-              className="block h-full rounded-full bg-indigo-600 transition-all duration-500"
-              style={{ width: `${level.next.progress}%` }}
-            />
-          </span>
-          <span className="text-[10px] text-slate-500">
-            {level.name} → {level.next.name} · {level.sessions}/
-            {level.next.target}
-          </span>
-        </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Prochaine session payée → niveau {level.next.name}
+        </p>
       ) : null}
 
       <div className="mt-2.5 flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2">

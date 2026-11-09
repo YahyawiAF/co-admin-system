@@ -24,13 +24,13 @@ export function usePlayer(memberId: string | null | undefined) {
   return { ...query, player: query.data ?? null, isPwa };
 }
 
-/** "6/10 vers Habitué" progress of the attendance level (0–100). */
+/** Next level = the next session paid and closed. */
 export function levelProgress(player: MemberPointsSnapshot | null) {
   const next = player?.level?.next;
-  if (!player || !next) return { pct: 100, label: player?.level?.name ?? "" };
+  if (!player || !next) return { pct: 100, label: "" };
   return {
     pct: Math.max(0, Math.min(100, next.progress)),
-    label: `${player.level.sessions}/${next.target} vers ${next.name}`,
+    label: `1 session payée → niveau ${next.name}`,
   };
 }
 

@@ -28,6 +28,7 @@ import type {
   SeatAssignmentInfo,
 } from "@/lib/types";
 import { PromoPrice } from "@/components/visitor/PromoPrice";
+import { LevelSteps } from "@/components/visitor/LevelSteps";
 import { useOrg } from "@/lib/org";
 import { usePricingContext } from "@/lib/hooks/use-pricing-context";
 import {
@@ -807,6 +808,10 @@ export function ActiveSessionPanel({
           </p>
         ) : null}
       </section>
+
+      {!isOptimistic ? (
+        <LevelSteps memberId={memberId} paid={covered || !!session.isPayed} />
+      ) : null}
 
       {canChangeTariff && live?.mode === "FIXED" ? (
         <TierLevelUp

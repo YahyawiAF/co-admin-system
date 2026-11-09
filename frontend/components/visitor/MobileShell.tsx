@@ -21,8 +21,10 @@ import { useApplyVisitorTheme } from "@/lib/visitor-theme";
 import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
-import { HouseRulesProvider, useHouseRules } from "@/components/visitor/HouseRules";
+import { HouseRulesProvider } from "@/components/visitor/HouseRules";
 import { AppGuideProvider, useAppGuide } from "@/components/visitor/AppGuide";
+import { LevelUpWatcher } from "@/components/visitor/LevelUp";
+import { useModalGate } from "@/lib/modal-gate";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
 import { CommunityNotePopup } from "@/components/visitor/CommunityNotePopup";
 import { VisitorSpotlight, useUnseenEventCount } from "@/components/visitor/VisitorSpotlight";
@@ -104,7 +106,7 @@ export function MobileShell({ children }: { children: ReactNode }) {
 }
 
 function MobileShellInner({ children }: { children: ReactNode }) {
-  const { showing: rulesShowing } = useHouseRules();
+  const rulesShowing = useModalGate();
   const { showing: guideShowing } = useAppGuide();
   const popupsWait = rulesShowing || guideShowing;
   const params = useParams<{ org: string }>();
@@ -233,6 +235,7 @@ function MobileShellInner({ children }: { children: ReactNode }) {
       )}
       {showSpotlight && !popupsWait ? <VisitorSpotlight /> : null}
       {showCommunityNudge && !popupsWait ? <CommunityNotePopup /> : null}
+      {onboarded && !guideShowing ? <LevelUpWatcher /> : null}
       <nav
         aria-hidden={keyboardOpen}
         className={cn(

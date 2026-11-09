@@ -6,8 +6,20 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useModalGate } from "@/lib/modal-gate"
 
-const Sheet = SheetPrimitive.Root
+function Sheet({
+  open,
+  ignoreGate,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root> & {
+  /** Opens even while the space rules are on screen (the rules sheet itself). */
+  ignoreGate?: boolean
+}) {
+  const blocked = useModalGate() && !ignoreGate
+  // Only popups the app opens by itself (controlled) wait; a tapped trigger can't be reached anyway.
+  return <SheetPrimitive.Root open={open === undefined ? open : open && !blocked} {...props} />
+}
 
 const SheetTrigger = SheetPrimitive.Trigger
 

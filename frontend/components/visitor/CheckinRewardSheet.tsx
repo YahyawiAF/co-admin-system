@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { Bangers } from "next/font/google";
 import { Check, Clock, Crown, Flame } from "lucide-react";
 import { QuestSheet } from "@/components/visitor/quest/QuestSheet";
-import { levelProgress, usePlayer } from "@/lib/hooks/use-player";
+import { usePlayer } from "@/lib/hooks/use-player";
 import { cn } from "@/lib/utils";
 
 const manga = Bangers({ weight: "400", subsets: ["latin"], display: "swap" });
@@ -156,7 +156,6 @@ export function CheckinRewardSheet({
   covered?: boolean;
 }) {
   const { player } = usePlayer(memberId);
-  const lp = levelProgress(player);
   const [held, setHeld] = useState(false);
   const closeRef = useRef(onOpenChange);
   closeRef.current = onOpenChange;
@@ -203,18 +202,15 @@ export function CheckinRewardSheet({
       }
       chip={
         player?.level.next
-          ? { label: `Vers ${player.level.next.name}`, value: `${player.level.sessions}/${player.level.next.target}` }
+          ? { label: "Niveau", value: `${player.level.name} → ${player.level.next.name}` }
           : player
             ? { label: "Niveau", value: player.level.name }
             : null
       }
       banner={
         player?.level.next ? (
-          <span className="mt-3 block h-2 overflow-hidden rounded-full bg-white/20">
-            <span
-              className="v-bar-grow block h-full rounded-full bg-gradient-to-r from-amber-300 to-amber-500 [animation-delay:.8s]"
-              style={{ width: `${lp.pct}%` }}
-            />
+          <span className="mt-3 block text-[12px] font-semibold text-white/85">
+            Payez et terminez cette session → niveau {player.level.next.name}
           </span>
         ) : null
       }

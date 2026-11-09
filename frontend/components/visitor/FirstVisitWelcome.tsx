@@ -1,10 +1,11 @@
 "use client";
 
+import { useModalGate } from "@/lib/modal-gate";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bangers } from "next/font/google";
 import { Star } from "lucide-react";
-import { levelProgress, usePlayer } from "@/lib/hooks/use-player";
+import { usePlayer } from "@/lib/hooks/use-player";
 import { cn } from "@/lib/utils";
 
 const manga = Bangers({ weight: "400", subsets: ["latin"], display: "swap" });
@@ -33,7 +34,7 @@ const LEAVE_MS = 220;
  * Takes the place of the usual check-in reward that one time.
  */
 export function FirstVisitWelcome({
-  open,
+  open: openProp,
   onOpenChange,
   memberId,
   firstName,
@@ -51,8 +52,9 @@ export function FirstVisitWelcome({
   wifiSsid?: string | null;
   tarifLine: string;
 }) {
+  // Waits while the space rules are on screen.
+  const open = openProp && !useModalGate();
   const { player } = usePlayer(memberId);
-  const lp = levelProgress(player);
   const nextName = player?.level?.next?.name;
   const [mounted, setMounted] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -150,17 +152,17 @@ export function FirstVisitWelcome({
 
         <div className="v-rise relative mt-5 w-full [animation-delay:1.5s]">
           <div className="flex justify-between text-xs font-semibold text-indigo-200">
-            <span>{player?.level?.name || "Nouveau"}</span>
-            <span>{nextName || "Niveau 2"}</span>
+            <span>Niveau {player?.level?.name || "1"}</span>
+            <span>Niveau {nextName || "2"}</span>
           </div>
           <div className="mt-1.5 h-2.5 overflow-hidden rounded-full bg-white/15">
             <div
               className="v-bar-grow h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-200 [animation-delay:1.9s]"
-              style={{ width: `${Math.max(6, player ? lp.pct : 10)}%` }}
+              style={{ width: "6%" }}
             />
           </div>
           {player?.level?.next ? (
-            <p className="mt-1 text-right text-[11px] text-indigo-200">{lp.label}</p>
+            <p className="mt-1 text-right text-[11px] text-indigo-200">Payez et terminez cette session → niveau {nextName}</p>
           ) : null}
         </div>
 
