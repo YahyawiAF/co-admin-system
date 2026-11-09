@@ -130,31 +130,26 @@ export const TROPHY_CATALOG: TrophyDef[] = [
   },
 ];
 
-/** Attendance levels — private by default (Member.shareAttendance opts in) */
-export type LevelDef = { id: string; name: string; min: number };
+/**
+ * Levels — private by default (Member.shareAttendance opts in).
+ * One level per session that is paid AND closed: level = 1 + those sessions.
+ * Levels 1, 2, 3 each have their own look (`id` l1 / l2 / l3); from 4 on, « élite ».
+ */
+export const LEVELED_SESSION_WHERE = {
+  isReservation: false,
+  isPayed: true,
+  leaveTime: { not: null },
+} as const;
 
-export const LEVELS: LevelDef[] = [
-  { id: 'nouveau', name: 'Nouveau', min: 0 },
-  { id: 'habitue', name: 'Habitué', min: 10 },
-  { id: 'pilier', name: 'Pilier', min: 50 },
-  { id: 'legende', name: 'Légende', min: 150 },
-];
-
-export function levelForSessions(sessions: number) {
-  let current = LEVELS[0];
-  for (const l of LEVELS) if (sessions >= l.min) current = l;
-  const next = LEVELS[LEVELS.indexOf(current) + 1] ?? null;
+export function levelForSessions(paidSessions: number) {
+  const sessions = Math.max(0, Math.floor(paidSessions) || 0);
+  const number = sessions + 1;
   return {
-    id: current.id,
-    name: current.name,
+    id: number >= 4 ? 'elite' : `l${number}`,
+    number,
+    name: String(number),
     sessions,
-    next: next
-      ? {
-          name: next.name,
-          target: next.min,
-          progress: Math.min(100, Math.round((sessions / next.min) * 100)),
-        }
-      : null,
+    next: { name: String(number + 1), target: sessions + 1, progress: 0 },
   };
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useModalGate } from "@/lib/modal-gate";
 import { useEffect, useState, type CSSProperties } from "react";
 import { Gift, Trophy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,12 +29,14 @@ const PARTICLES = Array.from({ length: 14 }, (_, i) => {
  * Gift box opens → particle burst → gold trophy with mission points.
  */
 export function TrophyReveal({
-  open,
+  open: openProp,
   points = PROFILE_MISSION_TOTAL,
   title = "Profil complet",
   subtitle = "Mission réussie",
   onClose,
 }: Props) {
+  // Waits while the space rules are on screen.
+  const open = openProp && !useModalGate();
   const [phase, setPhase] = useState<Phase>("box");
 
   useEffect(() => {

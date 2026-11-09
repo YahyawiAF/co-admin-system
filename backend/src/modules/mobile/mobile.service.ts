@@ -62,6 +62,7 @@ import {
   POINT_AMOUNTS,
   TROPHY_CATALOG,
   levelForSessions,
+  LEVELED_SESSION_WHERE,
   nextTrophyThreshold,
   pointsToDt,
   redeemablePoints,
@@ -5189,7 +5190,9 @@ export class MobileService {
       ? {
           streak: await this.computeStreak(memberId),
           level: levelForSessions(
-            await this.prisma.journal.count({ where: { memberID: memberId } }),
+            await this.prisma.journal.count({
+              where: { memberID: memberId, ...LEVELED_SESSION_WHERE },
+            }),
           ),
           shared: member.shareAttendance,
         }
@@ -7282,7 +7285,7 @@ export class MobileService {
     await this.expirePendingPoints(memberId);
 
     const streak = await this.computeStreak(memberId);
-    const [pendingAgg, trophies, journalCount, cafeCount, checkoutCount] =
+    const [pendingAgg, trophies, journalCount, cafeCount, checkoutCount, paidClosedCount] =
       await Promise.all([
         this.prisma.memberPointEntry.aggregate({
           where: { memberId, status: PointEntryStatus.PENDING },
@@ -7301,6 +7304,9 @@ export class MobileService {
         }),
         this.prisma.journal.count({
           where: { memberID: memberId, leaveTime: { not: null } },
+        }),
+        this.prisma.journal.count({
+          where: { memberID: memberId, ...LEVELED_SESSION_WHERE },
         }),
       ]);
 
@@ -7328,7 +7334,7 @@ export class MobileService {
       },
       // Private by default — shown on the public profile only when opted in
       streak,
-      level: levelForSessions(journalCount),
+      level: levelForSessions(paidClosedCount),
       shareAttendance: member.shareAttendance,
     };
   }

@@ -147,7 +147,10 @@ export const TROPHY_CATALOG: TrophyDef[] = [
 
 /** Attendance level computed server-side from session count */
 export type MemberLevel = {
+  /** Look: l1 / l2 / l3, then « elite » from level 4 */
   id: string;
+  /** 1 + sessions paid and closed */
+  number: number;
   name: string;
   sessions: number;
   next: { name: string; target: number; progress: number } | null;

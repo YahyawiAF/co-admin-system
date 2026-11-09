@@ -18,6 +18,7 @@ import { mobileApi } from "@/lib/api/resources";
 import { useVisitorSession } from "@/lib/visitor-session";
 import type { HouseRule, MemberHouseRules } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { ModalGateContext } from "@/lib/modal-gate";
 
 /** Picture tiles: red crossed-out = not allowed, green check = to do. */
 export function HouseRuleTiles({ rules, animate = true }: { rules: HouseRule[]; animate?: boolean }) {
@@ -120,7 +121,7 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   const [checked, setChecked] = useState(false);
   const afterAccept = useRef<(() => void) | null>(null);
 
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["house-rules", memberId],
     queryFn: () => mobileApi.houseRules(memberId!),
     enabled: !!memberId && onboarded,
@@ -133,8 +134,9 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // After sign-up (always) or when the app opens (if the admin chose it).
-  useEffect(() => {
-    if (!data || !memberId || moment) return;
+  // Worked out during render so other popups wait from the very first frame.
+  let autoMoment: Moment | null = null;
+  if (data && memberId && data.rules.length) {
     let fromSignup = false;
     let openedThisVisit = false;
     try {
@@ -143,20 +145,12 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
     } catch {
       /* storage blocked */
     }
-    if (!data.rules.length) return;
-    if (fromSignup && data.acceptedVersion !== data.version) {
-      open("signup");
-      return;
-    }
-    if (fromSignup) {
-      try {
-        localStorage.removeItem(signupKey(memberId));
-      } catch {
-        /* ignore */
-      }
-    }
-    if (data.onOpen && !openedThisVisit && needsReading(data)) open("open");
-  }, [data, memberId, moment, open]);
+    if (fromSignup && data.acceptedVersion !== data.version) autoMoment = "signup";
+    else if (data.onOpen && !openedThisVisit && needsReading(data)) autoMoment = "open";
+  }
+  useEffect(() => {
+    if (autoMoment && !moment) open(autoMoment);
+  }, [autoMoment, moment, open]);
 
   const accept = useMutation({
     mutationFn: () => mobileApi.acceptHouseRules(memberId!, data!.version),
@@ -200,21 +194,21 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
     [data, open]
   );
 
-  const copy = COPY[moment ?? "signup"];
-  // Before a forfait the visitor may step back; after sign-up / on open they must read.
-  const dismissible = moment === "forfait";
+  const copy = COPY[moment ?? autoMoment ?? "signup"];
+  const showing = !!data && !!(moment || autoMoment);
+  // Other popups wait while the rules load or are on screen.
+  const blocked = showing || (isLoading && !!memberId && onboarded);
 
   return (
-    <HouseRulesContext.Provider value={{ beforeForfait, showing: !!moment && !!data }}>
-      {children}
+    <HouseRulesContext.Provider value={{ beforeForfait, showing }}>
+      <ModalGateContext.Provider value={{ blocked }}>{children}</ModalGateContext.Provider>
+      {/* The only way out is « J'ai lu » + « C'est compris ». */}
       <QuestSheet
         open={!!moment && !!data}
-        onOpenChange={(o) => {
-          if (o || !dismissible) return;
-          afterAccept.current = null;
-          setMoment(null);
-        }}
-        dismissible={dismissible}
+        onOpenChange={() => {}}
+        dismissible={false}
+        closable={false}
+        ignoreGate
         tone="rose"
         eyebrow="Règlement de l'espace"
         title={copy.title}
