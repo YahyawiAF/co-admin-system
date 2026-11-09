@@ -11,7 +11,7 @@ import {
   subDays,
 } from 'date-fns';
 import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
-import { levelForSessions } from '../mobile/points';
+import { LEVELED_SESSION_WHERE, levelForSessions } from '../mobile/points';
 import {
   addVisitToSeries,
   emptySeries,
@@ -1017,7 +1017,7 @@ export class AnalyticsService {
           by: ['memberID'],
           where: {
             memberID: { in: members.map((m) => m.id) },
-            isReservation: false,
+            ...LEVELED_SESSION_WHERE,
           },
           _count: { _all: true },
         })

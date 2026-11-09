@@ -1,5 +1,6 @@
 "use client";
 
+import { useModalGate } from "@/lib/modal-gate";
 import { useEffect, useState, type TouchEvent } from "react";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ export function InstallAppNudge() {
   const [safari, setSafari] = useState(true);
   const [browser, setBrowser] = useState<AndroidBrowser | null>(null);
   const [touchX, setTouchX] = useState<number | null>(null);
+  const gateBlocked = useModalGate();
 
   useEffect(() => {
     if (isStandalonePwa()) return;
@@ -76,7 +78,7 @@ export function InstallAppNudge() {
     }
   };
 
-  if (!open) return null;
+  if (!open || gateBlocked) return null;
 
   const steps = pickInstallSteps(ios, browser);
   const current = steps[step]!;

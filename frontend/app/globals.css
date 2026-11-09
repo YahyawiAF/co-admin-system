@@ -465,3 +465,50 @@
     animation: none;
   }
 }
+
+/* ---------- Levels: one look per level (lib/level-look.ts) ---------- */
+@property --lvl-a { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+.lvl-l1 {
+  --lvl-bg: linear-gradient(115deg, #1e293b, #334155);
+  --lvl-ring: conic-gradient(#d97706, #f59e0b, #d97706);
+  --lvl-badge: #f59e0b; --lvl-badge-fg: #451a03; --lvl-glow: #b45309;
+}
+.lvl-l2 {
+  --lvl-bg: linear-gradient(115deg, #064e3b, #0f766e 60%, #14b8a6);
+  --lvl-ring: conic-gradient(#e2e8f0, #94a3b8, #f8fafc, #e2e8f0);
+  --lvl-badge: #e2e8f0; --lvl-badge-fg: #0f172a; --lvl-glow: #0f766e;
+}
+.lvl-l3 {
+  --lvl-bg: radial-gradient(120% 140% at 100% 0%, #7c3aed 0%, transparent 55%), linear-gradient(115deg, #2e1065, #4c1d95);
+  --lvl-ring: conic-gradient(#fbbf24, #fde68a, #f59e0b, #fbbf24);
+  --lvl-badge: #fbbf24; --lvl-badge-fg: #422006; --lvl-glow: #7c3aed;
+}
+.lvl-elite {
+  --lvl-bg: radial-gradient(120% 120% at 0% 0%, #3f3f46 0%, transparent 50%), linear-gradient(115deg, #09090b, #18181b);
+  --lvl-ring: conic-gradient(from var(--lvl-a), #f59e0b, #fde68a, #b45309, #fde68a, #f59e0b);
+  --lvl-badge: linear-gradient(135deg, #fde68a, #f59e0b); --lvl-badge-fg: #1c1917; --lvl-glow: #b45309;
+}
+.lvl-card { background: var(--lvl-bg); transition: background 0.4s ease, box-shadow 0.4s ease; }
+.lvl-card.lvl-l3 { box-shadow: 0 10px 24px -12px rgba(124, 58, 237, 0.7); }
+.lvl-card.lvl-elite { box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.45), 0 12px 28px -12px rgba(251, 191, 36, 0.5); }
+.lvl-card.lvl-elite::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(253, 230, 138, 0.18) 50%, transparent 65%);
+  background-size: 250% 100%; animation: lvl-shine 3.2s ease-in-out infinite;
+}
+.lvl-ring { background: var(--lvl-ring); }
+.lvl-elite .lvl-ring { animation: lvl-spin 4s linear infinite; }
+.lvl-badge { background: var(--lvl-badge); color: var(--lvl-badge-fg); }
+.lvl-word { color: #fde68a; }
+.lvl-l2 .lvl-word { color: #e2e8f0; }
+.lvl-elite .lvl-word { background: linear-gradient(135deg, #fde68a, #f59e0b); -webkit-background-clip: text; background-clip: text; color: transparent; }
+@keyframes lvl-spin { to { --lvl-a: 360deg; } }
+@keyframes lvl-shine { 0% { background-position: 150% 0; } 100% { background-position: -50% 0; } }
+@keyframes lvl-pop { from { transform: scale(0.4); } to { transform: scale(1); } }
+@keyframes lvl-fall { 0% { opacity: 1; transform: translateY(0) rotate(0); } 100% { opacity: 0; transform: translateY(100dvh) rotate(540deg); } }
+.lvl-pop { animation: lvl-pop 0.6s cubic-bezier(0.2, 1.4, 0.3, 1) both 0.15s; }
+.lvl-confetti { animation: lvl-fall 1.8s ease-in forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .lvl-card.lvl-elite::after, .lvl-elite .lvl-ring, .lvl-pop, .lvl-confetti { animation: none; }
+  .lvl-card { transition: none; }
+}

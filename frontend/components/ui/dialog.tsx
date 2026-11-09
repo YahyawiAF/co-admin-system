@@ -5,8 +5,20 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useModalGate } from "@/lib/modal-gate"
 
-const Dialog = DialogPrimitive.Root
+function Dialog({
+  open,
+  ignoreGate,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root> & {
+  /** Opens even while the space rules are on screen (the rules sheet itself). */
+  ignoreGate?: boolean
+}) {
+  const blocked = useModalGate() && !ignoreGate
+  // Only popups the app opens by itself (controlled) wait; a tapped trigger can't be reached anyway.
+  return <DialogPrimitive.Root open={open === undefined ? open : open && !blocked} {...props} />
+}
 
 const DialogTrigger = DialogPrimitive.Trigger
 

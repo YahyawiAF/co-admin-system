@@ -153,7 +153,13 @@ export function QuestSheet({
   footer,
   children,
   bodyClassName,
+  ignoreGate,
+  closable = true,
 }: {
+  /** Opens even while the space rules are on screen. */
+  ignoreGate?: boolean;
+  /** false: no close button at all (must answer to leave). */
+  closable?: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   dismissible?: boolean;
@@ -173,6 +179,7 @@ export function QuestSheet({
   return (
     <Sheet
       open={open}
+      ignoreGate={ignoreGate}
       onOpenChange={(next) => {
         if (!next && !dismissible) return;
         onOpenChange(next);
@@ -192,7 +199,7 @@ export function QuestSheet({
             subtitle={subtitle}
             reward={reward}
             chip={chip}
-            onClose={() => onOpenChange(false)}
+            onClose={closable ? () => onOpenChange(false) : undefined}
             closeDisabled={!dismissible}
           >
             {banner}
