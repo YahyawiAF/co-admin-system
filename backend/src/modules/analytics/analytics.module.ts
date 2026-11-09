@@ -1,3 +1,4 @@
+import { JwtModule } from '@nestjs/jwt';
 import { Module } from '@nestjs/common';
 import { PrismaService } from 'database/prisma.service';
 import { MemberModule } from '../member/member.module';
@@ -13,7 +14,7 @@ import { ForecastService } from './forecast.service';
 import { FinanceYearService } from './finance-year.service';
 
 @Module({
-  imports: [MemberModule, ExpensesModule, PushModule],
+  imports: [MemberModule, ExpensesModule, PushModule, JwtModule.register({ secret: process.env.JWT_ACCESS_SECRET })],
   controllers: [AnalyticsController],
   providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService, PrismaService],
   exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService],

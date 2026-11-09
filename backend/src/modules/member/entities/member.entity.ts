@@ -138,6 +138,12 @@ export class MemberEntity implements Member {
   })
   pwaInstalledAt: Date | null;
 
+  @ApiProperty({ required: false, nullable: true })
+  rulesAcceptedAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  rulesAcceptedVersion: number | null;
+
   @ApiProperty({ enum: MemberProfileType, required: false, nullable: true })
   profileType: MemberProfileType | null;
 

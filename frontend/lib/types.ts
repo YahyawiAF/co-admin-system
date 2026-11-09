@@ -2601,3 +2601,45 @@ export interface CafeMonth {
   offered: { qty: number; value: number };
   unpaid: { qty: number; value: number };
 }
+
+/** Space rules shown to visitors (picture tiles). */
+export type HouseRuleKind = "NO" | "DO";
+export type HouseRulesFrequency = "ONCE" | "DAILY" | "ALWAYS";
+export interface HouseRule {
+  id: string;
+  icon: string;
+  text: string;
+  kind: HouseRuleKind;
+  active: boolean;
+}
+export interface HouseRulesSettings {
+  facilityId: string;
+  rules: HouseRule[];
+  version: number;
+  onOpen: boolean;
+  beforeForfait: boolean;
+  frequency: HouseRulesFrequency;
+}
+export interface MemberHouseRules {
+  rules: HouseRule[];
+  version: number;
+  onOpen: boolean;
+  beforeForfait: boolean;
+  frequency: HouseRulesFrequency;
+  acceptedAt: string | null;
+  acceptedVersion: number | null;
+}
+export interface HouseRulesReaders {
+  version: number;
+  total: number;
+  read: number;
+  page: number;
+  pages: number;
+  items: {
+    id: string;
+    name: string;
+    phone: string | null;
+    acceptedAt: string | null;
+    upToDate: boolean;
+  }[];
+}

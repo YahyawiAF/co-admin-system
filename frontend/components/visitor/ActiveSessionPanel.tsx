@@ -13,6 +13,7 @@ import {
   MapPin,
   QrCode,
   Lock,
+  Power,
   Timer,
   Wifi,
 } from "lucide-react";
@@ -163,6 +164,19 @@ export function ActiveSessionPanel({
   const [firstVisit, setFirstVisit] = useState(false);
   const [isPwa, setIsPwa] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  /** The session card scrolled out of view: the small « Terminer » bar shows on top. */
+  const heroRef = useRef<HTMLElement>(null);
+  const [heroAway, setHeroAway] = useState(false);
+  useEffect(() => {
+    const el = heroRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      ([e]) => setHeroAway(!e.isIntersecting && e.boundingClientRect.top < 0),
+      { threshold: 0 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   useEffect(() => {
     setIsPwa(isStandalonePwa());
@@ -625,18 +639,65 @@ export function ActiveSessionPanel({
       ? { label: "Choisir ma place", onClick: () => setSeatOpen(true), accent: true }
       : { label: "Mon QR · place", onClick: () => setQrOpen(true), accent: true };
 
+  const canEnd = !checkout.isPending && !session.leaveTime && !isOptimistic;
+  const openCheckout = () => {
+    checkout.reset();
+    setCheckoutOpen(true);
+  };
+
   return (
     <div className="space-y-3">
+      {/* Small bar that stays on top once the session card scrolls away */}
+      <div
+        aria-hidden={!heroAway}
+        className={cn(
+          "fixed inset-x-0 top-[3.9rem] z-40 mx-auto max-w-[480px] px-3 pt-1",
+          "transition-[transform,opacity] duration-300 ease-out motion-reduce:transition-none",
+          heroAway ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-3 opacity-0"
+        )}
+      >
+        <div className="flex items-center gap-2 rounded-full bg-slate-900/95 py-1.5 pl-3.5 pr-1.5 text-[13px] font-extrabold text-white shadow-lg shadow-slate-900/25 backdrop-blur">
+          <span className="v-live h-[7px] w-[7px] rounded-full bg-emerald-400" />
+          <span className="tabular-nums">
+            {elapsedMs != null ? formatDurationHm(elapsedMs) : "En direct"}
+          </span>
+          <span className="truncate font-semibold text-white/70">· depuis {format(sessionStart, "HH:mm")}</span>
+          <button
+            type="button"
+            tabIndex={heroAway ? 0 : -1}
+            disabled={!canEnd}
+            onClick={openCheckout}
+            className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-rose-600 px-3.5 text-xs font-extrabold text-white transition-transform duration-150 active:scale-95 disabled:opacity-50 motion-reduce:transition-none"
+          >
+            <Power className="h-3.5 w-3.5" strokeWidth={3} />
+            Terminer
+          </button>
+        </div>
+      </div>
+
       {/* Hero: live status, time, amount, tarif track */}
-      <section className="v-rise rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-slate-900/5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-2 py-1 text-[11px] font-extrabold text-emerald-800">
-            <span className="v-live h-[7px] w-[7px] rounded-full bg-emerald-500" />
+      <section ref={heroRef} className="v-rise rounded-3xl bg-white p-3.5 shadow-sm ring-1 ring-slate-900/5">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-flex min-w-0 shrink items-center gap-1.5 overflow-hidden whitespace-nowrap rounded-lg bg-emerald-100 px-2 py-1 text-[11px] font-extrabold text-emerald-800">
+            <span className="v-live h-[7px] w-[7px] shrink-0 rounded-full bg-emerald-500" />
             En direct · depuis {format(sessionStart, "HH:mm")}
           </span>
-          <span className={cn("max-w-[45%] truncate rounded-lg px-2 py-1 text-[11px] font-extrabold", statusChip.cls)}>
+          <span className={cn("min-w-0 max-w-[45%] truncate rounded-lg px-2 py-1 text-[11px] font-extrabold", statusChip.cls)}>
             {statusChip.text}
           </span>
+          <button
+            type="button"
+            disabled={!canEnd}
+            onClick={openCheckout}
+            className="ml-auto inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-rose-600 px-3 text-[13px] font-extrabold text-white shadow-md shadow-rose-600/30 transition-transform duration-150 hover:bg-rose-700 active:scale-95 disabled:opacity-50 motion-reduce:transition-none"
+          >
+            {checkout.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Power className="h-4 w-4" strokeWidth={3} />
+            )}
+            {isOptimistic ? "Confirmation…" : "Terminer"}
+          </button>
         </div>
 
         {isOptimistic ? (
@@ -818,17 +879,6 @@ export function ActiveSessionPanel({
             {(checkout.error as Error).message}
           </p>
         ) : null}
-        <Button
-          variant="outline"
-          className="h-12 w-full rounded-full border-2 border-rose-600 bg-white text-sm font-extrabold text-rose-700 hover:bg-rose-50 hover:text-rose-800"
-          disabled={checkout.isPending || !!session.leaveTime || isOptimistic}
-          onClick={() => {
-            checkout.reset();
-            setCheckoutOpen(true);
-          }}
-        >
-          {isOptimistic ? "Confirmation…" : "Terminer ma session"}
-        </Button>
         {onWifi || showSubLink ? (
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-0.5">
             {onWifi ? (

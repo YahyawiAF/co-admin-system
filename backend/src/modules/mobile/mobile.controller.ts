@@ -613,6 +613,19 @@ export class MobileController {
     return this.mobileService.reviewPrompt(memberId);
   }
 
+  @Get('house-rules/:memberId')
+  houseRules(@Param('memberId', ParseUUIDPipe) memberId: string) {
+    return this.mobileService.houseRules(memberId);
+  }
+
+  @Post('house-rules/:memberId/accept')
+  acceptHouseRules(
+    @Param('memberId', ParseUUIDPipe) memberId: string,
+    @Body() body: { version: number },
+  ) {
+    return this.mobileService.acceptHouseRules(memberId, body?.version);
+  }
+
   @Post('review/:memberId/:action')
   markReview(
     @Param('memberId', ParseUUIDPipe) memberId: string,

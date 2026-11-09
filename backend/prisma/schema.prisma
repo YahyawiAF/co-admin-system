@@ -63,6 +63,9 @@ model Member {
   appInstallPromosUsed     String[]            @default([])
   /// First time the member opened the app as an installed PWA
   pwaInstalledAt           DateTime?
+  /// Last time the member accepted the space rules, and which version
+  rulesAcceptedAt          DateTime?
+  rulesAcceptedVersion     Int?
   /// Gamification score — only credited when client is installed PWA
   points                   Int                 @default(0)
   abonnements              Abonnement[]
@@ -800,6 +803,15 @@ model Facility {
   reviewAfterVisits           Int                  @default(5)
   /// Points for the sponsor and the friend after the friend's first paid visit
   referralPoints              Int                  @default(300)
+  /// Space rules shown to visitors: [{ id, icon, text, kind: "NO" | "DO", active }]; null = default rules
+  houseRules                  Json?
+  /// Bumped when the rules change: everyone reads them again once
+  houseRulesVersion           Int                  @default(1)
+  /// Also show the rules when the app opens / before choosing a forfait (always after sign-up)
+  houseRulesOnOpen            Boolean              @default(false)
+  houseRulesBeforeForfait     Boolean              @default(false)
+  /// ONCE (until the rules change), DAILY, or ALWAYS
+  houseRulesFrequency         String               @default("ONCE")
   /// Free text for the AI advisor: neighbourhood, clientele, competitors, goals
   businessContext             String?
   /// Location for weather and neighbourhood lookups (AI advisor)

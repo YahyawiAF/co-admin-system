@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../../../common/guards/accessToken.guard';
 import type { Response } from 'express';
 import { AnalyticsService } from './analytics.service';
 import { PerformanceService, PerformanceSettings } from './performance.service';
+import type { HouseRulesSettings } from '../mobile/house-rules';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
 import { NewcomersService } from './newcomers.service';
@@ -31,6 +33,32 @@ export class AnalyticsController {
     @Body() body: Partial<Omit<PerformanceSettings, 'facilityId'>>,
   ) {
     return this.performance.updateSettings(facilityId, body);
+  }
+
+  @Get('house-rules')
+  @UseGuards(JwtAuthGuard)
+  houseRules(@Query('facilityId') facilityId?: string) {
+    return this.performance.houseRules(facilityId);
+  }
+
+  @Patch('house-rules')
+  @UseGuards(JwtAuthGuard)
+  updateHouseRules(
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: Partial<Omit<HouseRulesSettings, 'facilityId' | 'version'>>,
+  ) {
+    return this.performance.updateHouseRules(facilityId, body);
+  }
+
+  @Get('house-rules/readers')
+  @UseGuards(JwtAuthGuard)
+  houseRulesReaders(
+    @Query('facilityId') facilityId?: string,
+    @Query('page') page?: string,
+    @Query('filter') filter?: string,
+  ) {
+    const f = filter === 'read' || filter === 'unread' ? filter : 'all';
+    return this.performance.houseRulesReaders(facilityId, Number(page) || 1, f);
   }
 
   @Get('performance/targets')

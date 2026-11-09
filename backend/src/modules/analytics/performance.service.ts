@@ -1,3 +1,9 @@
+import {
+  HouseRulesSettings,
+  houseRulesReaders,
+  houseRulesSettings,
+  updateHouseRules,
+} from '../mobile/house-rules';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { orderUnitPrice } from '../product/order-price';
 import { PrismaService } from 'database/prisma.service';
@@ -161,6 +167,28 @@ export class PerformanceService {
     return all.reduce((best, f) =>
       f._count.spaces > best._count.spaces ? f : best,
     );
+  }
+
+  async houseRules(facilityId?: string) {
+    const f = await this.facility(facilityId);
+    return houseRulesSettings(this.prisma, f.id);
+  }
+
+  async updateHouseRules(
+    facilityId: string | undefined,
+    body: Partial<Omit<HouseRulesSettings, 'facilityId' | 'version'>>,
+  ) {
+    const f = await this.facility(facilityId);
+    return updateHouseRules(this.prisma, f.id, body);
+  }
+
+  async houseRulesReaders(
+    facilityId: string | undefined,
+    page: number,
+    filter: 'all' | 'read' | 'unread',
+  ) {
+    const f = await this.facility(facilityId);
+    return houseRulesReaders(this.prisma, f.id, page, filter);
   }
 
   async settings(facilityId?: string): Promise<PerformanceSettings> {

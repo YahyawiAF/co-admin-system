@@ -1,5 +1,7 @@
 "use client";
 
+import { markHouseRulesAfterSignup } from "@/components/visitor/HouseRules";
+
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -73,7 +75,10 @@ export function VisitorAuthDialog({
         firstName: firstName || undefined,
         requirePassword: false,
       }),
-    onSuccess: (res) => finish(res.member, res.accessToken),
+    onSuccess: (res) => {
+      markHouseRulesAfterSignup(res.member.id);
+      finish(res.member, res.accessToken);
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
