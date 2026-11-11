@@ -67,7 +67,8 @@ describe('computeStock', () => {
     expect(r.lots.get('c1')!.recovered).toBeCloseTo(10);
     expect(r.lots.get('c2')!.used).toBe(20);
     expect(r.lots.get('c2')!.recovered).toBeCloseTo(2);
-    expect(r.items.get('cafe')!.unitCost).toBeCloseTo(0.06);
+    // average cost: (5 + 6) ÷ 200
+    expect(r.items.get('cafe')!.unitCost).toBeCloseTo(0.055);
   });
 
   it('a lot bought but not yet started is in reserve', () => {
@@ -153,8 +154,8 @@ describe('computeStock', () => {
       expect(after.lots.get(id)!.recovered).toBeCloseTo(before.lots.get(id)!.recovered);
     }
     expect(after.lots.get('l2')!.status).toBe('RESERVE');
-    // the cost shown stays the lot in use until it runs out
-    expect(after.items.get('lait')!.unitCost).toBeCloseTo(9.6 / 6000);
+    // the cost shown is the average of every purchase
+    expect(after.items.get('lait')!.unitCost).toBeCloseTo((9.6 + 12) / 12000);
   });
 
   it('a lot says what it made, and each product has its month of sales and cost', () => {
@@ -179,7 +180,30 @@ describe('computeStock', () => {
     const oct = r.productMonths.get('direct')!.get('2026-10')!;
     expect(oct.qty).toBe(4);
     expect(oct.revenue).toBe(8);
-    // cost = 16 g at 0.05 then 16 g at 0.048 + milk + cups
-    expect(oct.cost).toBeCloseTo(16 * 0.05 + 16 * 0.048 + 480 * 0.0016 + 4 * 0.08);
+    // cost = average of what was bought by then (only c1: 0.05/g) + milk + cups
+    expect(oct.cost).toBeCloseTo(32 * 0.05 + 480 * 0.0016 + 4 * 0.08);
+  });
+
+  it('average cost: 6 bottles for 5 DT + 6 for 6 DT = 11 ÷ 12 per bottle', () => {
+    const r = computeStock({
+      items: [{ id: 'eau' }],
+      lots: [
+        { id: 'e1', itemId: 'eau', purchaseId: 'A1', date: d(1), quantity: 6, price: 5 },
+        { id: 'e2', itemId: 'eau', purchaseId: 'A2', date: d(8), quantity: 6, price: 6 },
+      ],
+      recipes: new Map([['bottle', [{ itemId: 'eau', quantity: 1 }]]]),
+      sales: [
+        { productId: 'bottle', date: d(3), qty: 2, unitPrice: 1.5 },
+        { productId: 'bottle', date: d(9), qty: 3, unitPrice: 1.5 },
+      ],
+      adjustments: [],
+      asOf: d(10),
+    });
+    expect(r.items.get('eau')!.unitCost).toBeCloseTo(11 / 12);
+    expect(r.products.get('bottle')!.unitCost).toBeCloseTo(11 / 12);
+    expect(r.items.get('eau')!.left).toBe(7);
+    const oct = r.productMonths.get('bottle')!.get('2026-10')!;
+    // before the 2nd purchase: 5/6 each; after: 11/12 each
+    expect(oct.cost).toBeCloseTo(2 * (5 / 6) + 3 * (11 / 12));
   });
 });

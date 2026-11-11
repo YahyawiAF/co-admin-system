@@ -119,15 +119,15 @@ export function RevenueTab({ overview }: { overview: StockOverview }) {
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
         <Kpi label="Ventes" value={dt(tot.revenue)} hint={`${tot.qty} articles`} />
-        <Kpi label="Achats payés" value={dt(bought)} hint="dans Dépenses" tone="bad" />
+        <Kpi label="Achats" value={dt(bought)} hint="payés ou à payer, dans Dépenses" tone="bad" />
         <Kpi
           label="Coût de ce qui est vendu"
           value={dt(tot.cost)}
-          hint="recettes × prix des paquets"
+          hint="recettes × coût moyen"
           info={
             <Info2 title="Comment le coût est calculé">
-              <p><b>Achats payés</b> = l’argent sorti pour acheter (1 kg de café, un pack d’eau…). C’est une dépense du jour de l’achat.</p>
-              <p><b>Coût de ce qui est vendu</b> = pour chaque article vendu, sa recette × le prix du paquet utilisé (le plus ancien d’abord).</p>
+              <p><b>Achats</b> = ce que tu as acheté (1 kg de café, un pack d’eau…), payé ou encore à payer. C’est une dépense du mois de l’achat.</p>
+              <p><b>Coût de ce qui est vendu</b> = pour chaque article vendu, sa recette × le coût moyen de chaque ingrédient (tous les achats faits jusqu’à ce jour ÷ la quantité achetée).</p>
               <div className="rounded-xl bg-muted/60 px-4 py-3 tabular-nums">1 kg de café à 42 DT → 0,042 DT le gramme<br />Express = 8 g (0,34) + gobelet + sucre</div>
               <p>Ce qui est acheté mais pas encore vendu n’est pas une perte : c’est le stock restant.</p>
               <p>Produits sans recette (à l’unité, non suivis) : coût = prix d’achat × quantité, marqué « estimé ».</p>

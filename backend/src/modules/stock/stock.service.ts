@@ -9,6 +9,10 @@ import { EventsGateway } from '../webSocket/events.gateway';
 
 const UNITS = ['g', 'ml', 'pc'] as const;
 const SOURCES = ['CAISSE', 'COFFRE', 'AUTRE', 'NONE'] as const;
+const PAY_SOURCES = ['CAISSE', 'COFFRE', 'AUTRE'] as const;
+const REASONS = ['CASSE', 'VENTE_OUBLIEE', 'ERREUR', 'AUTRE'] as const;
+/** Label prefix of the expense of a purchase not paid yet */
+const DUE_PREFIX = 'À payer — ';
 const round2 = (n: number) => Math.round(n * 100) / 100;
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
 
@@ -158,6 +162,9 @@ export class StockService {
           date: pu.date,
           source: pu.source,
           note: pu.note,
+          supplier: pu.supplier,
+          paid: pu.paid,
+          paidAt: pu.paidAt,
           dailyExpenseId: pu.dailyExpenseId,
           invested: round2(invested),
           recovered: round2(recovered),
@@ -230,16 +237,16 @@ export class StockService {
         unit: itemById.get(l.itemId)?.unit ?? 'pc',
         quantity: l.quantity,
         amount: round2(l.amount),
+        reason: adjById.get(l.adjustmentId)?.reason ?? null,
         note: adjById.get(l.adjustmentId)?.note ?? null,
       }))
       .reverse();
 
     const invested = purchaseRows.reduce((s, p) => s + p.invested, 0);
     const recovered = purchaseRows.reduce((s, p) => s + p.recovered, 0);
-    const stockValue = itemRows.reduce(
-      (s, i) => s + purchaseRows.reduce((ss, p) => ss + p.lots.filter((l) => l.stockItemId === i.id).reduce((x, l) => x + (l.left * l.price) / (l.quantity || 1), 0), 0),
-      0,
-    );
+    // What is left, at the average cost
+    const stockValue = itemRows.reduce((s, i) => s + i.left * i.unitCost, 0);
+    const due = purchaseRows.filter((p) => !p.paid);
     // Sales, cost and margin of every product, month by month (12 months).
     // Recipe products: cost of the lots really used. Others: purchase price × qty (estimate).
     const since = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -303,6 +310,9 @@ export class StockService {
         stockValue: round2(stockValue),
         losses: round2(losses.reduce((s, l) => s + l.amount, 0)),
         purchases: purchaseRows.length,
+        /** Bought on credit, supplier not paid yet */
+        due: round2(due.reduce((s, p) => s + p.invested, 0)),
+        dueCount: due.length,
         firstPurchaseDate: purchases[0]?.date ?? null,
       },
       items: itemRows,
@@ -342,7 +352,7 @@ export class StockService {
   }
 
   /** Inventory count: the real remaining amount. The gap with the computed stock is saved as an adjustment. */
-  async count(id: string, body: { remaining?: number; note?: string }, organizationId?: string) {
+  async count(id: string, body: { remaining?: number; note?: string; reason?: string }, organizationId?: string) {
     const remaining = Number(body.remaining);
     if (!Number.isFinite(remaining) || remaining < 0) throw new BadRequestException('Quantité invalide');
     const item = await this.prisma.stockItem.findUnique({ where: { id } });
@@ -352,7 +362,13 @@ export class StockService {
     const gap = round3(left - remaining);
     if (Math.abs(gap) < 1e-6) return { gap: 0 };
     await this.prisma.stockAdjustment.create({
-      data: { stockItemId: id, quantity: gap, note: body.note?.trim() || null, date: new Date() },
+      data: {
+        stockItemId: id,
+        quantity: gap,
+        reason: REASONS.includes(body.reason as (typeof REASONS)[number]) ? body.reason! : null,
+        note: body.note?.trim() || null,
+        date: new Date(),
+      },
     });
     await this.syncProductStock();
     return { gap };
@@ -402,23 +418,39 @@ export class StockService {
 
   /* ---------- Purchases ---------- */
 
-  async createPurchase(body: { date?: string; source?: string; note?: string; lines?: PurchaseLine[]; organizationId?: string }) {
+  /**
+   * `paid: false` = bought on credit: the expense is created now (it counts for the purchase
+   * month) with source AUTRE and « À payer — » in its label, until `payPurchase`.
+   */
+  async createPurchase(body: {
+    date?: string;
+    source?: string;
+    note?: string;
+    supplier?: string;
+    paid?: boolean;
+    lines?: PurchaseLine[];
+    organizationId?: string;
+  }) {
     const lines = (body.lines ?? [])
       .map((l) => ({ stockItemId: l.stockItemId, quantity: Number(l.quantity), price: Number(l.price) }))
       .filter((l) => l.stockItemId && l.quantity > 0 && l.price >= 0);
     if (!lines.length) throw new BadRequestException('Ajoute au moins un article');
-    const source = SOURCES.includes(body.source as (typeof SOURCES)[number]) ? body.source! : 'CAISSE';
+    const paid = body.paid !== false;
+    const source = !paid ? 'AUTRE' : SOURCES.includes(body.source as (typeof SOURCES)[number]) ? body.source! : 'CAISSE';
     const items = await this.prisma.stockItem.findMany({ where: { id: { in: lines.map((l) => l.stockItemId) } } });
     if (items.length !== new Set(lines.map((l) => l.stockItemId)).size) throw new BadRequestException('Article introuvable');
     const byId = new Map(items.map((i) => [i.id, i]));
     const total = round2(lines.reduce((s, l) => s + l.price, 0));
     const date = parseLocalDay(body.date ?? null);
-    const label =
-      'Achat stock — ' + lines.map((l) => `${byId.get(l.stockItemId)!.name} ${qtyLabel(l.quantity, byId.get(l.stockItemId)!.unit)}`).join(', ');
+    const label = this.purchaseLabel(
+      lines.map((l) => ({ name: byId.get(l.stockItemId)!.name, unit: byId.get(l.stockItemId)!.unit, quantity: l.quantity })),
+      body.supplier,
+      paid,
+    );
 
     const expense =
       source !== 'NONE' && total > 0
-        ? await this.expenses.createDailyExpense({ amount: total, label: label.slice(0, 180), date, source, Summary: body.note ?? null })
+        ? await this.expenses.createDailyExpense({ amount: total, label, date, source, Summary: body.note ?? null, category: 'STOCK_CAFE' })
         : null;
     try {
       const purchase = await this.prisma.stockPurchase.create({
@@ -426,6 +458,8 @@ export class StockService {
           date,
           source,
           note: body.note?.trim() || null,
+          supplier: body.supplier?.trim() || null,
+          paid,
           organizationId: body.organizationId || items[0].organizationId || (await this.defaultOrgId()),
           dailyExpenseId: expense?.id ?? null,
           lots: { create: lines.map((l) => ({ stockItemId: l.stockItemId, quantity: l.quantity, price: l.price })) },
@@ -451,6 +485,115 @@ export class StockService {
     });
     await this.syncProductStock();
     return { ok: true };
+  }
+
+  private purchaseLabel(lines: { name: string; unit: string; quantity: number }[], supplier: string | null | undefined, paid: boolean) {
+    const what = lines.map((l) => `${l.name} ${qtyLabel(l.quantity, l.unit)}`).join(', ');
+    const who = supplier?.trim() ? ` (${supplier.trim()})` : '';
+    return `${paid ? '' : DUE_PREFIX}Achat stock — ${what}${who}`.slice(0, 180);
+  }
+
+  /**
+   * Supplier paid: the expense moves to the day the money left and its real source;
+   * « pour quel mois » keeps it in the purchase month.
+   */
+  async payPurchase(id: string, body: { source?: string; date?: string }) {
+    const purchase = await this.prisma.stockPurchase.findUnique({ where: { id }, include: { lots: { include: { stockItem: true } } } });
+    if (!purchase) throw new NotFoundException('Achat introuvable');
+    if (purchase.paid) throw new BadRequestException('Achat déjà payé');
+    const source = PAY_SOURCES.includes(body.source as (typeof PAY_SOURCES)[number]) ? body.source! : 'CAISSE';
+    const paidAt = parseLocalDay(body.date ?? null);
+    await this.prisma.stockPurchase.update({ where: { id }, data: { paid: true, paidAt, source } });
+    if (purchase.dailyExpenseId) {
+      await this.expenses.updateDailyExpense(purchase.dailyExpenseId, {
+        source,
+        date: paidAt,
+        forMonth: monthOf(purchase.date),
+        label: this.purchaseLabel(
+          purchase.lots.map((l) => ({ name: l.stockItem.name, unit: l.stockItem.unit, quantity: l.quantity })),
+          purchase.supplier,
+          true,
+        ),
+      });
+    }
+    return { ok: true };
+  }
+
+  /**
+   * Correct a purchase: date, supplier, note, quantity / price of its lots, paid or not.
+   * Stock, average cost and the expense follow.
+   */
+  async updatePurchase(
+    id: string,
+    body: {
+      date?: string;
+      supplier?: string | null;
+      note?: string | null;
+      paid?: boolean;
+      source?: string;
+      lines?: { lotId: string; quantity: number; price: number }[];
+    },
+  ) {
+    const purchase = await this.prisma.stockPurchase.findUnique({ where: { id }, include: { lots: { include: { stockItem: true } } } });
+    if (!purchase) throw new NotFoundException('Achat introuvable');
+    const changes = new Map((body.lines ?? []).map((l) => [l.lotId, { quantity: Number(l.quantity), price: Number(l.price) }]));
+    for (const [lotId, c] of changes) {
+      if (!purchase.lots.some((l) => l.id === lotId)) throw new BadRequestException('Ligne introuvable');
+      if (!(c.quantity > 0) || !(c.price >= 0)) throw new BadRequestException('Quantité ou prix invalide');
+    }
+    const lots = purchase.lots.map((l) => ({ ...l, ...(changes.get(l.id) ?? {}) }));
+    const total = round2(lots.reduce((s, l) => s + l.price, 0));
+    const date = body.date ? parseLocalDay(body.date) : purchase.date;
+    const supplier = body.supplier !== undefined ? body.supplier?.trim() || null : purchase.supplier;
+    const paid = body.paid ?? purchase.paid;
+    const wasNone = purchase.source === 'NONE';
+    const source = !paid
+      ? 'AUTRE'
+      : body.source && SOURCES.includes(body.source as (typeof SOURCES)[number])
+        ? body.source
+        : purchase.paid
+          ? purchase.source
+          : 'CAISSE';
+    // Paid later keeps its pay day; anything else is paid on the purchase day
+    const paidAt = paid && purchase.paid ? purchase.paidAt : null;
+
+    await this.prisma.$transaction([
+      ...lots
+        .filter((l) => changes.has(l.id))
+        .map((l) => this.prisma.stockLot.update({ where: { id: l.id }, data: { quantity: l.quantity, price: l.price } })),
+      this.prisma.stockPurchase.update({
+        where: { id },
+        data: {
+          date,
+          supplier,
+          note: body.note !== undefined ? body.note?.trim() || null : undefined,
+          paid,
+          paidAt,
+          source,
+        },
+      }),
+    ]);
+
+    const label = this.purchaseLabel(
+      lots.map((l) => ({ name: l.stockItem.name, unit: l.stockItem.unit, quantity: l.quantity })),
+      supplier,
+      paid,
+    );
+    const expense = {
+      amount: total,
+      label,
+      source: source === 'NONE' ? 'AUTRE' : source,
+      date: paidAt ?? date,
+      forMonth: paidAt ? monthOf(date) : null,
+    };
+    if (purchase.dailyExpenseId && total > 0 && !(source === 'NONE')) {
+      await this.expenses.updateDailyExpense(purchase.dailyExpenseId, expense);
+    } else if (!purchase.dailyExpenseId && total > 0 && source !== 'NONE' && !wasNone) {
+      const created = await this.expenses.createDailyExpense({ ...expense, category: 'STOCK_CAFE' });
+      await this.prisma.stockPurchase.update({ where: { id }, data: { dailyExpenseId: created.id } });
+    }
+    await this.syncProductStock();
+    return { ok: true, total };
   }
 
   /* ---------- Product stock ---------- */

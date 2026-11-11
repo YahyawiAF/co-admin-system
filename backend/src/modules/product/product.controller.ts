@@ -104,12 +104,25 @@ export class ProductsController {
     description: 'Daily product successfully created',
   })
   async createDailyProduct(
-    @Body() body: { productId?: string; quantite?: number; date?: string },
+    @Body()
+    body: {
+      productId?: string;
+      quantite?: number;
+      date?: string;
+      unitPrice?: number | null;
+      memberId?: string | null;
+      isPayed?: boolean;
+      fromAdmin?: boolean;
+    },
   ) {
     return this.productsService.createDailyProduct({
       productId: body.productId,
       quantite: body.quantite,
-      date: body.date, // Pass the date field
+      date: body.date,
+      unitPrice: body.unitPrice,
+      memberId: body.memberId,
+      isPayed: body.isPayed,
+      fromAdmin: body.fromAdmin,
     });
   }
 
@@ -122,12 +135,15 @@ export class ProductsController {
   })
   async updateDailyProduct(
     @Param('id') id: string,
-    @Body() body: { productId?: string; quantite?: number; date?: string },
+    @Body()
+    body: { productId?: string; quantite?: number; date?: string; unitPrice?: number | null; fromAdmin?: boolean },
   ) {
     return this.productsService.updateDailyProduct(id, {
       productId: body.productId,
       quantite: body.quantite,
-      date: body.date, // Pass the date field
+      date: body.date,
+      unitPrice: body.unitPrice,
+      fromAdmin: body.fromAdmin,
     });
   }
   @Delete('daily/:id')
@@ -150,6 +166,24 @@ export class ProductsController {
   })
   async findAllDailyProduct() {
     return this.productsService.findAllDailyProduct();
+  }
+
+  /** Produits › Ventes: confirmed sales, newest first, paginated, with totals. */
+  @Get('daily/list')
+  async listSales(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+    @Query('organizationId') organizationId?: string,
+    @Query('productId') productId?: string,
+  ) {
+    return this.productsService.listSales({
+      status,
+      page: Number(page) || 1,
+      pageSize: Number(pageSize) || 20,
+      organizationId,
+      productId,
+    });
   }
 
   @Get('daily/:id')
