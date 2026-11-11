@@ -6,7 +6,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CircleAlert, Coffee, Hourglass, Plus, ShoppingBasket } from "lucide-react";
+import { Beaker, CircleAlert, Coffee, Hourglass, Plus, ShoppingBasket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ import { mobileApi, salesApi, stockApi, type SaleFilter, type StockItemRow, type
 import { queryKeys } from "@/lib/query-client";
 import { GlassChip, dt } from "@/components/admin/stock/stock-ui";
 import { ProductDialog } from "@/components/admin/stock/ProductDialog";
+import { PurchaseDialog } from "@/components/admin/stock/PurchaseDialog";
 import { CountDialog, ItemDialog } from "@/components/admin/stock/ItemDialogs";
 import { AchatsTab } from "@/components/admin/stock/AchatsTab";
 import { AvgCostDialog, BuyDialog, PayDialog, type BuyTarget } from "@/components/admin/stock/BuyDialogs";
@@ -36,6 +37,7 @@ export default function ProductsPage() {
   const [buyOpen, setBuyOpen] = useState(false);
   const [buyItem, setBuyItem] = useState<string | null>(null);
   const [buyEdit, setBuyEdit] = useState<BuyTarget | null>(null);
+  const [multiOpen, setMultiOpen] = useState(false);
   const [payId, setPayId] = useState<string | null>(null);
   const [whyItem, setWhyItem] = useState<string | null>(null);
   const [saleTarget, setSaleTarget] = useState<SaleTarget | null>(null);
@@ -143,6 +145,29 @@ export default function ProductsPage() {
             <p className="mt-1 text-[13px] text-indigo-100">Ce que tu achètes, ce que tu vends, ce qu’il reste.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              className="rounded-xl bg-white/15 font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+              onClick={() => {
+                setItem(null);
+                setItemOpen(true);
+              }}
+            >
+              <Beaker className="h-4 w-4" />
+              Ingrédient
+            </Button>
+            <Button
+              variant="secondary"
+              className="rounded-xl bg-white/15 font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
+              disabled={!overview}
+              onClick={() => {
+                setProduct(null);
+                setProductOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Produit
+            </Button>
             <Button
               variant="secondary"
               className="rounded-xl bg-white/15 font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
@@ -323,6 +348,7 @@ export default function ProductsPage() {
               }}
               onPay={setPayId}
               onWhy={setWhyItem}
+              onChanged={refresh}
             />
           ) : tab === "ventes" ? (
             <VentesTab filter={saleFilter} onFilter={setSaleFilter} onSale={setSaleTarget} onChanged={refresh} />
@@ -358,7 +384,19 @@ export default function ProductsPage() {
 
       {overview ? (
         <>
-          <BuyDialog open={buyOpen} onOpenChange={setBuyOpen} overview={overview} preselect={buyItem} edit={buyEdit} onDone={refresh} />
+          <BuyDialog
+            open={buyOpen}
+            onOpenChange={setBuyOpen}
+            overview={overview}
+            preselect={buyItem}
+            edit={buyEdit}
+            onDone={refresh}
+            onMulti={() => {
+              setBuyOpen(false);
+              setMultiOpen(true);
+            }}
+          />
+          <PurchaseDialog open={multiOpen} onOpenChange={setMultiOpen} overview={overview} preselect={null} onDone={refresh} />
           <PayDialog purchaseId={payId} overview={overview} onOpenChange={(o) => !o && setPayId(null)} onDone={refresh} />
           <AvgCostDialog itemId={whyItem} overview={overview} onOpenChange={(o) => !o && setWhyItem(null)} />
           <SaleDialog target={saleTarget} overview={overview} onOpenChange={(o) => !o && setSaleTarget(null)} onDone={refresh} />

@@ -68,6 +68,7 @@ export function BuyDialog({
   preselect,
   edit,
   onDone,
+  onMulti,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -75,6 +76,8 @@ export function BuyDialog({
   preselect: string | null;
   edit: BuyTarget | null;
   onDone: () => void;
+  /** Switch to the purchase of several articles at once */
+  onMulti?: () => void;
 }) {
   const buys = useMemo(() => allBuys(overview), [overview]);
   const editing = edit ? buys.find((b) => b.lotId === edit.lotId) ?? null : null;
@@ -188,7 +191,18 @@ export function BuyDialog({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
           {!editing ? (
             <div>
-              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Article</p>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Article</p>
+                {onMulti ? (
+                  <button
+                    type="button"
+                    onClick={onMulti}
+                    className="text-xs font-semibold text-indigo-600 underline-offset-2 transition-colors hover:text-indigo-800 hover:underline"
+                  >
+                    Plusieurs articles d’un coup (ou stock de départ) →
+                  </button>
+                ) : null}
+              </div>
               <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
                 {overview.items.map((i) => (
                   <Opt key={i.id} on={i.id === itemId} onClick={() => pickItem(i.id)}>
