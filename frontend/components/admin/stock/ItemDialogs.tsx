@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { stockApi, type StockItemRow, type StockUnit } from "@/lib/api/resources";
+import { stockApi, type StockCountReason, type StockItemRow, type StockUnit } from "@/lib/api/resources";
 import { GradientHeader, SectionTitle, buyUnit, countUnit, dt, gradientDialogClass, parseNum, qty } from "./stock-ui";
 
 const UNITS: [StockUnit, string][] = [
@@ -161,30 +161,42 @@ export function ItemDialog({
 }
 
 /** Inventory count: what is really left. The gap becomes a loss (or a correction up). */
+const COUNT_REASONS: { id: StockCountReason; label: string }[] = [
+  { id: "CASSE", label: "Casse / perte" },
+  { id: "VENTE_OUBLIEE", label: "Vente oubliée" },
+  { id: "ERREUR", label: "Erreur de saisie" },
+  { id: "AUTRE", label: "Autre" },
+];
+
 export function CountDialog({
   open,
   onOpenChange,
   item,
   onDone,
+  onForgottenSale,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   item: StockItemRow | null;
   onDone: () => void;
+  /** Open « Vente oubliée » instead (articles sold as they are) */
+  onForgottenSale?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [note, setNote] = useState("");
+  const [reason, setReason] = useState<StockCountReason>("CASSE");
   const cu = countUnit(item?.unit ?? "pc");
   useEffect(() => {
     if (!open || !item) return;
     setValue(String(+(item.left / cu.factor).toFixed(3)).replace(".", ","));
     setNote("");
+    setReason("CASSE");
   }, [open, item?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const real = parseNum(value) * cu.factor;
   const gap = item && Number.isFinite(real) ? item.left - real : 0;
   const save = useMutation({
-    mutationFn: () => stockApi.count(item!.id, real, note.trim() || undefined),
+    mutationFn: () => stockApi.count(item!.id, real, note.trim() || undefined, reason),
     onSuccess: (r) => {
       toast.success(r.gap > 0 ? "Perte enregistrée, stock corrigé" : r.gap < 0 ? "Stock corrigé" : "Le compte est juste");
       onDone();
@@ -205,9 +217,46 @@ export function CountDialog({
             Combien il reste vraiment ({cu.label})
             <Input autoFocus inputMode="decimal" className="mt-0.5 h-10 tabular-nums" value={value} onChange={(e) => setValue(e.target.value)} />
           </label>
+          <div>
+            <p className="mb-1.5 text-[11px] font-semibold text-muted-foreground">Pourquoi ?</p>
+            <div className="flex flex-wrap gap-1.5">
+              {COUNT_REASONS.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  aria-pressed={reason === r.id}
+                  onClick={() => setReason(r.id)}
+                  className={cn(
+                    "min-h-9 rounded-xl border px-3 text-[13px] font-bold transition-colors duration-200 motion-reduce:transition-none",
+                    reason === r.id
+                      ? "border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300"
+                      : "bg-background hover:border-indigo-300"
+                  )}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {reason === "VENTE_OUBLIEE" && item.kind === "UNIT" && onForgottenSale ? (
+            <div className="animate-in fade-in-0 rounded-xl border border-orange-200 bg-orange-50 p-3 text-[13px] text-orange-800 duration-200 motion-reduce:animate-none dark:border-orange-900 dark:bg-orange-950/40 dark:text-orange-300">
+              Mieux : ajoute la vente oubliée dans Ventes. Elle compte dans le chiffre et le stock baisse tout seul.
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-2 rounded-lg"
+                onClick={() => {
+                  onOpenChange(false);
+                  onForgottenSale();
+                }}
+              >
+                Ajouter la vente oubliée
+              </Button>
+            </div>
+          ) : null}
           <label className="block text-[11px] font-semibold text-muted-foreground">
-            Pourquoi (optionnel)
-            <Input className="mt-0.5 h-10" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Offert, renversé, doses trop grosses…" />
+            Note (facultatif)
+            <Input className="mt-0.5 h-10" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Canette percée, doses trop grosses…" />
           </label>
           <p
             key={Math.sign(Math.round(gap * 1000))}

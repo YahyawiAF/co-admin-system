@@ -568,6 +568,12 @@ model StockPurchase {
   /// CAISSE | COFFRE | AUTRE | NONE (opening stock, already paid)
   source         String        @default("CAISSE")
   note           String?
+  /// Who it was bought from
+  supplier       String?
+  /// false = bought on credit (« à payer »). The expense still counts for the purchase month.
+  paid           Boolean       @default(true)
+  /// Day the supplier was paid (purchases first recorded as « à payer »)
+  paidAt         DateTime?
   dailyExpenseId String?       @unique
   dailyExpense   DailyExpense? @relation(fields: [dailyExpenseId], references: [id], onDelete: SetNull)
   createdAt      DateTime      @default(now())
@@ -600,6 +606,8 @@ model StockAdjustment {
   stockItem   StockItem @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
   date        DateTime  @default(now())
   quantity    Float
+  /// CASSE | VENTE_OUBLIEE | ERREUR | AUTRE
+  reason      String?
   note        String?
   createdAt   DateTime  @default(now())
 
@@ -623,6 +631,8 @@ model DailyProduct {
   /// Price charged per unit (after promotion); null = product.sellingPrice
   unitPrice     Float?
   promotionId   String?
+  /// Set when the sale was added or corrected later from Produits › Ventes
+  editedAt      DateTime?
   syncedAt      DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt

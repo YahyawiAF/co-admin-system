@@ -10,29 +10,35 @@ import { CircleAlert, Coffee, Hourglass, Plus, ShoppingBasket } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { mobileApi, stockApi, type StockItemRow, type StockProductRow } from "@/lib/api/resources";
+import { mobileApi, salesApi, stockApi, type SaleFilter, type StockItemRow, type StockProductRow } from "@/lib/api/resources";
 import { queryKeys } from "@/lib/query-client";
-import { GlassChip, dt, signedDt } from "@/components/admin/stock/stock-ui";
-import { IngredientsTab, ProductsTab, PurchasesTab } from "@/components/admin/stock/StockTabs";
-import { PurchaseDialog } from "@/components/admin/stock/PurchaseDialog";
+import { GlassChip, dt } from "@/components/admin/stock/stock-ui";
 import { ProductDialog } from "@/components/admin/stock/ProductDialog";
-import { LotsTab, RevenueTab } from "@/components/admin/stock/SalesTabs";
 import { CountDialog, ItemDialog } from "@/components/admin/stock/ItemDialogs";
+import { AchatsTab } from "@/components/admin/stock/AchatsTab";
+import { AvgCostDialog, BuyDialog, PayDialog, type BuyTarget } from "@/components/admin/stock/BuyDialogs";
+import { SaleDialog, VentesTab, salesKey, type SaleTarget } from "@/components/admin/stock/VentesTab";
+import { StockView, type StockSub } from "@/components/admin/stock/StockView";
 
-type Tab = "revenus" | "paquets" | "produits" | "ingredients" | "achats";
+type Tab = "achats" | "ventes" | "stock";
 const TABS: { id: Tab; label: string }[] = [
-  { id: "revenus", label: "Revenus & coûts" },
-  { id: "paquets", label: "Par paquet" },
-  { id: "produits", label: "Produits" },
-  { id: "ingredients", label: "Ingrédients" },
   { id: "achats", label: "Achats" },
+  { id: "ventes", label: "Ventes" },
+  { id: "stock", label: "Stock" },
 ];
+const monthKey = () => format(new Date(), "yyyy-MM");
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<Tab>("revenus");
+  const [tab, setTab] = useState<Tab>("achats");
+  const [stockSub, setStockSub] = useState<StockSub>("stock");
+  const [saleFilter, setSaleFilter] = useState<SaleFilter>("all");
   const [buyOpen, setBuyOpen] = useState(false);
   const [buyItem, setBuyItem] = useState<string | null>(null);
+  const [buyEdit, setBuyEdit] = useState<BuyTarget | null>(null);
+  const [payId, setPayId] = useState<string | null>(null);
+  const [whyItem, setWhyItem] = useState<string | null>(null);
+  const [saleTarget, setSaleTarget] = useState<SaleTarget | null>(null);
   const [product, setProduct] = useState<StockProductRow | null>(null);
   const [productOpen, setProductOpen] = useState(false);
   const [item, setItem] = useState<StockItemRow | null>(null);
@@ -58,9 +64,22 @@ export default function ProductsPage() {
     refetchInterval: 8_000,
   });
 
+  // Unpaid sales total for the hero (same cache as Ventes › Non payées, page 1)
+  const { data: unpaidSales } = useQuery({
+    queryKey: [...salesKey, "unpaid", 1],
+    queryFn: () => salesApi.list("unpaid", 1, 20),
+    refetchInterval: 30_000,
+  });
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["stock-overview"] });
     queryClient.invalidateQueries({ queryKey: ["products"] });
+    queryClient.invalidateQueries({ queryKey: salesKey });
+  };
+  const openBuy = (itemId: string | null) => {
+    setBuyEdit(null);
+    setBuyItem(itemId);
+    setBuyOpen(true);
   };
 
   const confirmOrder = useMutation({
@@ -83,12 +102,13 @@ export default function ProductsPage() {
   });
 
   const t = overview?.totals;
-  const counts: Record<Tab, number> = {
-    revenus: 0,
-    paquets: overview?.purchases.reduce((a, p) => a + p.lots.length, 0) ?? 0,
-    produits: overview?.products.length ?? 0,
-    ingredients: overview?.items.length ?? 0,
-    achats: overview?.purchases.length ?? 0,
+  const mk = monthKey();
+  const monthBuys = (overview?.purchases ?? []).filter((p) => format(new Date(p.date), "yyyy-MM") === mk);
+  const monthSales = (overview?.sales?.products ?? []).reduce((s, p) => s + (p.months[mk]?.revenue ?? 0), 0);
+  const hints: Record<Tab, string> = {
+    achats: t?.dueCount ? `${t.dueCount} à payer` : `${overview?.purchases.length ?? 0} achats`,
+    ventes: unpaidSales ? `${unpaidSales.totals.unpaidCount} non payées` : "",
+    stock: `${overview?.items.length ?? 0} articles`,
   };
   type Alert = { id: string; tone: "bad" | "warn"; text: string };
   const alerts = (overview?.items ?? []).flatMap((i): Alert[] => {
@@ -103,7 +123,7 @@ export default function ProductsPage() {
   return (
     <div className="space-y-4">
       {/* Hero */}
-      <section className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-5 py-5 text-white shadow-sm sm:px-6">
+      <section className="relative overflow-clip rounded-2xl bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-5 py-5 text-white shadow-sm sm:px-6">
         <div className="pointer-events-none absolute inset-0" aria-hidden>
           <div className="absolute -right-8 -top-10 h-40 w-40 rounded-full bg-white/10" />
           <div className="absolute -bottom-16 left-1/3 h-36 w-36 rounded-full bg-white/10" />
@@ -120,52 +140,76 @@ export default function ProductsPage() {
               <Coffee className="h-6 w-6" />
               Produits &amp; stock
             </h1>
-            <p className="mt-1 text-[13px] text-indigo-100">Ce que tu as investi, ce que les ventes ont rapporté, et ce qu’il reste.</p>
+            <p className="mt-1 text-[13px] text-indigo-100">Ce que tu achètes, ce que tu vends, ce qu’il reste.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
               className="rounded-xl bg-white/15 font-semibold text-white backdrop-blur-sm transition-colors hover:bg-white/25"
-              onClick={() => {
-                if (tab === "ingredients") {
-                  setItem(null);
-                  setItemOpen(true);
-                } else {
-                  setProduct(null);
-                  setProductOpen(true);
-                }
-              }}
+              disabled={!overview}
+              onClick={() => setSaleTarget({ productId: null })}
             >
               <Plus className="h-4 w-4" />
-              {tab === "ingredients" ? "Ingrédient" : "Produit"}
+              Vente oubliée
             </Button>
             <Button
               className="rounded-xl bg-white font-bold text-indigo-700 shadow-lg transition-transform duration-150 hover:-translate-y-0.5 hover:bg-white motion-reduce:hover:translate-y-0"
               disabled={!overview}
-              onClick={() => {
-                setBuyItem(null);
-                setBuyOpen(true);
-              }}
+              onClick={() => openBuy(null)}
             >
               <ShoppingBasket className="h-4 w-4" />
               Nouvel achat
             </Button>
           </div>
         </div>
-        <div className="relative mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="relative mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
           {t ? (
             <>
-              <GlassChip label="Investi" value={dt(t.invested)} hint={`${t.purchases} achat${t.purchases > 1 ? "s" : ""}`} />
-              <GlassChip label="Ventes" value={dt(t.recovered)} hint="part des ventes qui rembourse le stock" />
-              <GlassChip
-                label="Résultat"
-                value={<span className={t.result >= 0 ? "text-emerald-200" : "text-rose-200"}>{signedDt(t.result)}</span>}
-                hint="ventes − investi"
-              />
-              <GlassChip label="Stock restant" value={dt(t.stockValue)} hint={t.losses ? `pertes ${dt(t.losses)}` : "encore à vendre"} />
+              <HeroChip onClick={() => setTab("achats")}>
+                <GlassChip
+                  label={`Achats de ${format(new Date(), "MMMM", { locale: fr })}`}
+                  value={dt(monthBuys.reduce((s, p) => s + p.invested, 0))}
+                  hint={`${monthBuys.length} achat${monthBuys.length > 1 ? "s" : ""}, payés ou non`}
+                />
+              </HeroChip>
+              <HeroChip onClick={() => setTab("achats")}>
+                <GlassChip
+                  label="À payer aux fournisseurs"
+                  value={<span className={t.due ? "text-orange-200" : undefined}>{dt(t.due ?? 0)}</span>}
+                  hint={t.dueCount ? `${t.dueCount} achat${t.dueCount > 1 ? "s" : ""} pas encore payé${t.dueCount > 1 ? "s" : ""}` : "rien à payer"}
+                />
+              </HeroChip>
+              <HeroChip
+                onClick={() => {
+                  setSaleFilter("all");
+                  setTab("ventes");
+                }}
+              >
+                <GlassChip label={`Ventes de ${format(new Date(), "MMMM", { locale: fr })}`} value={dt(monthSales)} hint="produits vendus ce mois" />
+              </HeroChip>
+              <HeroChip
+                onClick={() => {
+                  setSaleFilter("unpaid");
+                  setTab("ventes");
+                }}
+              >
+                <GlassChip
+                  label="Ventes non payées"
+                  value={unpaidSales ? dt(unpaidSales.totals.unpaidAmount) : "…"}
+                  hint={unpaidSales ? `${unpaidSales.totals.unpaidCount} à encaisser` : ""}
+                />
+              </HeroChip>
+              <HeroChip
+                onClick={() => {
+                  setStockSub("stock");
+                  setTab("stock");
+                }}
+              >
+                <GlassChip label="Valeur du stock" value={dt(t.stockValue)} hint="au coût moyen" />
+              </HeroChip>
             </>
           ) : (
-            Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[70px] rounded-2xl bg-white/15" />)
+            Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-[70px] rounded-2xl bg-white/15" />)
           )}
         </div>
       </section>
@@ -174,9 +218,9 @@ export default function ProductsPage() {
         <div className="animate-in fade-in-0 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900 duration-300 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200">
           <p className="font-bold">Pour commencer</p>
           <ol className="mt-1 list-decimal space-y-0.5 pl-5">
-            <li>Onglet Ingrédients → « + Ingrédient » : café grain, lait, gobelets… avec ce qu’il te reste aujourd’hui.</li>
-            <li>Clique sur chaque produit → « Recette » (Express = 8 g café + 1 gobelet) ou « À l’unité » (eau, canette).</li>
-            <li>À chaque réassort : « Nouvel achat ». La dépense va dans Finance toute seule.</li>
+            <li>Onglet Stock → « + Article » : café grain, lait, gobelets… avec ce qu’il te reste aujourd’hui.</li>
+            <li>Stock › Produits &amp; recettes : clique sur chaque produit → « Recette » (Express = 8 g café + 1 gobelet) ou « À l’unité » (eau, canette).</li>
+            <li>À chaque réassort : « Nouvel achat ». La dépense va dans Finance toute seule, même si tu paies plus tard.</li>
           </ol>
         </div>
       ) : null}
@@ -187,10 +231,7 @@ export default function ProductsPage() {
             <button
               key={a.id}
               type="button"
-              onClick={() => {
-                setBuyItem(a.id);
-                setBuyOpen(true);
-              }}
+              onClick={() => openBuy(a.id)}
               className={cn(
                 "inline-flex animate-in fade-in-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors duration-200",
                 a.tone === "bad"
@@ -249,19 +290,16 @@ export default function ProductsPage() {
               aria-selected={on}
               onClick={() => setTab(x.id)}
               className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-all duration-200 motion-reduce:transition-none",
-                on ? "border-indigo-600 bg-indigo-600 text-white shadow-md" : "bg-card text-muted-foreground hover:border-indigo-300"
+                "inline-flex min-h-11 items-center gap-2.5 rounded-2xl border px-5 text-[15px] font-bold transition-all duration-200 motion-reduce:transition-none",
+                on ? "border-indigo-600 bg-indigo-600 text-white shadow-md" : "bg-card text-foreground hover:border-indigo-300"
               )}
             >
               {x.label}
-              {x.id === "revenus" ? null : <span
-                className={cn(
-                  "rounded-full px-1.5 text-[11px] tabular-nums transition-colors duration-200",
-                  on ? "bg-white/20" : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
-                )}
-              >
-                {counts[x.id]}
-              </span>}
+              {hints[x.id] ? (
+                <span className={cn("text-xs font-semibold transition-colors duration-200", on ? "text-indigo-100" : "text-muted-foreground")}>
+                  {hints[x.id]}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -275,40 +313,55 @@ export default function ProductsPage() {
         </div>
       ) : (
         <div key={tab} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
-          {tab === "revenus" ? (
-            <RevenueTab overview={overview} />
-          ) : tab === "paquets" ? (
-            <LotsTab overview={overview} />
-          ) : tab === "produits" ? (
-            <ProductsTab
+          {tab === "achats" ? (
+            <AchatsTab
               overview={overview}
-              onOpen={(p) => {
-                setProduct(p);
-                setProductOpen(true);
-              }}
-            />
-          ) : tab === "ingredients" ? (
-            <IngredientsTab
-              overview={overview}
-              onCount={setCountItem}
-              onBuy={(i) => {
-                setBuyItem(i.id);
+              onBuy={openBuy}
+              onEdit={(target) => {
+                setBuyEdit(target);
                 setBuyOpen(true);
               }}
-              onEdit={(i) => {
+              onPay={setPayId}
+              onWhy={setWhyItem}
+            />
+          ) : tab === "ventes" ? (
+            <VentesTab filter={saleFilter} onFilter={setSaleFilter} onSale={setSaleTarget} onChanged={refresh} />
+          ) : (
+            <StockView
+              overview={overview}
+              sub={stockSub}
+              onSub={setStockSub}
+              onCount={setCountItem}
+              onBuy={openBuy}
+              onEditItem={(i) => {
                 setItem(i);
                 setItemOpen(true);
               }}
+              onNewItem={() => {
+                setItem(null);
+                setItemOpen(true);
+              }}
+              onWhy={setWhyItem}
+              onOpenProduct={(p) => {
+                setProduct(p);
+                setProductOpen(true);
+              }}
+              onNewProduct={() => {
+                setProduct(null);
+                setProductOpen(true);
+              }}
+              onChanged={refresh}
             />
-          ) : (
-            <PurchasesTab overview={overview} onChanged={refresh} />
           )}
         </div>
       )}
 
       {overview ? (
         <>
-          <PurchaseDialog open={buyOpen} onOpenChange={setBuyOpen} overview={overview} preselect={buyItem} onDone={refresh} />
+          <BuyDialog open={buyOpen} onOpenChange={setBuyOpen} overview={overview} preselect={buyItem} edit={buyEdit} onDone={refresh} />
+          <PayDialog purchaseId={payId} overview={overview} onOpenChange={(o) => !o && setPayId(null)} onDone={refresh} />
+          <AvgCostDialog itemId={whyItem} overview={overview} onOpenChange={(o) => !o && setWhyItem(null)} />
+          <SaleDialog target={saleTarget} overview={overview} onOpenChange={(o) => !o && setSaleTarget(null)} onDone={refresh} />
           <ProductDialog
             open={productOpen}
             onOpenChange={(o) => {
@@ -324,7 +377,30 @@ export default function ProductsPage() {
         </>
       ) : null}
       <ItemDialog open={itemOpen} onOpenChange={setItemOpen} item={item} onDone={refresh} />
-      <CountDialog open={!!countItem} onOpenChange={(o) => !o && setCountItem(null)} item={countItem} onDone={refresh} />
+      <CountDialog
+        open={!!countItem}
+        onOpenChange={(o) => !o && setCountItem(null)}
+        item={countItem}
+        onDone={refresh}
+        onForgottenSale={() => {
+          const p = overview?.products.find((x) => x.recipe.length === 1 && x.recipe[0].stockItemId === countItem?.id);
+          setTab("ventes");
+          setSaleTarget({ productId: p?.id ?? null });
+        }}
+      />
     </div>
+  );
+}
+
+/** A hero number that opens the tab it comes from */
+function HeroChip({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="min-w-0 rounded-2xl text-left transition-transform duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    >
+      {children}
+    </button>
   );
 }

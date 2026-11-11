@@ -54,6 +54,17 @@ export class StockController {
     return this.stock.createPurchase(body);
   }
 
+  @Patch('purchases/:id')
+  updatePurchase(@Param('id') id: string, @Body() body: Parameters<S['updatePurchase']>[1]) {
+    return this.stock.updatePurchase(id, body);
+  }
+
+  /** Bought on credit → the supplier is now paid */
+  @Post('purchases/:id/pay')
+  payPurchase(@Param('id') id: string, @Body() body: Parameters<S['payPurchase']>[1]) {
+    return this.stock.payPurchase(id, body);
+  }
+
   @Delete('purchases/:id')
   removePurchase(@Param('id') id: string) {
     return this.stock.removePurchase(id);
