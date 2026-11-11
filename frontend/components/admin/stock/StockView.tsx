@@ -1,18 +1,19 @@
 "use client";
 
-import { ClipboardCheck, Info, Pencil, Plus, ShoppingBasket } from "lucide-react";
+import { useState } from "react";
+import { ClipboardCheck, Info, LayoutGrid, Pencil, Plus, ShoppingBasket, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { cn } from "@/lib/utils";
 import type { StockItemRow, StockOverview, StockProductRow } from "@/lib/api/resources";
 import { perBuyUnit } from "./buys";
-import { Losses, ProductsTab } from "./StockTabs";
+import { IngredientsTab, Losses, ProductsTab } from "./StockTabs";
 import { LotsTab, RevenueTab } from "./SalesTabs";
 import { StatusPill, dt, qty } from "./stock-ui";
 
 export type StockSub = "stock" | "produits" | "revenus" | "paquets";
 const SUBS: { id: StockSub; label: string }[] = [
-  { id: "stock", label: "Stock & coût moyen" },
+  { id: "stock", label: "Ingrédients & stock" },
   { id: "produits", label: "Produits & recettes" },
   { id: "revenus", label: "Revenus & coûts" },
   { id: "paquets", label: "Par paquet" },
@@ -52,6 +53,7 @@ export function StockView({
   onNewProduct: () => void;
   onChanged: () => void;
 }) {
+  const [view, setView] = useState<"cards" | "table">("cards");
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-1.5 border-b pb-3" role="tablist" aria-label="Vues du stock">
@@ -72,18 +74,32 @@ export function StockView({
         ))}
         <span className="flex-1" />
         {sub === "stock" ? (
-          <Button variant="outline" size="sm" className="rounded-xl" onClick={onNewItem}>
-            <Plus className="h-3.5 w-3.5" /> Article
-          </Button>
+          <>
+            <ViewSwitch view={view} onView={setView} />
+            <Button size="sm" className="rounded-xl bg-indigo-600 font-bold text-white hover:bg-indigo-700" onClick={onNewItem}>
+              <Plus className="h-3.5 w-3.5" /> Ingrédient
+            </Button>
+          </>
         ) : sub === "produits" ? (
-          <Button variant="outline" size="sm" className="rounded-xl" onClick={onNewProduct}>
+          <Button size="sm" className="rounded-xl bg-indigo-600 font-bold text-white hover:bg-indigo-700" onClick={onNewProduct}>
             <Plus className="h-3.5 w-3.5" /> Produit
           </Button>
         ) : null}
       </div>
       <div key={sub} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
         {sub === "stock" ? (
-          <StockTable overview={overview} onCount={onCount} onBuy={onBuy} onEdit={onEditItem} onWhy={onWhy} onChanged={onChanged} />
+          view === "cards" ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-w-0">
+                <IngredientsTab overview={overview} onCount={onCount} onBuy={(i) => onBuy(i.id)} onEdit={onEditItem} onWhy={onWhy} />
+              </div>
+              <aside className="space-y-3">
+                <Losses losses={overview.losses} total={overview.totals.losses} onChanged={onChanged} />
+              </aside>
+            </div>
+          ) : (
+            <StockTable overview={overview} onCount={onCount} onBuy={onBuy} onEdit={onEditItem} onWhy={onWhy} onChanged={onChanged} />
+          )
         ) : sub === "produits" ? (
           <ProductsTab overview={overview} onOpen={onOpenProduct} />
         ) : sub === "revenus" ? (
@@ -213,6 +229,34 @@ function StockTable({
       <aside className="space-y-3">
         <Losses losses={overview.losses} total={overview.totals.losses} onChanged={onChanged} />
       </aside>
+    </div>
+  );
+}
+
+/** Cards (with progress bars) or one table */
+export function ViewSwitch({ view, onView }: { view: "cards" | "table"; onView: (v: "cards" | "table") => void }) {
+  return (
+    <div className="inline-flex rounded-xl border bg-card p-0.5" role="group" aria-label="Affichage">
+      {(
+        [
+          ["cards", "Cartes", LayoutGrid],
+          ["table", "Tableau", Table2],
+        ] as const
+      ).map(([id, label, Icon]) => (
+        <button
+          key={id}
+          type="button"
+          aria-pressed={view === id}
+          onClick={() => onView(id)}
+          className={cn(
+            "inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold transition-colors duration-200 motion-reduce:transition-none",
+            view === id ? "bg-indigo-600 text-white" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </button>
+      ))}
     </div>
   );
 }

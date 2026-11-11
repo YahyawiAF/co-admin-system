@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { cn } from "@/lib/utils";
 import type { StockOverview } from "@/lib/api/resources";
+import { PurchasesTab } from "./StockTabs";
+import { ViewSwitch } from "./StockView";
 import { allBuys, average, itemBuys, payLabel, perBuyUnit } from "./buys";
 import type { BuyTarget } from "./BuyDialogs";
 import { StatusPill, dt, qty } from "./stock-ui";
@@ -30,17 +32,21 @@ export function AchatsTab({
   onEdit,
   onPay,
   onWhy,
+  onChanged,
 }: {
   overview: StockOverview;
   onBuy: (itemId: string | null) => void;
   onEdit: (t: BuyTarget) => void;
   onPay: (purchaseId: string) => void;
   onWhy: (itemId: string) => void;
+  onChanged: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [view, setView] = useState<"cards" | "table">("cards");
   const buys = useMemo(() => allBuys(overview).sort((a, b) => b.date.localeCompare(a.date)), [overview]);
   const due = overview.purchases.filter((p) => p.paid === false);
   const list = buys.filter((b) => filter === "all" || (filter === "due" ? !b.paid : b.paid));
+  const purchasesShown = overview.purchases.filter((p) => filter === "all" || (filter === "due" ? p.paid === false : p.paid !== false));
   const paged = usePaged(list, 20, filter);
   const cards = usePaged(overview.items, 12);
 
@@ -151,8 +157,8 @@ export function AchatsTab({
         <ListPager className="-mx-4 -mb-4 mt-3" page={cards.page} lastPage={cards.lastPage} total={cards.total} onPage={cards.setPage} />
       </section>
 
-      <section className="overflow-hidden rounded-2xl border bg-card">
-        <div className="flex flex-wrap items-center gap-2 p-4 pb-3">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-base font-extrabold">Tous les achats</h2>
           <span className="flex-1" />
           <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Filtrer les achats">
@@ -172,7 +178,19 @@ export function AchatsTab({
               </button>
             ))}
           </div>
+          <ViewSwitch view={view} onView={setView} />
         </div>
+        {view === "cards" ? (
+          <PurchasesTab
+            overview={overview}
+            purchases={purchasesShown}
+            resetKey={filter}
+            onChanged={onChanged}
+            onPay={onPay}
+            onEdit={onEdit}
+          />
+        ) : (
+          <div className="overflow-hidden rounded-2xl border bg-card">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-[13px]">
             <thead className="border-y bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -228,6 +246,8 @@ export function AchatsTab({
           </table>
         </div>
         <ListPager page={paged.page} lastPage={paged.lastPage} total={paged.total} onPage={paged.setPage} />
+          </div>
+        )}
       </section>
     </div>
   );
