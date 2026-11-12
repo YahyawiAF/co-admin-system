@@ -8,6 +8,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CaisseService } from './caisse.service';
+import { MoneyCheckService, type GapLineInput } from './money-check.service';
 
 type MovementBody = {
   type: 'IN' | 'OUT';
@@ -19,7 +20,31 @@ type MovementBody = {
 
 @Controller('caisse')
 export class CaisseController {
-  constructor(private readonly caisse: CaisseService) {}
+  constructor(
+    private readonly caisse: CaisseService,
+    private readonly moneyCheck: MoneyCheckService,
+  ) {}
+
+  /** Contrôle du mois: money that left the caisse/coffre without a record, month by month */
+  @Get('money-check')
+  moneyCheckMonths(@Query('months') months?: string) {
+    return this.moneyCheck.months(Number(months) || 6);
+  }
+
+  @Get('money-check/:month')
+  moneyCheckMonth(@Param('month') month: string) {
+    return this.moneyCheck.month(month);
+  }
+
+  @Post('money-check/lines')
+  addMoneyGapLine(@Body() body: GapLineInput) {
+    return this.moneyCheck.addLine(body);
+  }
+
+  @Delete('money-check/lines/:id')
+  removeMoneyGapLine(@Param('id') id: string) {
+    return this.moneyCheck.removeLine(id);
+  }
 
   @Get('summary')
   summary(@Query('date') date: string) {

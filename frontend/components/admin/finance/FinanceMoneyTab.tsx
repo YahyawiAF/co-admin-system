@@ -6,11 +6,12 @@ import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { advisorApi } from "@/lib/api/resources";
+import { advisorApi, moneyCheckApi } from "@/lib/api/resources";
 import { managerApi, type MoneyIdea } from "@/lib/api/manager";
 import type { AdviceMetric, AdvisorCategory } from "@/lib/types";
 import { MoneyTab } from "./MoneyTab";
 import { QUESTIONS_KEY, QuestionsTab } from "./MoneyQuestions";
+import { MONEY_CHECK_KEY, MoneyCheckTab } from "./MoneyCheckTab";
 
 /**
  * Finance › Argent: how much to keep, how much can be invested (caisse + coffre + banque
@@ -18,9 +19,12 @@ import { QUESTIONS_KEY, QuestionsTab } from "./MoneyQuestions";
  */
 export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void } = {}) {
   const qc = useQueryClient();
-  const [view, setView] = useState<"calcul" | "questions">("calcul");
+  const [view, setView] = useState<"calcul" | "controle" | "questions">("calcul");
   const questions = useQuery({ queryKey: QUESTIONS_KEY, queryFn: managerApi.questions });
   const toAsk = questions.data?.toAsk ?? 0;
+  // Finished months where money left without a record
+  const check = useQuery({ queryKey: MONEY_CHECK_KEY, queryFn: () => moneyCheckApi.months(6) });
+  const toCheck = (check.data?.months ?? []).filter((m) => m.checkable && !m.running && m.gap > 0.5).length;
 
   // An investment idea becomes a solution measured in Conseil IA (goal: pay back its cost)
   const start = useMutation({
@@ -52,6 +56,7 @@ export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void }
           {(
             [
               ["calcul", "Garder ou investir"],
+              ["controle", "Contrôle du mois"],
               ["questions", "Questions"],
             ] as const
           ).map(([k, label]) => (
@@ -70,6 +75,9 @@ export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void }
               {k === "questions" && toAsk ? (
                 <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] text-primary-foreground">{toAsk}</span>
               ) : null}
+              {k === "controle" && toCheck ? (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-orange-500 px-1.5 text-[11px] text-white">{toCheck}</span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -80,6 +88,8 @@ export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void }
       <div key={view} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">
         {view === "calcul" ? (
           <MoneyTab onAnswer={() => setView("questions")} onStartTest={(idea) => start.mutate(idea)} onGoTab={onGoTab} />
+        ) : view === "controle" ? (
+          <MoneyCheckTab onGoTab={onGoTab} />
         ) : (
           <QuestionsTab onShowMoney={() => setView("calcul")} />
         )}

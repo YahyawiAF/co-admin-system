@@ -223,7 +223,8 @@ export class CaisseService {
     }));
     const expenses = expenseRows.reduce((a, de) => a + de.amount, 0);
     const expensesCash = expenseRows
-      .filter((de) => de.source === 'CAISSE')
+      // Declared after the count: already inside the closing's gap
+      .filter((de) => de.source === 'CAISSE' && !de.afterCount)
       .reduce((a, de) => a + de.amount, 0);
     const movements = session?.movements ?? [];
     const movementsIn = movements
