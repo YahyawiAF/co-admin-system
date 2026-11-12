@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { advisorApi, analyticsApi } from "@/lib/api/resources";
 import { CompareCard, ExportCard, SourceCurveCard } from "./ForecastSources";
+import { MonthEndCard } from "./MonthEndCard";
 import type {
   AbonnementMonth,
   AdviceMetric,
@@ -165,10 +166,8 @@ export function ForecastBlock({
   const t = f.toDate;
   const ev = f.events;
   const prevTotal = f.versusPrevious ? f.versusPrevious.previousTotal + ev.previousMonth : null;
-  const calendarDriver = f.versusPrevious?.drivers.find((d) => d.key === "calendar");
   const lastComplete = t ? f.days[t.days - 1] : null;
   const showsPast = !f.period.isCurrent && !f.period.isFuture;
-  const ahead = t ? t.gap >= 0 : null;
   const s = f.subscriptions;
   const subsPaid = t?.subscriptions.actual ?? null;
   const projectedVariable = t ? (pace ? t.pace.projectedVariable : t.projectedVariable) : f.expected.variable;
@@ -193,84 +192,7 @@ export function ForecastBlock({
 
   return (
     <div className="grid gap-4">
-      <Card className="shadow-none">
-        <CardContent className="grid gap-5 p-5 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
-          {t && lastComplete ? (
-            <>
-              <div className="grid content-start gap-1.5">
-                <span
-                  className={cn(
-                    "justify-self-start rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors duration-300",
-                    ahead ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700",
-                  )}
-                >
-                  {showsPast ? (ahead ? "Au-dessus du prévu" : "En dessous du prévu") : ahead ? "En avance sur le prévu" : "En retard sur le prévu"}
-                </span>
-                <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(t.actual)}</div>
-                <p className="text-sm text-muted-foreground">
-                  passes + café {showsPast ? `en ${f.period.label}` : `au ${dayLabel(lastComplete.key)}`} · prévu{" "}
-                  <b className="text-foreground">{dt(t.expected)}</b>
-                </p>
-              </div>
-              <Kpi
-                label="Écart vs prévu"
-                value={`${signed(t.gap)} DT`}
-                tone={t.gap >= 0 ? "good" : "bad"}
-                sub={t.gapPct != null ? `${signed(t.gapPct)} % · mêmes jours de semaine` : undefined}
-              />
-              <Kpi
-                label={showsPast ? "Mois complet" : `Fin de mois estimée${pace ? " · rythme du mois" : ""}`}
-                value={dt(monthDone ?? r50(projected))}
-                sub={
-                  showsPast
-                    ? `prévu ${fmt(r50(f.expected.total))} · abonnements ${fmt(t.subscriptions.actual)} DT`
-                    : `passes + café ${fmt(r50(projectedVariable))} + abonnements ${fmt(r50(projectedSubs))}${
-                        ev.projected ? ` + événements ${fmt(ev.projected)}` : ""
-                      }`
-                }
-              />
-              <Kpi
-                label={`vs ${f.period.previousLabel}`}
-                value={prevTotal != null ? dt(prevTotal) : "—"}
-                sub={
-                  prevTotal != null
-                    ? `${signed((monthDone ?? projected) - prevTotal)} DT${
-                        calendarDriver && Math.abs(calendarDriver.effect) >= 20 ? ` · dont calendrier ${signed(calendarDriver.effect)}` : ""
-                      }`
-                    : undefined
-                }
-              />
-            </>
-          ) : (
-            <>
-              <div className="grid content-start gap-1.5">
-                <span className="justify-self-start rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                  {f.period.label} prévu
-                </span>
-                <div className="text-3xl font-extrabold tracking-tight tabular-nums">{dt(r50(f.expected.total + ev.projected))}</div>
-                <p className="text-sm text-muted-foreground">
-                  Passes + café {fmt(r50(f.expected.variable))} + abonnements {fmt(r50(f.expected.subscriptions))}
-                  {ev.projected ? ` + événements ${fmt(ev.projected)}` : ""} · fourchette {fmt(r50(f.expected.low))} –{" "}
-                  {fmt(r50(f.expected.high))} DT.
-                  {f.period.isCurrent ? " Le réel se remplit chaque soir." : ""}
-                </p>
-              </div>
-              <Kpi
-                label={`vs ${f.period.previousLabel}`}
-                value={prevTotal != null ? `${signed(f.expected.total + ev.projected - prevTotal)} DT` : "—"}
-                tone={prevTotal == null ? "neutral" : f.expected.total + ev.projected - prevTotal >= 0 ? "good" : "bad"}
-                sub={prevTotal != null ? `${f.period.previousLabel} : ${fmt(prevTotal)} DT` : undefined}
-              />
-              <Kpi
-                label={`Repère du ${dayLabel(f.checkpoints[0].key)}`}
-                value={dt(r50(f.checkpoints[0].expectedCum))}
-                sub={`passes + café · en dessous de ${fmt(r50(f.checkpoints[0].expectedCum * 0.9))} DT → lancer une idée`}
-              />
-              <Kpi label="Nouveaux attendus" value={fmt(f.expected.newVisitors)} sub={`${fmt(f.expected.visitCount)} visites au total`} />
-            </>
-          )}
-        </CardContent>
-      </Card>
+      <MonthEndCard f={f} year={year} month={month} pace={pace} onPace={setPace} />
 
       <SourceCurveCard f={f} pace={pace} onPace={setPace} />
 
@@ -357,24 +279,6 @@ export function ForecastBlock({
       </Card>
 
       <ExportCard year={year} month={month} facilityId={facilityId} />
-    </div>
-  );
-}
-
-function Kpi({ label, value, sub, tone = "neutral" }: { label: string; value: string; sub?: string; tone?: "good" | "bad" | "neutral" }) {
-  return (
-    <div className="grid content-start gap-1 border-t pt-3 sm:border-t-0 sm:pt-0 xl:border-l xl:pl-4">
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span
-        className={cn(
-          "text-2xl font-bold tabular-nums",
-          tone === "good" && "text-emerald-600",
-          tone === "bad" && "text-rose-600",
-        )}
-      >
-        {value}
-      </span>
-      {sub ? <span className="text-xs text-muted-foreground">{sub}</span> : null}
     </div>
   );
 }
