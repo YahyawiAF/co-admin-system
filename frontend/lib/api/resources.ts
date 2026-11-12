@@ -1221,6 +1221,11 @@ export type StockPurchaseRow = {
   date: string;
   source: "CAISSE" | "COFFRE" | "AUTRE" | "NONE";
   note: string | null;
+  supplier?: string | null;
+  /** false = bought on credit, supplier not paid yet */
+  paid?: boolean;
+  /** Day the supplier was paid (purchases first recorded as « à payer ») */
+  paidAt?: string | null;
   dailyExpenseId: string | null;
   invested: number;
   recovered: number;
@@ -1236,8 +1241,10 @@ export type StockLossRow = {
   unit: StockUnit;
   quantity: number;
   amount: number;
+  reason?: StockCountReason | null;
   note: string | null;
 };
+export type StockCountReason = "CASSE" | "VENTE_OUBLIEE" | "ERREUR" | "AUTRE";
 export type StockOverview = {
   sales?: StockSales;
   totals: {
@@ -1248,6 +1255,9 @@ export type StockOverview = {
     losses: number;
     purchases: number;
     firstPurchaseDate: string | null;
+    /** Bought on credit, not paid yet */
+    due?: number;
+    dueCount?: number;
   };
   items: StockItemRow[];
   products: StockProductRow[];
@@ -1258,6 +1268,9 @@ export type StockPurchaseInput = {
   date?: string;
   source: StockPurchaseRow["source"];
   note?: string;
+  supplier?: string;
+  /** false = « pas encore payé » */
+  paid?: boolean;
   lines: { stockItemId: string; quantity: number; price: number }[];
 };
 
@@ -1277,8 +1290,8 @@ export const stockApi = {
   removeItem(id: string) {
     return http.delete(`/stock/items/${id}`);
   },
-  count(id: string, remaining: number, note?: string) {
-    return http.post<{ gap: number }>(withOrgQuery(`/stock/items/${id}/count`), { remaining, note });
+  count(id: string, remaining: number, note?: string, reason?: StockCountReason) {
+    return http.post<{ gap: number }>(withOrgQuery(`/stock/items/${id}/count`), { remaining, note, reason });
   },
   removeAdjustment(id: string) {
     return http.delete(`/stock/adjustments/${id}`);
@@ -1297,6 +1310,62 @@ export const stockApi = {
   },
   removePurchase(id: string) {
     return http.delete(`/stock/purchases/${id}`);
+  },
+  updatePurchase(
+    id: string,
+    data: {
+      date?: string;
+      supplier?: string | null;
+      note?: string | null;
+      paid?: boolean;
+      source?: StockPurchaseRow["source"];
+      lines?: { lotId: string; quantity: number; price: number }[];
+    }
+  ) {
+    return http.patch<{ ok: true; total: number }>(`/stock/purchases/${id}`, data);
+  },
+  /** Supplier paid for a purchase bought on credit */
+  payPurchase(id: string, data: { source: "CAISSE" | "COFFRE" | "AUTRE"; date: string }) {
+    return http.post(`/stock/purchases/${id}/pay`, data);
+  },
+};
+
+/** One sale (café order) in Produits › Ventes */
+export type SaleRow = {
+  id: string;
+  date: string;
+  productId: string;
+  productName: string;
+  memberId: string | null;
+  memberName: string | null;
+  quantity: number;
+  unitPrice: number;
+  /** Price typed on the sale (null = product price) */
+  customPrice: number | null;
+  total: number;
+  isPayed: boolean;
+  /** Added or corrected later from Produits › Ventes */
+  editedAt: string | null;
+};
+export type SalesPage = {
+  page: number;
+  pageSize: number;
+  total: number;
+  totals: { count: number; amount: number; unpaidCount: number; unpaidAmount: number };
+  rows: SaleRow[];
+};
+export type SaleFilter = "all" | "unpaid" | "paid";
+
+export const salesApi = {
+  list(status: SaleFilter, page: number, pageSize = 20) {
+    return http.get<SalesPage>(withOrgQuery(`/products/daily/list?status=${status}&page=${page}&pageSize=${pageSize}`));
+  },
+  /** Forgotten sale, recorded later (date = yyyy-MM-dd) */
+  create(data: { productId: string; quantite: number; date: string; unitPrice: number | null; memberId?: string | null; isPayed: boolean }) {
+    return http.post("/products/daily", { ...data, fromAdmin: true });
+  },
+  update(id: string, data: { productId?: string; quantite?: number; date?: string; unitPrice?: number | null }) {
+    return http.patch(`/products/daily/${id}`, { ...data, fromAdmin: true });
   },
 };
 

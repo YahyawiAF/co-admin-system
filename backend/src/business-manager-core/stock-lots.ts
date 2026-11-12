@@ -1,7 +1,10 @@
 /**
  * Stock by purchase lot: what was invested, what the sales brought back, what is left.
  *
- * - Every article bought is a lot. Sales use lots first in, first out.
+ * - Every article bought is a lot. Sales use lots first in, first out (quantities).
+ * - Cost is the AVERAGE cost: all purchases of the item added up ÷ total quantity bought
+ *   (6 bottles for 5 DT + 6 for 6 DT → 11 ÷ 12 = 0.917 DT). A sale is valued with the
+ *   average of the purchases made up to its date.
  * - A product sold uses ingredients (its recipe). Its price is split between those
  *   ingredients in proportion to their cost: that share is what the lot "recovered".
  * - Lot result = recovered − price paid. Inventory counts (adjustments) use stock
@@ -47,7 +50,7 @@ export type ProductMonth = { qty: number; revenue: number; cost: number };
 export type ItemResult = {
   id: string;
   left: number;
-  /** DT per base unit, from the lot in use (or the last one bought) */
+  /** Average cost: DT per base unit, all purchases ÷ all quantity bought */
   unitCost: number;
   /** Lot in use, if any */
   currentLotId: string | null;
@@ -107,11 +110,17 @@ export function computeStock(input: {
       recentUse: 0,
     });
   }
-  const unit = (l: StockLotInput) => (l.quantity > 0 ? l.price / l.quantity : 0);
-  /** Cost per base unit of the lot the next use comes from (last lot once everything is used). */
-  const costNow = (st: ItemState) => {
-    const open = st.lots.find((s) => s.lot.quantity - s.used > EPS) ?? st.lots[st.lots.length - 1];
-    return open ? unit(open.lot) : 0;
+  /** Average cost per base unit of the purchases made up to `t` (all of them when none yet). */
+  const avgAt = (st: ItemState, t = Infinity) => {
+    let price = 0;
+    let quantity = 0;
+    for (const s of st.lots) {
+      if (s.lot.date.getTime() > t) continue;
+      price += s.lot.price;
+      quantity += s.lot.quantity;
+    }
+    if (quantity <= EPS && t !== Infinity) return avgAt(st);
+    return quantity > EPS ? price / quantity : 0;
   };
   /**
    * Takes `need` from the lots first in first out. Returns DT of stock used.
@@ -119,7 +128,7 @@ export function computeStock(input: {
    */
   const consume = (st: ItemState, need: number, date: Date, revenue: number, product: { id: string; dose: number } | null = null) => {
     const total = need;
-    let value = 0;
+    const cost = avgAt(st, date.getTime());
     for (const s of st.lots) {
       if (need <= EPS) break;
       const room = s.lot.quantity - s.used;
@@ -136,15 +145,11 @@ export function computeStock(input: {
       } else {
         s.lost += take;
       }
-      value += take * unit(s.lot);
       if (s.lot.quantity - s.used <= EPS) s.finishedAt = date;
       need -= take;
     }
-    if (need > EPS) {
-      st.uncovered += need;
-      value += need * costNow(st);
-    }
-    return value;
+    if (need > EPS) st.uncovered += need;
+    return total * cost;
   };
 
   // One timeline for every item, so each sale is split with the prices of the lots it really used.
@@ -170,7 +175,7 @@ export function computeStock(input: {
         .map((r) => ({ r, st: state.get(r.itemId) }))
         .filter((x): x is { r: RecipeLine; st: ItemState } => !!x.st && t >= x.st.firstDay);
       if (!lines.length) continue;
-      const costs = lines.map(({ r, st }) => r.quantity * costNow(st));
+      const costs = lines.map(({ r, st }) => r.quantity * avgAt(st, t));
       const totalCost = costs.reduce((a, b) => a + b, 0);
       const money = e.sale.qty * e.sale.unitPrice;
       let cost = 0;
@@ -235,7 +240,7 @@ export function computeStock(input: {
     items.set(item.id, {
       id: item.id,
       left,
-      unitCost: costNow(st),
+      unitCost: avgAt(st),
       currentLotId: current?.lot.id ?? null,
       dailyUse,
       daysLeft: dailyUse > EPS ? left / dailyUse : null,

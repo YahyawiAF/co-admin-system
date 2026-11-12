@@ -336,7 +336,7 @@ export function ProductDialog({
                 {unitFromLots ? (
                   <>
                     <Input className="mt-0.5 h-10 tabular-nums" value={dt3(unitRow!.unitCost)} disabled />
-                    <span className="mt-1 block font-normal">Vient du paquet en cours. Pour le changer, corrige l’achat dans « Achats ».</span>
+                    <span className="mt-1 block font-normal">Coût moyen de tous les achats. Pour le changer, corrige un achat dans « Achats ».</span>
                   </>
                 ) : (
                   <>
@@ -359,7 +359,7 @@ export function ProductDialog({
             </section>
           )}
           {mode === "RECIPE" ? (
-            <p className="-mt-2 text-xs text-muted-foreground">Le prix d’achat est la somme des ingrédients ci-dessus (prix de leur paquet en cours).</p>
+            <p className="-mt-2 text-xs text-muted-foreground">Le prix d’achat est la somme des ingrédients ci-dessus (au coût moyen de leurs achats).</p>
           ) : null}
 
           <section className="space-y-3">

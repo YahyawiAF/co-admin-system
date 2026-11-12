@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ClipboardCheck, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardCheck, HandCoins, Info, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { cn } from "@/lib/utils";
@@ -13,9 +13,9 @@ import {
   stockApi,
   type StockItemRow,
   type StockLossRow,
+  type StockPurchaseRow,
   type StockOverview,
   type StockProductRow,
-  type StockPurchaseRow,
 } from "@/lib/api/resources";
 import { Bar, SOURCE_LABEL, StatusPill, buyUnit, dt, dt3, qty, signedDt } from "./stock-ui";
 
@@ -144,13 +144,17 @@ export function ProductsTab({ overview, onOpen }: { overview: StockOverview; onO
                     ? <>Limité par : <b className="text-foreground">{p.limitedBy}</b></>
                     : " "}
               </p>
+              <span className="mt-3 flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-indigo-200 py-1.5 text-xs font-semibold text-indigo-700 transition-colors duration-200 group-hover:border-indigo-400 group-hover:bg-indigo-50 dark:border-indigo-900 dark:text-indigo-300 dark:group-hover:bg-indigo-950/40">
+                <Pencil className="h-3 w-3" />
+                {p.recipe.length && !unit ? "Modifier le produit et sa recette" : "Modifier le produit / ajouter une recette"}
+              </span>
             </button>
           );
         })}
       </div>
       <ListPager className="mt-3 rounded-xl border bg-card" page={paged.page} lastPage={paged.lastPage} total={paged.total} onPage={paged.setPage} />
       <p className="mt-3 text-xs text-muted-foreground">
-        Le coût vient du prix du lot en cours de chaque ingrédient. « Encore possible » se recalcule à chaque vente et chaque achat.
+        Le coût vient du coût moyen de chaque ingrédient (tous ses achats ÷ la quantité achetée). « Encore possible » se recalcule à chaque vente et chaque achat.
       </p>
     </div>
   );
@@ -186,15 +190,18 @@ export function IngredientsTab({
   onCount,
   onBuy,
   onEdit,
+  onWhy,
 }: {
   overview: StockOverview;
   onCount: (i: StockItemRow) => void;
   onBuy: (i: StockItemRow) => void;
   onEdit: (i: StockItemRow) => void;
+  /** ⓘ how the average cost is computed */
+  onWhy: (itemId: string) => void;
 }) {
   const paged = usePaged(overview.items);
   if (!overview.items.length) {
-    return <Empty>Aucun ingrédient. Clique sur « + Ingrédient » : café grain, lait, gobelets, sucre…</Empty>;
+    return <Empty>Aucun ingrédient. Clique sur « + Ingrédient » en haut : café grain, lait, gobelets, sucre…</Empty>;
   }
   return (
     <div>
@@ -220,8 +227,18 @@ export function IngredientsTab({
                   <p key={it.left} className="animate-in fade-in-0 text-lg font-black tabular-nums duration-200 motion-reduce:animate-none">
                     {qty(it.left, it.unit)}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {it.hasLots ? `${dt3(it.unitCost * bu.factor)} / ${bu.label}` : "pas d’achat"}
+                  <p className="flex items-center justify-end gap-0.5 text-[11px] text-muted-foreground">
+                    {it.hasLots ? `moy. ${dt3(it.unitCost * bu.factor)} / ${bu.label}` : "pas d’achat"}
+                    {it.hasLots ? (
+                      <button
+                        type="button"
+                        aria-label={`Calcul du coût moyen de ${it.name}`}
+                        onClick={() => onWhy(it.id)}
+                        className="rounded-full p-0.5 text-indigo-600 transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+                      >
+                        <Info className="h-3 w-3" />
+                      </button>
+                    ) : null}
                   </p>
                 </div>
               </div>
@@ -236,6 +253,11 @@ export function IngredientsTab({
                   {it.daysLeft != null && it.left > 0 ? `~${Math.max(1, Math.round(it.daysLeft))} j` : ""}
                 </span>
               </div>
+              {it.hasLots && it.left > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Valeur en stock : <b className="tabular-nums text-foreground">{dt(it.left * it.unitCost)}</b>
+                </p>
+              ) : null}
               {it.reserve > 0 ? (
                 <p className="mt-1 text-xs font-semibold text-indigo-600">+ {qty(it.reserve, it.unit)} en réserve (lot suivant)</p>
               ) : null}
@@ -264,14 +286,29 @@ export function IngredientsTab({
 
 // ---------- Achats ----------
 
-export function PurchasesTab({ overview, onChanged }: { overview: StockOverview; onChanged: () => void }) {
-  const [openId, setOpenId] = useState<string | null>(overview.purchases[0]?.id ?? null);
-  const paged = usePaged(overview.purchases);
+export function PurchasesTab({
+  overview,
+  purchases,
+  resetKey,
+  onChanged,
+  onPay,
+  onEdit,
+}: {
+  overview: StockOverview;
+  /** Purchases to show (filtered), newest first */
+  purchases: StockPurchaseRow[];
+  resetKey?: unknown;
+  onChanged: () => void;
+  onPay: (purchaseId: string) => void;
+  onEdit: (t: { purchaseId: string; lotId: string }) => void;
+}) {
+  const [openId, setOpenId] = useState<string | null>(purchases[0]?.id ?? null);
+  const paged = usePaged(purchases, 20, resetKey);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-3">
-        {!overview.purchases.length ? (
-          <Empty>Aucun achat. Clique sur « Nouvel achat » pour enregistrer ton premier réassort.</Empty>
+        {!purchases.length ? (
+          <Empty>Aucun achat ici. Clique sur « Nouvel achat » pour enregistrer un réassort.</Empty>
         ) : (
           paged.pageItems.map((p, i) => (
             <PurchaseCard
@@ -282,6 +319,8 @@ export function PurchasesTab({ overview, onChanged }: { overview: StockOverview;
               open={openId === p.id}
               onToggle={() => setOpenId(openId === p.id ? null : p.id)}
               onChanged={onChanged}
+              onPay={() => onPay(p.id)}
+              onEdit={(lotId) => onEdit({ purchaseId: p.id, lotId })}
             />
           ))
         )}
@@ -291,18 +330,18 @@ export function PurchasesTab({ overview, onChanged }: { overview: StockOverview;
         <div className="rounded-2xl border bg-card p-4">
           <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Comment c’est calculé</p>
           <ul className="mt-2 space-y-1.5 text-[13px] text-muted-foreground">
-            <li>Chaque article acheté est un <b className="text-foreground">lot</b>.</li>
-            <li>Chaque vente prend dans le lot ouvert. Son prix se partage entre les ingrédients selon leur coût.</li>
-            <li>Récupéré − prix du lot = résultat.</li>
-            <li>Lot fini → le suivant démarre avec son nouveau prix.</li>
+            <li>Chaque article acheté est un <b className="text-foreground">paquet</b>. Les ventes vident le plus ancien d’abord.</li>
+            <li>
+              Le <b className="text-foreground">coût</b> d’un article = tous ses achats additionnés ÷ la quantité achetée (coût moyen).
+            </li>
+            <li>Récupéré = la part des ventes qui revient à ce paquet. Récupéré − prix = résultat.</li>
           </ul>
         </div>
-        <Losses losses={overview.losses} total={overview.totals.losses} onChanged={onChanged} />
         <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-[13px] text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950/40 dark:text-indigo-200">
           <p className="font-bold">Dans Finance</p>
           <p className="mt-1">
-            Chaque achat est une dépense « Achat stock » (Caisse, Coffre ou Autre). Elle compte dans les dépenses du jour et du mois.
-            Supprimer un achat supprime aussi sa dépense.
+            Chaque achat est une dépense « Achat stock », même pas encore payé (« À payer »). Payer plus tard la déplace au jour du paiement,
+            pour le même mois. Supprimer un achat supprime aussi sa dépense.
           </p>
         </div>
       </aside>
@@ -317,6 +356,8 @@ function PurchaseCard({
   open,
   onToggle,
   onChanged,
+  onPay,
+  onEdit,
 }: {
   p: StockPurchaseRow;
   index: number;
@@ -324,6 +365,8 @@ function PurchaseCard({
   open: boolean;
   onToggle: () => void;
   onChanged: () => void;
+  onPay: () => void;
+  onEdit: (lotId: string) => void;
 }) {
   const [confirm, setConfirm] = useState(false);
   const back = p.invested > 0 ? Math.round((p.recovered / p.invested) * 100) : 100;
@@ -350,9 +393,11 @@ function PurchaseCard({
               <StatusPill tone="info">En cours</StatusPill>
             )}
             {first ? <StatusPill tone="violet">Premier investissement</StatusPill> : null}
+            {p.paid === false ? <StatusPill tone="warn">À payer</StatusPill> : null}
           </div>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {p.lots.map((l) => `${l.itemName} ${qty(l.quantity, l.unit)}`).join(" · ")}
+            {p.supplier ? ` · ${p.supplier}` : ""}
           </p>
         </div>
         <div className="grid grid-cols-3 gap-4 text-right">
@@ -365,7 +410,11 @@ function PurchaseCard({
           <Bar pct={back} className={p.result >= 0 ? "bg-emerald-500" : "bg-amber-500"} />
           <p className="mt-1 text-[11px] text-muted-foreground">
             {p.result >= 0 ? `Rentabilisé · ${back} % de l’investissement revenu` : `Pas encore rentabilisé · ${back} % revenu`} ·{" "}
-            {p.source === "NONE" ? "stock de départ, pas de dépense" : `dépense ${SOURCE_LABEL[p.source]} ✓`}
+            {p.source === "NONE"
+              ? "stock de départ, pas de dépense"
+              : p.paid === false
+                ? "dépense comptée, pas encore payé"
+                : `dépense ${SOURCE_LABEL[p.source]} ✓${p.paidAt ? ` (payé le ${day(p.paidAt)})` : ""}`}
           </p>
         </div>
       </button>
@@ -380,6 +429,7 @@ function PurchaseCard({
                   <th className="w-40 font-bold">Utilisé</th>
                   <th className="text-right font-bold">Récupéré</th>
                   <th className="text-right font-bold">Résultat</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -408,6 +458,11 @@ function PurchaseCard({
                       </td>
                       <td className="text-right tabular-nums">{dt(l.recovered)}</td>
                       <td className={cn("text-right font-bold tabular-nums", l.result >= 0 ? "text-emerald-600" : "text-rose-600")}>{signedDt(l.result)}</td>
+                      <td className="pl-2 text-right">
+                        <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-xs" onClick={() => onEdit(l.id)}>
+                          <Pencil className="h-3 w-3" /> Corriger
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -415,6 +470,12 @@ function PurchaseCard({
             </table>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">{p.note ?? ""}</p>
+              <span className="flex-1" />
+              {p.paid === false ? (
+                <Button size="sm" className="rounded-lg bg-emerald-600 font-bold text-white hover:bg-emerald-700" onClick={onPay}>
+                  <HandCoins className="h-3.5 w-3.5" /> Payer
+                </Button>
+              ) : null}
               {confirm ? (
                 <div className="flex animate-in fade-in-0 items-center gap-2 duration-150">
                   <span className="text-xs text-rose-600">{p.dailyExpenseId ? "Supprimer l’achat et sa dépense ?" : "Supprimer l’achat ?"}</span>
@@ -438,7 +499,26 @@ function PurchaseCard({
   );
 }
 
-function Losses({ losses, total, onChanged }: { losses: StockLossRow[]; total: number; onChanged: () => void }) {
+function Money({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
+  return (
+    <div>
+      <p className="text-[10px] font-bold uppercase text-muted-foreground">{label}</p>
+      <p className={cn("font-black tabular-nums", tone === "good" && "text-emerald-600", tone === "bad" && "text-rose-600")}>{value}</p>
+    </div>
+  );
+}
+
+// ---------- Corrections ----------
+
+const REASON_LABEL: Record<string, string> = {
+  CASSE: "Casse / perte",
+  VENTE_OUBLIEE: "Vente oubliée",
+  ERREUR: "Erreur de saisie",
+  AUTRE: "Autre",
+};
+
+/** Inventory count corrections, kept (never erased) with their reason. */
+export function Losses({ losses, total, onChanged }: { losses: StockLossRow[]; total: number; onChanged: () => void }) {
   const paged = usePaged(losses, 8);
   const remove = useMutation({
     mutationFn: (id: string) => stockApi.removeAdjustment(id),
@@ -451,7 +531,7 @@ function Losses({ losses, total, onChanged }: { losses: StockLossRow[]; total: n
   return (
     <div className="rounded-2xl border bg-card p-4">
       <div className="flex items-baseline justify-between">
-        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Pertes (inventaires)</p>
+        <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Corrections de stock</p>
         <p className="font-black tabular-nums text-rose-600">{dt(total)}</p>
       </div>
       {!losses.length ? (
@@ -467,6 +547,7 @@ function Losses({ losses, total, onChanged }: { losses: StockLossRow[]; total: n
                 </b>
                 <span className="block truncate text-xs text-muted-foreground">
                   {day(l.date)}
+                  {l.reason ? ` · ${REASON_LABEL[l.reason] ?? l.reason}` : ""}
                   {l.note ? ` · ${l.note}` : ""}
                 </span>
               </span>
@@ -486,15 +567,6 @@ function Losses({ losses, total, onChanged }: { losses: StockLossRow[]; total: n
         </ul>
       )}
       <ListPager className="-mx-4 -mb-4 mt-3 px-4" page={paged.page} lastPage={paged.lastPage} total={paged.total} onPage={paged.setPage} />
-    </div>
-  );
-}
-
-function Money({ label, value, tone }: { label: string; value: string; tone?: "good" | "bad" }) {
-  return (
-    <div>
-      <p className="text-[10px] font-bold uppercase text-muted-foreground">{label}</p>
-      <p className={cn("font-black tabular-nums", tone === "good" && "text-emerald-600", tone === "bad" && "text-rose-600")}>{value}</p>
     </div>
   );
 }

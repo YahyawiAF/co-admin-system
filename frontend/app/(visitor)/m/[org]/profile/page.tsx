@@ -38,6 +38,7 @@ import { AccountUpgradeCard } from "@/components/visitor/AccountUpgradeCard";
 import { ProfileHero } from "@/components/visitor/ProfileHero";
 import { TrophyGrid } from "@/components/visitor/TrophyGrid";
 import { ThemeSheet } from "@/components/visitor/ThemeSheet";
+import { GuideMenu } from "@/components/visitor/AppGuide";
 import { MemberHistory } from "@/components/visitor/MemberHistory";
 import { ReferralCard } from "@/components/visitor/ReferralCard";
 import { dispatchPointsAward } from "@/components/visitor/PointsCard";
@@ -271,6 +272,8 @@ function ProfileInner() {
 
         {memberId ? <MemberHistory memberId={memberId} /> : null}
 
+        <GuideMenu />
+
         <div className="overflow-hidden rounded-2xl bg-white shadow-sm">
           <Link
             href={href("/tarifs")}
@@ -420,6 +423,8 @@ function ProfileInner() {
           </button>
         ) : null}
       </div>
+      <GuideMenu />
+
       {memberId ? (
         <ThemeSheet open={themeOpen} onOpenChange={setThemeOpen} memberId={memberId} />
       ) : null}

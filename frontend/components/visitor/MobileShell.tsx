@@ -22,6 +22,7 @@ import { MobileHeader } from "@/components/visitor/MobileHeader";
 import { StaffMessageModal } from "@/components/visitor/StaffMessageModal";
 import { VisitorAlerts } from "@/components/visitor/VisitorAlerts";
 import { HouseRulesProvider } from "@/components/visitor/HouseRules";
+import { AppGuideProvider, useAppGuide } from "@/components/visitor/AppGuide";
 import { LevelUpWatcher } from "@/components/visitor/LevelUp";
 import { useModalGate } from "@/lib/modal-gate";
 import { OfflineBanner } from "@/components/visitor/OfflineBanner";
@@ -97,13 +98,17 @@ function isGuestAllowed(rest: string) {
 export function MobileShell({ children }: { children: ReactNode }) {
   return (
     <HouseRulesProvider>
-      <MobileShellInner>{children}</MobileShellInner>
+      <AppGuideProvider>
+        <MobileShellInner>{children}</MobileShellInner>
+      </AppGuideProvider>
     </HouseRulesProvider>
   );
 }
 
 function MobileShellInner({ children }: { children: ReactNode }) {
   const rulesShowing = useModalGate();
+  const { showing: guideShowing } = useAppGuide();
+  const popupsWait = rulesShowing || guideShowing;
   const params = useParams<{ org: string }>();
   const orgSlug = params.org;
   const pathname = usePathname();
@@ -228,9 +233,9 @@ function MobileShellInner({ children }: { children: ReactNode }) {
           {onboarded && hasAccount ? <StaffMessageModal /> : null}
         </div>
       )}
-      {showSpotlight && !rulesShowing ? <VisitorSpotlight /> : null}
-      {showCommunityNudge && !rulesShowing ? <CommunityNotePopup /> : null}
-      {onboarded ? <LevelUpWatcher /> : null}
+      {showSpotlight && !popupsWait ? <VisitorSpotlight /> : null}
+      {showCommunityNudge && !popupsWait ? <CommunityNotePopup /> : null}
+      {onboarded && !guideShowing ? <LevelUpWatcher /> : null}
       <nav
         aria-hidden={keyboardOpen}
         className={cn(

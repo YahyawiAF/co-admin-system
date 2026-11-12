@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { Archive, CreditCard, Landmark, Plus, ShoppingBasket, Trash2, Wallet } from "lucide-react";
+import { Archive, CreditCard, Hourglass, Landmark, Plus, ShoppingBasket, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -58,6 +58,9 @@ export function PurchaseDialog({
   const [source, setSource] = useState<StockPurchaseRow["source"]>("CAISSE");
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [note, setNote] = useState("");
+  const [supplier, setSupplier] = useState("");
+  /** Bought on credit: « pas encore payé » */
+  const [due, setDue] = useState(false);
 
   const lineFor = (stockItemId: string): Line => {
     const item = itemById.get(stockItemId);
@@ -77,6 +80,8 @@ export function PurchaseDialog({
     setSource("CAISSE");
     setDate(format(new Date(), "yyyy-MM-dd"));
     setNote("");
+    setSupplier("");
+    setDue(false);
     if (preselect) setLines([lineFor(preselect)]);
     else {
       // Items running out first, so the usual restock is one click away
@@ -96,7 +101,9 @@ export function PurchaseDialog({
     mutationFn: () =>
       stockApi.createPurchase({
         date,
-        source,
+        source: due ? "AUTRE" : source,
+        paid: !due,
+        supplier: supplier.trim() || undefined,
         note: note.trim() || undefined,
         lines: valid.map((l) => {
           const unit = itemById.get(l.stockItemId)!.unit;
@@ -105,7 +112,11 @@ export function PurchaseDialog({
       }),
     onSuccess: (r) => {
       toast.success(
-        r.expenseId ? `Achat enregistré · dépense ${dt(r.total)} (${SOURCE_LABEL[source]})` : "Stock de départ enregistré"
+        due
+          ? `Achat enregistré dans « À payer » · ${dt(r.total)}`
+          : r.expenseId
+            ? `Achat enregistré · dépense ${dt(r.total)} (${SOURCE_LABEL[source]})`
+            : "Stock de départ enregistré"
       );
       onDone();
       onOpenChange(false);
@@ -136,7 +147,7 @@ export function PurchaseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn(gradientDialogClass, "max-w-3xl sm:max-w-3xl")}>
         <GradientHeader
-          eyebrow="Réassort"
+          eyebrow="Réassort · plusieurs articles"
           title="Nouvel achat"
           icon={ShoppingBasket}
           description="Une ligne par article acheté. Le total devient une dépense dans Finance."
@@ -256,15 +267,25 @@ export function PurchaseDialog({
               <section>
                 <SectionTitle>Payé depuis</SectionTitle>
                 <div className="grid gap-2 sm:grid-cols-2">
-                  <ChoiceCard active={source === "CAISSE"} onClick={() => setSource("CAISSE")} icon={Wallet} title="Caisse" hint="Argent du tiroir" />
-                  <ChoiceCard active={source === "COFFRE"} onClick={() => setSource("COFFRE")} icon={Landmark} title="Coffre" hint="Pris dans le coffre" />
-                  <ChoiceCard active={source === "AUTRE"} onClick={() => setSource("AUTRE")} icon={CreditCard} title="Autre" hint="Carte, virement, de ta poche" />
+                  <ChoiceCard active={!due && source === "CAISSE"} onClick={() => { setDue(false); setSource("CAISSE"); }} icon={Wallet} title="Caisse" hint="Argent du tiroir" />
+                  <ChoiceCard active={!due && source === "COFFRE"} onClick={() => { setDue(false); setSource("COFFRE"); }} icon={Landmark} title="Coffre" hint="Pris dans le coffre" />
+                  <ChoiceCard active={!due && source === "AUTRE"} onClick={() => { setDue(false); setSource("AUTRE"); }} icon={CreditCard} title="Autre" hint="Carte, virement, de ta poche" />
                   <ChoiceCard
-                    active={source === "NONE"}
-                    onClick={() => setSource("NONE")}
+                    active={!due && source === "NONE"}
+                    onClick={() => {
+                      setDue(false);
+                      setSource("NONE");
+                    }}
                     icon={Archive}
                     title="Stock de départ"
                     hint="Déjà payé avant : pas de dépense"
+                  />
+                  <ChoiceCard
+                    active={due}
+                    onClick={() => setDue(true)}
+                    icon={Hourglass}
+                    title="Pas encore payé"
+                    hint="Compté en dépense, à payer plus tard"
                   />
                 </div>
               </section>
@@ -274,7 +295,22 @@ export function PurchaseDialog({
                   <Input type="date" className="mt-0.5 h-9 w-44" value={date} onChange={(e) => setDate(e.target.value)} />
                 </label>
                 <label className="min-w-0 flex-1 text-[11px] font-semibold text-muted-foreground">
-                  Note (fournisseur…)
+                  Fournisseur
+                  <Input
+                    className="mt-0.5 h-9"
+                    list="stock-suppliers-multi"
+                    value={supplier}
+                    onChange={(e) => setSupplier(e.target.value)}
+                    placeholder="Optionnel"
+                  />
+                  <datalist id="stock-suppliers-multi">
+                    {[...new Set(overview.purchases.map((p) => p.supplier?.trim()).filter(Boolean))].map((s) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </label>
+                <label className="min-w-0 flex-1 text-[11px] font-semibold text-muted-foreground">
+                  Note
                   <Input className="mt-0.5 h-9" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optionnel" />
                 </label>
               </div>
@@ -282,11 +318,16 @@ export function PurchaseDialog({
           ) : (
             <div key="s2" className="animate-in fade-in-0 slide-in-from-bottom-1 grid gap-4 duration-200 motion-reduce:animate-none sm:grid-cols-2">
               <div className="rounded-xl border p-4">
-                <SectionTitle>{source === "NONE" ? "Stock de départ" : "Dépense créée dans Finance"}</SectionTitle>
-                <p className="font-bold">{source === "NONE" ? label : `Achat stock — ${label}`}</p>
+                <SectionTitle>{!due && source === "NONE" ? "Stock de départ" : "Dépense créée dans Finance"}</SectionTitle>
+                <p className="font-bold">{!due && source === "NONE" ? label : `${due ? "À payer — " : ""}Achat stock — ${label}`}</p>
                 <p className="mt-1 text-2xl font-black tabular-nums">{dt(total)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {source === "NONE" ? "Compté dans l’investissement, pas dans les dépenses" : `Payé depuis ${SOURCE_LABEL[source]}`} ·{" "}
+                  {due
+                    ? "Pas encore payé : dans « À payer »"
+                    : source === "NONE"
+                      ? "Compté dans l’investissement, pas dans les dépenses"
+                      : `Payé depuis ${SOURCE_LABEL[source]}`}{" "}
+                  ·{" "}
                   {format(new Date(date), "dd/MM/yyyy")}
                 </p>
               </div>
