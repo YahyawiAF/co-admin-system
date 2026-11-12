@@ -63,7 +63,7 @@ export function TrophyReveal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-6 backdrop-blur-[2px]"
+      className="pointer-events-auto fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/55 px-6 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-label={title}

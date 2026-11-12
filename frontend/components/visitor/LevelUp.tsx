@@ -89,13 +89,16 @@ function LevelUpScreen({ from, to, onClose }: { from: number; to: number; onClos
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // Can pop up over an open Sheet/Dialog (Radix sets `pointer-events: none` on body):
+  // pointer-events-auto keeps « Super » clickable, stopPropagation keeps the sheet behind open.
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="level-up-title"
+      onPointerDown={(e) => e.stopPropagation()}
       className={cn(
-        "v-fade-in fixed inset-0 z-[95] flex flex-col items-center justify-center gap-2.5 overflow-hidden px-6 text-center text-white",
+        "v-fade-in pointer-events-auto fixed inset-0 z-[95] flex flex-col items-center justify-center gap-2.5 overflow-hidden px-6 text-center text-white",
         `lvl-${look}`
       )}
       style={{ background: "radial-gradient(80% 60% at 50% 40%, var(--lvl-glow) 0%, #0b0b1a 70%)" }}
