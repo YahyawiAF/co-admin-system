@@ -43,13 +43,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { caisseApi } from "@/lib/api/resources";
+import { EXPENSE_CATEGORIES, caisseApi, dailyExpensesApi, type ExpenseCategory } from "@/lib/api/resources";
 import type { DayFinanceSummary } from "@/lib/types";
 import { EXPENSE_SOURCE_LABEL, dt, invalidateMoney } from "@/lib/finance-queries";
 import { QuickExpenseDialog } from "./QuickExpenseDialog";
 
 const GAP_NEEDS_NOTE = 0.5;
 const GAP_REASONS = ["Erreur de monnaie", "Vente non saisie", "Dépense oubliée", "Client a payé plus tard"];
+/** Cash missing at closing: what it was. A forgotten expense or a coffre deposit is recorded, so the gap goes to 0. */
+type MissingKind = "expense" | "coffre" | "change" | "unknown";
+const MISSING: { id: MissingKind; label: string }[] = [
+  { id: "expense", label: "Une dépense pas notée" },
+  { id: "coffre", label: "Mis au coffre" },
+  { id: "change", label: "Erreur de monnaie" },
+  { id: "unknown", label: "Je ne sais pas" },
+];
 const parseAmount = (s: string) => Number(s.replace(",", "."));
 const shortDay = (key: string) =>
   format(new Date(`${key}T12:00:00`), "EEE d MMM", { locale: fr });
@@ -176,27 +184,65 @@ function CloseDialog({
   const [counted, setCounted] = useState("");
   const [kept, setKept] = useState("");
   const [notes, setNotes] = useState("");
+  const [missing, setMissing] = useState<MissingKind | null>(null);
+  const [fixAmount, setFixAmount] = useState("");
+  const [fixLabel, setFixLabel] = useState("");
+  const [fixCategory, setFixCategory] = useState<ExpenseCategory>("AUTRE");
   useEffect(() => {
     if (!open) return;
     setCounted("");
     setKept(String(summary.openingFloat || 0));
     setNotes("");
+    setMissing(null);
+    setFixLabel("");
+    setFixCategory("AUTRE");
   }, [open, summary.openingFloat]);
 
   const countedValue = parseAmount(counted);
   const hasCount = counted !== "" && Number.isFinite(countedValue);
   const gap = hasCount ? Math.round((countedValue - summary.expectedClose) * 100) / 100 : 0;
-  const needsNote = hasCount && Math.abs(gap) >= GAP_NEEDS_NOTE;
+  const isMissing = hasCount && gap <= -GAP_NEEDS_NOTE;
+  // Recording the forgotten expense / coffre deposit explains (part of) the gap
+  const fixValue = isMissing && (missing === "expense" || missing === "coffre") ? Math.max(0, parseAmount(fixAmount) || 0) : 0;
+  const gapAfter = Math.round((gap + fixValue) * 100) / 100;
+  const needsNote = hasCount && Math.abs(gapAfter) >= GAP_NEEDS_NOTE;
+  useEffect(() => {
+    if (isMissing) setFixAmount(String(-gap));
+  }, [isMissing, gap]);
   const keptValue = Math.min(hasCount ? countedValue : 0, Math.max(0, parseAmount(kept) || 0));
   const toCoffre = hasCount ? Math.max(0, countedValue - keptValue) : 0;
 
   const close = useMutation({
-    mutationFn: () =>
-      caisseApi.close(summary.dateKey, {
+    mutationFn: async () => {
+      if (fixValue > 0 && missing === "expense") {
+        await dailyExpensesApi.create({
+          date: summary.dateKey,
+          amount: fixValue,
+          label: fixLabel.trim() || "Dépense oubliée",
+          source: "CAISSE",
+          kind: "JOURNALIER",
+          category: fixCategory,
+        });
+      } else if (fixValue > 0 && missing === "coffre") {
+        await caisseApi.addMovement({ date: summary.dateKey, type: "OUT", amount: fixValue, label: "Mis au coffre (vu à la clôture)", coffre: true });
+      }
+      const why =
+        missing === "expense" && fixValue > 0
+          ? `Dépense oubliée : ${fixLabel.trim() || "dépense"} ${dt(fixValue, 2)}`
+          : missing === "coffre" && fixValue > 0
+            ? `Mis au coffre ${dt(fixValue, 2)}`
+            : missing === "change"
+              ? "Erreur de monnaie"
+              : missing === "unknown"
+                ? "Je ne sais pas"
+                : "";
+      const note = [why, notes.trim()].filter(Boolean).join(" · ");
+      return caisseApi.close(summary.dateKey, {
         countedClose: countedValue,
         keptFloat: keptValue,
-        notes: notes.trim() || undefined,
-      }),
+        notes: note || undefined,
+      });
+    },
     onSuccess: () => {
       toast.success(
         toCoffre > 0 ? `Journée clôturée · ${dt(toCoffre, 2)} versés au coffre` : "Journée clôturée",
@@ -204,12 +250,16 @@ function CloseDialog({
       invalidateMoney(queryClient);
       onOpenChange(false);
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      // The expense or deposit may be saved even if the closing failed: show it
+      invalidateMoney(queryClient);
+      toast.error(e.message);
+    },
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-h-[92vh] max-w-md overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Clôturer la journée</DialogTitle>
           <DialogDescription className="capitalize">
@@ -257,9 +307,66 @@ function CloseDialog({
             </div>
           </div>
 
-          {needsNote ? (
+          {isMissing ? (
+            <div className="space-y-2 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
+              <Label className="text-sm">Il manque {dt(-gap, 2)}. C&apos;était…</Label>
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Raison de l'écart">
+                {MISSING.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    aria-pressed={missing === r.id}
+                    onClick={() => setMissing(r.id)}
+                    className={cn(
+                      "min-h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-200 motion-reduce:transition-none",
+                      missing === r.id ? "border-indigo-500 bg-indigo-50 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-200" : "text-muted-foreground hover:border-foreground/40",
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {missing === "expense" || missing === "coffre" ? (
+                <div className="grid grid-cols-2 gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 p-2.5 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200 dark:border-indigo-900 dark:bg-indigo-950/30">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Montant (DT)</Label>
+                    <Input inputMode="decimal" value={fixAmount} onChange={(e) => setFixAmount(e.target.value.replace(/[^\d.,]/g, ""))} />
+                  </div>
+                  {missing === "expense" ? (
+                    <>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Catégorie</Label>
+                        <select
+                          value={fixCategory}
+                          onChange={(e) => setFixCategory(e.target.value as ExpenseCategory)}
+                          className="h-10 w-full rounded-md border bg-background px-2 text-sm"
+                        >
+                          {EXPENSE_CATEGORIES.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-span-2 space-y-1">
+                        <Label className="text-xs">Quoi ?</Label>
+                        <Input value={fixLabel} placeholder="ex. lait + sucre" onChange={(e) => setFixLabel(e.target.value)} />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="self-end text-xs text-muted-foreground">Noté comme versement de la caisse au coffre.</p>
+                  )}
+                  <p className="col-span-2 text-xs text-indigo-900 dark:text-indigo-200">
+                    {missing === "expense" ? "Ajoutée dans Dépenses (payée par la caisse). " : ""}Écart après : <b>{dt(gapAfter, 2)}</b>
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {needsNote && !(isMissing && !missing) ? (
             <div className="space-y-1.5">
-              <Label className="text-sm">Expliquez l&apos;écart</Label>
+              <Label className="text-sm">{isMissing && missing ? "Note (optionnel)" : "Expliquez l'écart"}</Label>
               <div className="flex flex-wrap gap-1.5">
                 {GAP_REASONS.map((r) => (
                   <button
@@ -300,7 +407,7 @@ function CloseDialog({
           <Button
             className="w-full"
             size="lg"
-            disabled={!hasCount || (needsNote && !notes.trim()) || close.isPending}
+            disabled={!hasCount || (needsNote && !notes.trim() && !(isMissing && missing)) || (isMissing && !missing) || close.isPending}
             onClick={() => close.mutate()}
           >
             <Lock className="mr-2 h-4 w-4" />

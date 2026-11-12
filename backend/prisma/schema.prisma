@@ -674,8 +674,11 @@ model DailyExpense {
   spreadMonths  Int            @default(1)
   /// LOYER | ENERGIE | INTERNET | SALAIRES | STOCK_CAFE | MENAGE | EQUIPEMENT | AUTRE
   category      String?
+  /// Declared after the cash was counted (« déclarée après coup »): the money is already gone, so it moves neither the caisse nor the coffre
+  afterCount    Boolean        @default(false)
   coffreEntry   CoffreEntry?
   stockPurchase StockPurchase?
+  moneyGapLine  MoneyGapLine?
   externalOrgId String?
   externalRef   String?
   syncedAt      DateTime?
@@ -1954,4 +1957,27 @@ model FeatureProposal {
 
   @@unique([facilityId, key])
   @@map("feature_proposals")
+}
+
+/// Finance › Argent « contrôle du mois »: where money that left the caisse/coffre without a record went
+model MoneyGapLine {
+  id              String        @id @default(uuid())
+  /// yyyy-MM
+  month           String
+  /// DEPENSE | BANQUE | RETRAIT | PERTE
+  kind            String
+  amount          Float
+  date            DateTime      @db.Date
+  note            String?
+  /// Taken from the coffre (else the caisse)
+  fromSafe        Boolean       @default(false)
+  /// The expense created for a DEPENSE line
+  dailyExpenseId  String?       @unique
+  dailyExpense    DailyExpense? @relation(fields: [dailyExpenseId], references: [id], onDelete: Cascade)
+  /// The closing whose gap this line explains
+  caisseSessionId String?
+  createdAt       DateTime      @default(now())
+
+  @@index([month])
+  @@map("money_gap_lines")
 }

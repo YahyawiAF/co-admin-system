@@ -113,6 +113,7 @@ export function ExpenseMonthList({ data, monthKey }: { data: ExpenseMonthOvervie
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="truncate font-medium">{r.label}</span>
                       {r.categoryLabel ? <span className={cn(pill, "bg-muted text-muted-foreground")}>{r.categoryLabel}</span> : null}
+                      {r.afterCount ? <span className={cn(pill, "bg-orange-100 text-orange-800")}>déclarée après coup</span> : null}
                       {r.otherMonth && r.months?.length ? (
                         <span className={cn(pill, "bg-sky-100 text-sky-800")}>
                           {r.months.length > 1 ? `${monthShort(r.months[0])} → ${monthShort(r.months[r.months.length - 1])}` : `pour ${monthName(r.months[0])}`}

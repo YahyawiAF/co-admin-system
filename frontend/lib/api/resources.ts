@@ -223,6 +223,8 @@ export type DailyExpense = {
   months?: string[];
   /** Paid in a month, counted in another */
   otherMonth?: boolean;
+  /** Declared after the cash was counted (contrôle du mois) */
+  afterCount?: boolean;
   /** In a month overview: the part of the expense that counts in this month */
   share?: number;
   /** In a month overview: the full amount paid */
@@ -988,6 +990,64 @@ export const facilityApi = {
   deleteFixture(id: string) {
     return http.delete(`/facilities/fixtures/${id}`);
   },
+};
+
+export type MoneyGapKind = "DEPENSE" | "BANQUE" | "RETRAIT" | "PERTE";
+
+/** Finance › Argent « contrôle du mois »: revenu brut − argent gardé = argent sorti, and how much of it has a record */
+export type MoneyCheckMonth = {
+  key: string;
+  label: string;
+  running: boolean;
+  /** At least one caisse closing this month */
+  checkable: boolean;
+  brut: number;
+  otherIn: number;
+  keptStart: number;
+  keptEnd: number;
+  kept: number;
+  safeEnd: number;
+  drawerEnd: number;
+  out: number;
+  expenses: number;
+  expensesLate: number;
+  expensesCount: number;
+  notedOut: { label: string; amount: number; date: string; from: "CAISSE" | "COFFRE" }[];
+  noted: number;
+  bank: number;
+  withdrawals: number;
+  losses: number;
+  explained: number;
+  gap: number;
+  explainedPct: number;
+  lastCountDate: string | null;
+  closingGaps: { sessionId: string; date: string; amount: number; note: string | null }[];
+  unclosedDays: string[];
+  lines: {
+    id: string;
+    kind: MoneyGapKind;
+    amount: number;
+    date: string;
+    note: string | null;
+    fromSafe: boolean;
+    caisseSessionId: string | null;
+    dailyExpenseId: string | null;
+  }[];
+};
+
+export const moneyCheckApi = {
+  months: (count = 6) => http.get<{ months: MoneyCheckMonth[] }>(`/caisse/money-check?months=${count}`),
+  addLine: (body: {
+    month: string;
+    kind: MoneyGapKind;
+    amount: number;
+    date: string;
+    note?: string;
+    category?: ExpenseCategory;
+    fromSafe?: boolean;
+    caisseSessionId?: string;
+  }) => http.post<MoneyCheckMonth>("/caisse/money-check/lines", body),
+  removeLine: (id: string) => http.delete<MoneyCheckMonth>(`/caisse/money-check/lines/${id}`),
 };
 
 export const caisseApi = {

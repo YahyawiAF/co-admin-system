@@ -109,10 +109,11 @@ export class ExpensesService {
   /** Keeps the coffre OUT line in step with an expense paid from the coffre. */
   private async syncCoffre(
     tx: Tx,
-    de: { id: string; date: Date | null; amount: number | null; label: string | null; source: string },
+    de: { id: string; date: Date | null; amount: number | null; label: string | null; source: string; afterCount?: boolean },
   ) {
     await tx.coffreEntry.deleteMany({ where: { dailyExpenseId: de.id } });
-    if (de.source !== 'COFFRE' || !de.amount) return;
+    // Declared after the count: the coffre already reflects it
+    if (de.source !== 'COFFRE' || !de.amount || de.afterCount) return;
     await tx.coffreEntry.create({
       data: {
         date: dbDay(de.date ?? new Date()),

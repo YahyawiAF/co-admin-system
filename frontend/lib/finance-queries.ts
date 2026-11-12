@@ -13,6 +13,7 @@ export function invalidateMoney(queryClient: QueryClient) {
     "analytics-finance-days",
     "analytics-finance-year",
     "performance",
+    "money-check",
   ]) {
     void queryClient.invalidateQueries({ queryKey: [key] });
   }
