@@ -64,7 +64,7 @@ export default function MobileHomePage() {
   const router = useRouter();
   const { org, slug, href } = useOrg();
   const { onboarded, memberId, ready } = useVisitorSession();
-  const { beforeForfait } = useHouseRules();
+  const { beforeForfait, settled: rulesSettled } = useHouseRules();
   const { player } = usePlayer(memberId);
   const [wifiOpen, setWifiOpen] = useState(false);
   const [isApp, setIsApp] = useState(true);
@@ -211,22 +211,26 @@ export default function MobileHomePage() {
       (!status?.session && !status?.pendingRequest && !!memberId);
 
     if (!canStart) return;
+    // QR check-in shows the space rules too: wait until they are loaded.
+    if (!rulesSettled) return;
 
     qrAutoStartedRef.current = true;
     setFromQr(false);
-    void startFromQrEntry({ org: slug, memberId, force: true })
-      .then((session) => {
-        if (!session) {
-          startAuto.mutate();
-          return;
-        }
-        goSession(session);
-      })
-      .catch((e: Error) => {
-        qrAutoStartedRef.current = false;
-        setFromQr(wantsQrCheckin(slug));
-        toast.error(e.message);
-      });
+    beforeForfait(() => {
+      void startFromQrEntry({ org: slug, memberId, force: true })
+        .then((session) => {
+          if (!session) {
+            startAuto.mutate();
+            return;
+          }
+          goSession(session);
+        })
+        .catch((e: Error) => {
+          qrAutoStartedRef.current = false;
+          setFromQr(wantsQrCheckin(slug));
+          toast.error(e.message);
+        });
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- startAuto.isPending only
   }, [
     fromQr,
@@ -238,6 +242,8 @@ export default function MobileHomePage() {
     slug,
     startAuto.isPending,
     goSession,
+    rulesSettled,
+    beforeForfait,
     href,
   ]);
 

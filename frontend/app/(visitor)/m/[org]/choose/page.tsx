@@ -44,12 +44,14 @@ import { usePlayer } from "@/lib/hooks/use-player";
 import { dtToPoints } from "@/lib/points-catalog";
 import { formatDt } from "@/lib/session-pricing";
 import { toast } from "sonner";
+import { useHouseRules } from "@/components/visitor/HouseRules";
 
 function ChooseInner() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { href, slug } = useOrg();
   const { memberId: sessionMemberId } = useVisitorSession();
+  const { beforeForfait } = useHouseRules();
   const searchParams = useSearchParams();
   const mode = (searchParams.get("mode") as string) || "day";
   const [memberId, setMemberId] = useState<string | null>(null);
@@ -376,21 +378,23 @@ function ChooseInner() {
         : options.find((o) => o.id === opts.priceId) ||
           tarifs.find((t) => t.id === opts.priceId);
     if (!price || !memberId) return;
-
-    // Day + auto-accept: show session UI immediately, sync server in background
-    const expectAuto = mode === "day" && autoAccept;
-    seedOptimisticAndGo({
-      price,
-      seatLabel: opts.seatLabel,
-      spaceId: opts.spaceId,
-      occupyWhole: opts.occupyWhole,
-      expectAutoSession: expectAuto,
+    // Every check-in: the space rules first (when the admin asks for them).
+    beforeForfait(() => {
+      // Day + auto-accept: show session UI immediately, sync server in background
+      const expectAuto = mode === "day" && autoAccept;
+      seedOptimisticAndGo({
+        price,
+        seatLabel: opts.seatLabel,
+        spaceId: opts.spaceId,
+        occupyWhole: opts.occupyWhole,
+        expectAutoSession: expectAuto,
+      });
+      // Reception must confirm: still go Accueil with pending (day) / keep choose pending UI (sub)
+      if (!expectAuto && mode === "day") {
+        // already navigated with pending overlay
+      }
+      create.mutate(opts);
     });
-    // Reception must confirm: still go Accueil with pending (day) / keep choose pending UI (sub)
-    if (!expectAuto && mode === "day") {
-      // already navigated with pending overlay
-    }
-    create.mutate(opts);
   };
   if (!memberId) {
     return (

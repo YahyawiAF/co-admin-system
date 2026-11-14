@@ -822,9 +822,9 @@ model Facility {
   houseRulesVersion           Int                  @default(1)
   /// Also show the rules when the app opens / before choosing a forfait (always after sign-up)
   houseRulesOnOpen            Boolean              @default(false)
-  houseRulesBeforeForfait     Boolean              @default(false)
+  houseRulesBeforeForfait     Boolean              @default(true)
   /// ONCE (until the rules change), DAILY, or ALWAYS
-  houseRulesFrequency         String               @default("ONCE")
+  houseRulesFrequency         String               @default("ALWAYS")
   /// Free text for the AI advisor: neighbourhood, clientele, competitors, goals
   businessContext             String?
   /// Location for weather and neighbourhood lookups (AI advisor)
