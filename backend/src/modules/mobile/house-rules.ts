@@ -24,12 +24,12 @@ export type HouseRulesSettings = {
 
 /** Used until the admin saves their own list. */
 export const DEFAULT_HOUSE_RULES: HouseRule[] = [
-  { id: 'outside-drinks', icon: '🥤', text: "Boissons de l'extérieur", kind: 'NO', active: true },
-  { id: 'noise', icon: '🔊', text: 'Bruit', kind: 'NO', active: true },
+  { id: 'outside-drinks', icon: '💧🥤🥛☕', text: "Aucune boisson de l'extérieur", kind: 'NO', active: true },
   { id: 'calls', icon: '📞', text: 'Appels en open space', kind: 'NO', active: true },
   { id: 'headphones', icon: '🎧', text: 'Casque pour le son', kind: 'DO', active: true },
   { id: 'clean', icon: '🧹', text: 'Place propre', kind: 'DO', active: true },
   { id: 'checkout', icon: '👋', text: 'Terminer en partant', kind: 'DO', active: true },
+  { id: 'calm', icon: '🤫', text: 'Restez calme', kind: 'DO', active: true },
 ];
 
 const FREQUENCIES: HouseRulesFrequency[] = ['ONCE', 'DAILY', 'ALWAYS'];
@@ -160,7 +160,7 @@ export async function updateHouseRules(
       if (!text) throw new BadRequestException('Chaque règle a besoin d’un texte');
       return {
         id: String(r?.id || `r${Date.now()}${i}`).slice(0, 40),
-        icon: String(r?.icon || '📌').slice(0, 8),
+        icon: String(r?.icon || '📌').slice(0, 16),
         text,
         kind: r?.kind === 'NO' ? 'NO' : 'DO',
         active: r?.active !== false,

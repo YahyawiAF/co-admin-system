@@ -11,10 +11,10 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { analyticsApi } from "@/lib/api/resources";
 import type { HouseRule, HouseRulesFrequency, HouseRulesSettings as Settings } from "@/lib/types";
-import { HouseRuleTiles } from "@/components/visitor/HouseRules";
+import { HouseRuleTiles, RuleIcon } from "@/components/visitor/HouseRules";
 import { cn } from "@/lib/utils";
 
-const ICONS = ["🥤", "🍔", "🔊", "📞", "🎧", "🧹", "👋", "🚭", "🐶", "📵", "💻", "🔌", "🪑", "🗑️", "🤫", "⏱️", "🙏", "📌"];
+const ICONS = ["💧🥤🥛☕", "🥤", "🍔", "🔊", "📞", "🎧", "🧹", "👋", "🚭", "🐶", "📵", "💻", "🔌", "🪑", "🗑️", "🤫", "⏱️", "🙏", "📌"];
 
 const FREQ: { value: HouseRulesFrequency; label: string; hint: string }[] = [
   { value: "ONCE", label: "Une seule fois", hint: "Revient seulement si vous modifiez les règles." },
@@ -47,7 +47,7 @@ function RuleRow({
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-100 text-xl transition-colors hover:bg-slate-200"
           aria-label="Changer l'image"
         >
-          {rule.icon}
+          <RuleIcon icon={rule.icon} size={20} />
         </button>
         <div className="flex shrink-0 overflow-hidden rounded-full border text-xs font-bold">
           {(["NO", "DO"] as const).map((k) => (
@@ -107,13 +107,13 @@ function RuleRow({
                 rule.icon === ic && "bg-indigo-100"
               )}
             >
-              {ic}
+              <RuleIcon icon={ic} size={18} />
             </button>
           ))}
           <Input
             className="h-9 w-20"
             placeholder="Autre"
-            maxLength={8}
+            maxLength={16}
             onChange={(e) => e.target.value.trim() && onChange({ ...rule, icon: e.target.value.trim() })}
           />
         </div>
