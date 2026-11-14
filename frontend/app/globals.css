@@ -512,3 +512,13 @@
   .lvl-card.lvl-elite::after, .lvl-elite .lvl-ring, .lvl-pop, .lvl-confetti { animation: none; }
   .lvl-card { transition: none; }
 }
+
+/* Space rules slides: picture pops in, « Suivant » fills while the rule must stay on screen. */
+@keyframes hr-pop { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
+@keyframes hr-fill { from { width: 0; } to { width: 100%; } }
+.hr-pop { animation: hr-pop 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) 0.1s both; }
+.hr-fill { animation: hr-fill linear both; }
+@media (prefers-reduced-motion: reduce) {
+  .hr-pop { animation: none; }
+  .hr-fill { animation: none; width: 100%; opacity: 0.35; }
+}
