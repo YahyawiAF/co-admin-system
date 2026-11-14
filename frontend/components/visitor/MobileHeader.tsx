@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Bell, ChevronLeft, LogIn, MessageCircle } from "lucide-react";
+import { Bell, ChevronLeft, LogIn, MessageCircle, ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -28,6 +28,7 @@ import {
 } from "@/lib/visitor-local-cache";
 import { VisitorLoginDialog } from "@/components/visitor/VisitorLoginDialog";
 import { RefreshButton } from "@/components/RefreshButton";
+import { useHouseRules } from "@/components/visitor/HouseRules";
 
 const TITLE_BY_SUFFIX: Record<string, string> = {
   "": "Accueil",
@@ -63,6 +64,7 @@ export function MobileHeader() {
   const { org, slug, href } = useOrg();
   const { memberId, onboarded, ready } = useVisitorSession();
   const [loginOpen, setLoginOpen] = useState(false);
+  const { showRules, hasRules } = useHouseRules();
   const [isApp, setIsApp] = useState(false);
   const base = `/m/${slug}`;
   const suffix =
@@ -191,6 +193,17 @@ export function MobileHeader() {
               <LogIn className="mr-1.5 h-3.5 w-3.5" />
               Connexion
             </Button>
+          ) : null}
+          {onboarded && hasRules ? (
+            <button
+              type="button"
+              onClick={showRules}
+              className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-rose-50 px-3 text-xs font-extrabold text-rose-700 ring-1 ring-rose-200 transition hover:bg-rose-100 active:scale-95"
+              aria-label="Voir les règles de l'espace"
+            >
+              <ScrollText className="h-4 w-4" />
+              Règles
+            </button>
           ) : null}
           <RefreshButton className="h-10 w-10 rounded-full bg-slate-50 text-indigo-600" />
           {onboarded && communityUnlocked ? (

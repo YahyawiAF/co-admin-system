@@ -180,7 +180,8 @@ function RuleSlides({
   );
 }
 
-type Moment = "signup" | "open" | "forfait";
+/** "view" = opened from the top bar: can be closed, nothing to accept if already accepted. */
+type Moment = "signup" | "open" | "forfait" | "view";
 
 const signupKey = (memberId: string) => `house-rules-signup:${memberId}`;
 const openKey = (memberId: string) => `house-rules-open:${memberId}`;
@@ -212,11 +213,16 @@ const COPY: Record<Moment, { title: string }> = {
   signup: { title: "Avant de vous installer" },
   open: { title: "Rappel du règlement" },
   forfait: { title: "Avant de pointer" },
+  view: { title: "Nos règles" },
 };
 
 type Ctx = {
   /** Before choosing a forfait: shows the rules if needed, then runs `then`. */
   beforeForfait: (then: () => void) => void;
+  /** Top-bar button: shows the rules from the first slide, every time. */
+  showRules: () => void;
+  /** Are there rules to show? */
+  hasRules: boolean;
   /** Rules on screen: other popups wait. */
   showing: boolean;
   /** The rules have been checked (loaded or failed): popups that come after may show. */
@@ -225,6 +231,8 @@ type Ctx = {
 
 const HouseRulesContext = createContext<Ctx>({
   beforeForfait: (then) => then(),
+  showRules: () => {},
+  hasRules: false,
   showing: false,
   settled: true,
 });
@@ -328,25 +336,40 @@ export function HouseRulesProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(t);
   }, [moment, slide, readUpTo]);
   const showing = !!data && !!(moment || autoMoment);
+  const showRules = useCallback(() => open("view"), [open]);
+  const viewing = moment === "view";
+  /** Opened from the top bar and already accepted: just « C'est compris » to close. */
+  const justLooking = viewing && !!data && data.acceptedVersion === data.version;
+  const close = () => {
+    if (viewing) setMoment(null);
+  };
   // Other popups wait while the rules load or are on screen.
   const blocked = showing || (isLoading && !!memberId && onboarded);
 
   return (
-    <HouseRulesContext.Provider value={{ beforeForfait, showing, settled: isFetched }}>
+    <HouseRulesContext.Provider value={{ beforeForfait, showRules, hasRules: rules.length > 0, showing, settled: isFetched }}>
       <ModalGateContext.Provider value={{ blocked }}>{children}</ModalGateContext.Provider>
-      {/* The only way out is « J'ai lu » + « C'est compris ». */}
+      {/* The only way out is « J'ai lu » + « C'est compris » (except when opened from the top bar). */}
       <QuestSheet
         open={!!moment && !!data}
-        onOpenChange={() => {}}
-        dismissible={false}
-        closable={false}
+        onOpenChange={(o) => !o && close()}
+        dismissible={viewing}
+        closable={viewing}
         ignoreGate
         tone="rose"
         eyebrow="Règlement de l'espace"
         title={copy.title}
         chip={{ label: "Règle", value: `${Math.min(slide + 1, rules.length)}/${rules.length}` }}
         footer={
-          lastSlide ? (
+          lastSlide && justLooking ? (
+            <Button
+              className="h-12 w-full rounded-full bg-indigo-600 text-sm font-extrabold transition-opacity duration-200 hover:bg-indigo-700 animate-in fade-in-0 slide-in-from-bottom-1 duration-300"
+              disabled={!slideRead}
+              onClick={close}
+            >
+              C&apos;est compris
+            </Button>
+          ) : lastSlide ? (
             <div className="space-y-2 animate-in fade-in-0 slide-in-from-bottom-1 duration-300">
               <label
                 htmlFor="house-rules-accept"
