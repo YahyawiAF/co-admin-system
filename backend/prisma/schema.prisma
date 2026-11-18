@@ -876,6 +876,8 @@ model Facility {
   directorBrief               Json?
   /// Data the brain asked to look at, answered in the next export: [{ eye, params, from, to, why }]
   directorLooks               Json?
+  /// Texts the owner wants the brain to learn, sent in the next export: [{ id, text, at }]
+  directorLearn               Json?
   directorPriorities          DirectorPriority[]
   directorWatches             DirectorWatch[]
   promotions                  Promotion[]
@@ -1668,6 +1670,20 @@ model DirectorEntry {
   detail     String?
   /// OWNER | CLAUDE | APP
   source     String   @default("OWNER")
+  /// LESSON only — CANDIDATE | TESTING | ADOPTED | ADAPTED | REJECTED | RETIRED
+  status     String?
+  /// LESSON only — 0–100, moved by results
+  confidence Int?
+  /// LESSON only — "*" (every business) or the trade it was learned in ("coworking")
+  domain     String?
+  /// LESSON only — where it came from (the pasted text, a seed key, an import)
+  origin     String?
+  /// LESSON only — [{ date, text }] results the brain cited
+  evidence   Json?
+  /// LESSON only — [{ by: OWNER | DIRECTOR, text, date }]; the owner contests once
+  debate     Json?
+  /// LESSON only — [{ date, change, why }]
+  history    Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -1693,6 +1709,8 @@ model DirectorPriority {
   source     String          @default("CLAUDE")
   /// exportedAt of the export the brain answered
   basedOn    String?
+  /// LESSON notes this priority applies or tests (their results come from its watches)
+  lessonIds  Json            @default("[]")
   startDate  DateTime        @db.Date
   closedAt   DateTime?
   createdAt  DateTime        @default(now())

@@ -59,6 +59,32 @@ export class DirectorController {
     return this.director.setNeed(facilityId, key, body);
   }
 
+  @Post('learn')
+  addLearn(@Query('facilityId') facilityId: string | undefined, @Body() body: { text?: string }) {
+    return this.director.addLearn(facilityId, body);
+  }
+
+  @Delete('learn/:id')
+  removeLearn(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string) {
+    return this.director.removeLearn(facilityId, id);
+  }
+
+  @Post('lessons/:id/contest')
+  contestLesson(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string, @Body() body: { text?: string }) {
+    return this.director.contestLesson(facilityId, id, body);
+  }
+
+  /** Principles to take to another project (directeur-lessons/v1). */
+  @Get('lessons/file')
+  lessonsFile(@Query('facilityId') facilityId?: string) {
+    return this.director.lessonsFile(facilityId);
+  }
+
+  @Post('lessons/file')
+  importLessonsFile(@Query('facilityId') facilityId: string | undefined, @Body() body: { json?: unknown }) {
+    return this.director.importLessonsFile(facilityId, body);
+  }
+
   @Patch('goal')
   setGoal(@Query('facilityId') facilityId: string | undefined, @Body() body: { profit?: number; date?: string | null }) {
     return this.director.setGoal(facilityId, body);

@@ -1,4 +1,4 @@
-import { addDayKey, measureWatch, parseUpdate, type EyeDay, type EyeSpec, type LegSpec } from './index';
+import { addDayKey, lessonFlag, measureWatch, parseUpdate, pickLessons, sameRule, type EyeDay, type EyeSpec, type LegSpec, type LessonView } from './index';
 
 /** 28 days before 2026-11-03 then 14 days from it; weekday value = base, after the start = after. */
 function days(base: (weekday: number) => number, after: (weekday: number) => number, split?: (k: string) => Record<string, number>): EyeDay[] {
@@ -139,5 +139,81 @@ describe('directeur-update/v2', () => {
 
   it('refuses another format', () => {
     expect(() => parseUpdate({ format: 'autre' }, ctx, '2026-11-19')).toThrow('directeur-update/v2');
+  });
+});
+
+describe('lessons', () => {
+  const lesson = (id: string, o: Partial<LessonView> = {}): LessonView => ({
+    id,
+    rule: id,
+    why: null,
+    corner: 'cafe',
+    status: 'ADOPTED',
+    confidence: 50,
+    domain: 'coworking',
+    results: [],
+    ...o,
+  });
+
+  it('sends the corners in trouble first, then tests, then the most trusted; never rejected or another trade', () => {
+    const picked = pickLessons(
+      [
+        lesson('a', { confidence: 90 }),
+        lesson('b', { corner: 'abos', confidence: 40 }),
+        lesson('c', { status: 'TESTING', confidence: 30 }),
+        lesson('d', { status: 'REJECTED', confidence: 0 }),
+        lesson('e', { domain: 'retail', confidence: 95 }),
+        lesson('f', { domain: '*', confidence: 70 }),
+      ],
+      { domain: 'coworking', hotCorners: ['abos'] },
+    );
+    expect(picked.map((l) => l.id)).toEqual(['b', 'c', 'a', 'f']);
+  });
+
+  it('asks for a review after 3 bad results, and a promotion when proven in 2 trades', () => {
+    const r = { priority: 'p', watch: 'w', change: -10, unit: '%', sales: null, date: '2026-11-01' };
+    expect(lessonFlag(lesson('a', { confidence: 15, results: [r, r, r] }))).toBe('review');
+    expect(lessonFlag(lesson('a', { confidence: 15, results: [r] }))).toBeNull();
+    expect(lessonFlag(lesson('a', { confidence: 85, provenIn: ['coworking', 'retail'] }))).toBe('promote');
+    expect(lessonFlag(lesson('a', { confidence: 85, domain: '*', provenIn: ['coworking', 'retail'] }))).toBeNull();
+  });
+
+  it('matches the same rule written differently', () => {
+    expect(sameRule('Choisir le public, avant le prix !', 'choisir le public avant le prix')).toBe(true);
+    expect(sameRule('Choisir le public', 'Choisir le prix')).toBe(false);
+  });
+
+  it('reads verdicts, confidence changes and replies; a priority can test a new lesson', () => {
+    const plan = parseUpdate(
+      {
+        format: 'directeur-update/v2',
+        lessons: [
+          { learnId: 'learn-1', claim: 'Le même produit paraît cher ou pas selon le public', verdict: 'adopt', rule: 'Choisir le public avant le prix', corner: 'cafe', domain: '*' },
+          { learnId: 'learn-1', claim: 'Bien positionnée, une offre se vend sans baisser le prix', verdict: 'TEST', rule: 'Le 4h se vend mieux avec un message pour un public précis', domain: 'retail' },
+          { claim: 'La qualité ne compte pas', verdict: 'REJECT', changeMind: 'deux mesures' },
+          { claim: 'On achète ce que ça signifie', verdict: 'SAME' },
+          { claim: 'x', verdict: 'MAYBE', rule: 'x' },
+        ],
+        priorities: [{ title: 'Tester deux messages', corner: 'cafe', lessonIds: ['new:1', 'new:2', 'n1', 'new:9', 'zz'] }],
+        confidence: [{ id: 'n1', confidence: 140, why: 'Express +51 %', status: 'adopted' }, { id: 'n1', confidence: 50 }],
+        replies: [{ id: 'n1', reply: 'Je garde : les chiffres le montrent' }, { id: 'n9', reply: 'x' }],
+      },
+      { ...ctx, lessonIds: ['n1'], learnIds: ['learn-1'], contestedIds: ['n1'], domain: 'coworking' },
+      '2026-11-19',
+    );
+    expect(plan.lessons.map((l) => [l.ref, l.verdict, l.rule, l.domain, l.learnId])).toEqual([
+      [0, 'ADOPT', 'Choisir le public avant le prix', '*', 'learn-1'],
+      [1, 'TEST', 'Le 4h se vend mieux avec un message pour un public précis', 'coworking', 'learn-1'],
+      [2, 'REJECT', 'La qualité ne compte pas', 'coworking', null],
+    ]);
+    expect(plan.priorities[0].lessonIds).toEqual(['new:1', 'n1']);
+    expect(plan.confidence).toEqual([{ id: 'n1', confidence: 100, why: 'Express +51 %', status: 'ADOPTED' }]);
+    expect(plan.replies).toEqual([{ id: 'n1', reply: 'Je garde : les chiffres le montrent', rule: null, status: null }]);
+    expect(plan.warnings).toEqual([
+      'lessons[3] ignoré : SAME sans leçon connue (sameAs)',
+      'lessons[4] ignoré : verdict inconnu',
+      'confidence[1] ignoré : sans raison',
+      'replies[1] ignoré : pas de contestation en attente',
+    ]);
   });
 });

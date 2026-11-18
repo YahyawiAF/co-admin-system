@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { Textarea } from "@/components/ui/textarea";
 import { DIALOG_CLASS } from "@/components/admin/OutreachCampaigns";
 import { DIRECTOR_KEY, directorApi, type DirectorEntry, type DirectorUpdatePlan } from "@/lib/api/director";
+import { domainLabel } from "@/components/admin/director/LessonsPanel";
 import { cn } from "@/lib/utils";
 
 /** Downloads the Directeur file for a Claude chat (memory + numbers + answer format). */
@@ -30,6 +31,13 @@ export function useExportForClaude() {
 }
 
 const COUNT = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+const VERDICT_UI: Record<DirectorUpdatePlan["lessons"][number]["verdict"], { label: string; pill: string }> = {
+  ADOPT: { label: "Adoptée", pill: "bg-emerald-100 text-emerald-800" },
+  ADAPT: { label: "Adaptée", pill: "bg-indigo-100 text-indigo-800" },
+  TEST: { label: "À tester", pill: "bg-amber-100 text-amber-900" },
+  REJECT: { label: "Refusée", pill: "bg-rose-100 text-rose-800" },
+  SAME: { label: "Déjà connue", pill: "bg-slate-100 text-slate-700" },
+};
 
 /** Paste or open Claude's answer, see what changes, then save it. */
 export function ClaudeUpdateDialog({
@@ -73,6 +81,9 @@ export function ClaudeUpdateDialog({
           r.watches && COUNT(r.watches, "chiffre suivi", "chiffres suivis"),
           r.looks && COUNT(r.looks, "demande de données", "demandes de données"),
           r.needs && COUNT(r.needs, "besoin à coder", "besoins à coder"),
+          r.lessons && COUNT(r.lessons, "idée jugée", "idées jugées"),
+          r.confidence && COUNT(r.confidence, "confiance mise à jour", "confiances mises à jour"),
+          r.replies && COUNT(r.replies, "réponse à ta contestation", "réponses à tes contestations"),
           !r.priorities && r.brief && "priorités de la semaine",
         ]
           .filter(Boolean)
@@ -88,7 +99,7 @@ export function ClaudeUpdateDialog({
   const textOf = (id: string) => memory.find((m) => m.id === id)?.text ?? id;
   const stale = plan?.basedOn && Date.now() - new Date(plan.basedOn).getTime() > 7 * 86_400_000;
   const empty =
-    plan && !plan.add.length && !plan.update.length && !plan.remove.length && !plan.corners.length && !plan.questions.length && !plan.priorities.length && !plan.summary && !plan.look.length && !plan.needs.length;
+    plan && !plan.add.length && !plan.update.length && !plan.remove.length && !plan.corners.length && !plan.questions.length && !plan.priorities.length && !plan.summary && !plan.look.length && !plan.needs.length && !plan.lessons.length && !plan.confidence.length && !plan.replies.length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -194,6 +205,40 @@ export function ClaudeUpdateDialog({
                       </li>
                     ))}
                   </ul>
+                </section>
+              ) : null}
+              {plan.lessons.length ? (
+                <section className="space-y-2 rounded-2xl border bg-white p-4">
+                  <h3 className="font-extrabold">Ce que le directeur a jugé</h3>
+                  <ul className="space-y-2">
+                    {plan.lessons.map((v) => (
+                      <li key={v.ref} className="space-y-1 rounded-xl bg-slate-50 px-3.5 py-2.5 text-sm">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", VERDICT_UI[v.verdict].pill)}>{VERDICT_UI[v.verdict].label}</span>
+                          <span className="text-xs text-slate-500">{domainLabel(v.domain)}</span>
+                        </span>
+                        {v.claim !== v.rule ? <span className="block text-[13px] text-slate-500">Le texte dit : {v.claim}</span> : null}
+                        <span className="block font-semibold">{v.verdict === "SAME" ? `Déjà connue : ${textOf(v.sameAs ?? "")}` : v.rule}</span>
+                        {v.why ? <span className="block text-slate-700">{v.why}</span> : null}
+                        {v.changed ? <span className="block text-slate-700">Changé : {v.changed}</span> : null}
+                        {v.changeMind ? <span className="block text-slate-700">Me ferait changer d’avis : {v.changeMind}</span> : null}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ) : null}
+              {plan.confidence.length || plan.replies.length ? (
+                <section className="space-y-1 rounded-2xl border bg-white p-4 text-sm">
+                  {plan.confidence.map((c) => (
+                    <p key={c.id}>
+                      <b>Confiance {c.confidence} :</b> {textOf(c.id)} <span className="text-slate-500">· {c.why}</span>
+                    </p>
+                  ))}
+                  {plan.replies.map((r) => (
+                    <p key={r.id}>
+                      <b>Réponse à ta contestation :</b> {textOf(r.id)} <span className="text-slate-500">· {r.reply}</span>
+                    </p>
+                  ))}
                 </section>
               ) : null}
               {plan.look.length || plan.needs.length ? (
