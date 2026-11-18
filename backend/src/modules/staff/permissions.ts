@@ -108,7 +108,7 @@ const SHARED_READS: RegExp[] = [
 ];
 
 /** Always reachable by a logged-in staff member. */
-const ALWAYS: RegExp[] = [/^\/auth\//, /^\/staff\/me$/];
+const ALWAYS: RegExp[] = [/^\/auth\//, /^\/staff\/me$/, /^\/admin\/push\//];
 
 export function methodToAction(method: string): StaffAction {
   const m = method.toUpperCase();

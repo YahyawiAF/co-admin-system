@@ -55,20 +55,6 @@ export function BookingRequestBell() {
         },
         duration: 10_000,
       });
-      if (
-        typeof window !== "undefined" &&
-        "Notification" in window &&
-        Notification.permission === "granted"
-      ) {
-        try {
-          new Notification(title, {
-            body: payload.spaceName || payload.seatLabel || "Demande mobile",
-            tag: `booking-${payload.id}`,
-          });
-        } catch {
-          /* ignore */
-        }
-      }
       queryClient.invalidateQueries({
         queryKey: queryKeys.bookingRequestsPending,
       });
@@ -88,13 +74,6 @@ export function BookingRequestBell() {
       socket.off("booking_request_resolved", onDone);
     };
   }, [socket, queryClient]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission === "default") {
-      void Notification.requestPermission();
-    }
-  }, []);
 
   const approve = useMutation({
     mutationFn: () => bookingRequestsApi.approve(current!.id),
