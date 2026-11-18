@@ -15,6 +15,7 @@ import {
   loadDayFacts,
   renewalOf,
 } from './month-data';
+import { clientGroups } from './client-groups';
 
 const WEEKDAY = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -47,10 +48,15 @@ export async function buildForecastExport(prisma: PrismaService, facilityId: str
   const end = endOfMonth(start);
   const histFrom = startOfMonth(subMonths(start, 2));
   const monthKey = localDayKey(start);
-  const [facts, calendar, abos] = await Promise.all([
+  const [facts, calendar, abos, visits, clientInfo] = await Promise.all([
     loadDayFacts(prisma, histFrom, end < now ? end : now),
     loadCalendar(prisma, facilityId),
     loadAbonnements(prisma),
+    prisma.journal.findMany({
+      where: { memberID: { not: null }, isReservation: false, hiddenAt: null, registredTime: { lte: now } },
+      select: { memberID: true, registredTime: true },
+    }),
+    prisma.member.findMany({ where: { deletedAt: null }, select: { id: true, phone: true, heardFrom: true } }),
   ]);
   const { all: special } = calendarKeys(calendar);
   const before = facts.filter((d) => d.key < monthKey);
@@ -131,6 +137,23 @@ export async function buildForecastExport(prisma: PrismaService, facilityId: str
       };
     });
 
+  // Clients by how often they come (no names or phone numbers, only the member id)
+  const visitsOf = new Map<string, Date[]>();
+  for (const v of visits) {
+    const list = visitsOf.get(v.memberID!) ?? [];
+    list.push(v.registredTime);
+    visitsOf.set(v.memberID!, list);
+  }
+  const subscribed = new Set(
+    abos.filter((a) => a.memberID && !a.terminatedAt && a.registredDate <= now && (!a.leaveDate || a.leaveDate >= now)).map((a) => a.memberID!),
+  );
+  const clients = clientGroups(
+    clientInfo
+      .filter((m) => visitsOf.has(m.id))
+      .map((m) => ({ memberId: m.id, visits: visitsOf.get(m.id)!, subscribed: subscribed.has(m.id), hasPhone: !!m.phone?.trim(), heardFrom: m.heardFrom ?? null })),
+    now,
+  );
+
   const tag = `${year}-${String(month).padStart(2, '0')}`;
   return {
     tag,
@@ -141,12 +164,14 @@ export async function buildForecastExport(prisma: PrismaService, facilityId: str
       forecast: f,
       baseDays: baseRows,
       calendarEntries: calendar,
+      clients,
     },
     csv: {
       days: toCsv(days),
       base: toCsv(baseRows),
       history: toCsv(history),
       abonnements: toCsv(abonnements),
+      clients: toCsv(clients.clients),
     },
   };
 }
