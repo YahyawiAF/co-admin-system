@@ -244,7 +244,7 @@ export class ContextService {
   }
 
   /** Keeps the questions of a finished report so the owner can answer them in the app. */
-  async storeQuestions(facilityId: string, reportId: string, questions: string[]) {
+  async storeQuestions(facilityId: string, reportId: string | null, questions: string[]) {
     for (const q of questions.map((x) => x.trim()).filter(Boolean)) {
       await this.prisma.advisorQuestion.upsert({
         where: { facilityId_key: { facilityId, key: this.questionKey(q) } },

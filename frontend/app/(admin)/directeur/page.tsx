@@ -4,13 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowRight, Brain, Copy, Pencil, Plus, Target, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowRight, Brain, Download, FileUp, Loader2, Pencil, Plus, Sparkles, Target, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { ConseilView } from "@/components/admin/advisor/ConseilView";
-import { ContextDialog } from "@/components/admin/advisor/ContextDialog";
+import { ClaudeUpdateDialog, useExportForClaude } from "@/components/admin/director/ClaudeRoundTrip";
 import { CornerDialog, EntryDialog, GoalDialog, ImportDialog, KINDS } from "@/components/admin/director/DirectorDialogs";
 import { advisorApi } from "@/lib/api/resources";
 import { DIRECTOR_KEY, directorApi, type DirectorCorner, type DirectorEntry, type DirectorOverview, type DirectorStatus } from "@/lib/api/director";
@@ -109,7 +109,15 @@ function WeekTab({
     onError: (e: Error) => toast.error(e.message),
   });
   const cornerName = (id: string) => d.corners.find((c) => c.id === id)?.name ?? id;
-  const priorities = [
+  const brief = d.brief && Date.now() - new Date(`${d.brief.date}T12:00:00`).getTime() < 14 * 86_400_000 ? d.brief : null;
+  const fromClaude = (brief?.priorities ?? []).map((p) => ({
+    key: `claude-${p.title}`,
+    title: p.title,
+    sub: `${cornerName(p.corner)} · ${p.why}`,
+    href: null as string | null,
+    action: "",
+  }));
+  const priorities = fromClaude.length ? fromClaude : [
     ...running.slice(0, 3).map((i) => ({
       key: i.id,
       title: i.title,
@@ -158,8 +166,18 @@ function WeekTab({
       <section className={cn("space-y-3 rounded-2xl border bg-white p-4 sm:p-5 lg:col-span-2", ENTER)}>
         <div>
           <h2 className="text-base font-extrabold">3 priorités cette semaine</h2>
-          <p className="text-[13px] text-slate-500">Jamais plus de 3, pour finir ce qu’on commence.</p>
+          <p className="text-[13px] text-slate-500">
+            {brief ? (
+              <>
+                <Sparkles className="mr-1 inline h-3.5 w-3.5 text-indigo-600" />
+                Par Claude le {shortDay(brief.date)}
+              </>
+            ) : (
+              "Calculées par les règles. Jamais plus de 3, pour finir ce qu’on commence."
+            )}
+          </p>
         </div>
+        {brief?.summary ? <p className="rounded-xl bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-950">{brief.summary}</p> : null}
         {priorities.length ? (
           <ol className="space-y-2.5">
             {priorities.map((p, k) => (
@@ -420,8 +438,8 @@ export default function DirecteurPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [goalOpen, setGoalOpen] = useState(false);
   const [cornerOpen, setCornerOpen] = useState(false);
-  const [contextOpen, setContextOpen] = useState(false);
-  const qc = useQueryClient();
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const exportFile = useExportForClaude();
 
   const overview = useQuery({ queryKey: DIRECTOR_KEY, queryFn: directorApi.overview });
   const initiatives = useQuery({ queryKey: ["advisor", "initiatives"], queryFn: advisorApi.initiatives });
@@ -459,9 +477,13 @@ export default function DirecteurPage() {
             <Plus className="mr-1.5 h-4 w-4" />
             Noter un changement
           </Button>
-          <Button className="h-11 rounded-xl font-bold" onClick={() => setContextOpen(true)}>
-            <Copy className="mr-1.5 h-4 w-4" />
-            Demander à Claude
+          <Button variant="outline" className="h-11 rounded-xl" disabled={exportFile.isPending} onClick={() => exportFile.mutate()}>
+            {exportFile.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Download className="mr-1.5 h-4 w-4" />}
+            Exporter pour Claude
+          </Button>
+          <Button className="h-11 rounded-xl font-bold" onClick={() => setUpdateOpen(true)}>
+            <FileUp className="mr-1.5 h-4 w-4" />
+            Importer la réponse
           </Button>
         </div>
       </header>
@@ -516,7 +538,7 @@ export default function DirecteurPage() {
 
       {tab !== "conseils" ? (
         <p className="flex flex-wrap items-center gap-1 text-[13px] text-slate-500">
-          Étape 1 sur 5 : Claude se demande à la main (« Demander à Claude » → copier le prompt). La mémoire est incluse.
+          Sans clé API : « Exporter pour Claude », donne le fichier à Claude, puis « Importer la réponse ».
           <button type="button" className="inline-flex items-center font-semibold text-indigo-700 hover:underline" onClick={() => go("conseils")}>
             Voir les conseils <ArrowRight className="ml-0.5 h-3.5 w-3.5" />
           </button>
@@ -533,13 +555,11 @@ export default function DirecteurPage() {
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <GoalDialog open={goalOpen} goal={d?.goal ?? null} onClose={() => setGoalOpen(false)} />
       <CornerDialog open={cornerOpen} onClose={() => setCornerOpen(false)} />
-      <ContextDialog
-        open={contextOpen}
-        onClose={() => setContextOpen(false)}
-        onImported={() => {
-          qc.invalidateQueries({ queryKey: ["advisor"] });
-          qc.invalidateQueries({ queryKey: DIRECTOR_KEY });
-        }}
+      <ClaudeUpdateDialog
+        open={updateOpen}
+        onClose={() => setUpdateOpen(false)}
+        memory={d?.memory ?? []}
+        cornerName={(id) => d?.corners.find((c) => c.id === id)?.name ?? id}
       />
     </div>
   );
