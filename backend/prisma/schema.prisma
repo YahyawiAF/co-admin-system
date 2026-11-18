@@ -844,6 +844,11 @@ model Facility {
   advisorFacts                AdvisorFact[]
   advisorDismissals           AdvisorDismissal[]
   advisorQuestions            AdvisorQuestion[]
+  directorEntries             DirectorEntry[]
+  /// Directeur: monthly profit goal in DT, the date to reach it, and the owner's own corners [{ id, name }]
+  directorGoalProfit          Int                  @default(10000)
+  directorGoalDate            DateTime?            @db.Date
+  directorCorners             Json?
   promotions                  Promotion[]
   shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]
@@ -1618,6 +1623,27 @@ model AdvisorQuestion {
 
   @@unique([facilityId, key])
   @@map("advisor_questions")
+}
+
+/// Directeur memory: what the owner decided, what happened, what we learned (one corner of the business each)
+model DirectorEntry {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  /// DECISION | FACT | LESSON | TEST
+  kind       String
+  /// clients, prix, surplace… or one of the owner's own corners
+  corner     String
+  text       String
+  detail     String?
+  /// OWNER | CLAUDE | APP
+  source     String   @default("OWNER")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([facilityId, date])
+  @@map("director_entries")
 }
 
 /// Flash offer shown to members as a "golden card" popup; the discount applies automatically

@@ -8,6 +8,8 @@ import { AdvisorContextController } from './advisor-context.controller';
 import { AdvisorController } from './advisor.controller';
 import { AdvisorService } from './advisor.service';
 import { ContextService } from './context.service';
+import { DirectorController } from './director.controller';
+import { DirectorService } from './director.service';
 import { InitiativeMeasure } from './initiative-measure';
 import { HealthService } from './health.service';
 import { ManagerController } from './manager.controller';
@@ -16,7 +18,7 @@ import { SnapshotService } from './snapshot.service';
 
 @Module({
   imports: [AnalyticsModule, CaisseModule, MemberModule, ExpensesModule],
-  controllers: [AdvisorController, AdvisorContextController, ManagerController],
-  providers: [AdvisorService, HealthService, SnapshotService, ContextService, InitiativeMeasure, ManagerService, PrismaService],
+  controllers: [AdvisorController, AdvisorContextController, ManagerController, DirectorController],
+  providers: [AdvisorService, DirectorService, HealthService, SnapshotService, ContextService, InitiativeMeasure, ManagerService, PrismaService],
 })
 export class AdvisorModule {}
