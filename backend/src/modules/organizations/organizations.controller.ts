@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
   ForbiddenException,
@@ -22,6 +23,43 @@ export class OrganizationsController {
   @Get()
   list() {
     return this.organizationsService.list();
+  }
+
+  /** Public: used by the web app on every admin page (device token from the cookie) */
+  @Get('admin-gate/check')
+  checkAdminGate(@Query('device') device?: string) {
+    return this.organizationsService.checkAdminGate(device);
+  }
+
+  /** Public: the code from /<code>/admin */
+  @Get('admin-gate/verify')
+  verifyAdminGate(@Query('key') key?: string) {
+    return this.organizationsService.verifyAdminGateKey(key);
+  }
+
+  @Get('admin-gate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  adminGate(
+    @Req() req: { user?: { id?: string; role?: Role } },
+    @Query('organizationId') organizationId?: string,
+  ) {
+    return this.organizationsService.adminGate(req.user, organizationId);
+  }
+
+  @Patch('admin-gate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  updateAdminGate(
+    @Req() req: { user?: { id?: string; role?: Role } },
+    @Query('organizationId') organizationId: string | undefined,
+    @Body() body: { enabled?: boolean; key?: string; regenerate?: boolean },
+  ) {
+    return this.organizationsService.updateAdminGate(
+      req.user,
+      organizationId,
+      body,
+    );
   }
 
   @Get('crm')

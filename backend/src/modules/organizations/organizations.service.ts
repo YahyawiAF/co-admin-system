@@ -1,9 +1,21 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash, randomInt } from 'crypto';
+import { Role } from '@prisma/client';
 import { PrismaService } from 'database/prisma.service';
+
+/** No 0/O, 1/l/I: the code is read from a screen and typed on a phone */
+const GATE_ALPHABET = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const GATE_KEY_RE = /^[A-Za-z0-9_-]{6,40}$/;
+
+/** Cookie value for a device unlocked with this code; changes when the code changes */
+export function adminGateDeviceToken(key: string) {
+  return createHash('sha256').update(`admin-gate:${key}`).digest('hex');
+}
 
 @Injectable()
 export class OrganizationsService {
@@ -258,5 +270,126 @@ export class OrganizationsService {
       },
     });
     return this.toPublic(org);
+  }
+
+  private newGateKey() {
+    let key = '';
+    for (let i = 0; i < 10; i++) key += GATE_ALPHABET[randomInt(GATE_ALPHABET.length)];
+    return key;
+  }
+
+  /** Owners only (not staff): platform admins, or an org admin of this organization */
+  private async gateOrgId(
+    user: { id?: string; role?: Role } | undefined,
+    organizationId?: string,
+  ) {
+    if (!user?.id) throw new ForbiddenException('Accès refusé');
+    if (user.role === Role.SUPER_ADMIN || user.role === Role.ADMIN) {
+      const id =
+        organizationId ||
+        (
+          await this.prisma.organization.findFirst({
+            orderBy: { createdAt: 'asc' },
+            select: { id: true },
+          })
+        )?.id;
+      if (!id) throw new NotFoundException('Organisation introuvable');
+      return id;
+    }
+    const membership = await this.prisma.organizationMembership.findFirst({
+      where: {
+        userId: user.id,
+        ...(organizationId ? { organizationId } : {}),
+        role: { in: [Role.ORG_ADMIN, Role.FACILITY_ADMIN, Role.ADMIN] },
+      },
+      select: { organizationId: true },
+    });
+    if (!membership) throw new ForbiddenException('Accès refusé');
+    return membership.organizationId;
+  }
+
+  async adminGate(
+    user: { id?: string; role?: Role } | undefined,
+    organizationIdParam?: string,
+  ) {
+    const organizationId = await this.gateOrgId(user, organizationIdParam);
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+      select: { adminGateEnabled: true, adminGateKey: true },
+    });
+    if (!org) throw new NotFoundException('Organisation introuvable');
+    if (org.adminGateKey) {
+      return { enabled: org.adminGateEnabled, key: org.adminGateKey };
+    }
+    // First visit: give a code right away so the card can show the link
+    const saved = await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: { adminGateKey: this.newGateKey() },
+      select: { adminGateEnabled: true, adminGateKey: true },
+    });
+    return { enabled: saved.adminGateEnabled, key: saved.adminGateKey! };
+  }
+
+  async updateAdminGate(
+    user: { id?: string; role?: Role } | undefined,
+    organizationIdParam: string | undefined,
+    body: { enabled?: boolean; key?: string; regenerate?: boolean },
+  ) {
+    const organizationId = await this.gateOrgId(user, organizationIdParam);
+    let key: string | undefined;
+    if (body.regenerate) key = this.newGateKey();
+    else if (body.key != null) {
+      key = body.key.trim();
+      if (!GATE_KEY_RE.test(key)) {
+        throw new BadRequestException(
+          'Code : 6 à 40 lettres ou chiffres, sans espace',
+        );
+      }
+      if (key.toLowerCase() === 'm') {
+        throw new BadRequestException('Code réservé');
+      }
+    }
+    if (key) {
+      const clash = await this.prisma.organization.findFirst({
+        where: { adminGateKey: key, NOT: { id: organizationId } },
+        select: { id: true },
+      });
+      if (clash) throw new BadRequestException('Ce code est déjà utilisé');
+    }
+    await this.prisma.organization.update({
+      where: { id: organizationId },
+      data: {
+        ...(body.enabled !== undefined ? { adminGateEnabled: !!body.enabled } : {}),
+        ...(key ? { adminGateKey: key } : {}),
+      },
+    });
+    return this.adminGate(user, organizationId);
+  }
+
+  /** Public: is admin hidden, and is this device unlocked (cookie token)? */
+  async checkAdminGate(device?: string) {
+    const gates = await this.prisma.organization.findMany({
+      where: { adminGateKey: { not: null } },
+      select: { adminGateKey: true, adminGateEnabled: true },
+    });
+    return {
+      hidden: gates.some((g) => g.adminGateEnabled),
+      // Unlocked phones work even while the switch is off
+      allowed:
+        !!device &&
+        gates.some((g) => adminGateDeviceToken(g.adminGateKey!) === device),
+    };
+  }
+
+  /** Public: the code from /<code>/admin → device token to store in the cookie */
+  async verifyAdminGateKey(key?: string) {
+    if (!key || !GATE_KEY_RE.test(key)) return { valid: false };
+    const org = await this.prisma.organization.findFirst({
+      where: { adminGateKey: key },
+      select: { id: true },
+    });
+    return org
+      ? { valid: true, device: adminGateDeviceToken(key) }
+      : { valid: false };
   }
 }
