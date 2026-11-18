@@ -12,6 +12,7 @@ import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { ConseilView } from "@/components/admin/advisor/ConseilView";
 import { ClaudeUpdateDialog, useExportForClaude } from "@/components/admin/director/ClaudeRoundTrip";
 import { NeedsCard, PriorityCards, WatchLine } from "@/components/admin/director/PriorityCards";
+import { LessonsPanel } from "@/components/admin/director/LessonsPanel";
 import { CornerDialog, EntryDialog, GoalDialog, ImportDialog, KINDS } from "@/components/admin/director/DirectorDialogs";
 import { advisorApi } from "@/lib/api/resources";
 import { DIRECTOR_KEY, directorApi, type DirectorCorner, type DirectorEntry, type DirectorOverview, type DirectorStatus } from "@/lib/api/director";
@@ -273,8 +274,10 @@ function MemoryTab({
   onEdit: (e: DirectorEntry) => void;
   onImport: () => void;
 }) {
-  const used = d.corners.filter((c) => c.notes > 0);
-  const list = useMemo(() => d.memory.filter((m) => corner === "all" || m.corner === corner), [d.memory, corner]);
+  const [view, setView] = useState<"notes" | "lessons">("notes");
+  const notes = useMemo(() => d.memory.filter((m) => m.kind !== "LESSON"), [d.memory]);
+  const used = d.corners.filter((c) => notes.some((m) => m.corner === c.id));
+  const list = useMemo(() => notes.filter((m) => corner === "all" || m.corner === corner), [notes, corner]);
   const paged = usePaged(list, 20, corner);
   const cornerName = (id: string) => d.corners.find((c) => c.id === id)?.name ?? id;
   const chip = (on: boolean) =>
@@ -282,16 +285,40 @@ function MemoryTab({
       "min-h-9 rounded-full border px-3 text-[13px] font-semibold transition-colors duration-150 motion-reduce:transition-none",
       on ? "border-indigo-600 bg-indigo-600 text-white" : "bg-white text-slate-700 hover:border-indigo-300",
     );
+  const segment = (on: boolean) =>
+    cn(
+      "min-h-11 rounded-xl px-4 text-sm font-semibold transition-colors duration-150 motion-reduce:transition-none",
+      on ? "bg-indigo-600 text-white" : "text-slate-600 hover:bg-slate-100",
+    );
+  const toggle = (
+    <div role="tablist" aria-label="Mémoire" className="inline-flex gap-1 rounded-2xl border bg-white p-1">
+      <button role="tab" type="button" aria-selected={view === "notes"} className={segment(view === "notes")} onClick={() => setView("notes")}>
+        Notes · {notes.length}
+      </button>
+      <button role="tab" type="button" aria-selected={view === "lessons"} className={segment(view === "lessons")} onClick={() => setView("lessons")}>
+        Leçons · {d.lessons.filter((l) => l.status !== "REJECTED" && l.status !== "RETIRED").length}
+        {d.learn.length ? <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-xs text-amber-950">{d.learn.length}</span> : null}
+      </button>
+    </div>
+  );
+  if (view === "lessons")
+    return (
+      <div className="space-y-3">
+        {toggle}
+        <LessonsPanel d={d} cornerName={cornerName} />
+      </div>
+    );
   return (
     <section className={cn("space-y-3", ENTER)}>
+      {toggle}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-semibold text-slate-500">Coin :</span>
         <button type="button" className={chip(corner === "all")} onClick={() => setCorner("all")}>
-          Tous · {d.memory.length}
+          Tous · {notes.length}
         </button>
         {used.map((c) => (
           <button key={c.id} type="button" className={chip(corner === c.id)} onClick={() => setCorner(c.id)}>
-            {c.name} · {c.notes}
+            {c.name} · {notes.filter((m) => m.corner === c.id).length}
           </button>
         ))}
         {corner !== "all" && !used.some((c) => c.id === corner) ? (

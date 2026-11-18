@@ -5,6 +5,7 @@
  * and needs (what the app can't do yet). Nothing unknown is ever applied.
  */
 import { checkParams, type EyeParams, type EyeSpec, type LegSpec } from './catalogue';
+import { ANY_DOMAIN, LESSON_STATUSES, VERDICTS, type LessonStatus, type Verdict } from './lessons';
 import { cornerId, ENTRY_KINDS, type EntryKind, type ImportedEntry } from './memory';
 
 export const EXPORT_FORMAT = 'directeur/v2';
@@ -16,10 +17,11 @@ const MAX_LEGS = 2;
 const MAX_WATCHES = 2;
 const MAX_LOOKS = 5;
 const MAX_NEEDS = 3;
+const MAX_VERDICTS = 12;
 export const WATCH_DAYS = { min: 7, max: 42, default: 14 };
 
 /** Written into every export so any Claude chat knows what to send back. `business` = the host's own words. */
-export function updateInstructions(business: string): string[] {
+export function updateInstructions(business: string, domain = ANY_DOMAIN): string[] {
   return [
     `Tu es le cerveau du Directeur de ${business}. L'app est tes yeux et tes jambes : elle mesure toute seule (eyes) et agit (legs).`,
     'Lis goal, month, alert, corners, memory, priorities (en cours, avec leurs watches mesurés), data (les jours récents), looks (réponses à ce que tu as demandé), needs, questions et numbers.',
@@ -32,18 +34,39 @@ export function updateInstructions(business: string): string[] {
       '"needs": [{ "title": "…", "problem": "ce que je ne peux pas voir ou faire", "capability": "ce qu’il faudrait coder" }], ' +
       '"add": [{ "date": "AAAA-MM-JJ", "kind": "DECISION|FACT|LESSON|TEST", "corner": "<id>", "text": "…", "detail": "…" }], ' +
       '"update": [{ "id": "<id d’une note>", "text": "…", "detail": "…" }], "remove": ["<id>"], ' +
-      '"corners": [{ "name": "Nouveau coin" }], "questions": ["…"] }',
+      '"corners": [{ "name": "Nouveau coin" }], "questions": ["…"], ' +
+      '"lessons": [{ "learnId": "<id de learn>", "claim": "ce que dit le texte", "verdict": "ADOPT|ADAPT|TEST|REJECT|SAME", "rule": "la leçon, une phrase", "why": "pourquoi, avec les chiffres", "changed": "ce que tu as changé (ADAPT)", "changeMind": "ce qui te ferait changer d’avis (REJECT)", "sameAs": "<id de leçon> (SAME)", "corner": "<id>", "domain": "* ou ${domain}" }], ' +
+      '"confidence": [{ "id": "<id de leçon>", "confidence": 0-100, "why": "le résultat qui la fait bouger", "status": "ADOPTED|ADAPTED|TESTING|RETIRED" }], ' +
+      '"replies": [{ "id": "<id de leçon contestée>", "reply": "ta réponse", "rule": "nouvelle phrase si tu changes", "status": "…" }] }',
     `Règles : ${MAX_PRIORITIES} priorités au plus ; elles remplacent celles en cours (leurs watches continuent). Chaque priorité qui change quelque chose a au moins un watch : l'app compare toute seule aux mêmes jours de semaine des 4 semaines avant et compte les ventes des legs.`,
     'legs : brouillons que le propriétaire valide (promo, relance, événement, enquête, tarif, produit) ; champs inutiles = "" / 0 / []. Une relance (CAMPAIGN) : segment = une liste connue, text = le message WhatsApp prêt, vouvoiement.',
     'Juge les watches terminés ou bien avancés de priorities : écris le résultat en note (FACT) et ce qu’il apprend (LESSON), avec les chiffres. Une étape pas faite n’est pas un échec.',
     'Si un chiffre manque dans data, demande-le dans look (réponse au prochain export). Si l’app ne peut pas le voir ou le faire (pas d’eye ou de leg), mets-le dans needs : le propriétaire décide de le faire coder.',
+    'learn : textes que le propriétaire veut t’apprendre. Découpe chacun en idées testables et juge chacune avec les principes, les leçons et les chiffres : ADOPT (tient), ADAPT (vrai mais exagéré : réécris-la et dis ce qui change), TEST (plausible, pas prouvé : ajoute aussi une priorité avec un watch qui la teste, et mets "new:<index dans lessons>" dans ses lessonIds), REJECT (fausse ou contredite : dis ce qui te ferait changer d’avis), SAME (déjà dans lessons : sameAs). Tu peux refuser : ne garde que ce qui aide CE business.',
+    'lessons (export) : les leçons les plus utiles avec leurs results (les watches des priorités qui les ont utilisées). Fais bouger confidence avec ces résultats et dis pourquoi ; review = à réécrire ou retirer ; ne repropose jamais une idée de rejected. contested : le propriétaire conteste une fois, réponds dans replies (garde ou change, avec une raison). Dans chaque priorité, lessonIds = les ids des leçons qu’elle applique.',
     'N’invente aucun chiffre. add = seulement le nouveau. Une question seulement si la réponse change une priorité. corner = un id de corners ou un coin ajouté dans corners.',
   ];
 }
 
 export type PlanLeg = { kind: string; label: string; draft: Record<string, unknown> };
 export type PlanWatch = { eye: string; params: EyeParams; days: number; label: string | null; goal: number | null };
-export type PlanPriority = { title: string; corner: string; why: string; steps: string[]; legs: PlanLeg[]; watch: PlanWatch[] };
+export type PlanPriority = { title: string; corner: string; why: string; steps: string[]; legs: PlanLeg[]; watch: PlanWatch[]; lessonIds: string[] };
+export type PlanVerdict = {
+  /** Index in the answer's lessons, for a priority that tests it ("new:<ref>") */
+  ref: number;
+  learnId: string | null;
+  claim: string;
+  verdict: Verdict;
+  rule: string;
+  why: string | null;
+  changed: string | null;
+  changeMind: string | null;
+  sameAs: string | null;
+  corner: string;
+  domain: string;
+};
+export type PlanConfidence = { id: string; confidence: number; why: string; status: LessonStatus | null };
+export type PlanReply = { id: string; reply: string; rule: string | null; status: LessonStatus | null };
 export type PlanLook = { eye: string; params: EyeParams; from: string; to: string; why: string };
 export type PlanNeed = { title: string; problem: string; capability: string };
 
@@ -54,6 +77,9 @@ export type UpdatePlan = {
   priorities: PlanPriority[];
   look: PlanLook[];
   needs: PlanNeed[];
+  lessons: PlanVerdict[];
+  confidence: PlanConfidence[];
+  replies: PlanReply[];
   add: ImportedEntry[];
   update: Array<{ id: string; text?: string; detail?: string | null; kind?: EntryKind; corner?: string; date?: string }>;
   remove: string[];
@@ -69,6 +95,12 @@ export type UpdateContext = {
   legs?: LegSpec[];
   /** Host check of one leg's draft (same rules as its create form); null = can't be used */
   checkLeg?: (kind: string, raw: { label?: unknown; draft?: unknown }) => PlanLeg | null;
+  /** Ids of LESSON notes, of pending texts to learn, and of lessons the owner contested */
+  lessonIds?: string[];
+  learnIds?: string[];
+  contestedIds?: string[];
+  /** The host's trade, for lessons that aren't principles */
+  domain?: string;
 };
 
 const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
@@ -173,6 +205,8 @@ export function parseUpdate(raw: unknown, known: UpdateContext, today: string): 
     return { eye: spec.id, params, days, label: str(o.label, 120), goal: goal != null && Number.isFinite(goal) ? goal : null };
   };
 
+  const lessonSet = new Set(known.lessonIds ?? []);
+  const status = (v: unknown) => (typeof v === 'string' && (LESSON_STATUSES as readonly string[]).includes(v.toUpperCase()) ? (v.toUpperCase() as LessonStatus) : null);
   const priorities: PlanPriority[] = [];
   for (const [i, p] of list(x.priorities).slice(0, MAX_PRIORITIES).entries()) {
     const o = obj(p);
@@ -200,6 +234,7 @@ export function parseUpdate(raw: unknown, known: UpdateContext, today: string): 
       steps: list(o.steps).map((s) => str(s, 160)).filter((s): s is string => !!s).slice(0, 4),
       legs,
       watch,
+      lessonIds: list(o.lessonIds).filter((l): l is string => typeof l === 'string' && (lessonSet.has(l) || /^new:\d+$/.test(l))),
     });
   }
   if (list(x.priorities).length > MAX_PRIORITIES) warnings.push(`Plus de ${MAX_PRIORITIES} priorités : seules les ${MAX_PRIORITIES} premières sont gardées`);
@@ -227,6 +262,70 @@ export function parseUpdate(raw: unknown, known: UpdateContext, today: string): 
     if (title && problem && capability) needs.push({ title, problem, capability });
   }
 
+  const learnSet = new Set(known.learnIds ?? []);
+  const lessons: PlanVerdict[] = [];
+  for (const [i, v] of list(x.lessons).entries()) {
+    const o = obj(v);
+    const verdict = typeof o.verdict === 'string' && (VERDICTS as readonly string[]).includes(o.verdict.toUpperCase()) ? (o.verdict.toUpperCase() as Verdict) : null;
+    const claim = str(o.claim, 300);
+    const rule = str(o.rule, 300) ?? claim;
+    if (!verdict || !rule) {
+      warnings.push(`lessons[${i}] ignoré : ${!verdict ? 'verdict inconnu' : 'pas de règle'}`);
+      continue;
+    }
+    const sameAs = typeof o.sameAs === 'string' && lessonSet.has(o.sameAs) ? o.sameAs : null;
+    if (verdict === 'SAME' && !sameAs) {
+      warnings.push(`lessons[${i}] ignoré : SAME sans leçon connue (sameAs)`);
+      continue;
+    }
+    if (lessons.length >= MAX_VERDICTS) {
+      warnings.push(`lessons[${i}] ignoré : ${MAX_VERDICTS} idées au plus par réponse`);
+      continue;
+    }
+    const domain = o.domain === ANY_DOMAIN || o.domain === known.domain ? (o.domain as string) : (known.domain ?? ANY_DOMAIN);
+    lessons.push({
+      ref: i,
+      learnId: typeof o.learnId === 'string' && learnSet.has(o.learnId) ? o.learnId : null,
+      claim: claim ?? rule,
+      verdict,
+      rule,
+      why: str(o.why, 500),
+      changed: str(o.changed, 300),
+      changeMind: str(o.changeMind, 300),
+      sameAs,
+      corner: corner(o.corner) ?? 'marketing',
+      domain,
+    });
+  }
+
+  // A priority may test a lesson of this same answer: "new:<index>" must point to one that was kept (not SAME / REJECT)
+  const testable = new Set(lessons.filter((l) => l.verdict !== 'SAME' && l.verdict !== 'REJECT').map((l) => `new:${l.ref}`));
+  for (const p of priorities) p.lessonIds = p.lessonIds.filter((l) => !l.startsWith('new:') || testable.has(l));
+
+  const confidence: PlanConfidence[] = [];
+  for (const [i, c] of list(x.confidence).entries()) {
+    const o = obj(c);
+    const n = Math.round(Number(o.confidence));
+    const why = str(o.why, 300);
+    if (typeof o.id !== 'string' || !lessonSet.has(o.id) || !Number.isFinite(n) || !why) {
+      warnings.push(`confidence[${i}] ignoré : ${typeof o.id !== 'string' || !lessonSet.has(o.id) ? 'leçon inconnue' : !why ? 'sans raison' : 'nombre invalide'}`);
+      continue;
+    }
+    confidence.push({ id: o.id, confidence: Math.min(100, Math.max(0, n)), why, status: status(o.status) });
+  }
+
+  const contested = new Set(known.contestedIds ?? []);
+  const replies: PlanReply[] = [];
+  for (const [i, r] of list(x.replies).entries()) {
+    const o = obj(r);
+    const reply = str(o.reply, 500);
+    if (typeof o.id !== 'string' || !contested.has(o.id) || !reply) {
+      warnings.push(`replies[${i}] ignoré : ${typeof o.id === 'string' && contested.has(o.id) ? 'réponse vide' : 'pas de contestation en attente'}`);
+      continue;
+    }
+    replies.push({ id: o.id, reply, rule: str(o.rule, 300), status: status(o.status) });
+  }
+
   const questions = list(x.questions).map((q) => str(q, 300)).filter((q): q is string => !!q).slice(0, 5);
 
   return {
@@ -236,6 +335,9 @@ export function parseUpdate(raw: unknown, known: UpdateContext, today: string): 
     priorities,
     look,
     needs,
+    lessons,
+    confidence,
+    replies,
     add,
     update,
     remove,

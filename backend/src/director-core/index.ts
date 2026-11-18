@@ -3,3 +3,4 @@ export * from './memory';
 export * from './alert';
 export * from './watch';
 export * from './formats';
+export * from './lessons';
