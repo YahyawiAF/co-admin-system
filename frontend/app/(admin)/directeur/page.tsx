@@ -4,19 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowRight, Brain, Download, FileUp, Loader2, Pencil, Plus, Sparkles, Target, Upload, X } from "lucide-react";
+import { AlertTriangle, Brain, Download, FileUp, Loader2, MapPin, Pencil, Plus, Sparkles, Target, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
-import { ConseilView } from "@/components/admin/advisor/ConseilView";
+import { ContextDialog } from "@/components/admin/advisor/ContextDialog";
+import { DataCheck } from "@/components/admin/advisor/DataCheck";
 import { ClaudeUpdateDialog, useExportForClaude } from "@/components/admin/director/ClaudeRoundTrip";
 import { NeedsCard, PriorityCards, WatchLine } from "@/components/admin/director/PriorityCards";
 import { LessonsPanel } from "@/components/admin/director/LessonsPanel";
 import { CornerDialog, EntryDialog, GoalDialog, ImportDialog, KINDS } from "@/components/admin/director/DirectorDialogs";
 import { advisorApi } from "@/lib/api/resources";
 import { DIRECTOR_KEY, directorApi, type DirectorCorner, type DirectorEntry, type DirectorOverview, type DirectorStatus } from "@/lib/api/director";
-import type { BusinessInitiative } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ENTER = "animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-both duration-300 motion-reduce:animate-none";
@@ -24,8 +24,6 @@ const TABS = [
   { id: "semaine", label: "Cette semaine" },
   { id: "memoire", label: "Mémoire" },
   { id: "coins", label: "Coins du business" },
-  { id: "conseils", label: "Conseils" },
-  { id: "tests", label: "Tests" },
 ] as const;
 type TabId = (typeof TABS)[number]["id"];
 const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -89,17 +87,16 @@ function GoalBand({ d, onEdit }: { d: DirectorOverview; onEdit: () => void }) {
   );
 }
 
-function WeekTab({
-  d,
-  running,
-  onCorner,
-  onGoal,
-}: {
-  d: DirectorOverview;
-  running: BusinessInitiative[];
-  onCorner: (id: string) => void;
-  onGoal: () => void;
-}) {
+function WeekTab({ d, onCorner, onGoal }: { d: DirectorOverview; onCorner: (id: string) => void; onGoal: () => void }) {
+  const dataCheck = useQuery({ queryKey: ["advisor", "data-check"], queryFn: advisorApi.dataCheck });
+  const startOne = useMutation({
+    mutationFn: (p: { title: string; corner: string; why: string }) => directorApi.createPriority(p),
+    onSuccess: () => {
+      toast.success("Priorité ajoutée : coche ses étapes, Claude la verra au prochain export");
+      qc.invalidateQueries({ queryKey: DIRECTOR_KEY });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   const qc = useQueryClient();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const answer = useMutation({
@@ -118,21 +115,16 @@ function WeekTab({
     sub: `${cornerName(p.corner)} · ${p.why}`,
     href: null as string | null,
     action: "",
+    start: null as null | { title: string; corner: string; why: string },
   }));
   const priorities = fromClaude.length ? fromClaude : [
-    ...running.slice(0, 3).map((i) => ({
-      key: i.id,
-      title: i.title,
-      sub: `En cours · jour ${i.activeDays} sur ${i.windowDays} · ${i.result?.gain != null ? `${i.result.gain >= 0 ? "+" : ""}${dt(i.result.gain)}` : "pas encore mesuré"}`,
-      href: "/directeur?tab=tests",
-      action: "Suivre",
-    })),
     ...d.suggestions.map((s) => ({
       key: s.title,
       title: s.title,
       sub: `${cornerName(s.corner)} · ${s.why}${s.gain ? ` · ≈ +${dt(s.gain)}/mois` : ""}`,
       href: s.href,
       action: "Voir",
+      start: s.href ? null : { title: s.title, corner: s.corner, why: s.why },
     })),
   ].slice(0, 3);
   const a = d.alert;
@@ -140,6 +132,11 @@ function WeekTab({
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
+      {dataCheck.data?.length ? (
+        <div className="lg:col-span-3">
+          <DataCheck issues={dataCheck.data} />
+        </div>
+      ) : null}
       {a?.status ? (
         <section
           className={cn(
@@ -202,6 +199,10 @@ function WeekTab({
                 {p.href ? (
                   <Button asChild variant="outline" className="h-11 shrink-0 rounded-xl">
                     <Link href={p.href}>{p.action}</Link>
+                  </Button>
+                ) : p.start ? (
+                  <Button variant="outline" className="h-11 shrink-0 rounded-xl" disabled={startOne.isPending} onClick={() => startOne.mutate(p.start!)}>
+                    En faire une priorité
                   </Button>
                 ) : null}
               </li>
@@ -433,47 +434,6 @@ function CornersTab({ d, onOpen, onAdd }: { d: DirectorOverview; onOpen: (c: Dir
   );
 }
 
-function TestsTab({ list }: { list: BusinessInitiative[] }) {
-  const sorted = useMemo(
-    () => [...list].filter((i) => !i.dropped).sort((a, b) => Number(a.finished) - Number(b.finished) || b.startDate.localeCompare(a.startDate)),
-    [list],
-  );
-  const paged = usePaged(sorted, 20);
-  if (!sorted.length)
-    return (
-      <p className={cn("rounded-2xl border border-dashed bg-white p-6 text-sm text-slate-600", ENTER)}>
-        Aucun test pour l’instant. Lance une solution depuis « Conseils » : l’app la mesure contre une comparaison.
-      </p>
-    );
-  return (
-    <section className={cn("space-y-3", ENTER)}>
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))]">
-        {paged.pageItems.map((i) => {
-          const gain = i.result?.gain;
-          return (
-            <article key={i.id} className="space-y-1.5 rounded-2xl border bg-white p-4">
-              <p className={cn("text-[11px] font-bold uppercase tracking-wider", i.finished ? "text-slate-500" : "text-sky-700")}>
-                {i.finished ? "Terminé" : i.paused ? "En pause" : `En cours · jour ${i.activeDays} sur ${i.windowDays}`}
-              </p>
-              <h3 className="font-extrabold">{i.title}</h3>
-              <p className="text-sm tabular-nums">
-                <b className={cn(gain != null && gain < 0 ? "text-rose-700" : "text-emerald-700")}>
-                  {gain != null ? `${gain >= 0 ? "+" : ""}${dt(gain)}` : "pas encore mesuré"}
-                </b>
-                {i.goalAmount ? <span className="text-slate-500"> sur +{dt(i.goalAmount)} visés</span> : null}
-              </p>
-              {i.ownerVerdict ? <p className="text-[13px] text-slate-600">Ton avis : {i.ownerVerdict.replace(/_/g, " ").toLowerCase()}</p> : null}
-            </article>
-          );
-        })}
-      </div>
-      <div className="overflow-hidden rounded-2xl border bg-white empty:hidden">
-        <ListPager page={paged.page} lastPage={paged.lastPage} total={paged.total} onPage={paged.setPage} />
-      </div>
-    </section>
-  );
-}
-
 export default function DirecteurPage() {
   const [tab, setTab] = useState<TabId>("semaine");
   const [corner, setCorner] = useState("all");
@@ -482,21 +442,21 @@ export default function DirecteurPage() {
   const [goalOpen, setGoalOpen] = useState(false);
   const [cornerOpen, setCornerOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
+  const [contextOpen, setContextOpen] = useState(false);
   const exportFile = useExportForClaude();
 
   const overview = useQuery({ queryKey: DIRECTOR_KEY, queryFn: directorApi.overview });
-  const initiatives = useQuery({ queryKey: ["advisor", "initiatives"], queryFn: advisorApi.initiatives });
-  const running = useMemo(() => (initiatives.data ?? []).filter((i) => !i.finished && !i.dropped), [initiatives.data]);
 
   useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
+    const q = new URLSearchParams(window.location.search);
+    const t = q.get("tab");
     if (t && TABS.some((x) => x.id === t)) setTab(t as TabId);
+    if (q.get("contexte")) setContextOpen(true);
   }, []);
   const go = (t: TabId) => {
     setTab(t);
     const url = new URL(window.location.href);
     url.searchParams.set("tab", t);
-    if (t !== "conseils") url.searchParams.delete("area");
     window.history.replaceState(null, "", url);
   };
   const openCorner = (id: string) => {
@@ -516,6 +476,10 @@ export default function DirecteurPage() {
           <p className="text-sm text-slate-600">Tout ce qu’on sait du business. Le cerveau : Claude. Les conseils sortent d’ici.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="h-11 rounded-xl" onClick={() => setContextOpen(true)}>
+            <MapPin className="mr-1.5 h-4 w-4" />
+            Mon contexte
+          </Button>
           <Button variant="outline" className="h-11 rounded-xl" onClick={() => setEntry({ open: true, entry: null })}>
             <Plus className="mr-1.5 h-4 w-4" />
             Noter un changement
@@ -551,20 +515,15 @@ export default function DirecteurPage() {
           >
             {t.label}
             {t.id === "memoire" && d ? <span className="ml-1.5 tabular-nums opacity-70">{d.memory.length}</span> : null}
-            {t.id === "tests" && running.length ? <span className="ml-1.5 tabular-nums opacity-70">{running.length}</span> : null}
           </button>
         ))}
       </div>
 
       <div key={tab} className={ENTER}>
-        {tab === "conseils" ? (
-          <ConseilView />
-        ) : tab === "tests" ? (
-          <TestsTab list={initiatives.data ?? []} />
-        ) : !d ? (
+        {!d ? (
           <Skeleton className="h-64 rounded-2xl" />
         ) : tab === "semaine" ? (
-          <WeekTab d={d} running={running} onCorner={openCorner} onGoal={() => setGoalOpen(true)} />
+          <WeekTab d={d} onCorner={openCorner} onGoal={() => setGoalOpen(true)} />
         ) : tab === "memoire" ? (
           <MemoryTab
             d={d}
@@ -579,14 +538,9 @@ export default function DirecteurPage() {
         )}
       </div>
 
-      {tab !== "conseils" ? (
-        <p className="flex flex-wrap items-center gap-1 text-[13px] text-slate-500">
-          Sans clé API : « Exporter pour Claude », donne le fichier à Claude, puis « Importer la réponse ».
-          <button type="button" className="inline-flex items-center font-semibold text-indigo-700 hover:underline" onClick={() => go("conseils")}>
-            Voir les conseils <ArrowRight className="ml-0.5 h-3.5 w-3.5" />
-          </button>
-        </p>
-      ) : null}
+      <p className="text-[13px] text-slate-500">
+        Sans clé API : « Exporter pour Claude », donne le fichier à Claude, puis « Importer la réponse ». Il voit tes chiffres, tes notes et ce que l’app mesure.
+      </p>
 
       <EntryDialog
         open={entry.open}
@@ -598,6 +552,7 @@ export default function DirecteurPage() {
       <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
       <GoalDialog open={goalOpen} goal={d?.goal ?? null} onClose={() => setGoalOpen(false)} />
       <CornerDialog open={cornerOpen} onClose={() => setCornerOpen(false)} />
+      <ContextDialog open={contextOpen} onClose={() => setContextOpen(false)} />
       <ClaudeUpdateDialog
         open={updateOpen}
         onClose={() => setUpdateOpen(false)}

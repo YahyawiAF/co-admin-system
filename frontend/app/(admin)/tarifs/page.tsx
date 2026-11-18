@@ -140,7 +140,7 @@ function PriceFormDialog({
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (o: boolean) => void;
-  /** Pre-filled by Conseil IA (« Préparer le tarif ») */
+  /** Pre-filled by a Directeur draft (« Préparer le tarif ») */
   initial?: { name?: string; price?: number; fromHour?: number; toHour?: number } | null;
   onCreated?: (id: string) => void;
 }) {
@@ -221,7 +221,7 @@ function PriceFormDialog({
       availableFromHour: price?.availableFromHour ?? 8,
       availableToHour: price?.availableToHour ?? 12,
       availableDays: price?.availableDays ?? [],
-      // A new tarif prepared by Conseil IA: name, price and its time slot
+      // A new tarif prepared by the Directeur: name, price and its time slot
       ...(!price && initial
         ? {
             name: initial.name ?? "",
@@ -696,7 +696,7 @@ function PriceFormDialog({
 export default function TarifsPage() {
   const queryClient = useQueryClient();
   const [edit, setEdit] = useState<Price | null>(null);
-  // Opened from Conseil IA: the AI's tarif, ready to check and save
+  // Opened from a Directeur draft: the brain's tarif, ready to check and save
   const conseil = useConseilDraft("PRICE");
   const conseilPrice = conseil.draft as { name?: string; price?: number; fromHour?: number; toHour?: number } | null;
   const [globalDraft, setGlobalDraft] = useState<{

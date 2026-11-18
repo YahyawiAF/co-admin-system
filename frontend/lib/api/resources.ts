@@ -690,7 +690,7 @@ export const analyticsApi = {
     return http.get<{ changes: PerformanceChange[] }>(`/analytics/performance/changes${q}`);
   },
   answerPerformanceChange(data: { metric: string; direction: string; from: string; to: string; cause: string; note?: string }) {
-    return http.post<{ ok: boolean; key: string; initiativeId: string | null }>(
+    return http.post<{ ok: boolean; key: string; noteId: string | null }>(
       "/analytics/performance/changes/answer",
       data,
     );
@@ -2507,15 +2507,6 @@ export const advisorApi = {
   saveSettings(data: { businessContext: string }) {
     return http.patch<AdvisorSettings>("/advisor/settings", data);
   },
-  reports() {
-    return http.get<AdvisorReportSummary[]>("/advisor/reports");
-  },
-  report(id: string) {
-    return http.get<AdvisorReport>(`/advisor/reports/${id}`);
-  },
-  generate(days: number) {
-    return http.post<AdvisorReportSummary>("/advisor/reports", { days });
-  },
   prompt(days: number) {
     return http.get<AdvisorPrompt>(`/advisor/prompt?days=${days}`);
   },
@@ -2524,91 +2515,6 @@ export const advisorApi = {
   },
   dataCheck() {
     return http.get<AdvisorDataIssue[]>("/advisor/data-check");
-  },
-  initiatives() {
-    return http.get<BusinessInitiative[]>("/advisor/initiatives");
-  },
-  /** Bilan: six points with number, colour and solutions */
-  health() {
-    return http.get<AdvisorHealth>("/advisor/health");
-  },
-  /** « Adapter » a solution with the AI (nothing saved) */
-  adapt(data: { solution: Partial<AdaptedSolution>; instruction: string }) {
-    return http.post<AdaptedSolution>("/advisor/solutions/adapt", data);
-  },
-  addTool(initiativeId: string, data: { kind: ToolKind; targetId: string; stepIndex?: number | null }) {
-    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools`, data);
-  },
-  removeTool(initiativeId: string, linkId: string) {
-    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/tools/${linkId}`);
-  },
-  createInitiative(data: {
-    title: string;
-    description?: string;
-    category: AdvisorCategory;
-    startDate: string;
-    sourceReportId?: string;
-    recommendationTitle?: string;
-    metric?: AdviceMetric;
-    targetPct?: number | null;
-    cost?: number | null;
-    targetKind?: TargetKind;
-    targetDays?: number[];
-    targetFromHour?: number | null;
-    targetToHour?: number | null;
-    targetSegment?: string | null;
-    linkedKind?: LinkedKind | null;
-    linkedId?: string | null;
-    objective?: InitiativeObjective | null;
-    hypothesis?: string | null;
-    channels?: InitiativeChannel[];
-    steps?: InitiativeStep[];
-    goalAmount?: number | null;
-    area?: HealthAreaId | null;
-    leverId?: string | null;
-    tools?: ToolDraft[];
-  }) {
-    return http.post<BusinessInitiative>("/advisor/initiatives", data);
-  },
-  updateInitiative(
-    id: string,
-    data: Partial<{
-      title: string;
-      description: string | null;
-      endDate: string | null;
-      metric: AdviceMetric | null;
-      targetPct: number | null;
-      cost: number | null;
-      ownerVerdict: InitiativeVerdict | null;
-      notes: InitiativeNote[];
-      steps: InitiativeStep[];
-      manualFunnel: Array<{ date: string; channel?: string | null; reach: number }>;
-      interested: number | null;
-      paused: boolean;
-      drop: { reason: string } | null;
-      goalAmount: number | null;
-      tools: ToolDraft[];
-    }>,
-  ) {
-    return http.patch<BusinessInitiative>(`/advisor/initiatives/${id}`, data);
-  },
-  createLink(initiativeId: string, channel: InitiativeChannel) {
-    return http.post<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/links`, { channel });
-  },
-  deleteLink(initiativeId: string, linkId: string) {
-    return http.delete<BusinessInitiative>(`/advisor/initiatives/${initiativeId}/links/${linkId}`);
-  },
-  deleteInitiative(id: string) {
-    return http.delete(`/advisor/initiatives/${id}`);
-  },
-  dismissals() {
-    return http.get<AdvisorDismissal[]>("/advisor/dismissals");
-  },
-  dismiss(data: { title: string; category?: string | null; leverId?: string | null; reason: string }) {
-    return http.post<AdvisorDismissal>("/advisor/dismissals", data);
-  },
-  undismiss(id: string) {
-    return http.delete(`/advisor/dismissals/${id}`);
   },
   missing() {
     return http.get<AdvisorMissing>("/advisor/missing");

@@ -42,6 +42,12 @@ describe('watch', () => {
     ]);
   });
 
+  it('gives a mean as is, with its change in %', () => {
+    // 4 h per visit before, 5 h after
+    const d = days(() => 40, () => 50).map((x) => ({ ...x, base: 10 }));
+    expect(measureWatch({ aggregate: 'mean', days: d, start: '2026-11-03', length: 14, today: '2026-11-16' })).toMatchObject({ before: 4, after: 5, change: 25, changeUnit: '%' });
+  });
+
   it('flags calendar periods and carries the legs sales', () => {
     const r = measureWatch({
       aggregate: 'sum',

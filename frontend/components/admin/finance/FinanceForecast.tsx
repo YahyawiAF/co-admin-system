@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { advisorApi, analyticsApi } from "@/lib/api/resources";
+import { analyticsApi } from "@/lib/api/resources";
+import { CATEGORY_CORNER, DIRECTOR_KEY, directorApi, metricWatch, type DirectorPriorityInput } from "@/lib/api/director";
 import { CompareCard, ExportCard, SourceCurveCard } from "./ForecastSources";
 import { MonthEndCard } from "./MonthEndCard";
 import type {
@@ -302,11 +303,11 @@ export function ChangeQuestions() {
       const label = v.c.causes.find((x) => x.code === v.cause)?.label ?? "";
       setDone((d) => ({
         ...d,
-        [v.c.key]: res.initiativeId
-          ? `Noté comme action du ${dayLabel(v.c.from)} : « ${label} ». Le conseiller la mesure et te la proposera à nouveau si l'effet tient.`
+        [v.c.key]: res.noteId
+          ? `Noté dans la mémoire du Directeur (${dayLabel(v.c.from)}) : « ${label} ». Il te proposera de le refaire si l'effet tient.`
           : v.cause === "UNKNOWN"
-            ? "Noté. Le conseiller regardera les réponses « Comment tu nous as connus ? » de ces jours-là."
-            : `Noté : « ${label} ». Le conseiller en tient compte dans ses prochains conseils.`,
+            ? "Noté. Le directeur regardera les réponses « Comment tu nous as connus ? » de ces jours-là."
+            : `Noté : « ${label} ». Le directeur en tient compte dans ses prochaines priorités.`,
       }));
       void queryClient.invalidateQueries({ queryKey: ["performance", "levers"] });
     },
@@ -334,7 +335,7 @@ export function ChangeQuestions() {
               </p>
             </div>
             <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-semibold text-violet-700 dark:bg-violet-900/60 dark:text-violet-200">
-              <HelpCircle className="h-3.5 w-3.5" /> Le conseiller demande
+              <HelpCircle className="h-3.5 w-3.5" /> Le directeur demande
             </span>
           </div>
           {done[c.key] ? (
@@ -375,34 +376,15 @@ const STATUS_UI: Record<LeverStatus, { label: string; className: string }> = {
   OK: { label: "Pas prioritaire", className: "bg-muted text-muted-foreground" },
 };
 
-function ideaPayload(idea: MissingIdea) {
-  const p = idea.plan as {
-    title?: string;
-    category?: AdvisorCategory;
-    objective?: InitiativeObjective;
-    channels?: InitiativeChannel[];
-    metric?: AdviceMetric;
-    targetPct?: number;
-    targetKind?: "ALL" | "SLOT" | "LIST";
-    targetDays?: number[];
-  };
+/** A missing lever becomes a Directeur priority: its steps, and the number the app watches. */
+function ideaPayload(idea: MissingIdea): DirectorPriorityInput {
+  const p = idea.plan as { title?: string; category?: string; metric?: string };
   return {
     title: p.title ?? idea.title,
-    category: p.category ?? "NEW_REVENUE",
-    objective: p.objective,
-    channels: p.channels,
-    metric: p.metric,
-    targetPct: p.targetPct ?? null,
-    // A slot needs days: without them the whole space is measured
-    targetKind: p.targetKind === "SLOT" && !p.targetDays?.length ? "ALL" : p.targetKind,
-    targetDays: p.targetDays,
-    hypothesis: idea.why.slice(0, 300),
-    recommendationTitle: idea.title,
-    startDate: format(new Date(), "yyyy-MM-dd"),
-    steps: idea.steps.map((text) => ({ text, done: false })),
-    // Same as « Je m'en occupe » in Conseil IA: a goal in DT, tied to its lever
-    leverId: idea.leverId,
-    goalAmount: Math.max(50, Math.round(idea.gain / 10) * 10),
+    corner: CATEGORY_CORNER[p.category ?? ""] ?? "revenus",
+    why: idea.why.slice(0, 300),
+    steps: idea.steps,
+    watch: metricWatch(p.metric) ?? null,
   };
 }
 
@@ -416,13 +398,13 @@ export function LeverMapCard() {
   });
   const [added, setAdded] = useState<Set<string>>(new Set());
   const add = useMutation({
-    mutationFn: (idea: MissingIdea) => advisorApi.createInitiative(ideaPayload(idea)),
+    mutationFn: (idea: MissingIdea) => directorApi.createPriority(ideaPayload(idea)),
     onSuccess: (_r, idea) => {
       setAdded((s) => new Set(s).add(idea.leverId));
-      toast.success("Solution lancée : suivez-la dans Conseil IA", {
-        action: { label: "Ouvrir", onClick: () => window.location.assign("/conseiller") },
+      toast.success("Ajoutée aux priorités du Directeur", {
+        action: { label: "Ouvrir", onClick: () => window.location.assign("/directeur") },
       });
-      void queryClient.invalidateQueries({ queryKey: ["advisor"] });
+      void queryClient.invalidateQueries({ queryKey: DIRECTOR_KEY });
     },
     onError: (e: Error) => toast.error(e.message || "Erreur"),
   });
@@ -443,7 +425,7 @@ export function LeverMapCard() {
       <Card className="shadow-none">
         <CardHeader className="flex flex-row flex-wrap items-end justify-between gap-3 pb-2">
           <div>
-            <CardTitle className="text-base">Ce que le conseiller vérifie</CardTitle>
+            <CardTitle className="text-base">Ce que le directeur vérifie</CardTitle>
             <p className="text-sm text-muted-foreground">
               Les 4 façons de faire grandir l&apos;espace. Pour chaque levier : ce que disent tes chiffres, et s&apos;il y a une action en cours.
             </p>
@@ -557,7 +539,7 @@ export function LeverMapCard() {
             </p>
           )}
           <details className="group mt-4 text-sm">
-            <summary className="cursor-pointer font-medium text-indigo-600">Comment le conseiller trouve une idée manquante</summary>
+            <summary className="cursor-pointer font-medium text-indigo-600">Comment le directeur trouve une idée manquante</summary>
             <ol className="mt-2 grid gap-2 text-muted-foreground motion-safe:group-open:animate-in motion-safe:group-open:fade-in sm:grid-cols-2 xl:grid-cols-4">
               <li><b className="text-foreground">1. Découper le chiffre d&apos;affaires</b> : nouveaux, habitués, ticket moyen, abonnements, café. Chaque moteur a son prévu.</li>
               <li><b className="text-foreground">2. Trouver le moteur qui bouge</b> : l&apos;écart en DT contre le prévu. Le plus gros passe en premier.</li>
@@ -565,8 +547,8 @@ export function LeverMapCard() {
               <li><b className="text-foreground">4. Expliquer les hausses</b> : une hausse sans action → il te demande ce que tu as fait, puis le mesure.</li>
             </ol>
             <p className="mt-2 text-xs text-muted-foreground">
-              Les mêmes leviers sont envoyés au <Link href="/conseiller" className="underline">Conseiller IA</Link> : il doit proposer une
-              recommandation pour chaque levier qui manque.
+              Les mêmes chiffres partent au <Link href="/directeur" className="underline">Directeur</Link> à chaque « Exporter pour Claude ».
+              Une idée ajoutée ici devient une de ses priorités, avec son chiffre suivi.
             </p>
           </details>
         </CardContent>

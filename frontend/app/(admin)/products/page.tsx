@@ -46,7 +46,7 @@ export default function ProductsPage() {
   const [item, setItem] = useState<StockItemRow | null>(null);
   const [itemOpen, setItemOpen] = useState(false);
   const [countItem, setCountItem] = useState<StockItemRow | null>(null);
-  // Opened from Conseil IA (« Préparer le produit »): name and price ready to check
+  // Opened from a Directeur draft (« Préparer le produit »): name and price ready to check
   const conseil = useConseilDraft("PRODUCT");
   const conseilDraft = conseil.draft as { name?: string; price?: number } | null;
   useEffect(() => {

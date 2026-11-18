@@ -88,7 +88,7 @@ export default function AdminEventsPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [code, setCode] = useState("");
-  // Opened from Conseil IA (« Préparer l'événement »): the AI's event, ready to check and save
+  // Opened from a Directeur draft (« Préparer l'événement »): the brain's event, ready to check and save
   const conseil = useConseilDraft("EVENT");
   useEffect(() => {
     const d = conseil.draft as

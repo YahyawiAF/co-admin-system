@@ -499,7 +499,7 @@ export function CampaignDialog({
       goal: draft.goal ?? (SUBSCRIPTION_SEGMENTS.includes(segment) ? "SUBSCRIPTION" : "ANY"),
       sourceReportId: draft.sourceReportId ?? null,
       recommendationTitle: draft.recommendationTitle ?? null,
-      trackAsInitiative: draft.trackAsInitiative ?? true,
+      trackAsInitiative: false,
       category: draft.category as AdvisorCategory | undefined,
     });
   }, [draft]);
@@ -650,15 +650,6 @@ export function CampaignDialog({
                     );
                   })}
                 </div>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 accent-indigo-600"
-                    checked={!!form.trackAsInitiative}
-                    onChange={(e) => set({ trackAsInitiative: e.target.checked })}
-                  />
-                  Suivre aussi l&apos;effet global (avant / après) dans « Mes initiatives »
-                </label>
                 <div className="rounded-xl bg-muted/50 p-3 text-sm">
                   <div className="font-semibold">{form.title.trim() || "Sans nom"}</div>
                   <div className="text-muted-foreground">

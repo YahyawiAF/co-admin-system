@@ -36,7 +36,7 @@ export function ProductDialog({
   product: StockProductRow | null;
   overview: StockOverview;
   onDone: () => void;
-  /** Pre-filled name / price for a new product (Conseil IA « Préparer le produit ») */
+  /** Pre-filled name / price for a new product (Directeur « Préparer le produit ») */
   draft?: { name?: string; price?: number } | null;
   /** Called with the new product's id after a creation */
   onCreated?: (id: string) => void;
@@ -128,7 +128,7 @@ export function ProductDialog({
     onSuccess: (saved) => {
       toast.success(product ? "Produit mis à jour" : "Produit créé");
       onDone();
-      // Before closing: closing forgets the Conseil IA draft
+      // Before closing: closing forgets the Directeur draft
       if (!product && saved?.id) onCreated?.(saved.id);
       onOpenChange(false);
     },

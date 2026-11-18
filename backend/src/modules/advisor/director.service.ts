@@ -10,6 +10,7 @@ import { ContextService } from './context.service';
 import { HealthService } from './health.service';
 import {
   addDayKey,
+  checkParams,
   eyeLabel,
   EXPORT_FORMAT,
   ANY_DOMAIN,
@@ -322,7 +323,7 @@ export class DirectorService {
       const s = a.solutions[0];
       if (!s || (a.status !== 'red' && a.status !== 'orange')) continue;
       const corner = BASE_CORNERS.find((c) => c.areas?.includes(a.id))?.id ?? a.id;
-      suggestions.push({ title: s.title, corner, why: a.headline, gain: s.gain || null, href: `/directeur?tab=conseils&area=${a.id}` });
+      suggestions.push({ title: s.title, corner, why: a.headline, gain: s.gain || null, href: null });
     }
 
     return {
@@ -721,6 +722,51 @@ export class DirectorService {
       added += 1;
     }
     return { added, skipped };
+  }
+
+  /**
+   * A priority the owner starts himself (from Finance: a money idea to test, a missing lever):
+   * his steps, and a watch when he picks the number to follow. Counts in the 3 at most.
+   */
+  async createPriority(
+    facilityId: string | undefined,
+    body: { title?: string; corner?: string; why?: string; steps?: string[]; watch?: { eye?: string; params?: Record<string, unknown>; days?: number; goal?: number | null } | null },
+  ) {
+    const id = await this.facilityId(facilityId);
+    const title = body.title?.trim().slice(0, 200);
+    if (!title) throw new BadRequestException('Donne un titre');
+    const active = await this.prisma.directorPriority.count({ where: { facilityId: id, status: 'ACTIVE' } });
+    if (active >= MAX_ACTIVE) throw new BadRequestException(`${MAX_ACTIVE} priorités en cours au plus : termine-en une dans le Directeur`);
+    const corners = await this.cornerIds(id);
+    const eye = body.watch?.eye ? eyeById(body.watch.eye) : null;
+    const params = eye ? checkParams(eye, body.watch?.params ?? {}) : null;
+    const today = dbDay(new Date());
+    return this.prisma.directorPriority.create({
+      data: {
+        facilityId: id,
+        title,
+        corner: corners.find((c) => c.id === body.corner)?.id ?? 'revenus',
+        why: body.why?.trim().slice(0, 300) ?? '',
+        steps: (body.steps ?? []).map((t) => String(t).trim().slice(0, 160)).filter(Boolean).slice(0, 4).map((text) => ({ text, done: false })),
+        source: 'OWNER',
+        startDate: today,
+        ...(eye && params
+          ? {
+              watches: {
+                create: {
+                  facilityId: id,
+                  eye: eye.id,
+                  params,
+                  label: eyeLabel(eye, params),
+                  startDate: today,
+                  days: Math.min(42, Math.max(7, Math.round(Number(body.watch?.days) || 28))),
+                  goal: body.watch?.goal ?? null,
+                },
+              },
+            }
+          : {}),
+      },
+    });
   }
 
   private async ownPriority(facilityId: string | undefined, priorityId: string) {

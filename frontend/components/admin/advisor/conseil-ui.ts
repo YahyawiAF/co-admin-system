@@ -1,58 +1,7 @@
-import {
-  AlertCircle,
-  BadgePercent,
-  CalendarDays,
-  ClipboardList,
-  Coffee,
-  Megaphone,
-  Package,
-  Repeat,
-  Sparkles,
-  Tag,
-  TrendingDown,
-  UserPlus,
-  Wallet,
-  type LucideIcon,
-} from "lucide-react";
-import type { HealthAreaId, HealthStatus, ToolKind } from "@/lib/types";
+import { BadgePercent, CalendarDays, ClipboardList, Megaphone, Package, Tag, type LucideIcon } from "lucide-react";
+import type { ToolKind } from "@/lib/types";
 
-export const dt = (n: number | null | undefined) =>
-  n == null ? "—" : `${Math.round(n).toLocaleString("fr-FR")} DT`;
-export const signedDt = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(Math.round(n)).toLocaleString("fr-FR")} DT`;
-
-export const AREA_ICON: Record<HealthAreaId, LucideIcon> = {
-  cafe: Coffee,
-  abos: Repeat,
-  creux: TrendingDown,
-  nouveaux: UserPlus,
-  retour: Sparkles,
-  impayes: Wallet,
-};
-
-/** Colours of a point: card, dot and pill. Text is always given too (never colour alone). */
-export const STATUS_UI: Record<HealthStatus, { card: string; dot: string; pill: string }> = {
-  red: {
-    card: "border-rose-200 bg-gradient-to-b from-rose-50 to-white",
-    dot: "bg-rose-600 ring-4 ring-rose-100",
-    pill: "bg-rose-100 text-rose-800",
-  },
-  orange: {
-    card: "border-amber-200 bg-gradient-to-b from-amber-50 to-white",
-    dot: "bg-amber-500 ring-4 ring-amber-100",
-    pill: "bg-amber-100 text-amber-900",
-  },
-  green: {
-    card: "border-slate-200 bg-white",
-    dot: "bg-emerald-500 ring-4 ring-emerald-100",
-    pill: "bg-emerald-100 text-emerald-800",
-  },
-  grey: {
-    card: "border-slate-200 bg-slate-50/60",
-    dot: "bg-slate-400 ring-4 ring-slate-100",
-    pill: "bg-slate-100 text-slate-600",
-  },
-};
-
+/** The feature each Directeur draft (leg) opens, and how it is named. */
 export const TOOL_UI: Record<ToolKind, { label: string; noun: string; icon: LucideIcon; href: string | null }> = {
   PROMOTION: { label: "Promo", noun: "une promo", icon: BadgePercent, href: "/promotions" },
   EVENT: { label: "Événement", noun: "un événement", icon: CalendarDays, href: "/events" },
@@ -62,38 +11,17 @@ export const TOOL_UI: Record<ToolKind, { label: string; noun: string; icon: Luci
   PRODUCT: { label: "Produit", noun: "un produit", icon: Package, href: "/products" },
 };
 
-export const VERDICTS = [
-  ["WORKING", "Ça marche"],
-  ["MIXED", "Mitigé"],
-  ["NOT_WORKING", "Pas d'effet"],
-] as const;
-
-export const DISMISS_REASONS = ["Trop cher", "Pas le temps", "Déjà essayé", "Ne colle pas à mon espace", "Plus tard"];
-
-export const STATUS_TEXT: Record<string, string> = {
-  goal_reached: "Objectif atteint",
-  below_goal: "En dessous de l'objectif",
-  no_effect: "Pas d'effet",
-  too_early: "Trop tôt pour juger",
-  up: "En hausse",
-  down: "En baisse",
-};
-
-export const ALERT_ICON = AlertCircle;
-
 // ---------- « Préparer »: a feature's form opened pre-filled, then linked back ----------
 
 /** What travels in ?conseil= to the feature page. */
 export type ConseilDraftParam = {
-  /** Initiative (solution in progress); '' for a Directeur draft */
+  /** Kept for old links; always '' now */
   i: string;
   /** Directeur priority and the index of its draft (leg) */
   p?: string;
   l?: number;
-  /** Objective index the tool fulfils */
   s: number | null;
-  /** Health point, to come back to its modal */
-  a: HealthAreaId | null;
+  a: string | null;
   k: ToolKind;
   d: Record<string, unknown>;
 };

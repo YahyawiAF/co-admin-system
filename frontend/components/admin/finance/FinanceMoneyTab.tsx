@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { advisorApi, moneyCheckApi } from "@/lib/api/resources";
+import { moneyCheckApi } from "@/lib/api/resources";
+import { CATEGORY_CORNER, DIRECTOR_KEY, directorApi, metricWatch } from "@/lib/api/director";
 import { managerApi, type MoneyIdea } from "@/lib/api/manager";
-import type { AdviceMetric, AdvisorCategory } from "@/lib/types";
 import { MoneyTab } from "./MoneyTab";
 import { QUESTIONS_KEY, QuestionsTab } from "./MoneyQuestions";
 import { MONEY_CHECK_KEY, MoneyCheckTab } from "./MoneyCheckTab";
@@ -26,24 +25,20 @@ export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void }
   const check = useQuery({ queryKey: MONEY_CHECK_KEY, queryFn: () => moneyCheckApi.months(6) });
   const toCheck = (check.data?.months ?? []).filter((m) => m.checkable && !m.running && m.gap > 0.5).length;
 
-  // An investment idea becomes a solution measured in Conseil IA (goal: pay back its cost)
+  // An investment idea becomes a Directeur priority: the app watches its number (goal: pay back its cost)
   const start = useMutation({
     mutationFn: (idea: MoneyIdea) =>
-      advisorApi.createInitiative({
+      directorApi.createPriority({
         title: idea.title,
-        description: idea.test,
-        category: (idea.draft?.category as AdvisorCategory) ?? "NEW_REVENUE",
-        startDate: format(new Date(), "yyyy-MM-dd"),
-        metric: (idea.draft?.metric as AdviceMetric) ?? undefined,
-        cost: idea.cost,
-        steps: [{ text: idea.test, done: false }],
-        goalAmount: Math.max(50, Math.round(idea.cost)),
-        ...(idea.draft ? { targetKind: "SLOT" as const, targetDays: [], targetFromHour: idea.draft.fromHour, targetToHour: idea.draft.toHour } : {}),
+        corner: CATEGORY_CORNER[idea.draft?.category ?? ""] ?? "revenus",
+        why: `${idea.why} · Coût ${Math.round(idea.cost)} DT à récupérer`.slice(0, 300),
+        steps: [idea.test],
+        watch: metricWatch(idea.draft?.metric ?? "revenuePerDay", idea.draft) ?? { eye: "money.day", params: { part: "total" } },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["advisor"] });
-      toast.success("Test lancé : suivez-le dans Conseil IA", {
-        action: { label: "Ouvrir", onClick: () => window.location.assign("/conseiller") },
+      qc.invalidateQueries({ queryKey: DIRECTOR_KEY });
+      toast.success("Test lancé : suivez-le dans le Directeur", {
+        action: { label: "Ouvrir", onClick: () => window.location.assign("/directeur") },
       });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -81,8 +76,8 @@ export function FinanceMoneyTab({ onGoTab }: { onGoTab?: (tab: string) => void }
             </button>
           ))}
         </div>
-        <Link href="/conseiller" className="text-sm font-medium text-indigo-700 hover:underline">
-          Que faire de cet argent ? Conseil IA →
+        <Link href="/directeur" className="text-sm font-medium text-indigo-700 hover:underline">
+          Que faire de cet argent ? Directeur →
         </Link>
       </div>
       <div key={view} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none">

@@ -462,7 +462,7 @@ function PromotionDialog({
   editing: Promotion | null;
   open: boolean;
   onClose: () => void;
-  /** Pre-filled by Conseil IA (« Préparer la promo ») */
+  /** Pre-filled by a Directeur draft (« Préparer la promo ») */
   initial?: Partial<Form> | null;
   onCreated?: (id: string) => void;
 }) {
@@ -1516,7 +1516,7 @@ export default function PromotionsPage() {
   const filtered = useMemo(() => rows.filter((r) => inFilter(filter, r.key)).map((r) => r.p), [rows, filter]);
   const paged = usePaged(filtered, PER_PAGE, filter);
   const openNew = () => setDialog({ open: true, editing: null });
-  // Opened from Conseil IA: the AI's promo, ready to check and save
+  // Opened from a Directeur draft: the brain's promo, ready to check and save
   const conseil = useConseilDraft("PROMOTION");
   const conseilForm = useMemo<Partial<Form> | null>(() => {
     const d = conseil.draft as

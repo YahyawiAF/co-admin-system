@@ -49,7 +49,7 @@ function LearnShare() {
   const tabParam = params.get("tab");
   const tab: Tab = TABS.some(([k]) => k === tabParam) ? (tabParam as Tab) : "resultats";
   const [creating, setCreating] = useState(false);
-  // Opened from Conseil IA (« Préparer l'enquête »)
+  // Opened from a Directeur draft (« Préparer l'enquête »)
   const conseil = useConseilDraft("SURVEY");
   useEffect(() => {
     if (conseil.draft) setCreating(true);
@@ -274,7 +274,7 @@ function StatusActions({ survey, pending, onStatus }: { survey: SurveyDetail; pe
   );
 }
 
-/** Survey prepared by Conseil IA: title, intro and short questions. */
+/** Survey prepared by the Directeur: title, intro and short questions. */
 type ConseilSurvey = { title?: string; intro?: string; questions?: string[] };
 
 function NewSurveyDialog({
@@ -323,7 +323,7 @@ function NewSurveyDialog({
   });
   const options: Array<[typeof from, string, string, boolean]> = [
     ...(initial?.questions?.length
-      ? ([["conseil", "Préparé par Conseil IA", `${initial.questions.length} questions courtes : ${initial.questions.slice(0, 2).join(" · ")}…`, true]] as Array<[typeof from, string, string, boolean]>)
+      ? ([["conseil", "Préparé par le Directeur", `${initial.questions.length} questions courtes : ${initial.questions.slice(0, 2).join(" · ")}…`, true]] as Array<[typeof from, string, string, boolean]>)
       : []),
     ["template", templates[0]?.name ?? "Collabora Learn & Share", `Modèle prêt : ${templates[0]?.questions ?? 12} questions, rôle d’abord, contact WhatsApp optionnel.`, true],
     ["blank", "Sondage vierge", "Sans question. Vous ajoutez les vôtres.", true],

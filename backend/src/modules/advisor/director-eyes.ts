@@ -233,6 +233,115 @@ export const EYES: Eye[] = [
       return done(rows);
     },
   },
+  {
+    id: 'stay',
+    label: 'Durée par visite',
+    unit: 'h',
+    aggregate: 'mean',
+    help: 'Heures passées sur place par visite terminée (entrée → sortie), au jour de l’entrée.',
+    params: [...HOURS],
+    async compute(prisma, p, from, to) {
+      const rows = emptyDays(from, to);
+      const visits = await prisma.journal.findMany({
+        where: { registredTime: { gte: startOfDay(from), lte: endOfDay(to) }, leaveTime: { not: null }, isReservation: false, hiddenAt: null },
+        select: { registredTime: true, leaveTime: true },
+      });
+      for (const v of visits) {
+        if (!inHours(v.registredTime, p)) continue;
+        const hours = (v.leaveTime!.getTime() - v.registredTime.getTime()) / 3_600_000;
+        // Forgotten check-outs (over 16 h) would bend the average
+        if (hours > 0 && hours <= 16) addTo(rows, v.registredTime, hours, undefined, 1);
+      }
+      return done(rows);
+    },
+  },
+  {
+    id: 'sources.new',
+    label: 'Nouveaux clients par source',
+    unit: 'nouveaux',
+    aggregate: 'sum',
+    splitBy: 'source',
+    help: 'Premières visites, par réponse à « Comment nous avez-vous connus ? » (NOT_ASKED = pas demandé).',
+    params: [{ name: 'source', label: 'source', values: ['INSTAGRAM', 'FRIEND', 'SCHOOL', 'WALK_BY', 'OTHER', 'NOT_ASKED'] }],
+    async compute(prisma, p, from, to) {
+      const rows = emptyDays(from, to);
+      const firsts = await prisma.journal.groupBy({
+        by: ['memberID'],
+        where: { memberID: { not: null }, isReservation: false, hiddenAt: null },
+        _min: { registredTime: true },
+      });
+      const inRange = firsts.filter((f) => f._min.registredTime && f._min.registredTime >= startOfDay(from) && f._min.registredTime <= endOfDay(to));
+      const members = await prisma.member.findMany({ where: { id: { in: inRange.map((f) => f.memberID!) } }, select: { id: true, heardFrom: true } });
+      const heard = new Map(members.map((m) => [m.id, m.heardFrom || 'NOT_ASKED']));
+      for (const f of inRange) {
+        const source = heard.get(f.memberID!) ?? 'NOT_ASKED';
+        if (p.source && p.source !== source) continue;
+        addTo(rows, f._min.registredTime, 1, source);
+      }
+      return done(rows);
+    },
+  },
+  {
+    id: 'expenses',
+    label: 'Dépenses',
+    unit: 'DT',
+    aggregate: 'sum',
+    splitBy: 'catégorie',
+    help: 'Dépenses saisies dans Finance, au jour de la dépense.',
+    params: [{ name: 'category', label: 'catégorie', type: 'text' }],
+    async compute(prisma, p, from, to) {
+      const rows = emptyDays(from, to);
+      const list = await prisma.dailyExpense.findMany({
+        where: { date: { gte: startOfDay(from), lte: endOfDay(to) } },
+        select: { date: true, amount: true, category: true },
+      });
+      for (const e of list) if (matches(e.category, p.category)) addTo(rows, e.date, e.amount ?? 0, e.category || 'Autre');
+      return done(rows);
+    },
+  },
+  {
+    id: 'events',
+    label: 'Inscriptions aux événements',
+    unit: 'inscrits',
+    aggregate: 'sum',
+    splitBy: 'événement',
+    help: 'registered = inscriptions au jour de l’inscription, paid = places payées au jour du paiement.',
+    params: [
+      { name: 'measure', label: 'quoi', values: ['registered', 'paid'] },
+      { name: 'event', label: 'événement', type: 'text' },
+    ],
+    async compute(prisma, p, from, to) {
+      const rows = emptyDays(from, to);
+      const range = { gte: startOfDay(from), lte: endOfDay(to) };
+      const paid = p.measure === 'paid';
+      const regs = await prisma.eventRegistration.findMany({
+        where: { ...(paid ? { paidAt: range } : { createdAt: range }), status: { not: 'CANCELLED' } },
+        select: { createdAt: true, paidAt: true, event: { select: { title: true } } },
+      });
+      for (const r of regs) if (matches(r.event?.title, p.event)) addTo(rows, paid ? r.paidAt : r.createdAt, 1, r.event?.title ?? 'Événement');
+      return done(rows);
+    },
+  },
+  {
+    id: 'relances',
+    label: 'Relances',
+    unit: 'clients',
+    aggregate: 'sum',
+    splitBy: 'canal',
+    help: 'contacted = clients relancés au jour du contact ; won = relances gagnées (le client est revenu ou a payé) au jour de la clôture.',
+    params: [{ name: 'what', label: 'quoi', values: ['contacted', 'won'] }],
+    async compute(prisma, p, from, to) {
+      const rows = emptyDays(from, to);
+      const range = { gte: startOfDay(from), lte: endOfDay(to) };
+      const won = p.what === 'won';
+      const list = await prisma.memberOutreach.findMany({
+        where: won ? { closedAt: range, closedResult: 'WON' } : { createdAt: range, channel: { not: 'SKIP' } },
+        select: { createdAt: true, closedAt: true, channel: true },
+      });
+      for (const o of list) addTo(rows, won ? o.closedAt : o.createdAt, 1, o.channel);
+      return done(rows);
+    },
+  },
 ];
 
 export const eyeSpecs = (): EyeSpec[] => EYES.map(({ compute: _c, ...spec }) => spec);
