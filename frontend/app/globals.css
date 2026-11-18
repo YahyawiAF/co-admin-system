@@ -522,3 +522,15 @@
   .hr-pop { animation: none; }
   .hr-fill { animation: none; width: 100%; opacity: 0.35; }
 }
+
+/* Admin alerts: soft pulse on the bell until notifications are turned on. */
+.admin-alerts-dot {
+  animation: admin-alerts-pulse 1.6s ease-in-out infinite;
+}
+@keyframes admin-alerts-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-alerts-dot { animation: none; }
+}

@@ -4317,6 +4317,12 @@ export class MobileService {
     }
 
     this.eventsGateway.sendVisitRequest(payload);
+    void this.pushService.sendToOrgAdmins(member.organizationId, {
+      title: '🚪 Demande d’entrée',
+      body: `${payload.memberName} · ${request.price.name || 'Forfait'}`,
+      tag: `visit-${request.id}`,
+      url: '/dashboard',
+    });
 
     return {
       ...request,
@@ -5338,6 +5344,14 @@ export class MobileService {
       seat,
       forfaitName: session?.prices?.name || null,
     });
+    void this.pushService.sendToOrgAdmins(member.organizationId, {
+      title: '☕ Nouvelle commande',
+      body: `${member.firstName || 'Visiteur'} · ${qty}× ${product.name}${
+        seat?.seatLabel ? ` · place ${seat.seatLabel}` : ''
+      }`,
+      tag: `order-${order.id}`,
+      url: '/commandes',
+    });
     this.eventsGateway.sendProductUpdated({
       type: 'product_updated',
       productId: product.id,
@@ -6159,6 +6173,12 @@ export class MobileService {
       avatarUrl: member.avatarUrl,
     };
     this.eventsGateway.sendStaffMessage(payload);
+    void this.pushService.sendToOrgAdmins(member.organizationId, {
+      title: `💬 ${payload.memberName}`,
+      body: text.slice(0, 120),
+      tag: `staff-in-${created.id}`,
+      url: '/dashboard',
+    });
     this.eventsGateway.sendTableUpdates({
       type: 'staff_message',
       memberId: dto.memberId,
@@ -6650,6 +6670,24 @@ export class MobileService {
     const payload = this.serializeBooking(created);
     this.eventsGateway.sendBookingRequest(payload);
     if (rules.autoApprove) return this.approveBookingRequest(created.id);
+    void this.pushService.sendToOrgAdmins(created.member.organizationId, {
+      title: '📅 Nouvelle réservation',
+      body: [
+        created.member.firstName || 'Visiteur',
+        kind === BookingRequestKind.ROOM
+          ? spaceName || 'Salle'
+          : `Place ${seatLabels.join(', ')}`,
+        startAt.toLocaleString('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Africa/Tunis',
+        }),
+      ].join(' · '),
+      tag: `booking-${created.id}`,
+      url: '/reservations',
+    });
     return payload;
   }
 

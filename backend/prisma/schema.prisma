@@ -23,6 +23,7 @@ model User {
   phoneNumber             String?                  @unique
   Journals                Journal[]
   organizationMemberships OrganizationMembership[]
+  adminPushSubscriptions  AdminPushSubscription[]
   facilityMemberships     FacilityMembership[]
   staffActions            StaffAction[]            @relation("StaffActionActor")
   reviewedStaffActions    StaffAction[]            @relation("StaffActionReviewer")
@@ -223,6 +224,23 @@ model PushSubscription {
 
   @@index([memberId])
   @@map("push_subscriptions")
+}
+
+/// Admin/staff browser that receives push alerts (new café order, booking, visit, message) for one organization.
+model AdminPushSubscription {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  userAgent      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@map("admin_push_subscriptions")
 }
 
 /// Staff follow-up of a member (renewal, win-back, conversion, unpaid reminder).

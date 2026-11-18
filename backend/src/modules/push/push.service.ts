@@ -75,18 +75,76 @@ export class PushService implements OnModuleInit {
     await this.prisma.pushSubscription.deleteMany({ where: { endpoint } });
   }
 
+  async saveAdminSubscription(data: {
+    userId: string;
+    organizationId: string;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+    userAgent?: string;
+  }) {
+    const fields = {
+      userId: data.userId,
+      organizationId: data.organizationId,
+      p256dh: data.p256dh,
+      auth: data.auth,
+      userAgent: data.userAgent || null,
+    };
+    await this.prisma.adminPushSubscription.upsert({
+      where: { endpoint: data.endpoint },
+      create: { ...fields, endpoint: data.endpoint },
+      update: fields,
+    });
+    return { ok: true };
+  }
+
+  async removeAdminSubscription(endpoint: string, userId: string) {
+    await this.prisma.adminPushSubscription.deleteMany({
+      where: { endpoint, userId },
+    });
+    return { ok: true };
+  }
+
   async sendToMember(memberId: string, payload: PushPayload) {
     if (!this.ready || !memberId) return;
     const rows = await this.prisma.pushSubscription.findMany({
       where: { memberId },
     });
+    await this.deliver(rows, payload, '/m', (id) =>
+      this.prisma.pushSubscription.delete({ where: { id } }),
+    );
+  }
+
+  /** Every admin/staff browser that turned on alerts for this organization. */
+  async sendToOrgAdmins(
+    organizationId: string | null | undefined,
+    payload: PushPayload,
+  ) {
+    if (!this.ready || !organizationId) return;
+    const rows = await this.prisma.adminPushSubscription.findMany({
+      where: { organizationId },
+    });
+    await this.deliver(
+      rows,
+      { requireInteraction: true, ...payload },
+      '/dashboard',
+      (id) => this.prisma.adminPushSubscription.delete({ where: { id } }),
+    );
+  }
+
+  private async deliver(
+    rows: { id: string; endpoint: string; p256dh: string; auth: string }[],
+    payload: PushPayload,
+    defaultUrl: string,
+    dropGone: (id: string) => Promise<unknown>,
+  ) {
     if (!rows.length) return;
 
     const body = JSON.stringify({
       title: payload.title,
       body: payload.body,
       tag: payload.tag || 'collabora',
-      url: payload.url || '/m',
+      url: payload.url || defaultUrl,
       vibrate: payload.vibrate || [200, 80, 200, 80, 400],
       requireInteraction: payload.requireInteraction ?? false,
     });
@@ -108,9 +166,7 @@ export class PushService implements OnModuleInit {
               ? (err as { statusCode?: number }).statusCode
               : undefined;
           if (status === 404 || status === 410) {
-            await this.prisma.pushSubscription
-              .delete({ where: { id: row.id } })
-              .catch(() => undefined);
+            await dropGone(row.id).catch(() => undefined);
           } else {
             this.logger.warn(
               `Push failed for ${row.id}: ${

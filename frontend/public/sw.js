@@ -130,6 +130,17 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((clients) => {
+        // Admin alerts: bring back an open admin tab as it is (its pop-up is already showing).
+        const isVisitorUrl = url === "/m" || url.startsWith("/m/");
+        if (!isVisitorUrl) {
+          const admin = clients.find((c) => {
+            const path = new URL(c.url).pathname;
+            return path !== "/m" && !path.startsWith("/m/") && "focus" in c;
+          });
+          if (admin) return admin.focus();
+          if (self.clients.openWindow) return self.clients.openWindow(url);
+          return;
+        }
         for (const client of clients) {
           if ("focus" in client) {
             client.navigate?.(url);

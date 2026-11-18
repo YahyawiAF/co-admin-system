@@ -40,6 +40,8 @@ import { ProductOrderBell } from "@/components/admin/ProductOrderBell";
 import { StaffInboxBell } from "@/components/admin/StaffInboxBell";
 import { BookingRequestBell } from "@/components/admin/BookingRequestBell";
 import { CheckoutNotify } from "@/components/admin/CheckoutNotify";
+import { AdminAlerts } from "@/components/admin/AdminAlerts";
+import { disableAdminPush } from "@/lib/admin-alerts";
 import { JournalAlertNavBell } from "@/components/admin/JournalAlertCenter";
 import { SeatOccupancyBoard } from "@/components/admin/SeatOccupancyBoard";
 import { JournalAlertsProvider } from "@/lib/journal-alerts-context";
@@ -206,7 +208,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
             variant="ghost"
             size="sm"
             className="mt-1 w-full justify-start gap-2"
-            onClick={() => logout()}
+            onClick={() => {
+              void disableAdminPush();
+              logout();
+            }}
           >
             <LogOut className="h-4 w-4" />
             Déconnexion
@@ -231,6 +236,12 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Sheet>
           <div className="flex-1" />
           <RefreshButton />
+          {journalOps || can("reservations", "read") ? (
+            <AdminAlerts
+              journal={journalOps}
+              reservations={can("reservations", "read")}
+            />
+          ) : null}
           {journalOps ? (
             <>
               <SeatOccupancyBoard variant="icon" />
