@@ -13,6 +13,22 @@ export class DirectorController {
     return this.director.overview(facilityId);
   }
 
+  /** One JSON with memory + numbers + the answer format, to paste into a Claude chat. */
+  @Get('export')
+  exportForClaude(@Query('facilityId') facilityId?: string) {
+    return this.director.exportForClaude(facilityId);
+  }
+
+  @Post('update/preview')
+  previewUpdate(@Query('facilityId') facilityId: string | undefined, @Body() body: { json?: unknown }) {
+    return this.director.previewUpdate(facilityId, body);
+  }
+
+  @Post('update')
+  applyUpdate(@Query('facilityId') facilityId: string | undefined, @Body() body: { json?: unknown }) {
+    return this.director.applyUpdate(facilityId, body);
+  }
+
   @Patch('goal')
   setGoal(@Query('facilityId') facilityId: string | undefined, @Body() body: { profit?: number; date?: string | null }) {
     return this.director.setGoal(facilityId, body);

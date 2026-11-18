@@ -1,5 +1,5 @@
 import type { DayFact } from '../../business-manager-core';
-import { corners, dropAlert, parseImport } from './director';
+import { corners, dropAlert, parseImport, parseUpdate } from './director';
 
 const day = (key: string, money: number, visits: number): DayFact => ({
   key,
@@ -77,5 +77,43 @@ describe('Directeur import', () => {
     ]);
     expect(x.newCorners).toEqual([{ id: 'partenariats', name: 'Partenariats' }]);
     expect(x.skipped).toEqual(['pas une ligne']);
+  });
+});
+
+describe('Directeur update from Claude', () => {
+  const known = { corners: [{ id: 'clients', name: 'Clients' }, { id: 'prix', name: 'Prix & offres' }], entryIds: ['e1', 'e2'] };
+  const base = { format: 'directeur-update/v1', basedOn: '2026-11-18T10:00:00Z' };
+
+  it('keeps what is valid and lists what is not', () => {
+    const p = parseUpdate(
+      {
+        ...base,
+        summary: 'La baisse suit le règlement.',
+        priorities: [{ title: 'Tester le règlement une fois', corner: 'Expérience', why: 'baisse le 12 nov' }],
+        corners: [{ name: 'Expérience' }],
+        add: [
+          { date: '2026-11-18', kind: 'lesson', corner: 'Prix & offres', text: 'Le 2h a remplacé le 1h' },
+          { kind: 'FACT', corner: 'Inconnu', text: 'x' },
+        ],
+        update: [{ id: 'e1', detail: 'précisé' }, { id: 'zz', text: 'y' }],
+        remove: ['e2', 'nope'],
+        questions: ['Quel jour exact ?'],
+      },
+      known,
+      '2026-11-19',
+    );
+    expect(p.corners).toEqual([{ id: 'experience', name: 'Expérience' }]);
+    expect(p.priorities).toEqual([{ title: 'Tester le règlement une fois', corner: 'experience', why: 'baisse le 12 nov' }]);
+    expect(p.add).toEqual([{ date: '2026-11-18', kind: 'LESSON', corner: 'prix', text: 'Le 2h a remplacé le 1h', detail: null }]);
+    expect(p.update).toEqual([{ id: 'e1', detail: 'précisé' }]);
+    expect(p.remove).toEqual(['e2']);
+    expect(p.questions).toEqual(['Quel jour exact ?']);
+    expect(p.warnings).toHaveLength(3);
+  });
+
+  it('reads a pasted answer, even wrapped in ```json, and refuses another format', () => {
+    expect(parseUpdate('```json\n' + JSON.stringify({ ...base, add: [] }) + '\n```', known, '2026-11-19').add).toEqual([]);
+    expect(() => parseUpdate('{"format":"autre"}', known, '2026-11-19')).toThrow('directeur-update/v1');
+    expect(() => parseUpdate('pas du json', known, '2026-11-19')).toThrow('JSON');
   });
 });

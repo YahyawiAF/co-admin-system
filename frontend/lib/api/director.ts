@@ -47,7 +47,28 @@ export type DirectorOverview = {
   memory: DirectorEntry[];
   questions: Array<{ id: string; question: string }>;
   suggestions: Array<{ title: string; corner: string; why: string; gain: number | null; href: string | null }>;
+  brief: DirectorBrief | null;
   maxRunning: number;
+};
+
+export type DirectorBrief = {
+  date: string;
+  basedOn: string | null;
+  summary: string | null;
+  priorities: Array<{ title: string; corner: string; why: string }>;
+};
+
+/** Claude's answer, checked by the app before anything is saved. */
+export type DirectorUpdatePlan = {
+  basedOn: string | null;
+  summary: string | null;
+  priorities: DirectorBrief["priorities"];
+  add: Array<{ date: string; kind: DirectorEntryKind; corner: string; text: string; detail: string | null }>;
+  update: Array<{ id: string; text?: string; detail?: string | null; kind?: DirectorEntryKind; corner?: string; date?: string }>;
+  remove: string[];
+  corners: Array<{ id: string; name: string }>;
+  questions: string[];
+  warnings: string[];
 };
 
 export type DirectorEntryInput = {
@@ -63,6 +84,18 @@ export const DIRECTOR_KEY = ["director"] as const;
 export const directorApi = {
   overview() {
     return http.get<DirectorOverview>("/director");
+  },
+  exportForClaude() {
+    return http.get<Record<string, unknown> & { exportedAt: string }>("/director/export");
+  },
+  previewUpdate(json: string) {
+    return http.post<DirectorUpdatePlan>("/director/update/preview", { json });
+  },
+  applyUpdate(json: string) {
+    return http.post<{ added: number; updated: number; removed: number; corners: number; questions: number; brief: boolean; warnings: string[] }>(
+      "/director/update",
+      { json },
+    );
   },
   setGoal(data: { profit?: number; date?: string | null }) {
     return http.patch<DirectorOverview>("/director/goal", data);

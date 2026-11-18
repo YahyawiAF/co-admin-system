@@ -849,6 +849,8 @@ model Facility {
   directorGoalProfit          Int                  @default(10000)
   directorGoalDate            DateTime?            @db.Date
   directorCorners             Json?
+  /// Last brief from Claude: { date, basedOn, summary, priorities: [{ title, corner, why }] }
+  directorBrief               Json?
   promotions                  Promotion[]
   shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]

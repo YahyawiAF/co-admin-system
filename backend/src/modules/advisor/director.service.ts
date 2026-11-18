@@ -5,11 +5,26 @@ import { dbDay, fromDbDay, localDayKey } from '../../../common/parse-local-day';
 import { computeMonthForecast, loadDayFacts } from '../analytics/month-data';
 import { PerformanceService } from '../analytics/performance.service';
 import { ExpensesService } from '../expense/expense.service';
+import { AdvisorService } from './advisor.service';
+import { ContextService } from './context.service';
 import { HealthService } from './health.service';
-import { BASE_CORNERS, cornerId, corners, dropAlert, ENTRY_KINDS, type EntryKind, KIND_LABEL, parseImport } from './director';
+import {
+  BASE_CORNERS,
+  cornerId,
+  corners,
+  dropAlert,
+  ENTRY_KINDS,
+  type EntryKind,
+  EXPORT_FORMAT,
+  KIND_LABEL,
+  parseImport,
+  parseUpdate,
+  UPDATE_INSTRUCTIONS,
+} from './director';
 
 type EntryBody = { date?: string; kind?: string; corner?: string; text?: string; detail?: string | null };
 type OwnCorner = { id: string; name: string };
+type Brief = { date: string; basedOn: string | null; summary: string | null; priorities: Array<{ title: string; corner: string; why: string }> };
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const dayKey = (d: Date) => localDayKey(fromDbDay(d));
@@ -25,6 +40,8 @@ export class DirectorService {
     private readonly performance: PerformanceService,
     private readonly expenses: ExpensesService,
     private readonly health: HealthService,
+    private readonly advisor: AdvisorService,
+    private readonly context: ContextService,
   ) {}
 
   private async facilityId(facilityId?: string) {
@@ -39,7 +56,7 @@ export class DirectorService {
     const [facility, entries, bilan, facts, forecast, month, questions] = await Promise.all([
       this.prisma.facility.findUniqueOrThrow({
         where: { id },
-        select: { directorGoalProfit: true, directorGoalDate: true, directorCorners: true },
+        select: { directorGoalProfit: true, directorGoalDate: true, directorCorners: true, directorBrief: true },
       }),
       this.prisma.directorEntry.findMany({ where: { facilityId: id }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 300 }),
       this.health.health(id),
@@ -91,7 +108,113 @@ export class DirectorService {
       memory,
       questions,
       suggestions: suggestions.slice(0, 3),
+      brief: (facility.directorBrief as Brief | null) ?? null,
       maxRunning: bilan.max,
+    };
+  }
+
+  /** Everything Claude needs in one file (memory, numbers, the update format), for a chat without API key. */
+  async exportForClaude(facilityId?: string) {
+    const id = await this.facilityId(facilityId);
+    const [overview, prompt, tests, answered] = await Promise.all([
+      this.overview(id),
+      this.advisor.prompt(id, 30),
+      this.advisor.initiatives(id),
+      this.prisma.advisorQuestion.findMany({
+        where: { facilityId: id, status: 'ANSWERED' },
+        orderBy: { updatedAt: 'desc' },
+        take: 30,
+        select: { question: true, answer: true },
+      }),
+    ]);
+    const exportedAt = new Date().toISOString();
+    return {
+      format: EXPORT_FORMAT,
+      exportedAt,
+      instructions: UPDATE_INSTRUCTIONS,
+      goal: overview.goal,
+      month: overview.month,
+      alert: overview.alert,
+      lastBrief: overview.brief,
+      corners: overview.corners.map((c) => ({ id: c.id, name: c.name, status: c.status, fact: c.fact, own: c.custom })),
+      memory: overview.memory.map(({ kindLabel: _k, ...m }) => m),
+      tests: tests
+        .filter((i) => !i.dropped)
+        .slice(0, 20)
+        .map((i) => ({
+          title: i.title,
+          startDate: i.startDate,
+          endDate: i.endDate,
+          finished: i.finished,
+          gain: i.result?.gain ?? null,
+          goalAmount: i.goalAmount ?? null,
+          ownerVerdict: i.ownerVerdict,
+        })),
+      questions: { open: overview.questions.map((q) => q.question), answered },
+      numbers: prompt.snapshot,
+    };
+  }
+
+  private async plan(id: string, json: unknown) {
+    const [f, ids] = await Promise.all([
+      this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorCorners: true } }),
+      this.prisma.directorEntry.findMany({ where: { facilityId: id }, select: { id: true } }),
+    ]);
+    const own = ownCorners(f.directorCorners);
+    try {
+      return { own, plan: parseUpdate(json, { corners: [...BASE_CORNERS, ...own], entryIds: ids.map((e) => e.id) }, localDayKey(new Date())) };
+    } catch (e) {
+      throw new BadRequestException((e as Error).message);
+    }
+  }
+
+  /** What Claude's answer would change, without saving anything. */
+  async previewUpdate(facilityId: string | undefined, body: { json?: unknown }) {
+    const id = await this.facilityId(facilityId);
+    return (await this.plan(id, body.json)).plan;
+  }
+
+  /** Saves Claude's answer: new corners, notes added / changed / removed, questions, and the week's brief. */
+  async applyUpdate(facilityId: string | undefined, body: { json?: unknown }) {
+    const id = await this.facilityId(facilityId);
+    const { own, plan } = await this.plan(id, body.json);
+    const brief: Brief | undefined =
+      plan.summary || plan.priorities.length
+        ? { date: localDayKey(new Date()), basedOn: plan.basedOn, summary: plan.summary, priorities: plan.priorities }
+        : undefined;
+    await this.prisma.$transaction([
+      ...(plan.corners.length || brief
+        ? [
+            this.prisma.facility.update({
+              where: { id },
+              data: {
+                ...(plan.corners.length ? { directorCorners: [...own, ...plan.corners] } : {}),
+                ...(brief ? { directorBrief: brief } : {}),
+              },
+            }),
+          ]
+        : []),
+      ...(plan.add.length
+        ? [
+            this.prisma.directorEntry.createMany({
+              data: plan.add.map((e) => ({ facilityId: id, source: 'CLAUDE', date: dbDay(e.date), kind: e.kind, corner: e.corner, text: e.text, detail: e.detail })),
+            }),
+          ]
+        : []),
+      ...plan.update.map(({ id: entryId, date, ...rest }) =>
+        this.prisma.directorEntry.update({ where: { id: entryId }, data: { ...rest, ...(date ? { date: dbDay(date) } : {}) } }),
+      ),
+      ...(plan.remove.length ? [this.prisma.directorEntry.deleteMany({ where: { facilityId: id, id: { in: plan.remove } } })] : []),
+    ]);
+    if (plan.questions.length) await this.context.storeQuestions(id, null, plan.questions);
+    return {
+      added: plan.add.length,
+      updated: plan.update.length,
+      removed: plan.remove.length,
+      corners: plan.corners.length,
+      questions: plan.questions.length,
+      brief: !!brief,
+      warnings: plan.warnings,
     };
   }
 

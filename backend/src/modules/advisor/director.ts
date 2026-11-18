@@ -194,3 +194,137 @@ export function parseImport(text: string, known: Array<{ id: string; name: strin
   }
   return { entries, skipped, newCorners };
 }
+
+// ---------------------------------------------------------------------------
+// Round trip with Claude without an API key: the app exports, Claude answers with an update
+// ---------------------------------------------------------------------------
+
+export const EXPORT_FORMAT = 'directeur/v1';
+export const UPDATE_FORMAT = 'directeur-update/v1';
+
+/** Written into every export so any Claude chat knows what to send back. */
+export const UPDATE_INSTRUCTIONS = [
+  'Tu es le cerveau du Directeur de cet espace de coworking. Lis goal, month, alert, corners, memory, tests, questions et numbers (les chiffres calculés par l’app).',
+  'Réponds par UN objet JSON, sans texte autour, de cette forme :',
+  '{ "format": "directeur-update/v1", "basedOn": <exportedAt de cet export>, "summary": "3 phrases au plus", ' +
+    '"priorities": [{ "title": "…", "corner": "<id de coin>", "why": "…" }] (3 au plus), ' +
+    '"add": [{ "date": "AAAA-MM-JJ", "kind": "DECISION|FACT|LESSON|TEST", "corner": "<id>", "text": "…", "detail": "…" }], ' +
+    '"update": [{ "id": "<id d’une note>", "text": "…", "detail": "…", "kind": "…", "corner": "…", "date": "…" }], ' +
+    '"remove": ["<id d’une note fausse ou en double>"], "corners": [{ "name": "Nouveau coin" }], "questions": ["question au propriétaire"] }',
+  'Règles : n’invente aucun chiffre (prends-les dans numbers ou memory) ; add = seulement ce qui est nouveau (leçons tirées des chiffres, faits constatés), pas ce qui est déjà dans memory ; une question seulement si la réponse change une priorité ; corner = un id de corners, ou le nom d’un coin ajouté dans corners.',
+];
+
+export type UpdatePlan = {
+  basedOn: string | null;
+  summary: string | null;
+  priorities: Array<{ title: string; corner: string; why: string }>;
+  add: ImportedEntry[];
+  update: Array<{ id: string; text?: string; detail?: string | null; kind?: EntryKind; corner?: string; date?: string }>;
+  remove: string[];
+  corners: Array<{ id: string; name: string }>;
+  questions: string[];
+  warnings: string[];
+};
+
+const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Checks Claude's answer before anything is saved: known ids only, known or new corners,
+ * valid dates and kinds. What can't be used is listed in `warnings`, never applied.
+ */
+export function parseUpdate(raw: unknown, known: { corners: Array<{ id: string; name: string }>; entryIds: string[] }, today: string): UpdatePlan {
+  let x: Record<string, unknown>;
+  if (typeof raw === 'string') {
+    const text = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
+    try {
+      x = JSON.parse(text);
+    } catch {
+      throw new Error('Ce n’est pas du JSON valide');
+    }
+  } else x = raw as Record<string, unknown>;
+  if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error('Il faut un objet JSON');
+  if (x.format !== UPDATE_FORMAT) throw new Error(`Format attendu : « ${UPDATE_FORMAT} »`);
+
+  const warnings: string[] = [];
+  const corners: Array<{ id: string; name: string }> = [];
+  for (const c of Array.isArray(x.corners) ? x.corners : []) {
+    const name = str((c as { name?: unknown })?.name, 40);
+    if (!name) continue;
+    const id = cornerId(name);
+    if ([...known.corners, ...corners].some((k) => k.id === id)) continue;
+    corners.push({ id, name });
+  }
+  const all = [...known.corners, ...corners];
+  const corner = (v: unknown) => {
+    const s = str(v, 60);
+    if (!s) return null;
+    return all.find((c) => c.id === s || c.id === cornerId(s) || cornerId(c.name) === cornerId(s))?.id ?? null;
+  };
+  const kind = (v: unknown) => (typeof v === 'string' && (ENTRY_KINDS as readonly string[]).includes(v.toUpperCase()) ? (v.toUpperCase() as EntryKind) : null);
+
+  const add: ImportedEntry[] = [];
+  for (const [i, e] of (Array.isArray(x.add) ? x.add : []).entries()) {
+    const o = (e ?? {}) as Record<string, unknown>;
+    const text = str(o.text, 300);
+    const c = corner(o.corner);
+    if (!text || !c) {
+      warnings.push(`add[${i}] ignoré : ${!text ? 'texte vide' : `coin inconnu « ${String(o.corner)} »`}`);
+      continue;
+    }
+    const date = typeof o.date === 'string' && DAY_KEY.test(o.date) ? o.date : today;
+    add.push({ date, kind: kind(o.kind) ?? 'FACT', corner: c, text, detail: str(o.detail, 500) });
+  }
+
+  const ids = new Set(known.entryIds);
+  const update: UpdatePlan['update'] = [];
+  for (const [i, e] of (Array.isArray(x.update) ? x.update : []).entries()) {
+    const o = (e ?? {}) as Record<string, unknown>;
+    if (typeof o.id !== 'string' || !ids.has(o.id)) {
+      warnings.push(`update[${i}] ignoré : note inconnue`);
+      continue;
+    }
+    const u: UpdatePlan['update'][number] = { id: o.id };
+    if (o.text !== undefined) {
+      const t = str(o.text, 300);
+      if (t) u.text = t;
+    }
+    if (o.detail !== undefined) u.detail = str(o.detail, 500);
+    if (o.kind !== undefined && kind(o.kind)) u.kind = kind(o.kind)!;
+    if (o.corner !== undefined) {
+      const c = corner(o.corner);
+      if (c) u.corner = c;
+      else warnings.push(`update[${i}] : coin inconnu « ${String(o.corner)} », gardé tel quel`);
+    }
+    if (typeof o.date === 'string' && DAY_KEY.test(o.date)) u.date = o.date;
+    if (Object.keys(u).length > 1) update.push(u);
+  }
+
+  const remove: string[] = [];
+  for (const id of Array.isArray(x.remove) ? x.remove : []) {
+    if (typeof id === 'string' && ids.has(id)) remove.push(id);
+    else warnings.push(`remove : note inconnue « ${String(id)} »`);
+  }
+
+  const priorities: UpdatePlan['priorities'] = [];
+  for (const p of (Array.isArray(x.priorities) ? x.priorities : []).slice(0, 3)) {
+    const o = (p ?? {}) as Record<string, unknown>;
+    const title = str(o.title, 200);
+    if (title) priorities.push({ title, corner: corner(o.corner) ?? 'clients', why: str(o.why, 300) ?? '' });
+  }
+  if (Array.isArray(x.priorities) && x.priorities.length > 3) warnings.push('Plus de 3 priorités : seules les 3 premières sont gardées');
+
+  const questions = (Array.isArray(x.questions) ? x.questions : []).map((q) => str(q, 300)).filter((q): q is string => !!q).slice(0, 5);
+
+  return {
+    basedOn: str(x.basedOn, 40),
+    summary: str(x.summary, 800),
+    priorities,
+    add,
+    update,
+    remove,
+    corners,
+    questions,
+    warnings,
+  };
+}
