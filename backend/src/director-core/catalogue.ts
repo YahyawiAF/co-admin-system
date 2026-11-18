@@ -15,19 +15,20 @@ export type EyeParam = {
 /**
  * Something the app can measure by itself, day by day.
  * sum: the days add up (money, sales). ratio: value ÷ base over the period, in % (e.g. visits with a coffee).
+ * mean: value ÷ base over the period, as is (e.g. hours per visit).
  */
 export type EyeSpec = {
   id: string;
   label: string;
   unit: string;
-  aggregate: 'sum' | 'ratio';
+  aggregate: 'sum' | 'ratio' | 'mean';
   params: EyeParam[];
   /** What the split keys mean (e.g. « canal »), when the eye splits its days */
   splitBy?: string;
   help: string;
 };
 
-/** One day of an eye. For a ratio eye, value = numerator and base = denominator. */
+/** One day of an eye. For a ratio or mean eye, value = numerator and base = denominator. */
 export type EyeDay = {
   day: string;
   value: number;

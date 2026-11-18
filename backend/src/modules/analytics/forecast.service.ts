@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { addDays, endOfDay, endOfMonth, format, getDaysInMonth, startOfDay, startOfMonth, startOfWeek, subDays, subMonths } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { PrismaService } from 'database/prisma.service';
-import { localDayKey } from '../../../common/parse-local-day';
+import { dbDay, localDayKey } from '../../../common/parse-local-day';
 import { orderUnitPrice } from '../product/order-price';
 import {
   calendarEffects,
@@ -57,6 +57,8 @@ export const CHANGE_CAUSES = {
 } as const;
 
 /** A rise with one of these causes becomes an action, so it gets measured and suggested again. */
+/** Directeur corner of a cause's category */
+const CATEGORY_CORNER: Record<string, string> = { ACQUISITION: 'marketing', PROMO: 'creux' };
 const CAUSE_ACTION: Record<string, { title: string; category: string; channels: string[] }> = {
   SOCIAL: { title: 'Publications sur les réseaux', category: 'ACQUISITION', channels: ['INSTAGRAM_POST', 'INSTAGRAM_STORY'] },
   EVENT: { title: 'Événement', category: 'ACQUISITION', channels: [] },
@@ -308,26 +310,24 @@ export class ForecastService {
       update: { label: cause.label, note, unknown: cause.code === 'UNKNOWN', answeredAt: new Date() },
     });
 
+    // A rise with a known cause goes to the Directeur's memory: the brain reads it and can watch it
     const act = direction === 'up' ? CAUSE_ACTION[cause.code] : undefined;
-    let initiativeId: string | null = null;
+    let noteId: string | null = null;
     if (act) {
-      const created = await this.prisma.businessInitiative.create({
+      const created = await this.prisma.directorEntry.create({
         data: {
           facilityId: s.facilityId,
-          title: act.title,
-          description: note,
-          category: act.category,
-          startDate: new Date(`${body.from}T00:00:00`),
-          recommendationTitle: `Hausse : ${METRIC_LABEL[body.metric].toLowerCase()} du ${body.from} au ${body.to}`,
-          metric: body.metric === 'newVisitors' ? 'newMembers' : 'visitsPerDay',
-          objective: 'TICKETS',
-          hypothesis: `${METRIC_LABEL[body.metric]} en hausse après : ${cause.label.toLowerCase()}`,
-          channels: act.channels,
+          date: dbDay(body.from),
+          kind: 'DECISION',
+          corner: CATEGORY_CORNER[act.category] ?? 'marketing',
+          text: `${act.title} : ${METRIC_LABEL[body.metric].toLowerCase()} en hausse du ${body.from} au ${body.to}`.slice(0, 300),
+          detail: note,
+          source: 'OWNER',
         },
       });
-      initiativeId = created.id;
+      noteId = created.id;
     }
-    return { ok: true, key, initiativeId };
+    return { ok: true, key, noteId };
   }
 
   /** New visitors per week by « Comment tu nous as connus ? » (oldest week first). */

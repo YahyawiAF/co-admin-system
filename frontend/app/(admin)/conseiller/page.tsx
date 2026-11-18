@@ -1,8 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ConseilView } from "@/components/admin/advisor/ConseilView";
-
-/** Kept for old links (« Préparer », shared links): same view as the Directeur's Conseils tab. */
+/** Conseil IA was replaced by the Directeur: old links land there. */
 export default function ConseillerPage() {
-  return <ConseilView />;
+  redirect("/directeur");
 }

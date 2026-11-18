@@ -6,7 +6,7 @@ import type { EyeDay } from './catalogue';
  * (a Monday is only compared with Mondays). The brain judges; this only counts.
  */
 export type WatchInput = {
-  aggregate: 'sum' | 'ratio';
+  aggregate: 'sum' | 'ratio' | 'mean';
   /** Days of the eye from 28 days before `start` to `end` (missing days = 0) */
   days: EyeDay[];
   /** First day measured, yyyy-MM-dd */
@@ -26,10 +26,10 @@ export type WatchResult = {
   status: 'waiting' | 'running' | 'done';
   daysMeasured: number;
   length: number;
-  /** sum: total over the measured days, against the same weekdays before. ratio: % before and after. */
+  /** sum: total over the measured days, against the same weekdays before. ratio: % before and after. mean: the average before and after. */
   before: number | null;
   after: number | null;
-  /** sum: % change. ratio: change in points. */
+  /** sum and mean: % change. ratio: change in points. */
   change: number | null;
   changeUnit: '%' | 'pts';
   splits: Array<{ key: string; before: number; after: number }>;
@@ -78,17 +78,18 @@ export function measureWatch(w: WatchInput): WatchResult {
   let b: number;
   let a: number;
   let change: number | null;
-  if (w.aggregate === 'ratio') {
+  if (w.aggregate === 'ratio' || w.aggregate === 'mean') {
+    const scale = w.aggregate === 'ratio' ? 100 : 1;
     const ratio = (keys: string[]) => {
       const num = keys.reduce((s, k) => s + (get(k)?.value ?? 0), 0);
       const den = keys.reduce((s, k) => s + (get(k)?.base ?? 0), 0);
-      return den > 0 ? (num / den) * 100 : null;
+      return den > 0 ? (num / den) * scale : null;
     };
     const rb = ratio(before);
     const ra = ratio(after);
     b = rb ?? 0;
     a = ra ?? 0;
-    change = rb != null && ra != null ? r1(ra - rb) : null;
+    change = rb == null || ra == null ? null : w.aggregate === 'ratio' ? r1(ra - rb) : rb > 0 ? Math.round(((ra - rb) / rb) * 100) : null;
   } else {
     // Expected = for each measured day, the average of the same weekday before
     const avgAll = before.reduce((s, k) => s + (get(k)?.value ?? 0), 0) / before.length;
@@ -119,6 +120,6 @@ export function measureWatch(w: WatchInput): WatchResult {
     change,
     splits,
     periods,
-    goalReached: goal == null ? null : w.aggregate === 'ratio' ? a >= goal : a >= goal,
+    goalReached: goal == null ? null : a >= goal,
   };
 }

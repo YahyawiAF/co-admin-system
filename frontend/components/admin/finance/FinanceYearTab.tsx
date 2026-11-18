@@ -253,7 +253,7 @@ export function FinanceYearTab() {
         <CardContent className="p-5">
           <div className="mb-2 flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Septembre → août, semaine par semaine</h2>
-            <Link href="/conseiller" className="text-sm font-medium text-primary hover:underline">Dates d’examens manquantes ? Conseil IA → Contexte</Link>
+            <Link href="/directeur?contexte=1" className="text-sm font-medium text-primary hover:underline">Dates d’examens manquantes ? Directeur → Mon contexte</Link>
           </div>
           <YearChart y={d} />
         </CardContent>
@@ -280,7 +280,7 @@ export function FinanceYearTab() {
                 </div>
               ))
             ) : (
-              <p className="text-sm text-muted-foreground">Pas encore d’effet mesuré : ajoutez vos périodes dans Conseil IA → Contexte.</p>
+              <p className="text-sm text-muted-foreground">Pas encore d’effet mesuré : ajoutez vos périodes dans Directeur → Mon contexte.</p>
             )}
           </CardContent>
         </Card>

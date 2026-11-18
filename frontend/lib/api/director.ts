@@ -115,7 +115,7 @@ export type DirectorWatch = {
   params: Record<string, string | number>;
   label: string;
   unit: string;
-  aggregate: "sum" | "ratio";
+  aggregate: "sum" | "ratio" | "mean";
   startDate: string;
   days: number;
   goal: number | null;
@@ -201,6 +201,48 @@ export type DirectorEntryInput = {
 
 export const DIRECTOR_KEY = ["director"] as const;
 
+export type DirectorPriorityInput = {
+  title: string;
+  corner?: string;
+  why?: string;
+  steps?: string[];
+  watch?: { eye: string; params?: Record<string, string | number>; days?: number; goal?: number | null } | null;
+};
+
+/** Old Conseil categories → the Directeur's corners. */
+export const CATEGORY_CORNER: Record<string, string> = {
+  ACQUISITION: "marketing",
+  NEW_REVENUE: "revenus",
+  PROMO: "creux",
+  PRICING: "prix",
+  CAFE: "cafe",
+  RETENTION: "abos",
+  OPERATIONS: "couts",
+};
+
+/** Old Conseil metrics → the eye the app watches for them (none = no watch). */
+export function metricWatch(metric?: string | null, hours?: { fromHour?: number; toHour?: number }): DirectorPriorityInput["watch"] {
+  const h: Record<string, number> = hours?.fromHour != null && hours?.toHour ? { fromHour: hours.fromHour, toHour: hours.toHour } : {};
+  switch (metric) {
+    case "newMembers":
+      return { eye: "visits", params: { who: "new", ...h } };
+    case "visitsPerDay":
+      return { eye: "visits", params: { ...h } };
+    case "revenueCafe":
+      return { eye: "cafe.sales", params: { measure: "dt", ...h } };
+    case "cafeAttachRatePct":
+      return { eye: "cafe.attach", params: { ...h } };
+    case "revenueSubscriptions":
+      return { eye: "money.day", params: { part: "abos" } };
+    case "revenuePerDay":
+      return { eye: "money.day", params: { part: "total" } };
+    case "avgStayHours":
+      return { eye: "stay", params: { ...h } };
+    default:
+      return null;
+  }
+}
+
 export const directorApi = {
   overview() {
     return http.get<DirectorOverview>("/director");
@@ -232,6 +274,9 @@ export const directorApi = {
       "/director/update",
       { json },
     );
+  },
+  createPriority(data: DirectorPriorityInput) {
+    return http.post<{ id: string }>("/director/priorities", data);
   },
   setPriority(id: string, status: DirectorPriority["status"]) {
     return http.patch<{ ok: true }>(`/director/priorities/${id}`, { status });

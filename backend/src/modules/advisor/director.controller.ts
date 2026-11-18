@@ -29,6 +29,11 @@ export class DirectorController {
     return this.director.applyUpdate(facilityId, body);
   }
 
+  @Post('priorities')
+  createPriority(@Query('facilityId') facilityId: string | undefined, @Body() body: Parameters<DirectorService['createPriority']>[1]) {
+    return this.director.createPriority(facilityId, body);
+  }
+
   @Patch('priorities/:id')
   closePriority(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string, @Body() body: { status?: string }) {
     return this.director.closePriority(facilityId, id, body);
