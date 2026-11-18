@@ -2,7 +2,6 @@
 ALTER TABLE "facilities" ADD COLUMN "directorGoalProfit" INTEGER NOT NULL DEFAULT 10000;
 ALTER TABLE "facilities" ADD COLUMN "directorGoalDate" DATE;
 ALTER TABLE "facilities" ADD COLUMN "directorCorners" JSONB;
-ALTER TABLE "facilities" ADD COLUMN "directorBrief" JSONB;
 
 CREATE TABLE "director_entries" (
     "id" TEXT NOT NULL,
