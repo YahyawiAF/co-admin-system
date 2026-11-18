@@ -85,8 +85,11 @@ export const ALERT_ICON = AlertCircle;
 
 /** What travels in ?conseil= to the feature page. */
 export type ConseilDraftParam = {
-  /** Initiative (solution in progress) */
+  /** Initiative (solution in progress); '' for a Directeur draft */
   i: string;
+  /** Directeur priority and the index of its draft (leg) */
+  p?: string;
+  l?: number;
   /** Objective index the tool fulfils */
   s: number | null;
   /** Health point, to come back to its modal */
@@ -107,7 +110,7 @@ export function decodeDraft(raw: string | null): ConseilDraftParam | null {
     const b64 = raw.replace(/-/g, "+").replace(/_/g, "/");
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     const p = JSON.parse(new TextDecoder().decode(bytes)) as ConseilDraftParam;
-    return p && typeof p.i === "string" && typeof p.k === "string" ? p : null;
+    return p && (typeof p.i === "string" || typeof p.p === "string") && typeof p.k === "string" ? p : null;
   } catch {
     return null;
   }

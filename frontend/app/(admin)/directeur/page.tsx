@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ListPager, usePaged } from "@/components/ui/list-pager";
 import { ConseilView } from "@/components/admin/advisor/ConseilView";
 import { ClaudeUpdateDialog, useExportForClaude } from "@/components/admin/director/ClaudeRoundTrip";
+import { NeedsCard, PriorityCards, WatchLine } from "@/components/admin/director/PriorityCards";
 import { CornerDialog, EntryDialog, GoalDialog, ImportDialog, KINDS } from "@/components/admin/director/DirectorDialogs";
 import { advisorApi } from "@/lib/api/resources";
 import { DIRECTOR_KEY, directorApi, type DirectorCorner, type DirectorEntry, type DirectorOverview, type DirectorStatus } from "@/lib/api/director";
@@ -134,6 +135,7 @@ function WeekTab({
     })),
   ].slice(0, 3);
   const a = d.alert;
+  const fromBrain = d.priorities.some((p) => p.status === "ACTIVE");
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -178,7 +180,16 @@ function WeekTab({
           </p>
         </div>
         {brief?.summary ? <p className="rounded-xl bg-indigo-50 px-3.5 py-2.5 text-sm text-indigo-950">{brief.summary}</p> : null}
-        {priorities.length ? (
+        {fromBrain || d.priorities.length ? <PriorityCards list={d.priorities} cornerName={cornerName} /> : null}
+        {d.watches.length ? (
+          <div className="space-y-2">
+            <p className="text-[12px] font-bold uppercase tracking-wider text-slate-500">Autres chiffres suivis</p>
+            {d.watches.map((w) => (
+              <WatchLine key={w.id} w={w} />
+            ))}
+          </div>
+        ) : null}
+        {fromBrain ? null : priorities.length ? (
           <ol className="space-y-2.5">
             {priorities.map((p, k) => (
               <li key={p.key} className="flex items-center gap-3 rounded-xl border p-3.5 transition-shadow duration-200 hover:shadow-md motion-reduce:transition-none">
@@ -238,6 +249,11 @@ function WeekTab({
         {d.goal.date && !d.questions.length ? <p className="text-sm text-slate-600">Pas de question en attente.</p> : null}
         <p className="text-[13px] text-slate-500">Chaque réponse est lue par Claude au prochain bilan.</p>
       </section>
+      {d.needs.length ? (
+        <div className="lg:col-start-3">
+          <NeedsCard needs={d.needs} />
+        </div>
+      ) : null}
     </div>
   );
 }

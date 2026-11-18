@@ -103,7 +103,7 @@ describe('Directeur update from Claude', () => {
       '2026-11-19',
     );
     expect(p.corners).toEqual([{ id: 'experience', name: 'Expérience' }]);
-    expect(p.priorities).toEqual([{ title: 'Tester le règlement une fois', corner: 'experience', why: 'baisse le 12 nov' }]);
+    expect(p.priorities).toEqual([{ title: 'Tester le règlement une fois', corner: 'experience', why: 'baisse le 12 nov', steps: [], legs: [], watch: [] }]);
     expect(p.add).toEqual([{ date: '2026-11-18', kind: 'LESSON', corner: 'prix', text: 'Le 2h a remplacé le 1h', detail: null }]);
     expect(p.update).toEqual([{ id: 'e1', detail: 'précisé' }]);
     expect(p.remove).toEqual(['e2']);
@@ -113,7 +113,7 @@ describe('Directeur update from Claude', () => {
 
   it('reads a pasted answer, even wrapped in ```json, and refuses another format', () => {
     expect(parseUpdate('```json\n' + JSON.stringify({ ...base, add: [] }) + '\n```', known, '2026-11-19').add).toEqual([]);
-    expect(() => parseUpdate('{"format":"autre"}', known, '2026-11-19')).toThrow('directeur-update/v1');
+    expect(() => parseUpdate('{"format":"autre"}', known, '2026-11-19')).toThrow('directeur-update/v2');
     expect(() => parseUpdate('pas du json', known, '2026-11-19')).toThrow('JSON');
   });
 });
