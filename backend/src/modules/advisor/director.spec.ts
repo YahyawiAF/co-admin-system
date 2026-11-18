@@ -103,7 +103,7 @@ describe('Directeur update from Claude', () => {
       '2026-11-19',
     );
     expect(p.corners).toEqual([{ id: 'experience', name: 'Expérience' }]);
-    expect(p.priorities).toEqual([{ title: 'Tester le règlement une fois', corner: 'experience', why: 'baisse le 12 nov', steps: [], legs: [], watch: [] }]);
+    expect(p.priorities).toEqual([{ title: 'Tester le règlement une fois', corner: 'experience', why: 'baisse le 12 nov', steps: [], legs: [], watch: [], lessonIds: [] }]);
     expect(p.add).toEqual([{ date: '2026-11-18', kind: 'LESSON', corner: 'prix', text: 'Le 2h a remplacé le 1h', detail: null }]);
     expect(p.update).toEqual([{ id: 'e1', detail: 'précisé' }]);
     expect(p.remove).toEqual(['e2']);

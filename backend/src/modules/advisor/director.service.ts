@@ -12,8 +12,17 @@ import {
   addDayKey,
   eyeLabel,
   EXPORT_FORMAT,
+  ANY_DOMAIN,
+  lessonFlag,
+  LESSONS_FILE_FORMAT,
   measureWatch,
+  pickLessons,
+  sameRule,
+  START_CONFIDENCE,
   updateInstructions,
+  VERDICT_STATUS,
+  type LessonResult,
+  type LessonStatus,
   type EyeParams,
   type PlanLeg,
   type WatchResult,
@@ -41,6 +50,12 @@ type StoredStep = { text: string; done: boolean };
 type Look = { eye: string; params: EyeParams; from: string; to: string; why: string };
 
 const BUSINESS = 'cet espace de coworking en Tunisie (prix en DT)';
+/** This app's trade, for lessons that are not principles */
+const DOMAIN = 'coworking';
+const MAX_LEARN = 5;
+type Learn = { id: string; text: string; at: string };
+type Debate = Array<{ by: 'OWNER' | 'DIRECTOR'; text: string; date: string }>;
+type History = Array<{ date: string; change: string; why: string }>;
 /** Days of history sent with every export, so the brain can compute most things itself */
 const PACK_DAYS = 56;
 const MAX_ACTIVE = 3;
@@ -107,6 +122,29 @@ export class DirectorService {
     return cal.map((c) => ({ label: c.label, from: c.start, to: c.end }));
   }
 
+  /** For each lesson, the results of the watches of the priorities (last 180 days) that applied or tested it. */
+  private async lessonResults(facilityId: string) {
+    const rows = await this.prisma.directorPriority.findMany({
+      where: { facilityId, createdAt: { gte: subDays(new Date(), 180) }, NOT: { lessonIds: { equals: [] } } },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+      include: { watches: true },
+    });
+    const out = new Map<string, LessonResult[]>();
+    if (!rows.length) return out;
+    const periods = await this.periods(facilityId);
+    for (const p of rows) {
+      const legs = (p.legs as StoredLeg[]) ?? [];
+      for (const w of p.watches) {
+        const r = await this.measureOne(w, legs, periods);
+        if (!r || r.status === 'waiting') continue;
+        const res: LessonResult = { priority: p.title, watch: w.label, change: r.change, unit: r.changeUnit, sales: r.sales?.revenue ?? null, date: dayKey(w.startDate) };
+        for (const l of (p.lessonIds as string[]) ?? []) out.set(l, [...(out.get(l) ?? []), res]);
+      }
+    }
+    return out;
+  }
+
   /** Active priorities and the ones closed in the last 30 days, each with its legs and measured watches. */
   async priorities(facilityId: string) {
     const [rows, loose, periods] = await Promise.all([
@@ -151,6 +189,7 @@ export class DirectorService {
           source: p.source,
           startDate: dayKey(p.startDate),
           closedAt: p.closedAt?.toISOString() ?? null,
+          lessonIds: (p.lessonIds as string[]) ?? [],
           watches: await Promise.all(p.watches.map((w) => watchView(w, legs))),
         };
       }),
@@ -215,7 +254,7 @@ export class DirectorService {
     const [facility, entries, bilan, facts, forecast, month, questions, plan, needs] = await Promise.all([
       this.prisma.facility.findUniqueOrThrow({
         where: { id },
-        select: { directorGoalProfit: true, directorGoalDate: true, directorCorners: true, directorBrief: true },
+        select: { directorGoalProfit: true, directorGoalDate: true, directorCorners: true, directorBrief: true, directorLearn: true },
       }),
       this.prisma.directorEntry.findMany({ where: { facilityId: id }, orderBy: [{ date: 'desc' }, { createdAt: 'desc' }], take: 300 }),
       this.health.health(id),
@@ -247,6 +286,31 @@ export class DirectorService {
       detail: e.detail,
       source: e.source,
     }));
+    const results = await this.lessonResults(id);
+    const lessons = entries
+      .filter((e) => e.kind === 'LESSON')
+      .map((e) => {
+        const debate = (e.debate as Debate | null) ?? [];
+        const view = {
+          id: e.id,
+          rule: e.text,
+          why: e.detail,
+          corner: e.corner,
+          date: dayKey(e.date),
+          source: e.source,
+          status: (e.status ?? 'ADOPTED') as LessonStatus,
+          confidence: e.confidence ?? 50,
+          domain: e.domain ?? DOMAIN,
+          origin: e.origin,
+          results: results.get(e.id) ?? [],
+          evidence: (e.evidence as Array<{ date: string; text: string }> | null) ?? [],
+          debate,
+          history: (e.history as History | null) ?? [],
+          canContest: e.source === 'CLAUDE' && !debate.some((d) => d.by === 'OWNER'),
+          contested: debate.length > 0 && debate[debate.length - 1].by === 'OWNER',
+        };
+        return { ...view, flag: lessonFlag(view) };
+      });
     const cornerList = corners({ areas: bilan.areas, entries: memory, custom, charges, alert });
 
     // Rule priorities: what is missing to judge, then the first solution of each point in trouble
@@ -274,6 +338,8 @@ export class DirectorService {
       priorities: plan.priorities,
       watches: plan.watches,
       needs,
+      lessons,
+      learn: (facility.directorLearn as Learn[] | null) ?? [],
     };
   }
 
@@ -307,7 +373,7 @@ export class DirectorService {
       format: EXPORT_FORMAT,
       exportedAt,
       today: localDayKey(new Date()),
-      instructions: updateInstructions(BUSINESS),
+      instructions: updateInstructions(BUSINESS, DOMAIN),
       catalogue: { eyes: eyeSpecs(), legs: LEGS },
       goal: overview.goal,
       month: overview.month,
@@ -327,7 +393,16 @@ export class DirectorService {
       otherWatches: overview.watches.map(watchOut),
       looks: await this.answerLooks(facility.directorLooks),
       needs: overview.needs,
-      memory: overview.memory.map(({ kindLabel: _k, ...m }) => m),
+      memory: overview.memory.filter((m) => m.kind !== 'LESSON').map(({ kindLabel: _k, ...m }) => m),
+      learn: overview.learn.map((l) => ({ id: l.id, text: l.text })),
+      lessons: pickLessons(overview.lessons, {
+        domain: DOMAIN,
+        hotCorners: overview.corners.filter((c) => c.status === 'red' || c.status === 'orange').map((c) => c.id),
+      }).map((l) => ({ id: l.id, rule: l.rule, why: l.why, corner: l.corner, status: l.status, confidence: l.confidence, domain: l.domain, results: l.results, evidence: l.evidence, flag: l.flag })),
+      rejected: overview.lessons.filter((l) => l.status === 'REJECTED').slice(0, 30).map((l) => ({ id: l.id, rule: l.rule })),
+      contested: overview.lessons
+        .filter((l) => l.contested)
+        .map((l) => ({ id: l.id, rule: l.rule, status: l.status, objection: l.debate[l.debate.length - 1].text })),
       questions: { open: overview.questions.map((q) => q.question), answered },
       data,
       numbers: prompt.snapshot,
@@ -336,8 +411,8 @@ export class DirectorService {
 
   private async plan(id: string, json: unknown) {
     const [f, ids, products] = await Promise.all([
-      this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorCorners: true } }),
-      this.prisma.directorEntry.findMany({ where: { facilityId: id }, select: { id: true } }),
+      this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorCorners: true, directorLearn: true } }),
+      this.prisma.directorEntry.findMany({ where: { facilityId: id }, select: { id: true, kind: true, debate: true } }),
       this.prisma.product.findMany({ select: { id: true, name: true } }),
     ]);
     const own = ownCorners(f.directorCorners);
@@ -353,6 +428,15 @@ export class DirectorService {
             eyes: eyeSpecs(),
             legs: LEGS,
             checkLeg: (kind, raw) => checkLeg(kind, raw, { now, products }),
+            lessonIds: ids.filter((e) => e.kind === 'LESSON').map((e) => e.id),
+            learnIds: ((f.directorLearn as Learn[] | null) ?? []).map((l) => l.id),
+            contestedIds: ids
+              .filter((e) => {
+                const d = (e.debate as Debate | null) ?? [];
+                return d.length > 0 && d[d.length - 1].by === 'OWNER';
+              })
+              .map((e) => e.id),
+            domain: DOMAIN,
           },
           localDayKey(now),
         ),
@@ -402,13 +486,17 @@ export class DirectorService {
     ]);
     if (plan.questions.length) await this.context.storeQuestions(id, null, plan.questions);
     const v2 = plan.format !== 'directeur-update/v1';
-    if (v2) await this.saveActions(id, plan);
+    const created = v2 ? await this.saveLessons(id, plan) : new Map<string, string>();
+    if (v2) await this.saveActions(id, plan, created);
     return {
       priorities: v2 ? plan.priorities.length : 0,
       watches: v2 ? plan.priorities.reduce((a, p) => a + p.watch.length, 0) : 0,
       drafts: v2 ? plan.priorities.reduce((a, p) => a + p.legs.length, 0) : 0,
       looks: v2 ? plan.look.length : 0,
       needs: v2 ? plan.needs.length : 0,
+      lessons: v2 ? plan.lessons.length : 0,
+      confidence: v2 ? plan.confidence.length : 0,
+      replies: v2 ? plan.replies.length : 0,
       added: plan.add.length,
       updated: plan.update.length,
       removed: plan.remove.length,
@@ -423,7 +511,7 @@ export class DirectorService {
    * v2: the new priorities replace the active ones (their watches keep measuring), each with its
    * steps, drafts and watches from today; looks replace the last ones; needs become feature requests.
    */
-  private async saveActions(id: string, plan: Awaited<ReturnType<DirectorService['plan']>>['plan']) {
+  private async saveActions(id: string, plan: Awaited<ReturnType<DirectorService['plan']>>['plan'], created: Map<string, string>) {
     const today = dbDay(new Date());
     await this.prisma.$transaction(async (tx) => {
       if (plan.priorities.length) {
@@ -438,6 +526,7 @@ export class DirectorService {
               steps: p.steps.map((text) => ({ text, done: false })),
               legs: p.legs.map((l) => ({ ...l, status: 'DRAFT', targetId: null, doneAt: null })) as object[],
               basedOn: plan.basedOn,
+              lessonIds: p.lessonIds.map((l) => created.get(l) ?? l).filter((l) => !l.startsWith('new:')),
               startDate: today,
               watches: {
                 create: p.watch.map((w) => ({
@@ -464,6 +553,174 @@ export class DirectorService {
         });
       }
     });
+  }
+
+  /**
+   * The brain's verdicts on what the owner wanted it to learn, its confidence changes and its
+   * answers to contests. Returns "new:<ref>" → id of each lesson created, for the priorities that test them.
+   */
+  private async saveLessons(id: string, plan: Awaited<ReturnType<DirectorService['plan']>>['plan']) {
+    const today = localDayKey(new Date());
+    const created = new Map<string, string>();
+    const f = await this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorLearn: true } });
+    const learn = (f.directorLearn as Learn[] | null) ?? [];
+    const sourceOf = (learnId: string | null) => learn.find((l) => l.id === learnId)?.text.slice(0, 200) ?? null;
+    const touched = new Set(plan.lessons.map((l) => l.learnId).filter(Boolean));
+    const load = async (lessonId: string) => this.prisma.directorEntry.findUniqueOrThrow({ where: { id: lessonId } });
+
+    for (const v of plan.lessons) {
+      if (v.verdict === 'SAME') {
+        const e = await load(v.sameAs!);
+        await this.prisma.directorEntry.update({
+          where: { id: e.id },
+          data: { history: [...((e.history as History | null) ?? []), { date: today, change: 'Même idée reçue', why: v.claim }] },
+        });
+        continue;
+      }
+      const why = [v.why, v.changed && `Changé : ${v.changed}`, v.changeMind && `Me ferait changer d’avis : ${v.changeMind}`].filter(Boolean).join(' · ');
+      const row = await this.prisma.directorEntry.create({
+        data: {
+          facilityId: id,
+          date: dbDay(today),
+          kind: 'LESSON',
+          corner: v.corner,
+          text: v.rule,
+          detail: why.slice(0, 500) || null,
+          source: 'CLAUDE',
+          status: VERDICT_STATUS[v.verdict],
+          confidence: START_CONFIDENCE[v.verdict],
+          domain: v.domain,
+          origin: [sourceOf(v.learnId), v.claim !== v.rule ? `« ${v.claim} »` : null].filter(Boolean).join(' · ').slice(0, 500) || null,
+          history: [{ date: today, change: { ADOPT: 'Adoptée', ADAPT: 'Adaptée', TEST: 'À tester', REJECT: 'Refusée' }[v.verdict], why: why || v.claim }],
+        },
+      });
+      created.set(`new:${v.ref}`, row.id);
+    }
+    for (const c of plan.confidence) {
+      const e = await load(c.id);
+      await this.prisma.directorEntry.update({
+        where: { id: e.id },
+        data: {
+          confidence: c.confidence,
+          ...(c.status ? { status: c.status } : {}),
+          evidence: [...((e.evidence as Array<{ date: string; text: string }> | null) ?? []), { date: today, text: c.why }],
+          history: [...((e.history as History | null) ?? []), { date: today, change: `Confiance ${e.confidence ?? 50} → ${c.confidence}${c.status ? `, ${c.status}` : ''}`, why: c.why }],
+        },
+      });
+    }
+    for (const r of plan.replies) {
+      const e = await load(r.id);
+      await this.prisma.directorEntry.update({
+        where: { id: e.id },
+        data: {
+          ...(r.rule ? { text: r.rule } : {}),
+          ...(r.status ? { status: r.status } : {}),
+          debate: [...((e.debate as Debate | null) ?? []), { by: 'DIRECTOR', text: r.reply, date: today }],
+          history: [...((e.history as History | null) ?? []), { date: today, change: r.rule ? 'Réécrite après contestation' : 'Gardée après contestation', why: r.reply }],
+        },
+      });
+    }
+    if (touched.size) await this.prisma.facility.update({ where: { id }, data: { directorLearn: learn.filter((l) => !touched.has(l.id)) } });
+    return created;
+  }
+
+  /** A text the owner wants the brain to learn (book note, video summary…), sent with the next export. */
+  async addLearn(facilityId: string | undefined, body: { text?: string }) {
+    const id = await this.facilityId(facilityId);
+    const text = body.text?.trim();
+    if (!text || text.length < 20) throw new BadRequestException('Colle au moins quelques phrases');
+    if (text.length > 8000) throw new BadRequestException('8 000 caractères au plus');
+    const f = await this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorLearn: true } });
+    const learn = (f.directorLearn as Learn[] | null) ?? [];
+    if (learn.length >= MAX_LEARN) throw new BadRequestException(`${MAX_LEARN} textes en attente au plus : exporte d’abord pour Claude`);
+    const item = { id: `learn-${Date.now().toString(36)}`, text, at: new Date().toISOString() };
+    await this.prisma.facility.update({ where: { id }, data: { directorLearn: [...learn, item] } });
+    return item;
+  }
+
+  async removeLearn(facilityId: string | undefined, learnId: string) {
+    const id = await this.facilityId(facilityId);
+    const f = await this.prisma.facility.findUniqueOrThrow({ where: { id }, select: { directorLearn: true } });
+    const learn = (f.directorLearn as Learn[] | null) ?? [];
+    await this.prisma.facility.update({ where: { id }, data: { directorLearn: learn.filter((l) => l.id !== learnId) } });
+    return { ok: true };
+  }
+
+  /** The owner disagrees with a lesson the brain wrote: once, with an argument; the brain answers in the next update. */
+  async contestLesson(facilityId: string | undefined, entryId: string, body: { text?: string }) {
+    const id = await this.facilityId(facilityId);
+    const text = body.text?.trim();
+    if (!text) throw new BadRequestException('Écris ton argument ou un fait');
+    const e = await this.prisma.directorEntry.findFirst({ where: { id: entryId, facilityId: id, kind: 'LESSON' } });
+    if (!e) throw new NotFoundException('Leçon introuvable');
+    const debate = (e.debate as Debate | null) ?? [];
+    if (debate.some((d) => d.by === 'OWNER')) throw new BadRequestException('Déjà contestée une fois : ce sont les résultats qui décident maintenant');
+    await this.prisma.directorEntry.update({
+      where: { id: e.id },
+      data: { debate: [...debate, { by: 'OWNER', text: text.slice(0, 500), date: localDayKey(new Date()) }] },
+    });
+    return { ok: true };
+  }
+
+  /** Principles (domain *) to take to another project, e.g. the ERP. */
+  async lessonsFile(facilityId?: string) {
+    const id = await this.facilityId(facilityId);
+    const rows = await this.prisma.directorEntry.findMany({
+      where: { facilityId: id, kind: 'LESSON', domain: ANY_DOMAIN, status: { in: ['ADOPTED', 'ADAPTED', 'TESTING', 'REJECTED'] } },
+      orderBy: { confidence: 'desc' },
+    });
+    return {
+      format: LESSONS_FILE_FORMAT,
+      exportedAt: new Date().toISOString(),
+      from: DOMAIN,
+      lessons: rows.map((r) => ({ rule: r.text, why: r.detail, status: r.status, confidence: r.confidence, corner: r.corner, history: r.history })),
+    };
+  }
+
+  /** Lessons from another project: new ideas only, kept with their status and a lower confidence (not proven here yet). */
+  async importLessonsFile(facilityId: string | undefined, body: { json?: unknown }) {
+    const id = await this.facilityId(facilityId);
+    let x: { format?: string; from?: string; lessons?: unknown };
+    try {
+      x = (typeof body.json === 'string' ? JSON.parse(body.json) : body.json) as typeof x;
+    } catch {
+      throw new BadRequestException('Ce n’est pas du JSON valide');
+    }
+    if (x?.format !== LESSONS_FILE_FORMAT || !Array.isArray(x.lessons)) throw new BadRequestException(`Format attendu : « ${LESSONS_FILE_FORMAT} »`);
+    const known = await this.prisma.directorEntry.findMany({ where: { facilityId: id, kind: 'LESSON' }, select: { text: true } });
+    const corners = await this.cornerIds(id);
+    const today = localDayKey(new Date());
+    let added = 0;
+    let skipped = 0;
+    for (const raw of x.lessons.slice(0, 200)) {
+      const l = (raw ?? {}) as { rule?: unknown; why?: unknown; status?: unknown; confidence?: unknown; corner?: unknown };
+      const rule = typeof l.rule === 'string' ? l.rule.trim().slice(0, 300) : '';
+      if (!rule || known.some((k) => sameRule(k.text, rule))) {
+        skipped += 1;
+        continue;
+      }
+      const status = ['ADOPTED', 'ADAPTED', 'TESTING', 'REJECTED'].includes(l.status as string) ? (l.status as LessonStatus) : 'TESTING';
+      await this.prisma.directorEntry.create({
+        data: {
+          facilityId: id,
+          date: dbDay(today),
+          kind: 'LESSON',
+          corner: corners.find((c) => c.id === l.corner)?.id ?? 'marketing',
+          text: rule,
+          detail: typeof l.why === 'string' ? l.why.slice(0, 500) : null,
+          source: 'APP',
+          status,
+          // Not proven here yet: at most 50
+          confidence: Math.min(50, Math.max(0, Math.round(Number(l.confidence) || 30))),
+          domain: ANY_DOMAIN,
+          origin: `import:${typeof x.from === 'string' ? x.from.slice(0, 40) : 'autre projet'}`,
+          history: [{ date: today, change: 'Importée d’un autre projet', why: `Venue de ${x.from ?? 'un autre projet'}` }],
+        },
+      });
+      known.push({ text: rule });
+      added += 1;
+    }
+    return { added, skipped };
   }
 
   private async ownPriority(facilityId: string | undefined, priorityId: string) {

@@ -52,6 +52,32 @@ export type DirectorOverview = {
   priorities: DirectorPriority[];
   watches: DirectorWatch[];
   needs: DirectorNeed[];
+  lessons: DirectorLesson[];
+  /** Texts waiting for the next export, for the brain to learn */
+  learn: Array<{ id: string; text: string; at: string }>;
+};
+
+export type DirectorLessonStatus = "CANDIDATE" | "TESTING" | "ADOPTED" | "ADAPTED" | "REJECTED" | "RETIRED";
+
+/** Knowledge the director kept after challenging it; results move its confidence. */
+export type DirectorLesson = {
+  id: string;
+  rule: string;
+  why: string | null;
+  corner: string;
+  date: string;
+  source: "OWNER" | "CLAUDE" | "APP";
+  status: DirectorLessonStatus;
+  confidence: number;
+  domain: string;
+  origin: string | null;
+  results: Array<{ priority: string; watch: string; change: number | null; unit: string; sales: number | null; date: string }>;
+  evidence: Array<{ date: string; text: string }>;
+  debate: Array<{ by: "OWNER" | "DIRECTOR"; text: string; date: string }>;
+  history: Array<{ date: string; change: string; why: string }>;
+  canContest: boolean;
+  contested: boolean;
+  flag: "review" | "promote" | null;
 };
 
 export type DirectorLegKind = "PROMOTION" | "EVENT" | "SURVEY" | "CAMPAIGN" | "PRICE" | "PRODUCT";
@@ -142,6 +168,21 @@ export type DirectorUpdatePlan = {
   }>;
   look: Array<{ eye: string; params: Record<string, string | number>; from: string; to: string; why: string }>;
   needs: Array<{ title: string; problem: string; capability: string }>;
+  lessons: Array<{
+    ref: number;
+    learnId: string | null;
+    claim: string;
+    verdict: "ADOPT" | "ADAPT" | "TEST" | "REJECT" | "SAME";
+    rule: string;
+    why: string | null;
+    changed: string | null;
+    changeMind: string | null;
+    sameAs: string | null;
+    corner: string;
+    domain: string;
+  }>;
+  confidence: Array<{ id: string; confidence: number; why: string; status: DirectorLessonStatus | null }>;
+  replies: Array<{ id: string; reply: string; rule: string | null; status: DirectorLessonStatus | null }>;
   add: Array<{ date: string; kind: DirectorEntryKind; corner: string; text: string; detail: string | null }>;
   update: Array<{ id: string; text?: string; detail?: string | null; kind?: DirectorEntryKind; corner?: string; date?: string }>;
   remove: string[];
@@ -177,6 +218,9 @@ export const directorApi = {
       drafts: number;
       looks: number;
       needs: number;
+      lessons: number;
+      confidence: number;
+      replies: number;
       added: number;
       updated: number;
       removed: number;
@@ -203,6 +247,21 @@ export const directorApi = {
   },
   setNeed(key: string, stage: "APPROVED" | "DEFERRED" | "REJECTED") {
     return http.patch<{ ok: true }>(`/director/needs/${encodeURIComponent(key)}`, { stage });
+  },
+  addLearn(text: string) {
+    return http.post<{ id: string; text: string; at: string }>("/director/learn", { text });
+  },
+  removeLearn(id: string) {
+    return http.delete<{ ok: true }>(`/director/learn/${encodeURIComponent(id)}`);
+  },
+  contestLesson(id: string, text: string) {
+    return http.post<{ ok: true }>(`/director/lessons/${id}/contest`, { text });
+  },
+  lessonsFile() {
+    return http.get<Record<string, unknown> & { exportedAt: string }>("/director/lessons/file");
+  },
+  importLessonsFile(json: string) {
+    return http.post<{ added: number; skipped: number }>("/director/lessons/file", { json });
   },
   setGoal(data: { profit?: number; date?: string | null }) {
     return http.patch<DirectorOverview>("/director/goal", data);
