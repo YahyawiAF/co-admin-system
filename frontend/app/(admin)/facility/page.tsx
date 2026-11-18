@@ -40,6 +40,7 @@ import Link from "next/link";
 import { GalleryUpload } from "@/components/admin/GalleryUpload";
 import { VisitorQrCard } from "@/components/admin/VisitorQrCard";
 import { HouseRulesSettings } from "@/components/admin/HouseRulesSettings";
+import { AdminGateSettings } from "@/components/admin/AdminGateSettings";
 import { PriceCategory, type FixtureKind, type Space, type SpaceFixture, type SpaceSeat, type SpaceTable, type SpaceWall } from "@/lib/types";
 import { PRICE_CATEGORY_LABEL, spaceCategoriesOf } from "@/lib/tarif-labels";
 import { SPACE_RESERVE_MODE_LABEL } from "@/lib/space-occupy";
@@ -2556,6 +2557,8 @@ export default function FacilityPage() {
               )}
             </CardContent>
           </Card>
+
+          <AdminGateSettings />
 
           <Card>
             <CardHeader>

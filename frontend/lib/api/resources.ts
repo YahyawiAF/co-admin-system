@@ -2355,7 +2355,16 @@ export const organizationsApi = {
       data,
     );
   },
+  adminGate() {
+    return http.get<AdminGate>(withOrgQuery("/organizations/admin-gate"));
+  },
+  updateAdminGate(data: { enabled?: boolean; key?: string; regenerate?: boolean }) {
+    return http.patch<AdminGate>(withOrgQuery("/organizations/admin-gate"), data);
+  },
 };
+
+/** Secret admin link: /<key>/admin unlocks a device; enabled = admin hidden for others */
+export type AdminGate = { enabled: boolean; key: string };
 
 export const eventsApi = {
   adminList() {

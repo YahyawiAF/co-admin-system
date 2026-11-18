@@ -735,6 +735,9 @@ model Organization {
   isActive       Boolean                  @default(true)
   activatedAt    DateTime?                @default(now())
   notes          String?
+  /// Hide admin: only devices that opened /<adminGateKey>/admin can reach the admin pages
+  adminGateEnabled Boolean                @default(false)
+  adminGateKey     String?                @unique
   createdAt      DateTime                 @default(now())
   facilities     Facility[]
   members        Member[]
