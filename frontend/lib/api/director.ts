@@ -49,6 +49,75 @@ export type DirectorOverview = {
   suggestions: Array<{ title: string; corner: string; why: string; gain: number | null; href: string | null }>;
   brief: DirectorBrief | null;
   maxRunning: number;
+  priorities: DirectorPriority[];
+  watches: DirectorWatch[];
+  needs: DirectorNeed[];
+};
+
+export type DirectorLegKind = "PROMOTION" | "EVENT" | "SURVEY" | "CAMPAIGN" | "PRICE" | "PRODUCT";
+
+/** A draft the brain prepared: the owner opens it, checks it and creates it (OK). */
+export type DirectorLeg = {
+  index: number;
+  kind: DirectorLegKind;
+  label: string;
+  draft: Record<string, unknown>;
+  status: "DRAFT" | "DONE" | "SKIPPED";
+  targetId: string | null;
+  doneAt: string | null;
+};
+
+export type DirectorWatchResult = {
+  status: "waiting" | "running" | "done";
+  daysMeasured: number;
+  length: number;
+  before: number | null;
+  after: number | null;
+  change: number | null;
+  changeUnit: "%" | "pts";
+  splits: Array<{ key: string; before: number; after: number }>;
+  periods: string[];
+  sales: { count: number; revenue: number } | null;
+  goal: number | null;
+  goalReached: boolean | null;
+};
+
+/** A number the app follows by itself after a change. */
+export type DirectorWatch = {
+  id: string;
+  eye: string;
+  params: Record<string, string | number>;
+  label: string;
+  unit: string;
+  aggregate: "sum" | "ratio";
+  startDate: string;
+  days: number;
+  goal: number | null;
+  stopped: boolean;
+  result: DirectorWatchResult | null;
+};
+
+export type DirectorPriority = {
+  id: string;
+  title: string;
+  corner: string;
+  why: string;
+  steps: Array<{ text: string; done: boolean }>;
+  legs: DirectorLeg[];
+  status: "ACTIVE" | "DONE" | "DROPPED";
+  source: "CLAUDE" | "OWNER";
+  startDate: string;
+  closedAt: string | null;
+  watches: DirectorWatch[];
+};
+
+/** What the brain can't see or do yet: the owner decides whether to have it coded. */
+export type DirectorNeed = {
+  key: string;
+  title: string;
+  problem: string | null;
+  capability: string | null;
+  stage: "SUGGESTED" | "APPROVED" | "TICKET_READY" | "DEFERRED";
 };
 
 export type DirectorBrief = {
@@ -60,9 +129,19 @@ export type DirectorBrief = {
 
 /** Claude's answer, checked by the app before anything is saved. */
 export type DirectorUpdatePlan = {
+  format: string;
   basedOn: string | null;
   summary: string | null;
-  priorities: DirectorBrief["priorities"];
+  priorities: Array<{
+    title: string;
+    corner: string;
+    why: string;
+    steps: string[];
+    legs: Array<{ kind: DirectorLegKind; label: string; draft: Record<string, unknown> }>;
+    watch: Array<{ eye: string; params: Record<string, string | number>; days: number; label: string | null; goal: number | null }>;
+  }>;
+  look: Array<{ eye: string; params: Record<string, string | number>; from: string; to: string; why: string }>;
+  needs: Array<{ title: string; problem: string; capability: string }>;
   add: Array<{ date: string; kind: DirectorEntryKind; corner: string; text: string; detail: string | null }>;
   update: Array<{ id: string; text?: string; detail?: string | null; kind?: DirectorEntryKind; corner?: string; date?: string }>;
   remove: string[];
@@ -92,10 +171,38 @@ export const directorApi = {
     return http.post<DirectorUpdatePlan>("/director/update/preview", { json });
   },
   applyUpdate(json: string) {
-    return http.post<{ added: number; updated: number; removed: number; corners: number; questions: number; brief: boolean; warnings: string[] }>(
+    return http.post<{
+      priorities: number;
+      watches: number;
+      drafts: number;
+      looks: number;
+      needs: number;
+      added: number;
+      updated: number;
+      removed: number;
+      corners: number;
+      questions: number;
+      brief: boolean;
+      warnings: string[];
+    }>(
       "/director/update",
       { json },
     );
+  },
+  setPriority(id: string, status: DirectorPriority["status"]) {
+    return http.patch<{ ok: true }>(`/director/priorities/${id}`, { status });
+  },
+  setLeg(id: string, index: number, data: { targetId?: string | null; status?: DirectorLeg["status"] }) {
+    return http.patch<{ ok: true }>(`/director/priorities/${id}/legs/${index}`, data);
+  },
+  setStep(id: string, index: number, done: boolean) {
+    return http.patch<{ ok: true }>(`/director/priorities/${id}/steps/${index}`, { done });
+  },
+  stopWatch(id: string) {
+    return http.patch<{ ok: true }>(`/director/watches/${id}/stop`, {});
+  },
+  setNeed(key: string, stage: "APPROVED" | "DEFERRED" | "REJECTED") {
+    return http.patch<{ ok: true }>(`/director/needs/${encodeURIComponent(key)}`, { stage });
   },
   setGoal(data: { profit?: number; date?: string | null }) {
     return http.patch<DirectorOverview>("/director/goal", data);

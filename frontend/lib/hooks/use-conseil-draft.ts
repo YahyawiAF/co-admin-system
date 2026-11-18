@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { advisorApi } from "@/lib/api/resources";
+import { DIRECTOR_KEY, directorApi } from "@/lib/api/director";
 import { decodeDraft, type ConseilDraftParam } from "@/components/admin/advisor/conseil-ui";
 import type { ToolKind } from "@/lib/types";
 
 /**
- * A feature page opened from Conseil IA (« Préparer »): the AI's draft to pre-fill the
- * create form, and `linked(id)` to tie what was created to the solution and go back.
+ * A feature page opened from Conseil IA or the Directeur (« Préparer »): the AI's draft to pre-fill
+ * the create form, and `linked(id)` to tie what was created to the solution / priority and go back.
  */
 export function useConseilDraft(kind: ToolKind) {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function useConseilDraft(kind: ToolKind) {
   }, [kind]);
 
   const back = useCallback(
-    (p: ConseilDraftParam | null) => router.push(p?.a ? `/conseiller?area=${p.a}` : "/conseiller"),
+    (p: ConseilDraftParam | null) => router.push(p?.p ? "/directeur" : p?.a ? `/conseiller?area=${p.a}` : "/conseiller"),
     [router],
   );
 
@@ -34,10 +35,16 @@ export function useConseilDraft(kind: ToolKind) {
       if (!p) return;
       setParam(null);
       try {
-        await advisorApi.addTool(p.i, { kind, targetId, stepIndex: p.s });
-        qc.invalidateQueries({ queryKey: ["advisor"] });
-        toast.success("Lié à la solution : ses ventes comptent maintenant pour elle", {
-          action: opts.stay ? { label: "Conseil IA", onClick: () => back(p) } : undefined,
+        if (p.p) {
+          // Directeur draft: what was created counts for the priority's watches from now on
+          await directorApi.setLeg(p.p, p.l ?? 0, { targetId, status: "DONE" });
+          qc.invalidateQueries({ queryKey: DIRECTOR_KEY });
+        } else {
+          await advisorApi.addTool(p.i, { kind, targetId, stepIndex: p.s });
+          qc.invalidateQueries({ queryKey: ["advisor"] });
+        }
+        toast.success(p.p ? "Fait : ses ventes comptent pour la priorité du Directeur" : "Lié à la solution : ses ventes comptent maintenant pour elle", {
+          action: opts.stay ? { label: p.p ? "Directeur" : "Conseil IA", onClick: () => back(p) } : undefined,
         });
         if (!opts.stay) back(p);
       } catch (e) {

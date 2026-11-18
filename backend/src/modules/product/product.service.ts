@@ -107,6 +107,7 @@ export class ProductsService {
         productId: data.productId,
         quantite: Math.round(Number(data.quantite)),
         date: data.date ? (data.fromAdmin ? this.dayAtNoon(data.date) : new Date(data.date)) : new Date(),
+        channel: 'COUNTER',
         ...(data.fromAdmin && {
           unitPrice: data.unitPrice != null ? Number(data.unitPrice) : null,
           memberId: data.memberId || null,

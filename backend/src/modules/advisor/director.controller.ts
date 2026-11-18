@@ -29,6 +29,36 @@ export class DirectorController {
     return this.director.applyUpdate(facilityId, body);
   }
 
+  @Patch('priorities/:id')
+  closePriority(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string, @Body() body: { status?: string }) {
+    return this.director.closePriority(facilityId, id, body);
+  }
+
+  @Patch('priorities/:id/legs/:index')
+  setLeg(
+    @Query('facilityId') facilityId: string | undefined,
+    @Param('id') id: string,
+    @Param('index') index: string,
+    @Body() body: { targetId?: string | null; status?: string },
+  ) {
+    return this.director.setLeg(facilityId, id, Number(index), body);
+  }
+
+  @Patch('priorities/:id/steps/:index')
+  setStep(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string, @Param('index') index: string, @Body() body: { done?: boolean }) {
+    return this.director.setStep(facilityId, id, Number(index), body);
+  }
+
+  @Patch('watches/:id/stop')
+  stopWatch(@Query('facilityId') facilityId: string | undefined, @Param('id') id: string) {
+    return this.director.stopWatch(facilityId, id);
+  }
+
+  @Patch('needs/:key')
+  setNeed(@Query('facilityId') facilityId: string | undefined, @Param('key') key: string, @Body() body: { stage?: string }) {
+    return this.director.setNeed(facilityId, key, body);
+  }
+
   @Patch('goal')
   setGoal(@Query('facilityId') facilityId: string | undefined, @Body() body: { profit?: number; date?: string | null }) {
     return this.director.setGoal(facilityId, body);

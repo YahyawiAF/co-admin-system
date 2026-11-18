@@ -651,6 +651,8 @@ model DailyProduct {
   promotionId   String?
   /// Set when the sale was added or corrected later from Produits › Ventes
   editedAt      DateTime?
+  /// Where the order came from: APP (member app) | COUNTER (staff). Null = before 2026-11-19
+  channel       String?
   syncedAt      DateTime?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
@@ -872,6 +874,10 @@ model Facility {
   directorCorners             Json?
   /// Last brief from Claude: { date, basedOn, summary, priorities: [{ title, corner, why }] }
   directorBrief               Json?
+  /// Data the brain asked to look at, answered in the next export: [{ eye, params, from, to, why }]
+  directorLooks               Json?
+  directorPriorities          DirectorPriority[]
+  directorWatches             DirectorWatch[]
   promotions                  Promotion[]
   shareLinks                  ShareLink[]
   outreachCampaigns           OutreachCampaign[]
@@ -1669,6 +1675,55 @@ model DirectorEntry {
   @@map("director_entries")
 }
 
+/// Directeur: one of the week's priorities from the brain (≤ 3 ACTIVE), with the owner's steps and the legs (drafts to approve)
+model DirectorPriority {
+  id         String          @id @default(uuid())
+  facilityId String
+  facility   Facility        @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  title      String
+  corner     String
+  why        String          @default("")
+  /// Owner's steps: [{ text, done }]
+  steps      Json            @default("[]")
+  /// Drafts: [{ kind, label, draft, status: DRAFT | DONE | SKIPPED, targetId, doneAt }]
+  legs       Json            @default("[]")
+  /// ACTIVE | DONE | DROPPED
+  status     String          @default("ACTIVE")
+  /// CLAUDE | OWNER
+  source     String          @default("CLAUDE")
+  /// exportedAt of the export the brain answered
+  basedOn    String?
+  startDate  DateTime        @db.Date
+  closedAt   DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  watches    DirectorWatch[]
+
+  @@index([facilityId, status])
+  @@map("director_priorities")
+}
+
+/// Directeur: a number the app follows by itself after a change (an eye + params, from startDate for `days` days)
+model DirectorWatch {
+  id         String            @id @default(uuid())
+  facilityId String
+  facility   Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  priorityId String?
+  priority   DirectorPriority? @relation(fields: [priorityId], references: [id], onDelete: SetNull)
+  eye        String
+  params     Json              @default("{}")
+  label      String
+  startDate  DateTime          @db.Date
+  days       Int               @default(14)
+  goal       Float?
+  /// Stopped by the owner before the end
+  stoppedAt  DateTime?
+  createdAt  DateTime          @default(now())
+
+  @@index([facilityId, startDate])
+  @@map("director_watches")
+}
+
 /// Flash offer shown to members as a "golden card" popup; the discount applies automatically
 model Promotion {
   id               String             @id @default(uuid())
@@ -1997,6 +2052,11 @@ model FeatureProposal {
   facility      Facility  @relation(fields: [facilityId], references: [id], onDelete: Cascade)
   key           String
   title         String
+  /// Asked by the Directeur's brain (source CLAUDE): what it can't see or do, and what to code
+  problem       String?
+  capability    String?
+  /// RULES | CLAUDE
+  source        String    @default("RULES")
   /// SUGGESTED | APPROVED | TICKET_READY | DEFERRED | REJECTED
   stage         String    @default("SUGGESTED")
   deferredUntil DateTime?

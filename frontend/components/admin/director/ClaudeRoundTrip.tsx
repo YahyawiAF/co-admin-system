@@ -68,7 +68,12 @@ export function ClaudeUpdateDialog({
           r.removed && COUNT(r.removed, "note retirée", "notes retirées"),
           r.corners && COUNT(r.corners, "coin ajouté", "coins ajoutés"),
           r.questions && COUNT(r.questions, "question", "questions"),
-          r.brief && "priorités de la semaine",
+          r.priorities && COUNT(r.priorities, "priorité", "priorités"),
+          r.drafts && COUNT(r.drafts, "brouillon à valider", "brouillons à valider"),
+          r.watches && COUNT(r.watches, "chiffre suivi", "chiffres suivis"),
+          r.looks && COUNT(r.looks, "demande de données", "demandes de données"),
+          r.needs && COUNT(r.needs, "besoin à coder", "besoins à coder"),
+          !r.priorities && r.brief && "priorités de la semaine",
         ]
           .filter(Boolean)
           .join(" · ") || "Rien à changer",
@@ -83,7 +88,7 @@ export function ClaudeUpdateDialog({
   const textOf = (id: string) => memory.find((m) => m.id === id)?.text ?? id;
   const stale = plan?.basedOn && Date.now() - new Date(plan.basedOn).getTime() > 7 * 86_400_000;
   const empty =
-    plan && !plan.add.length && !plan.update.length && !plan.remove.length && !plan.corners.length && !plan.questions.length && !plan.priorities.length && !plan.summary;
+    plan && !plan.add.length && !plan.update.length && !plan.remove.length && !plan.corners.length && !plan.questions.length && !plan.priorities.length && !plan.summary && !plan.look.length && !plan.needs.length;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -91,7 +96,7 @@ export function ClaudeUpdateDialog({
         <div className="shrink-0 bg-gradient-to-br from-indigo-700 via-indigo-600 to-violet-600 px-6 pb-5 pt-5 text-white">
           <DialogTitle className="pr-10 text-xl font-extrabold text-white">Importer la réponse de Claude</DialogTitle>
           <DialogDescription className="mt-1 text-[13px] text-indigo-100">
-            Colle le JSON « directeur-update/v1 ». L’app vérifie tout et te montre les changements avant d’enregistrer.
+            Colle le JSON « directeur-update/v2 ». L’app vérifie tout et te montre les changements avant d’enregistrer.
           </DialogDescription>
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5 sm:p-6">
@@ -102,7 +107,7 @@ export function ClaudeUpdateDialog({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={12}
-                placeholder='{ "format": "directeur-update/v1", … }'
+                placeholder='{ "format": "directeur-update/v2", … }'
                 className="font-mono text-[13px]"
               />
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -137,13 +142,26 @@ export function ClaudeUpdateDialog({
                 <section className="space-y-2 rounded-2xl border bg-white p-4">
                   <h3 className="font-extrabold">Priorités de la semaine</h3>
                   {plan.summary ? <p className="text-sm text-slate-700">{plan.summary}</p> : null}
-                  <ol className="list-decimal space-y-1 pl-5 text-sm">
+                  <ol className="list-decimal space-y-2 pl-5 text-sm">
                     {plan.priorities.map((p) => (
                       <li key={p.title}>
                         <b>{p.title}</b> <span className="text-slate-500">· {cornerName(p.corner)}</span>
+                        {p.legs.length || p.watch.length ? (
+                          <span className="block text-[13px] text-slate-600">
+                            {[
+                              p.legs.length && `À valider : ${p.legs.map((l) => l.label).join(", ")}`,
+                              p.watch.length && `L’app suit : ${p.watch.map((w) => w.label ?? w.eye).join(", ")}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ol>
+                  {plan.priorities.length ? (
+                    <p className="text-[13px] text-slate-500">Elles remplacent les priorités en cours (leurs suivis continuent).</p>
+                  ) : null}
                 </section>
               ) : null}
               {plan.add.length ? (
@@ -176,6 +194,21 @@ export function ClaudeUpdateDialog({
                       </li>
                     ))}
                   </ul>
+                </section>
+              ) : null}
+              {plan.look.length || plan.needs.length ? (
+                <section className="space-y-1 rounded-2xl border bg-white p-4 text-sm">
+                  {plan.look.map((l) => (
+                    <p key={`${l.eye}${l.from}`}>
+                      <b>Données au prochain export :</b> {l.eye} du {l.from} au {l.to}
+                      {l.why ? <span className="text-slate-500"> · {l.why}</span> : null}
+                    </p>
+                  ))}
+                  {plan.needs.map((n) => (
+                    <p key={n.title}>
+                      <b>Besoin à coder :</b> {n.title} <span className="text-slate-500">· {n.problem}</span>
+                    </p>
+                  ))}
                 </section>
               ) : null}
               {plan.corners.length || plan.questions.length ? (
