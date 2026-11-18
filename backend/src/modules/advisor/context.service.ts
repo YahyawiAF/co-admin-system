@@ -3,7 +3,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { Prisma } from '@prisma/client';
 import { addDays, endOfDay, getDay, min as minDate, startOfDay } from 'date-fns';
 import { PrismaService } from 'database/prisma.service';
-import { localDayKey, parseLocalDay } from '../../../common/parse-local-day';
+import { fromDbDay, localDayKey, parseLocalDay } from '../../../common/parse-local-day';
 import { PerformanceService } from '../analytics/performance.service';
 import { round1 } from '../analytics/traffic';
 import { nearbyPlaces, parseLocation, weatherDays, weatherLabel } from './external-data';
@@ -413,7 +413,7 @@ export class ContextService {
     const [facility, facts, answers, open, missing, journals] = await Promise.all([
       this.prisma.facility.findUniqueOrThrow({
         where: { id: facilityId },
-        select: { latitude: true, longitude: true },
+        select: { latitude: true, longitude: true, directorGoalProfit: true, directorGoalDate: true, directorCorners: true },
       }),
       this.prisma.advisorFact.findMany({ where: { facilityId } }),
       this.prisma.advisorQuestion.findMany({
@@ -530,7 +530,26 @@ export class ContextService {
       audiences,
       ownerAnswers: answers,
       openQuestions: open.map((q) => q.question),
+      director: await this.directorMemory(facilityId, facility),
       missingInfo: missing.items.filter((i) => i.section !== 'questions').map((i) => i.title),
+    };
+  }
+
+  /** The Directeur's memory for Claude: the goal, the owner's own corners, and every decision, fact and lesson noted. */
+  private async directorMemory(
+    facilityId: string,
+    facility: { directorGoalProfit: number; directorGoalDate: Date | null; directorCorners: unknown },
+  ) {
+    const entries = await this.prisma.directorEntry.findMany({
+      where: { facilityId },
+      orderBy: { date: 'desc' },
+      take: 150,
+      select: { date: true, kind: true, corner: true, text: true, detail: true, source: true },
+    });
+    return {
+      goal: { profitPerMonth: facility.directorGoalProfit, by: facility.directorGoalDate ? localDayKey(fromDbDay(facility.directorGoalDate)) : null },
+      ownCorners: Array.isArray(facility.directorCorners) ? facility.directorCorners : [],
+      memory: entries.map((e) => ({ ...e, date: localDayKey(fromDbDay(e.date)) })),
     };
   }
 

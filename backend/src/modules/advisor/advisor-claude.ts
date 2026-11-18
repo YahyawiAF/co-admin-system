@@ -236,6 +236,7 @@ Le contexte autour des chiffres :
 - neighbors : lieux autour de l'espace (restaurants, magasins, foyers, facultés, concurrents) avec la distance en mètres.
 - audiences : les types de clients décrits par le propriétaire, parfois mesurés par un groupe de membres (visites, montant payé).
 - ownerAnswers : réponses du propriétaire à tes questions précédentes. openQuestions : questions encore sans réponse. missingInfo : ce que le propriétaire n'a pas encore renseigné.
+- director : la mémoire du Directeur. goal = le bénéfice visé par mois (et la date), ownCorners = les coins du business ajoutés par le propriétaire, memory = ses décisions, faits, leçons et tests datés (corner = le coin). Ce sont des faits : explique les chiffres avec (ex. un tarif supprimé, un écran ajouté à l'entrée), ne propose pas ce qu'une leçon dit déjà raté, et rapproche chaque idée de l'objectif de bénéfice.
 - weekdays[].hourlyAvgPresent : présence moyenne par heure depuis firstHour ; quietHours : heures creuses (moins de 30 % du pic). recentDaysVsUsual : les 7 derniers jours complets comparés à la moyenne des 4 mêmes jours précédents (usualVisits, usualRevenue — visites + abonnements, sans café).
 
 Règles :
