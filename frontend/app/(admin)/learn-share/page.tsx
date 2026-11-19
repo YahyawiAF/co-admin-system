@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Copy, Eye, FileText, GraduationCap, Lock, Pause, Play, Plus, QrCode, RotateCcw, Send } from "lucide-react";
+import { Copy, Eye, FileText, GraduationCap, Lock, Pause, Play, Plus, QrCode, RotateCcw, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,8 @@ import { LinksTab } from "@/components/admin/learn-share/LinksTab";
 import { QuestionsTab } from "@/components/admin/learn-share/QuestionsTab";
 import { SettingsTab } from "@/components/admin/learn-share/SettingsTab";
 import { CreateSessionDialog, SessionsTab } from "@/components/admin/learn-share/SessionsTab";
+import { ClaudeImport } from "@/components/admin/learn-share/ClaudeImport";
+import { parseClaudeSurvey } from "@/lib/survey-import";
 
 const TABS = [
   ["resultats", "Résultats"],
@@ -210,6 +212,7 @@ function LearnShare() {
       <NewSurveyDialog
         open={creating}
         current={survey ?? null}
+        orgName={orgName}
         initial={conseil.draft as ConseilSurvey | null}
         onClose={(id) => {
           setCreating(false);
@@ -280,22 +283,27 @@ type ConseilSurvey = { title?: string; intro?: string; questions?: string[] };
 function NewSurveyDialog({
   open,
   current,
+  orgName,
   onClose,
   initial,
 }: {
   open: boolean;
   current: SurveyDetail | null;
+  orgName: string;
   onClose: (id?: string) => void;
   initial?: ConseilSurvey | null;
 }) {
   const qc = useQueryClient();
-  const [from, setFrom] = useState<"template" | "blank" | "copy" | "conseil">("template");
+  const [from, setFrom] = useState<"claude" | "template" | "blank" | "copy" | "conseil">("claude");
   const [title, setTitle] = useState("");
+  const [pasted, setPasted] = useState("");
+  const imported = useMemo(() => (pasted.trim() ? parseClaudeSurvey(pasted) : null), [pasted]);
   const { data: templates = [] } = useQuery({ queryKey: ["survey-templates"], queryFn: surveysApi.templates, enabled: open });
   useEffect(() => {
     if (open) {
-      setFrom(initial?.questions?.length ? "conseil" : "template");
+      setFrom(initial?.questions?.length ? "conseil" : "claude");
       setTitle(initial?.title ?? "");
+      setPasted("");
     }
   }, [open, initial]);
   const create = useMutation({
@@ -303,8 +311,15 @@ function NewSurveyDialog({
       const created = await surveysApi.create({
         ...(from === "template" && { templateCode: templates[0]?.code ?? "learn_share" }),
         ...(from === "copy" && current && { duplicateOf: current.id }),
-        ...(title.trim() && { title: title.trim() }),
+        ...(title.trim() ? { title: title.trim() } : from === "claude" && imported?.ok ? { title: imported.title } : {}),
       });
+      // Claude's survey: its questions with emojis and companion lines (a blank survey has one section, « main »)
+      if (from === "claude" && imported?.ok) {
+        await surveysApi.update(created.id, {
+          ...(imported.intro ? { intro: imported.intro } : {}),
+          questions: imported.questions.map(({ fixes: _fixes, ...q }) => q),
+        });
+      }
       // The AI's questions, as short free answers the owner can edit in « Questions »
       if (from === "conseil" && initial?.questions?.length) {
         await surveysApi.update(created.id, {
@@ -325,13 +340,14 @@ function NewSurveyDialog({
     ...(initial?.questions?.length
       ? ([["conseil", "Préparé par le Directeur", `${initial.questions.length} questions courtes : ${initial.questions.slice(0, 2).join(" · ")}…`, true]] as Array<[typeof from, string, string, boolean]>)
       : []),
+    ["claude", "Depuis Claude", "Claude crée le sondage pour vous. Vos visiteurs y répondent.", true],
     ["template", templates[0]?.name ?? "Collabora Learn & Share", `Modèle prêt : ${templates[0]?.questions ?? 12} questions, rôle d’abord, contact WhatsApp optionnel.`, true],
     ["blank", "Sondage vierge", "Sans question. Vous ajoutez les vôtres.", true],
     ["copy", current ? `Copie de « ${current.title} »` : "Copier un sondage", "Mêmes questions et réglages, sans les réponses ni les liens.", !!current],
   ];
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={cn("max-h-[92vh] overflow-y-auto transition-[max-width] duration-300", from === "claude" ? "max-w-2xl" : "max-w-lg")}>
         <DialogHeader>
           <DialogTitle>Nouveau sondage</DialogTitle>
           <DialogDescription>Il est créé en brouillon : rien n’est visible tant que vous ne publiez pas.</DialogDescription>
@@ -348,22 +364,37 @@ function NewSurveyDialog({
                 from === k ? "border-primary bg-primary/5" : "hover:border-primary/50"
               )}
             >
-              <FileText className={cn("mt-0.5 h-4 w-4 shrink-0", from === k ? "text-primary" : "text-muted-foreground")} />
+              {k === "claude" ? (
+                <Sparkles className={cn("mt-0.5 h-4 w-4 shrink-0", from === k ? "text-primary" : "text-muted-foreground")} />
+              ) : (
+                <FileText className={cn("mt-0.5 h-4 w-4 shrink-0", from === k ? "text-primary" : "text-muted-foreground")} />
+              )}
               <span>
-                <b className="block text-sm">{label}</b>
+                <b className="block text-sm">
+                  {label}
+                  {k === "claude" ? <span className="ml-1.5 rounded-full bg-primary px-1.5 py-0.5 align-[2px] text-[10px] font-bold tracking-wide text-primary-foreground">NOUVEAU</span> : null}
+                </b>
                 <span className="text-xs text-muted-foreground">{hint}</span>
               </span>
             </button>
           ))}
         </div>
+        {from === "claude" ? <ClaudeImport orgName={orgName} pasted={pasted} result={imported} onPaste={setPasted} /> : null}
         <div className="space-y-1.5">
           <Label htmlFor="new-title">Titre (optionnel)</Label>
-          <Input id="new-title" value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Learn & Share — Rentrée 2026" />
+          <Input
+            id="new-title"
+            value={title}
+            maxLength={120}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={from === "claude" && imported?.ok ? imported.title : "Ex. Learn & Share — Rentrée 2026"}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onClose()}>Annuler</Button>
-          <Button disabled={create.isPending} onClick={() => create.mutate()}>
-            <Plus className="h-4 w-4" /> Créer
+          <Button disabled={create.isPending || (from === "claude" && !imported?.ok)} onClick={() => create.mutate()}>
+            <Plus className="h-4 w-4" />
+            {from === "claude" && imported?.ok ? `Créer le sondage (${imported.questions.length} questions)` : "Créer"}
           </Button>
         </DialogFooter>
       </DialogContent>

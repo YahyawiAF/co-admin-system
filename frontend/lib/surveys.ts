@@ -17,7 +17,7 @@ export type QuestionTag =
   | "teachTime"
   | "teachSlots"
   | "host";
-export type QuestionOption = { value: string; label: string };
+export type QuestionOption = { value: string; label: string; emoji?: string };
 export type SurveyQuestion = {
   id: string;
   section: string;
@@ -29,6 +29,8 @@ export type SurveyQuestion = {
   allowOther?: boolean;
   showIf?: { questionId: string; anyOf: string[] };
   tag?: QuestionTag;
+  /** Short funny line the survey companion says on this question */
+  say?: string;
 };
 export type SurveySection = { id: string; title: string; description?: string };
 export type ContactMode = "NONE" | "OPTIONAL" | "REQUIRED";
@@ -315,6 +317,36 @@ export function isVisible(
   const parent = all.find((p) => p.id === q.showIf!.questionId);
   if (!parent || !isVisible(parent, answers, all, depth + 1)) return false;
   return asList(answers[parent.id]).some((v) => q.showIf!.anyOf.includes(v));
+}
+
+const EMOJI_START = /^(\p{Extended_Pictographic}|\p{Regional_Indicator}{2})[\p{Extended_Pictographic}\u200d\ufe0f\p{Emoji_Modifier}]*\s*/u;
+
+/** "🇬🇧 Anglais" → { emoji: "🇬🇧", label: "Anglais" } */
+export function splitEmoji(line: string): { emoji?: string; label: string } {
+  const t = line.trim();
+  const m = t.match(EMOJI_START);
+  if (!m || m[0].length === t.length) return { label: t };
+  return { emoji: m[0].trim(), label: t.slice(m[0].length).trim() };
+}
+
+const GUESS: Array<[RegExp, string]> = [
+  [/anglais|english/i, "🇬🇧"], [/fran[cç]ais/i, "🇫🇷"], [/code|program|informatique/i, "💻"], [/math/i, "📐"],
+  [/cv|entretien/i, "💼"], [/tech/i, "🛠️"], [/matin/i, "🌅"], [/apr[eè]s-midi/i, "☀️"], [/soir/i, "🌙"],
+  [/samedi/i, "🎉"], [/dimanche/i, "☕"], [/semaine/i, "📅"], [/^oui/i, "🙋"], [/peut-[eê]tre/i, "🤔"], [/^non|pas pour/i, "🙅"],
+  [/d[ée]butant/i, "🐣"], [/interm[ée]diaire|moyen/i, "🚀"], [/avanc[ée]/i, "🧠"], [/groupe/i, "👥"], [/autre/i, "✨"], [/apprendre/i, "📚"], [/partager|aider|animer/i, "🤝"], [/les deux/i, "🔁"],
+];
+/** Learn & Share template answers, by stored value */
+const VALUE_EMOJI: Record<string, string> = {
+  english: "🇬🇧", french: "🇫🇷", programming: "💻", maths: "📐", tech: "🛠️", cv: "💼", other: "✨", LEARN: "📚", SHARE: "🤝", BOTH: "🔁",
+  beginner: "🐣", intermediate: "🚀", advanced: "🧠", unsure: "🤷", small_group: "👥", conversation: "💬", workshop: "🧪", study_group: "📖",
+  weekdays: "📅", saturday: "🎉", sunday: "☕", flexible: "🌀", morning: "🌅", afternoon: "☀️", evening: "🌙", yes: "🙋", maybe: "🤔",
+  exploring: "👀", once: "🎯", monthly: "🗓️", weekly: "⚡", more: "🏆", no: "🙅",
+};
+const SPARE = ["🎯", "🌟", "🎈", "🍀", "🎲", "🔥", "💡", "🎵"];
+
+/** The option's emoji, or a guess from its words for surveys made before emojis existed. */
+export function optionEmoji(o: QuestionOption, index: number) {
+  return o.emoji || VALUE_EMOJI[o.value] || GUESS.find(([re]) => re.test(o.label))?.[1] || SPARE[index % SPARE.length];
 }
 
 /** "si Vous voulez plutôt… = Partager ou Les deux" */

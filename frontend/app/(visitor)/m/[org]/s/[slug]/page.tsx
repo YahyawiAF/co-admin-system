@@ -117,7 +117,7 @@ export default function PublicSurveyPage() {
   }
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}` : "";
-  const shareText = `${survey.title} : 2 minutes, sans compte. ${shareUrl}`;
+  const shareText = `${survey.title} : choisis ton compagnon et bats mes XP 🎮 2 minutes, sans compte. ${shareUrl}`;
 
   return (
     <SurveyForm
@@ -131,17 +131,17 @@ export default function PublicSurveyPage() {
       onSubmit={onSubmit}
       doneActions={
         <>
-          <Link href={href("/events")} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-indigo-600 text-base font-bold text-white transition-[filter] hover:brightness-110">
+          <Link href={href("/events")} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-[18px] border-[2.5px] border-slate-900 bg-gradient-to-br from-indigo-600 to-violet-600 text-base font-black text-white shadow-[3px_3px_0_#0f172a] transition-[filter,transform] hover:brightness-110 active:translate-x-0.5 active:translate-y-0.5 motion-reduce:transform-none">
             <CalendarDays className="h-5 w-5" /> Voir les séances
           </Link>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Partager le sondage sur WhatsApp"
-            className="flex h-14 shrink-0 items-center justify-center rounded-2xl bg-slate-100 px-5 text-slate-700 transition-colors hover:bg-slate-200"
+            aria-label="Défier un ami : partager le sondage sur WhatsApp"
+            className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-[18px] border-[2.5px] border-slate-900 bg-white px-4 font-black text-slate-800 shadow-[3px_3px_0_#0f172a] transition-[background-color,transform] hover:bg-slate-50 active:translate-x-0.5 active:translate-y-0.5 motion-reduce:transform-none"
           >
-            <Share2 className="h-5 w-5" />
+            <Share2 className="h-5 w-5" /> Défier un ami
           </a>
         </>
       }

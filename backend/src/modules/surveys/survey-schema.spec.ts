@@ -221,6 +221,35 @@ describe('validateQuestions', () => {
     );
     expect(r.ok && r.questions[0].section).toBe('main');
   });
+
+  it('keeps option emojis and the companion line, capped', () => {
+    const r = validateQuestions(
+      [
+        {
+          id: 'a',
+          type: 'single',
+          label: 'A',
+          say: 'x'.repeat(300),
+          options: [
+            { value: 'y', label: 'Oui', emoji: '🙋' },
+            { value: 'n', label: 'Non', emoji: '' },
+          ],
+        },
+      ],
+      sections,
+    );
+    if (r.ok !== true) throw new Error("refused");
+    expect(r.questions[0].say).toHaveLength(140);
+    expect(r.questions[0].options).toEqual([
+      { value: 'y', label: 'Oui', emoji: '🙋' },
+      { value: 'n', label: 'Non' },
+    ]);
+  });
+
+  it('gives every template choice an emoji', () => {
+    const choices = Q.flatMap((q) => q.options ?? []);
+    expect(choices.every((o) => !!o.emoji)).toBe(true);
+  });
 });
 
 describe('normalizeSettings', () => {
