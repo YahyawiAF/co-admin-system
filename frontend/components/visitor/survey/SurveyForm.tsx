@@ -116,7 +116,7 @@ export function SurveyForm({
   framed?: boolean;
 }) {
   const { questions, settings } = survey;
-  const [phase, setPhase] = useState<"intro" | "steps" | "done">(initialDraft ? "steps" : "intro");
+  const [phase, setPhase] = useState<"steps" | "done">("steps");
   const [answers, setAnswers] = useState<Answers>(initialDraft?.answers ?? {});
   const [name, setName] = useState(initialDraft?.name ?? "");
   const [phone, setPhone] = useState(initialDraft?.phone ?? "");
@@ -133,7 +133,8 @@ export function SurveyForm({
   const bodyRef = useRef<HTMLDivElement>(null);
 
   // Game state
-  const [pet, setPet] = useState<CompanionKind>(
+  // One companion for everyone: no choice screen, the survey opens on its first question
+  const [pet] = useState<CompanionKind>(
     COMPANION_KINDS.includes(initialDraft?.pet as CompanionKind) ? (initialDraft!.pet as CompanionKind) : "kodi"
   );
   const [xp, setXp] = useState(initialDraft?.xp ?? 0);
@@ -183,7 +184,7 @@ export function SurveyForm({
     setMood((o) => ({ m, text, anim, n: o.n + 1 }));
   }, []);
   const lineOf = (s: Step | undefined) =>
-    !s ? "" : s.kind === "contact" ? "Boss final : ton WhatsApp (optionnel) 😎" : s.q.say || (idx === 0 ? "Salut ! On commence facile 😄" : pick(["À toi de jouer 🎮", "Celle-là est facile 😉", "Je t’écoute 👂", "On avance bien 🚀"]));
+    !s ? "" : s.kind === "contact" ? "Dernière étape 😎" : s.q.say || (idx === 0 ? "Salut ! On commence facile 😄" : pick(["À toi de jouer 🎮", "Celle-là est facile 😉", "Je t’écoute 👂", "On avance bien 🚀"]));
   useEffect(() => {
     advancing.current = false;
     if (phase !== "steps") return;
@@ -205,13 +206,14 @@ export function SurveyForm({
     bodyRef.current?.scrollTo({ top: 0 });
   };
 
-  const start = () => {
+  // Opening the page starts the survey (a saved draft already started it)
+  const started = useRef(!!initialDraft);
+  useEffect(() => {
+    if (started.current) return;
+    started.current = true;
     startedAt.current = Date.now();
-    setPhase("steps");
-    setDir(1);
-    setStepIdx(0);
     onStart?.();
-  };
+  }, [onStart]);
 
   /** XP once per question; a quick answer chains a combo. Returns true when the companion evolves. */
   const gain = (key: string, pts: number, el?: HTMLElement | null) => {
@@ -256,7 +258,7 @@ export function SurveyForm({
     const digits = phoneDigits(phone);
     if (phone.trim() && digits.length !== 8) e["contact.phone"] = "Numéro tunisien attendu : 8 chiffres, ex. 22 123 456.";
     if (!phone.trim() && settings.contactMode === "REQUIRED") e["contact.phone"] = "Indique ton WhatsApp.";
-    if (phone.trim() && !consent) e["contact.consent"] = "Coche la case pour qu’on puisse t’écrire, ou laisse le numéro vide.";
+    if (phone.trim() && !consent) e["contact.consent"] = "Coche la case pour qu’on puisse t’écrire.";
     return e;
   };
 
@@ -376,7 +378,10 @@ export function SurveyForm({
     setAwarded([]);
     setStage(0);
     comboN.current = 0;
-    setPhase("intro");
+    startedAt.current = Date.now();
+    setDir(1);
+    setStepIdx(0);
+    setPhase("steps");
   };
 
   const showHud = phase === "steps";
@@ -434,10 +439,6 @@ export function SurveyForm({
               ))}
               <span className="text-base leading-none" aria-hidden>🏁</span>
             </div>
-            <div className="flex justify-between text-[11px] font-extrabold tabular-nums text-slate-500">
-              <span>{petName} · {STAGE_NAMES[stage]}</span>
-              <span>{nextAt !== undefined ? `${xp} / ${nextAt} XP avant l’évolution` : `${xp} XP · forme ultime`}</span>
-            </div>
             <div className="h-1.5 overflow-hidden rounded-full bg-indigo-50">
               <div
                 className="h-full rounded-full bg-amber-400 transition-[width] duration-500 ease-out motion-reduce:transition-none"
@@ -449,61 +450,7 @@ export function SurveyForm({
       </header>
 
       <div ref={bodyRef} className="flex-1 px-4 pb-6 pt-3">
-        {phase === "intro" ? (
-          <div className="ls-enter space-y-4">
-            <div className={cn(INK_CARD, "space-y-2 bg-gradient-to-br from-indigo-600 to-violet-700 p-5 text-white")}>
-              <p className={cn(manga.className, "truncate text-lg tracking-[0.06em] text-amber-300")}>Mission · {survey.title}</p>
-              <h1 className="text-[28px] font-black leading-[1.05] tracking-tight">Choisis ton compagnon !</h1>
-              {survey.intro ? <p className="line-clamp-3 text-sm font-semibold leading-snug text-white/85">{survey.intro}</p> : null}
-              <p className="text-[15px] font-extrabold leading-snug">Il te suit pendant le sondage. Chaque réponse lui donne des XP… et il évolue 🔥</p>
-            </div>
-            <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Compagnon">
-              {COMPANION_KINDS.map((k) => {
-                const on = k === pet;
-                return (
-                  <button
-                    key={k}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    onClick={() => setPet(k)}
-                    className={cn(
-                      INK_CARD,
-                      "grid min-w-0 justify-items-center gap-0.5 px-1 pb-2.5 pt-2 transition-[transform,background-color,border-color,box-shadow] duration-150",
-                      on ? "-translate-y-1 border-indigo-600 bg-indigo-50 shadow-[3px_3px_0_#4f46e5]" : "bg-white"
-                    )}
-                  >
-                    <span className={cn("block aspect-square w-full max-w-[78px]", on && "sg-cre")}>
-                      <Companion kind={k} stage={0} mood={on ? "happy" : "idle"} className="h-full w-full" />
-                    </span>
-                    <b className={cn(manga.className, "text-lg font-normal tracking-[0.04em]")}>{COMPANIONS[k].names[0]}</b>
-                    <span className="text-[11px] font-extrabold text-slate-500">Type : {COMPANIONS[k].type}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center text-xs font-extrabold">
-              {[
-                ["⏱️", "2 min"],
-                ["🙅", "Sans compte"],
-                ["🎓", "Gratuit"],
-              ].map(([e, t]) => (
-                <div key={t} className="rounded-2xl border-2 border-slate-900 px-1 py-2.5">
-                  <span className="block text-xl">{e}</span>
-                  {t}
-                </div>
-              ))}
-            </div>
-            <p className="flex items-center gap-2.5 rounded-2xl border-2 border-dashed border-slate-900 bg-amber-50 p-3 text-[13px] font-extrabold">
-              <span className="text-2xl">🏅</span>À la fin : un badge selon ton profil, et ton compagnon dans sa forme ultime si tu as assez d’XP.
-            </p>
-            {alreadyAnsweredAt ? (
-              <p className="rounded-2xl bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-                Tu as déjà répondu depuis ce téléphone. Tu peux répondre à nouveau si tes envies ont changé.
-              </p>
-            ) : null}
-          </div>
-        ) : phase === "done" ? (
+        {phase === "done" ? (
           <div className="ls-enter flex flex-col items-center gap-3 pt-2 text-center">
             <span className="sg-cre block h-36 w-36">
               <Companion kind={pet} stage={stage} mood="happy" className="h-full w-full" />
@@ -535,6 +482,9 @@ export function SurveyForm({
           </div>
         ) : step ? (
           <div key={idx} className={cn("space-y-4", dir > 0 ? "ls-in-right" : "ls-in-left")}>
+            {idx === 0 && alreadyAnsweredAt ? (
+              <p className="rounded-2xl bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900">Tu as déjà répondu. Tu peux répondre à nouveau.</p>
+            ) : null}
             <div className="flex items-center gap-2">
               {companionBtn("h-24 w-24")}
               <p
@@ -549,8 +499,6 @@ export function SurveyForm({
             {step.kind === "contact" ? (
               <ContactStep
                 orgName={orgName}
-                text={settings.contactText}
-                required={settings.contactMode === "REQUIRED"}
                 name={name}
                 phone={phone}
                 consent={consent}
@@ -606,11 +554,7 @@ export function SurveyForm({
       </div>
 
       <footer className="sticky bottom-0 flex gap-2.5 border-t-2 border-slate-100 bg-white px-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3">
-        {phase === "intro" ? (
-          <button type="button" onClick={start} className={PRIMARY}>
-            Partir avec {COMPANIONS[pet].names[0]} ! 🚀
-          </button>
-        ) : phase === "done" ? (
+        {phase === "done" ? (
           doneActions ?? (
             <button type="button" onClick={reset} className={PRIMARY}>
               Recommencer 🔁
@@ -618,9 +562,11 @@ export function SurveyForm({
           )
         ) : step ? (
           <>
-            <button type="button" aria-label="Retour" onClick={() => (idx === 0 ? setPhase("intro") : go(idx - 1, -1))} className={cn(SECONDARY, "w-14 shrink-0")}>
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            {idx > 0 ? (
+              <button type="button" aria-label="Retour" onClick={() => go(idx - 1, -1)} className={cn(SECONDARY, "w-14 shrink-0")}>
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+            ) : null}
             {(step.kind === "contact" ? settings.contactMode !== "REQUIRED" : !step.q.required) && !lastStep ? (
               <button type="button" onClick={skip} className={cn(SECONDARY, "shrink-0 px-4 text-sm text-slate-500")}>
                 Passer
@@ -906,8 +852,6 @@ const INPUT =
 
 function ContactStep({
   orgName,
-  text,
-  required,
   name,
   phone,
   consent,
@@ -917,8 +861,6 @@ function ContactStep({
   onConsent,
 }: {
   orgName: string;
-  text: string;
-  required: boolean;
   name: string;
   phone: string;
   consent: boolean;
@@ -929,15 +871,10 @@ function ContactStep({
 }) {
   return (
     <>
-      <div className="space-y-1">
-        <p className={cn(manga.className, "text-lg tracking-[0.06em] text-indigo-700")}>Boss final 🏁</p>
-        <h2 className="text-[23px] font-black leading-tight">On te prévient des séances ?</h2>
-        <p className="text-[13px] font-semibold text-slate-500">{text}</p>
-        <p className="text-[13px] font-semibold text-slate-500">{required ? "Ton WhatsApp est demandé pour ce sondage." : "Optionnel. Sans numéro, ta réponse reste anonyme."}</p>
-      </div>
+      <h2 className="text-[26px] font-black leading-tight">Tes coordonnées 📱</h2>
       <label className="block space-y-1.5" htmlFor="contact-name">
-        <span className="text-[15px] font-black">Prénom</span>
-        <input id="contact-name" autoComplete="given-name" maxLength={80} placeholder="Ton prénom" value={name} onChange={(e) => onName(e.target.value)} className={INPUT} />
+        <span className="text-[15px] font-black">Nom et prénom</span>
+        <input id="contact-name" autoComplete="name" maxLength={80} placeholder="Ex. Sami Ben Ali" value={name} onChange={(e) => onName(e.target.value)} className={INPUT} />
       </label>
       <div className="space-y-1.5">
         <label htmlFor="contact-phone" className="text-[15px] font-black">
@@ -960,16 +897,11 @@ function ContactStep({
         </div>
         {errors["contact.phone"] ? <p role="alert" className="text-sm font-bold text-rose-600">{errors["contact.phone"]}</p> : null}
       </div>
-      <label htmlFor="contact-consent" className="flex cursor-pointer items-start gap-3 rounded-2xl bg-indigo-50 p-3.5 text-[13px] font-semibold leading-relaxed text-slate-700">
-        <input id="contact-consent" type="checkbox" checked={consent} onChange={(e) => onConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-indigo-600" />
-        <span>
-          J’accepte que {orgName} m’écrive sur WhatsApp <b>uniquement</b> pour les séances Learn &amp; Share. Mon numéro n’est jamais partagé.
-        </span>
+      <label htmlFor="contact-consent" className="flex cursor-pointer items-center gap-3 text-sm font-bold text-slate-700">
+        <input id="contact-consent" type="checkbox" checked={consent} onChange={(e) => onConsent(e.target.checked)} className="h-6 w-6 shrink-0 accent-indigo-600" />
+        <span>OK pour que {orgName} m’écrive sur WhatsApp</span>
       </label>
       {errors["contact.consent"] ? <p role="alert" className="text-sm font-bold text-rose-600">{errors["contact.consent"]}</p> : null}
-      <p className="flex items-center gap-2.5 rounded-2xl border-2 border-dashed border-slate-900 bg-amber-50 p-3 text-[13px] font-extrabold">
-        <span className="text-2xl">🎁</span>Laisse ton numéro : +{XP_ANSWER * 2} XP et tu seras le premier prévenu.
-      </p>
     </>
   );
 }
