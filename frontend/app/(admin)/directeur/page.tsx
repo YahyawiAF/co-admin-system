@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, Brain, Download, FileUp, Loader2, MapPin, Pencil, Plus, Sparkles, Target, Upload, X } from "lucide-react";
+import { AlertTriangle, Brain, Download, FileUp, Info, Loader2, MapPin, Pencil, Plus, Sparkles, Target, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,6 +87,38 @@ function GoalBand({ d, onEdit }: { d: DirectorOverview; onEdit: () => void }) {
   );
 }
 
+/** What a tab is and what the owner does with it, in one line each. */
+const TAB_HELP = {
+  semaine: {
+    what: "Les 3 choses à faire cette semaine, choisies par le directeur.",
+    you: "Coche les étapes, valide les brouillons. L’app mesure le résultat toute seule.",
+  },
+  notes: {
+    what: "Le carnet du directeur : ce qui s’est passé et ce que tu as décidé, avec la date.",
+    you: "Quand tu changes quelque chose dans l’espace, note-le le jour même avec « Noter un changement ».",
+  },
+  lessons: {
+    what: "Ce que le directeur a appris, et à quel point il en est sûr (la barre de confiance).",
+    you: "« Apprendre » pour lui donner un texte. Pas d’accord avec une leçon ? Ouvre-la et conteste, une fois.",
+  },
+  coins: {
+    what: "Ton business en morceaux, avec une couleur : rouge = problème, orange = à surveiller, vert = ça va, gris = pas assez de données.",
+    you: "Regarde seulement : les solutions sont dans « Cette semaine ». Clique un coin pour voir ses notes.",
+  },
+} as const;
+
+function TabHelp({ id, className }: { id: keyof typeof TAB_HELP; className?: string }) {
+  const h = TAB_HELP[id];
+  return (
+    <div className={cn("flex items-start gap-3 rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3", ENTER, className)}>
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" aria-hidden />
+      <p className="text-sm text-indigo-950">
+        {h.what} <b className="font-semibold">Toi :</b> {h.you}
+      </p>
+    </div>
+  );
+}
+
 function WeekTab({ d, onCorner, onGoal }: { d: DirectorOverview; onCorner: (id: string) => void; onGoal: () => void }) {
   const dataCheck = useQuery({ queryKey: ["advisor", "data-check"], queryFn: advisorApi.dataCheck });
   const startOne = useMutation({
@@ -132,6 +164,7 @@ function WeekTab({ d, onCorner, onGoal }: { d: DirectorOverview; onCorner: (id: 
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
+      <TabHelp id="semaine" className="lg:col-span-3" />
       {dataCheck.data?.length ? (
         <div className="lg:col-span-3">
           <DataCheck issues={dataCheck.data} />
@@ -306,12 +339,14 @@ function MemoryTab({
     return (
       <div className="space-y-3">
         {toggle}
+        <TabHelp id="lessons" />
         <LessonsPanel d={d} cornerName={cornerName} />
       </div>
     );
   return (
     <section className={cn("space-y-3", ENTER)}>
       {toggle}
+      <TabHelp id="notes" />
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[13px] font-semibold text-slate-500">Coin :</span>
         <button type="button" className={chip(corner === "all")} onClick={() => setCorner("all")}>
@@ -388,49 +423,52 @@ function CornersTab({ d, onOpen, onAdd }: { d: DirectorOverview; onOpen: (c: Dir
     onError: (e: Error) => toast.error(e.message),
   });
   return (
-    <section className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]">
-      {d.corners.map((c, k) => (
-        <div key={c.id} className={cn("relative", ENTER)} style={{ animationDelay: `${Math.min(k, 8) * 35}ms` }}>
-          <button
-            type="button"
-            onClick={() => onOpen(c)}
-            className="flex h-full w-full flex-col gap-2 rounded-2xl border bg-white p-4 text-left transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
-          >
-            <span className="flex w-full items-center justify-between gap-2 pr-6">
-              <span className="flex items-center gap-2 text-[15px] font-extrabold">
-                <span className={cn("h-2.5 w-2.5 rounded-full", STATUS[c.status].dot)} aria-hidden />
-                {c.name}
-              </span>
-              <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", STATUS[c.status].pill)}>{c.statusLabel}</span>
-            </span>
-            <span className="text-sm text-slate-700">{c.fact}</span>
-            <span className="mt-auto text-[13px] font-semibold text-indigo-700">
-              {c.notes} note{c.notes > 1 ? "s" : ""} dans la mémoire →
-            </span>
-          </button>
-          {c.custom && !c.notes ? (
+    <div className="space-y-3">
+      <TabHelp id="coins" />
+      <section className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(270px,1fr))]">
+        {d.corners.map((c, k) => (
+          <div key={c.id} className={cn("relative", ENTER)} style={{ animationDelay: `${Math.min(k, 8) * 35}ms` }}>
             <button
               type="button"
-              aria-label={`Retirer le coin ${c.name}`}
-              onClick={() => remove.mutate(c.id)}
-              className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              onClick={() => onOpen(c)}
+              className="flex h-full w-full flex-col gap-2 rounded-2xl border bg-white p-4 text-left transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md motion-reduce:transition-none motion-reduce:hover:translate-y-0"
             >
-              <X className="h-4 w-4" />
+              <span className="flex w-full items-center justify-between gap-2 pr-6">
+                <span className="flex items-center gap-2 text-[15px] font-extrabold">
+                  <span className={cn("h-2.5 w-2.5 rounded-full", STATUS[c.status].dot)} aria-hidden />
+                  {c.name}
+                </span>
+                <span className={cn("rounded-full px-2.5 py-0.5 text-xs font-bold", STATUS[c.status].pill)}>{c.statusLabel}</span>
+              </span>
+              <span className="text-sm text-slate-700">{c.fact}</span>
+              <span className="mt-auto text-[13px] font-semibold text-indigo-700">
+                {c.notes} note{c.notes > 1 ? "s" : ""} dans la mémoire →
+              </span>
             </button>
-          ) : null}
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={onAdd}
-        className={cn(
-          "min-h-32 rounded-2xl border-2 border-dashed border-slate-300 text-sm font-bold text-indigo-700 transition-colors duration-150 hover:border-indigo-400 hover:bg-white motion-reduce:transition-none",
-          ENTER,
-        )}
-      >
-        + Ajouter un coin
-      </button>
-    </section>
+            {c.custom && !c.notes ? (
+              <button
+                type="button"
+                aria-label={`Retirer le coin ${c.name}`}
+                onClick={() => remove.mutate(c.id)}
+                className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={onAdd}
+          className={cn(
+            "min-h-32 rounded-2xl border-2 border-dashed border-slate-300 text-sm font-bold text-indigo-700 transition-colors duration-150 hover:border-indigo-400 hover:bg-white motion-reduce:transition-none",
+            ENTER,
+          )}
+        >
+          + Ajouter un coin
+        </button>
+      </section>
+    </div>
   );
 }
 
