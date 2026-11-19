@@ -17,7 +17,7 @@ import { surveyUrl, type ContactMode, type DuplicatePolicy, type SurveyDetail } 
 const CONTACT: Array<[ContactMode, string, string]> = [
   ["NONE", "Aucun", "La section contact est masquée. Tout reste anonyme."],
   ["OPTIONAL", "Optionnel", "Prénom et WhatsApp proposés, jamais exigés."],
-  ["REQUIRED", "Obligatoire", "WhatsApp exigé. Moins de réponses, plus de suivi."],
+  ["REQUIRED", "Obligatoire", "Nom et WhatsApp exigés. Moins de réponses, plus de suivi."],
 ];
 const DUPS: Array<[DuplicatePolicy, string, string]> = [
   ["LATEST_PER_BROWSER", "Dernière réponse par navigateur", "Si la même personne répond deux fois sur le même téléphone, seule la dernière compte. L’ancienne reste visible."],

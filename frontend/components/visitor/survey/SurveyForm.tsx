@@ -258,6 +258,7 @@ export function SurveyForm({
     const digits = phoneDigits(phone);
     if (phone.trim() && digits.length !== 8) e["contact.phone"] = "Numéro tunisien attendu : 8 chiffres, ex. 22 123 456.";
     if (!phone.trim() && settings.contactMode === "REQUIRED") e["contact.phone"] = "Indique ton WhatsApp.";
+    if (!name.trim() && settings.contactMode === "REQUIRED") e["contact.name"] = "Indique ton nom et prénom.";
     if (phone.trim() && !consent) e["contact.consent"] = "Coche la case pour qu’on puisse t’écrire.";
     return e;
   };
@@ -503,7 +504,10 @@ export function SurveyForm({
                 phone={phone}
                 consent={consent}
                 errors={errors}
-                onName={setName}
+                onName={(v) => {
+                  setName(v);
+                  setErrors((e) => ({ ...e, "contact.name": "" }));
+                }}
                 onPhone={(v) => {
                   setPhone(v);
                   setErrors((e) => ({ ...e, "contact.phone": "" }));
@@ -874,8 +878,18 @@ function ContactStep({
       <h2 className="text-[26px] font-black leading-tight">Tes coordonnées 📱</h2>
       <label className="block space-y-1.5" htmlFor="contact-name">
         <span className="text-[15px] font-black">Nom et prénom</span>
-        <input id="contact-name" autoComplete="name" maxLength={80} placeholder="Ex. Sami Ben Ali" value={name} onChange={(e) => onName(e.target.value)} className={INPUT} />
+        <input
+          id="contact-name"
+          autoComplete="name"
+          maxLength={80}
+          placeholder="Ex. Sami Ben Ali"
+          value={name}
+          onChange={(e) => onName(e.target.value)}
+          aria-invalid={!!errors["contact.name"]}
+          className={INPUT}
+        />
       </label>
+      {errors["contact.name"] ? <p role="alert" className="text-sm font-bold text-rose-600">{errors["contact.name"]}</p> : null}
       <div className="space-y-1.5">
         <label htmlFor="contact-phone" className="text-[15px] font-black">
           WhatsApp

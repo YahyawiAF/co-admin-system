@@ -303,6 +303,12 @@ export class SurveysPublicService {
     let contactConsentAt: Date | null = null;
     if (settings.contactMode !== 'NONE' && !memberId) {
       contactName = (dto.contact?.name || '').trim().slice(0, 80) || null;
+      if (!contactName && settings.contactMode === 'REQUIRED') {
+        throw new BadRequestException({
+          message: 'Indiquez votre nom et prénom',
+          errors: [{ questionId: 'contact.name', message: 'Réponse requise' }],
+        });
+      }
       const rawPhone = (dto.contact?.phone || '').trim();
       if (rawPhone) {
         contactPhone = parseTunisiaPhoneOrNull(rawPhone);
