@@ -449,6 +449,44 @@
   .ls-check path { animation: none; stroke-dashoffset: 0; }
 }
 
+/* Survey game: companion moods, XP pops, combo, evolution, confetti-free fallbacks */
+@keyframes sg-float { 50% { transform: translateY(-5px); } }
+@keyframes sg-hop { 40% { transform: translateY(-18px) rotate(-8deg) scale(1.06); } 70% { transform: translateY(0) scale(1.08, 0.92); } }
+@keyframes sg-shake { 20%, 60% { transform: translateX(-5px) rotate(-4deg); } 40%, 80% { transform: translateX(5px) rotate(4deg); } }
+@keyframes sg-breathe { 50% { transform: scale(1.04, 0.97); } }
+@keyframes sg-blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(0.1); } }
+@keyframes sg-ant { 50% { fill: #fff; } }
+@keyframes sg-spin { to { transform: rotate(360deg); } }
+@keyframes sg-zz { 50% { transform: translateY(-6px); opacity: 0.5; } }
+@keyframes sg-pop { from { transform: scale(0.9); opacity: 0.4; } }
+@keyframes sg-wiggle { 25% { transform: rotate(-3deg) scale(1.04); } 75% { transform: rotate(3deg) scale(1.04); } }
+@keyframes sg-bump { 40% { transform: scale(1.25) rotate(-4deg); } }
+@keyframes sg-rise { from { opacity: 1; transform: translate(-50%, 0) scale(0.8); } 30% { transform: translate(-50%, -14px) scale(1.15); } to { opacity: 0; transform: translate(-50%, -60px); } }
+@keyframes sg-combo { from { transform: rotate(-6deg) scale(2); opacity: 0; } 20% { transform: rotate(-6deg) scale(1); opacity: 1; } 80% { opacity: 1; } to { opacity: 0; transform: rotate(-6deg) translateY(-20px); } }
+@keyframes sg-slam { from { transform: scale(2.4) rotate(-12deg); opacity: 0; } }
+@keyframes sg-evo { 0%, 85% { opacity: 1; } to { opacity: 0; } }
+@keyframes sg-flash { 15%, 25%, 35%, 45% { filter: brightness(8); } 20%, 30%, 40%, 50% { filter: brightness(1); } 50% { transform: scale(1.15); } }
+.sg-cre { animation: sg-float 3s ease-in-out infinite; }
+.sg-cre-jump { animation: sg-hop 0.55s cubic-bezier(0.3, 1.6, 0.5, 1); }
+.sg-cre-shake { animation: sg-shake 0.5s ease; }
+.sg-cre-sleep { animation: sg-breathe 2.4s ease-in-out infinite; }
+.sg-blink { transform-box: fill-box; transform-origin: center; animation: sg-blink 4s infinite; }
+.sg-ant { animation: sg-ant 1.2s steps(2) infinite; }
+.sg-aura { transform-box: fill-box; transform-origin: center; animation: sg-spin 8s linear infinite; }
+.sg-zz { animation: sg-zz 2s ease-in-out infinite; }
+.sg-pop { animation: sg-pop 0.3s ease; }
+.sg-wiggle { animation: sg-wiggle 0.4s ease; }
+.sg-bump { animation: sg-bump 0.45s ease; }
+.sg-rise { animation: sg-rise 0.9s ease-out forwards; }
+.sg-combo { animation: sg-combo 1.1s ease forwards; }
+.sg-slam { animation: sg-slam 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) both; }
+.sg-evo { animation: sg-evo 2.6s ease forwards; }
+.sg-flash { animation: sg-flash 2.6s ease forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .sg-cre, .sg-cre-jump, .sg-cre-shake, .sg-cre-sleep, .sg-blink, .sg-ant, .sg-aura, .sg-zz, .sg-pop, .sg-wiggle, .sg-bump, .sg-flash, .sg-slam { animation: none !important; }
+  .sg-rise, .sg-combo, .sg-evo { animation-duration: 1.2s; animation-timing-function: steps(1, end); transform: none; }
+}
+
 /* Abonnements table: rows fade in when the quick filter changes */
 @keyframes abo-row-in {
   from {

@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { surveysApi } from "@/lib/api/resources";
 import { cn } from "@/lib/utils";
-import { conditionLabel, OTHER, QUESTION_TYPE_LABEL, type QuestionType, type SurveyDetail, type SurveyQuestion } from "@/lib/surveys";
+import { conditionLabel, optionEmoji, OTHER, QUESTION_TYPE_LABEL, splitEmoji, type QuestionType, type SurveyDetail, type SurveyQuestion } from "@/lib/surveys";
 import { SurveyForm } from "@/components/visitor/survey/SurveyForm";
 import { selectClass } from "./shared";
 
@@ -126,7 +126,7 @@ export function QuestionsTab({ survey, orgName }: { survey: SurveyDetail; orgNam
                       {cond}
                     </p>
                   ) : null}
-                  {q.options?.length ? <p className="truncate text-xs text-muted-foreground">{q.options.map((o) => o.label).join(" · ")}</p> : null}
+                  {q.options?.length ? <p className="truncate text-xs text-muted-foreground">{q.options.map((o, k) => `${optionEmoji(o, k)} ${o.label}`).join(" · ")}</p> : null}
                 </div>
                 <span className="hidden xl:block"><span className="rounded-md bg-muted px-2 py-0.5 text-xs">{QUESTION_TYPE_LABEL[q.type]}</span></span>
                 <label className="hidden items-center gap-2 text-xs text-muted-foreground xl:flex" htmlFor={`req-${q.id}`}>
@@ -232,7 +232,7 @@ function QuestionDialog({
   useEffect(() => {
     if (!editing) return;
     setQ(editing.q);
-    setOptionsText((editing.q.options ?? []).map((o) => o.label).join("\n"));
+    setOptionsText((editing.q.options ?? []).map((o) => (o.emoji ? `${o.emoji} ${o.label}` : o.label)).join("\n"));
     setError("");
   }, [editing]);
   if (!q) return null;
@@ -247,7 +247,9 @@ function QuestionDialog({
     if (!label) return setError("Écrivez la question.");
     let options = q.options;
     if (needsOptions) {
-      const labels = optionsText.split("\n").map((s) => s.trim()).filter(Boolean);
+      // "🇬🇧 Anglais": the leading emoji is shown on the answer card
+      const lines = optionsText.split("\n").map((s) => splitEmoji(s)).filter((l) => l.label);
+      const labels = lines.map((l) => l.label);
       if (labels.length < 2) return setError("Au moins 2 choix, un par ligne.");
       const old = q.options ?? [];
       const taken = new Set<string>();
@@ -256,7 +258,7 @@ function QuestionDialog({
         const same = old.find((o) => o.label === l) ?? (old[k] && !labels.includes(old[k].label) ? old[k] : undefined);
         const value = same?.value && !taken.has(same.value) ? same.value : /^autre$/i.test(l) ? OTHER : slugId(l, taken);
         taken.add(value);
-        return { value, label: l };
+        return { value, label: l, ...(lines[k].emoji && { emoji: lines[k].emoji }) };
       });
     }
     const taken = new Set(list.filter((x) => x.id !== editing?.q.id).map((x) => x.id));
@@ -266,6 +268,7 @@ function QuestionDialog({
       id,
       label,
       help: q.help?.trim() || undefined,
+      say: q.say?.trim() || undefined,
       options: needsOptions ? options : undefined,
       allowOther: needsOptions && options?.some((o) => o.value === OTHER) ? q.allowOther : undefined,
       showIf: q.showIf?.questionId && q.showIf.anyOf.length ? q.showIf : undefined,
@@ -288,6 +291,10 @@ function QuestionDialog({
             <Label htmlFor="q-help">Aide (optionnelle)</Label>
             <Input id="q-help" value={q.help ?? ""} maxLength={300} onChange={(e) => setQ({ ...q, help: e.target.value })} />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="q-say">Phrase du compagnon (optionnelle)</Label>
+            <Input id="q-say" value={q.say ?? ""} maxLength={140} placeholder="Ex. Lève-tôt ou couche-tard ? 🦉" onChange={(e) => setQ({ ...q, say: e.target.value })} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="q-type">Type</Label>
@@ -308,8 +315,8 @@ function QuestionDialog({
           </div>
           {needsOptions ? (
             <div className="ls-enter space-y-1.5">
-              <Label htmlFor="q-options">Choix (un par ligne)</Label>
-              <Textarea id="q-options" rows={5} value={optionsText} onChange={(e) => setOptionsText(e.target.value)} />
+              <Label htmlFor="q-options">Choix (un par ligne, emoji au début)</Label>
+              <Textarea id="q-options" rows={5} placeholder={"🇬🇧 Anglais\n💻 Code"} value={optionsText} onChange={(e) => setOptionsText(e.target.value)} />
               <label className="flex items-center gap-2 text-sm" htmlFor="q-other">
                 <Switch id="q-other" checked={!!q.allowOther} onCheckedChange={(v) => setQ({ ...q, allowOther: v })} />
                 Champ libre quand « Autre » est choisi

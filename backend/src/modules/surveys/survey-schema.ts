@@ -28,7 +28,7 @@ export const QUESTION_TAGS = [
 ] as const;
 export type QuestionTag = (typeof QUESTION_TAGS)[number];
 
-export type QuestionOption = { value: string; label: string };
+export type QuestionOption = { value: string; label: string; emoji?: string };
 
 export type SurveyQuestion = {
   id: string;
@@ -43,6 +43,8 @@ export type SurveyQuestion = {
   /** Shown only when another question's answer contains one of these values */
   showIf?: { questionId: string; anyOf: string[] };
   tag?: QuestionTag;
+  /** Short funny line the survey companion says on this question */
+  say?: string;
 };
 
 export type SurveySection = { id: string; title: string; description?: string };
@@ -85,6 +87,8 @@ const MAX_OPTIONS = 30;
 const SHORT_MAX = 200;
 const LONG_MAX = 2000;
 const OTHER_MAX = 120;
+const EMOJI_MAX = 16;
+const SAY_MAX = 140;
 const ID_RE = /^[a-z0-9_]{1,40}$/i;
 
 export const DEFAULT_SETTINGS: SurveySettings = {
@@ -176,7 +180,8 @@ export function validateQuestions(
         const optLabel = str(o?.label, 120);
         if (!value || !optLabel || values.has(value)) continue;
         values.add(value);
-        options.push({ value, label: optLabel });
+        const emoji = str(o?.emoji, EMOJI_MAX);
+        options.push({ value, label: optLabel, ...(emoji && { emoji }) });
       }
       if (options.length < 2)
         return { ok: false, error: `Question ${n} : au moins 2 choix` };
@@ -218,6 +223,7 @@ export function validateQuestions(
         options!.some((o) => o.value === OTHER) && { allowOther: true }),
       ...(showIf && { showIf }),
       ...(tag && { tag }),
+      ...(str(q.say, SAY_MAX) && { say: str(q.say, SAY_MAX) }),
     });
   }
   return { ok: true, questions: out };
