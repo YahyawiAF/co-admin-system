@@ -599,8 +599,9 @@ export class StockService {
   /* ---------- Product stock ---------- */
 
   /**
-   * Products with a recipe get their stock from the ingredients. Called after every sale,
-   * purchase, count or recipe change. Runs one at a time; a call during a run queues one more.
+   * Products with a recipe get their stock from the ingredients, and their buying price from
+   * the purchases (so every margin and check uses the same cost as Produits). Called after every
+   * sale, purchase, count or recipe change. Runs one at a time; a call during a run queues one more.
    */
   syncProductStock(): Promise<void> {
     if (this.syncing) {
@@ -634,9 +635,11 @@ export class StockService {
         const r = result.products.get(p.id);
         if (!r) continue;
         const stock = Math.max(0, r.possible);
-        if (stock === p.stock) continue;
-        await this.prisma.product.update({ where: { id: p.id }, data: { stock } });
-        this.events.sendProductUpdated({ type: 'product_updated', productId: p.id, name: p.name, stock });
+        // The price typed on the product long ago goes stale once purchases are recorded
+        const cost = r.unitCost > 0 ? round3(r.unitCost) : p.purchasePrice;
+        if (stock === p.stock && cost === p.purchasePrice) continue;
+        await this.prisma.product.update({ where: { id: p.id }, data: { stock, purchasePrice: cost } });
+        if (stock !== p.stock) this.events.sendProductUpdated({ type: 'product_updated', productId: p.id, name: p.name, stock });
       }
     }
   }
