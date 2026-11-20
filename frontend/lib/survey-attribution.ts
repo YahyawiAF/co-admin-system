@@ -109,8 +109,7 @@ export type SurveyDraft = {
   consent: boolean;
   step: number;
   startedAt: number;
-  /** Survey game: chosen companion, XP and which questions already paid XP */
-  pet?: string;
+  /** Survey game: XP and which questions already paid XP */
   xp?: number;
   awarded?: string[];
 };

@@ -399,6 +399,31 @@ describe('SurveysPublicService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('contact: a required contact needs the name and the number', async () => {
+    db.surveys[0].settings = {
+      ...db.surveys[0].settings,
+      contactMode: 'REQUIRED',
+    };
+    const noName = await svc
+      .submit(
+        'collabora',
+        'learn-and-share',
+        submitDto({ contact: { phone: '22123456', consent: true } }),
+        '1.1.1.1',
+      )
+      .catch((e) => e);
+    expect(noName.getResponse().errors[0].questionId).toBe('contact.name');
+    const noPhone = await svc
+      .submit(
+        'collabora',
+        'learn-and-share',
+        submitDto({ contact: { name: 'Amel' } }),
+        '1.1.1.1',
+      )
+      .catch((e) => e);
+    expect(noPhone.getResponse().errors[0].questionId).toBe('contact.phone');
+  });
+
   it('known member of this organization is linked (method SESSION)', async () => {
     const memberId = '11111111-1111-4111-8111-111111111111';
     await svc.submit(

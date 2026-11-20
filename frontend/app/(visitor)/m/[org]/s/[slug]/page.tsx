@@ -95,7 +95,7 @@ export default function PublicSurveyPage() {
   );
 
   if (isLoading || !mounted || !ready) {
-    return <div className="grid min-h-dvh place-items-center text-sm text-slate-500" aria-live="polite">Chargement…</div>;
+    return <div className="grid min-h-dvh place-items-center bg-[#070a13] text-sm text-[#8a96b3]" aria-live="polite">Chargement…</div>;
   }
   if (isError || !survey) {
     return (
@@ -117,7 +117,7 @@ export default function PublicSurveyPage() {
   }
 
   const shareUrl = typeof window !== "undefined" ? `${window.location.origin}${window.location.pathname}` : "";
-  const shareText = `${survey.title} : choisis ton compagnon et bats mes XP 🎮 2 minutes, sans compte. ${shareUrl}`;
+  const shareText = `${survey.title} : 30 secondes, sans compte. ${shareUrl}`;
 
   return (
     <SurveyForm
@@ -131,17 +131,17 @@ export default function PublicSurveyPage() {
       onSubmit={onSubmit}
       doneActions={
         <>
-          <Link href={href("/events")} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-[18px] border-[2.5px] border-slate-900 bg-gradient-to-br from-indigo-600 to-violet-600 text-base font-black text-white shadow-[3px_3px_0_#0f172a] transition-[filter,transform] hover:brightness-110 active:translate-x-0.5 active:translate-y-0.5 motion-reduce:transform-none">
+          <Link href={href("/events")} className="flex h-[54px] flex-1 items-center justify-center gap-2 rounded-[14px] bg-gradient-to-r from-cyan-400 to-indigo-300 text-sm font-bold uppercase tracking-[0.12em] text-[#050816] shadow-[0_10px_30px_-10px_rgba(34,211,238,.7)] transition-[filter,transform] hover:brightness-110 active:scale-[0.98] motion-reduce:transform-none">
             <CalendarDays className="h-5 w-5" /> Voir les séances
           </Link>
           <a
             href={`https://wa.me/?text=${encodeURIComponent(shareText)}`}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Défier un ami : partager le sondage sur WhatsApp"
-            className="flex h-14 shrink-0 items-center justify-center gap-2 rounded-[18px] border-[2.5px] border-slate-900 bg-white px-4 font-black text-slate-800 shadow-[3px_3px_0_#0f172a] transition-[background-color,transform] hover:bg-slate-50 active:translate-x-0.5 active:translate-y-0.5 motion-reduce:transform-none"
+            aria-label="Partager le sondage sur WhatsApp"
+            className="flex h-[54px] shrink-0 items-center justify-center gap-2 rounded-[14px] border border-[#24314d] bg-[#0f1524] px-4 text-sm font-bold text-[#e8ecf8] transition-[background-color,transform] hover:bg-[#141c30] active:scale-[0.98] motion-reduce:transform-none"
           >
-            <Share2 className="h-5 w-5" /> Défier un ami
+            <Share2 className="h-5 w-5" /> Partager
           </a>
         </>
       }
