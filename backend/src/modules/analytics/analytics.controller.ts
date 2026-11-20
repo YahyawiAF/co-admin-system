@@ -6,6 +6,8 @@ import { PerformanceService, PerformanceSettings } from './performance.service';
 import type { HouseRulesSettings } from '../mobile/house-rules';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
+import { ClientsService } from './clients.service';
+import type { ClientRules } from './client-segments';
 import { NewcomersService } from './newcomers.service';
 import { ForecastService } from './forecast.service';
 import { FinanceYearService } from './finance-year.service';
@@ -17,6 +19,7 @@ export class AnalyticsController {
     private readonly performance: PerformanceService,
     private readonly outreach: OutreachService,
     private readonly campaigns: CampaignService,
+    private readonly clients: ClientsService,
     private readonly newcomers: NewcomersService,
     private readonly forecasts: ForecastService,
     private readonly financeYear: FinanceYearService,
@@ -357,6 +360,52 @@ export class AnalyticsController {
     @Body() body: { memberId?: string; outcome?: string | null; note?: string | null; followUpAt?: string | null },
   ) {
     return this.campaigns.answer(id, body);
+  }
+
+  /** Finance › Clients: groups, to-do band, paginated list. */
+  @Get('clients')
+  clientsList(
+    @Query('facilityId') facilityId?: string,
+    @Query('segment') segment?: string,
+    @Query('abo') abo?: string,
+    @Query('todo') todo?: string,
+    @Query('q') q?: string,
+    @Query('page') page?: string,
+    @Query('perPage') perPage?: string,
+  ) {
+    return this.clients.list({ facilityId, segment, abo, todo, q, page: Number(page) || undefined, perPage: Number(perPage) || undefined });
+  }
+
+  @Get('clients/rules')
+  clientsRules(@Query('facilityId') facilityId?: string) {
+    return this.clients.rules(facilityId);
+  }
+
+  @Patch('clients/rules')
+  updateClientsRules(@Query('facilityId') facilityId: string | undefined, @Body() body: Partial<Record<keyof ClientRules, unknown>>) {
+    return this.clients.updateRules(facilityId, body);
+  }
+
+  /** Client file: why this group, visits, abonnements, payments, contacts, ready message. */
+  @Get('clients/:memberId')
+  clientFile(@Param('memberId') memberId: string, @Query('facilityId') facilityId?: string) {
+    return this.clients.client(memberId, facilityId);
+  }
+
+  /** « Ne pas contacter » and the staff note. */
+  @Patch('clients/:memberId')
+  updateClient(@Param('memberId') memberId: string, @Body() body: { doNotContact?: boolean; staffNote?: string | null }) {
+    return this.clients.update(memberId, body);
+  }
+
+  /** « Autre version (IA) »: a message drafted by Claude, to edit before sending. */
+  @Post('clients/:memberId/draft')
+  clientDraft(
+    @Param('memberId') memberId: string,
+    @Query('facilityId') facilityId: string | undefined,
+    @Body() body: { reason?: string; promotionId?: string | null; previous?: string | null },
+  ) {
+    return this.clients.draft(memberId, body, facilityId);
   }
 
   @Post('outreach/push')

@@ -9,6 +9,7 @@ import { AnalyticsService } from './analytics.service';
 import { PerformanceService } from './performance.service';
 import { OutreachService } from './outreach.service';
 import { CampaignService } from './campaign.service';
+import { ClientsService } from './clients.service';
 import { NewcomersService } from './newcomers.service';
 import { ForecastService } from './forecast.service';
 import { FinanceYearService } from './finance-year.service';
@@ -16,7 +17,7 @@ import { FinanceYearService } from './finance-year.service';
 @Module({
   imports: [MemberModule, ExpensesModule, PushModule, JwtModule.register({ secret: process.env.JWT_ACCESS_SECRET })],
   controllers: [AnalyticsController],
-  providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService, PrismaService],
-  exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService, NewcomersService, ForecastService, FinanceYearService],
+  providers: [AnalyticsService, PerformanceService, OutreachService, CampaignService, ClientsService, NewcomersService, ForecastService, FinanceYearService, PrismaService],
+  exports: [AnalyticsService, PerformanceService, OutreachService, CampaignService, ClientsService, NewcomersService, ForecastService, FinanceYearService],
 })
 export class AnalyticsModule {}

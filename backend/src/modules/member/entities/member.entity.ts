@@ -165,6 +165,15 @@ export class MemberEntity implements Member {
   @ApiProperty({ required: false, nullable: true })
   recallAt: Date | null;
 
+  @ApiProperty()
+  doNotContact: boolean;
+
+  @ApiProperty({ required: false, nullable: true })
+  doNotContactAt: Date | null;
+
+  @ApiProperty({ required: false, nullable: true })
+  staffNote: string | null;
+
   @ApiProperty({ required: false, nullable: true })
   referralCode: string | null;
 

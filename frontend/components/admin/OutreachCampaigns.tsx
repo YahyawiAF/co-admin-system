@@ -90,6 +90,11 @@ export const SEGMENT_LABEL: Record<CampaignSegment, string> = {
   ALL: "Tous les membres (avec téléphone)",
   GROUP: "Un groupe de membres",
   MANUAL: "Choisis à la main",
+  CLIENT_NEW: "Clients nouveaux",
+  CLIENT_OCCASIONAL: "Clients occasionnels",
+  CLIENT_REGULAR: "Clients réguliers",
+  CLIENT_AT_RISK: "Clients à risque",
+  CLIENT_INACTIVE: "Clients inactifs",
 };
 
 const SEGMENT_SHORT: Record<CampaignSegment, string> = {
@@ -98,6 +103,11 @@ const SEGMENT_SHORT: Record<CampaignSegment, string> = {
   TOP_UP: "À compléter",
   CONVERT: "Passes → abonnement",
   RECENT_30: "Venus en 30 j",
+  CLIENT_NEW: "Nouveaux",
+  CLIENT_OCCASIONAL: "Occasionnels",
+  CLIENT_REGULAR: "Réguliers",
+  CLIENT_AT_RISK: "À risque",
+  CLIENT_INACTIVE: "Inactifs",
 };
 
 const SEGMENT_ICON: Record<CampaignSegment, LucideIcon> = {
@@ -111,10 +121,29 @@ const SEGMENT_ICON: Record<CampaignSegment, LucideIcon> = {
   ALL: Users,
   GROUP: Users,
   MANUAL: UserRound,
+  CLIENT_NEW: UserRound,
+  CLIENT_OCCASIONAL: Footprints,
+  CLIENT_REGULAR: Repeat,
+  CLIENT_AT_RISK: UserMinus,
+  CLIENT_INACTIVE: CalendarX,
 };
 
 /** Lists offered in the people picker, in this order. */
-const PICK_LISTS: CampaignSegment[] = ["ALL", "CONVERT", "ABO_EXPIRING", "ABO_ENDED", "INACTIVE", "TOP_UP", "UNPAID", "RECENT_30"];
+const PICK_LISTS: CampaignSegment[] = [
+  "ALL",
+  "CLIENT_AT_RISK",
+  "CLIENT_NEW",
+  "CLIENT_OCCASIONAL",
+  "CLIENT_INACTIVE",
+  "CLIENT_REGULAR",
+  "CONVERT",
+  "ABO_EXPIRING",
+  "ABO_ENDED",
+  "INACTIVE",
+  "TOP_UP",
+  "UNPAID",
+  "RECENT_30",
+];
 
 const GOALS: Array<{ id: CampaignGoal; label: string; icon: LucideIcon }> = [
   { id: "SUBSCRIPTION", label: "Il prend un abonnement", icon: BadgeCheck },
@@ -536,7 +565,13 @@ export function CampaignDialog({
 
   if (!form) return null;
   const set = (patch: Partial<CampaignInput>) => setForm((f) => (f ? { ...f, ...patch } : f));
-  const preview = form.message.replace(/\{\s*pr[ée]nom\s*\}/gi, "Sarra");
+  const preview = form.message
+    .replace(/\{\s*pr[ée]nom\s*\}/gi, "Sarra")
+    .replace(/\{\s*derniere_visite\s*\}/gi, "8 novembre")
+    .replace(/\{\s*visites\s*\}/gi, "6")
+    .replace(/\{\s*abonnement\s*\}/gi, "Mensuel")
+    .replace(/\{\s*fin_abonnement\s*\}/gi, "24 novembre")
+    .replace(/\{\s*espace\s*\}/gi, "Collabora Hub");
   const stepOk = [selected.size > 0, !!form.title.trim() && !!form.message.trim(), true];
   const canGo = (i: number) => i <= step || stepOk.slice(0, i).every(Boolean);
 
@@ -614,7 +649,10 @@ export function CampaignDialog({
                 </label>
                 <label className="block space-y-1.5">
                   <span className="text-sm font-semibold">
-                    Message <span className="font-normal text-muted-foreground">({"{prenom}"} = son prénom)</span>
+                    Message{" "}
+                    <span className="font-normal text-muted-foreground">
+                      ({"{prenom}"}, {"{derniere_visite}"}, {"{visites}"}, {"{abonnement}"}, {"{fin_abonnement}"}, {"{espace}"})
+                    </span>
                   </span>
                   <Textarea rows={5} value={form.message} onChange={(e) => set({ message: e.target.value })} className="rounded-xl" />
                 </label>

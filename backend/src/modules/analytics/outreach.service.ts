@@ -16,6 +16,7 @@ import { PerformanceService } from './performance.service';
 import { computeOffers, computeTopUps, type AbonnementOffer, type TopUpOffer } from './offers';
 import { round1 } from './traffic';
 import { NewcomersService } from './newcomers.service';
+import { MESSAGE_CHANNELS, contactBlock, facilityClientRules } from './contact-limit';
 
 export const OUTREACH_REASONS = [
   'ABO_EXPIRING',
@@ -28,6 +29,10 @@ export const OUTREACH_REASONS = [
   'CONVERT',
   'REVIEW',
   'FOLLOW_UP',
+  /** Finance › Clients only: first visit, occasional client away, inactive client */
+  'WELCOME',
+  'NEWS',
+  'WINBACK',
 ] as const;
 export type OutreachReason = (typeof OUTREACH_REASONS)[number];
 /** How the member was reached. PERSON = at the desk, GROUP = WhatsApp group or status (one post, many people). */
@@ -46,6 +51,9 @@ const SNOOZE_DAYS: Record<OutreachReason, number> = {
   CONVERT: 14,
   REVIEW: 30,
   FOLLOW_UP: 3,
+  WELCOME: 30,
+  NEWS: 30,
+  WINBACK: 30,
 };
 /** Member's answer when staff mark a relance as contacted. */
 export const OUTREACH_OUTCOMES = [
@@ -73,7 +81,7 @@ const SUIVI_DAYS = 90;
 export const AWAY_REASONS = ['STUDY_HOME', 'PRICE', 'DISTANCE', 'NOISE', 'HOURS', 'OTHER'] as const;
 export type AwayReason = (typeof AWAY_REASONS)[number];
 /** Contacts whose result is "came back for a visit". */
-const VISIT_REASONS = new Set<string>(['INACTIVE', 'NEW_NOT_BACK', 'RECALL']);
+const VISIT_REASONS = new Set<string>(['INACTIVE', 'NEW_NOT_BACK', 'RECALL', 'WELCOME', 'NEWS', 'WINBACK']);
 /** A newcomer who came once is listed from this many days after the visit, until 30 days. */
 const NEW_NOT_BACK_FROM_DAYS = 3;
 const NEW_NOT_BACK_TO_DAYS = 30;
@@ -397,9 +405,11 @@ export class OutreachService {
     }
 
     const ids = [...drafts.keys()];
+    const rules = await facilityClientRules(this.prisma, settings.facilityId);
     const [people, pushRows, contacts] = await Promise.all([
       this.prisma.member.findMany({
-        where: { id: { in: ids } },
+        // « Ne pas contacter »: never in the lists
+        where: { id: { in: ids }, doNotContact: false },
         select: {
           id: true,
           firstName: true,
@@ -433,12 +443,14 @@ export class OutreachService {
       const mine = contacts.filter((c) => c.memberId === d.memberId);
       const last = mine[0];
       const sameReason = mine.find((c) => c.reason === d.reason);
+      const lastMessage = mine.find((c) => MESSAGE_CHANNELS.includes(c.channel));
       const answer = due.get(d.memberId);
       const snoozed =
         held.has(d.memberId) ||
         (!answer &&
-          !!sameReason &&
-          differenceInCalendarDays(today, sameReason.createdAt) < SNOOZE_DAYS[d.reason]);
+          ((!!sameReason && differenceInCalendarDays(today, sameReason.createdAt) < SNOOZE_DAYS[d.reason]) ||
+            // At most one message every N days, whatever the reason
+            (!!lastMessage && differenceInCalendarDays(today, lastMessage.createdAt) < rules.messageGapDays)));
       const { ctx, ...rest } = d;
       items.push({
         ...rest,
@@ -620,6 +632,11 @@ export class OutreachService {
     return { memberId: m.id, awayReason: m.awayReason, recallAt: m.recallAt?.toISOString() ?? null };
   }
 
+  /** Ready message for a reason (Finance › Clients), same wording as the Relances list. */
+  draft(reason: OutreachReason, c: { firstName: string; place: string; days?: string }) {
+    return this.message(reason, { ...c, days: c.days ?? '', owed: 0 });
+  }
+
   private message(
     reason: OutreachReason,
     c: { [k: string]: string | number; firstName: string; place: string; owed: number },
@@ -652,6 +669,12 @@ export class OutreachService {
           ? `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}, c'est autant que l'${topUp.plan.name} (${money(topUp.plan.price)}). On vous le passe en abonnement sans rien payer de plus ?${debt}`
           : `${hi}, vous avez déjà payé ${money(topUp.paid)} en passes ces ${topUp.plan.periodDays} derniers jours chez ${c.place}. Pour seulement ${money(topUp.remaining)} de plus, vous passez à l'${topUp.plan.name} (${money(topUp.plan.price)}) : vos passes sont déduits. On vous le prépare ?${debt}`;
       }
+      case 'WELCOME':
+        return `${hi}, merci d'être passé(e) chez ${c.place} ! Si vous avez une question sur les tarifs ou les salles, je suis là. Au plaisir de vous revoir.${debt}`;
+      case 'NEWS':
+        return `${hi}, petite nouvelle de ${c.place} : votre place vous attend quand vous voulez. Au plaisir de vous revoir !${debt}`;
+      case 'WINBACK':
+        return `${hi}, il y a du nouveau chez ${c.place} depuis votre dernière visite. Si l'envie revient, on serait ravis de vous revoir.${debt}`;
       case 'FOLLOW_UP':
         return `${hi}, je reviens vers vous comme convenu de la part de ${c.place}. Vous avez pu y réfléchir ?${debt}`;
       case 'REVIEW':
@@ -815,6 +838,7 @@ export class OutreachService {
     if (!OUTREACH_CHANNELS.includes(channel)) throw new BadRequestException('Canal invalide');
     const past = body.contactedAt ? this.pastDay(body.contactedAt) : null;
     if (past && channel === 'SKIP') throw new BadRequestException('Canal invalide');
+    if (!past) await this.assertCanContact(body.memberId, channel, reason);
     const row = await this.prisma.memberOutreach.create({
       data: {
         memberId: body.memberId,
@@ -845,6 +869,13 @@ export class OutreachService {
       }
     }
     return this.prisma.memberOutreach.findUniqueOrThrow({ where: { id: row.id } });
+  }
+
+  /** « Ne pas contacter » and the 1-message-per-N-days limit (Finance › Clients rules). */
+  private async assertCanContact(memberId: string, channel: string, reason?: string) {
+    const rules = await facilityClientRules(this.prisma);
+    const why = await contactBlock(this.prisma, memberId, channel, { gapDays: rules.messageGapDays, reason });
+    if (why) throw new BadRequestException(why);
   }
 
   /** A day in the past (not today's future), at most SUIVI_DAYS ago. */
@@ -1244,6 +1275,7 @@ export class OutreachService {
     const subs = await this.prisma.pushSubscription.count({ where: { memberId: body.memberId } });
     if (!subs) throw new BadRequestException("Ce client n'a pas activé les notifications");
     const reason = body.reason as OutreachReason;
+    await this.assertCanContact(body.memberId, 'PUSH', reason);
     await this.push.sendToMember(body.memberId, {
       title:
         body.title ||
