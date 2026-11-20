@@ -95,7 +95,7 @@ export default function PublicSurveyPage() {
   );
 
   if (isLoading || !mounted || !ready) {
-    return <div className="grid min-h-dvh place-items-center bg-[#070a13] text-sm text-[#8a96b3]" aria-live="polite">Chargement…</div>;
+    return <div className="grid min-h-dvh place-items-center bg-white text-sm text-slate-500" aria-live="polite">Chargement…</div>;
   }
   if (isError || !survey) {
     return (
@@ -131,7 +131,7 @@ export default function PublicSurveyPage() {
       onSubmit={onSubmit}
       doneActions={
         <>
-          <Link href={href("/events")} className="flex h-[54px] flex-1 items-center justify-center gap-2 rounded-[14px] bg-gradient-to-r from-cyan-400 to-indigo-300 text-sm font-bold uppercase tracking-[0.12em] text-[#050816] shadow-[0_10px_30px_-10px_rgba(34,211,238,.7)] transition-[filter,transform] hover:brightness-110 active:scale-[0.98] motion-reduce:transform-none">
+          <Link href={href("/events")} className="flex h-[54px] flex-1 items-center justify-center gap-2 rounded-[14px] bg-gradient-to-r from-indigo-600 to-violet-600 text-sm font-bold uppercase tracking-[0.12em] text-white shadow-[0_10px_30px_-12px_rgba(79,70,229,.7)] transition-[filter,transform] hover:brightness-110 active:scale-[0.98] motion-reduce:transform-none">
             <CalendarDays className="h-5 w-5" /> Voir les séances
           </Link>
           <a
@@ -139,7 +139,7 @@ export default function PublicSurveyPage() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Partager le sondage sur WhatsApp"
-            className="flex h-[54px] shrink-0 items-center justify-center gap-2 rounded-[14px] border border-[#24314d] bg-[#0f1524] px-4 text-sm font-bold text-[#e8ecf8] transition-[background-color,transform] hover:bg-[#141c30] active:scale-[0.98] motion-reduce:transform-none"
+            className="flex h-[54px] shrink-0 items-center justify-center gap-2 rounded-[14px] border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-900 transition-[background-color,transform] hover:bg-slate-100 active:scale-[0.98] motion-reduce:transform-none"
           >
             <Share2 className="h-5 w-5" /> Partager
           </a>
