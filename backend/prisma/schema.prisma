@@ -123,6 +123,11 @@ model Member {
   awayReasonAt             DateTime?
   /// Date to contact the member again (e.g. exam revisions for STUDY_HOME)
   recallAt                 DateTime?
+  /// Finance › Clients: never send this client a message (relances, campaigns, push)
+  doNotContact             Boolean             @default(false)
+  doNotContactAt           DateTime?
+  /// Finance › Clients: staff note on the client file
+  staffNote                String?
 
   @@unique([organizationId, phone])
   @@unique([organizationId, visitorNumber])
@@ -430,6 +435,7 @@ model Journal {
   @@index([spaceId])
   @@index([memberID, priceId])
   @@index([checkInCode])
+  @@index([memberID, registredTime])
   @@map("journals")
 }
 
@@ -833,6 +839,8 @@ model Facility {
   regularVisitsPerWeek        Int                  @default(4)
   /// Alert when a regular has not come for N days
   inactiveAlertDays           Int                  @default(7)
+  /// Finance › Clients group rules and message limit (null = defaults in client-segments.ts)
+  clientRules                 Json?
   /// Google Maps review link shown to happy regulars
   googleReviewUrl             String?
   /// Ask for a review after N paid visits

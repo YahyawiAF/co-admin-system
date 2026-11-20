@@ -25,6 +25,10 @@ import type {
   HouseRulesSettings,
   HouseRulesReaders,
   MemberHouseRules,
+  ClientsList,
+  ClientFile,
+  ClientRules,
+  ClientSegment,
 } from "@/lib/types";
 import { withOrgQuery, getAdminOrganizationId } from "@/lib/admin-org";
 import type { PricingRules, PricingTier } from "@/lib/session-pricing";
@@ -725,6 +729,32 @@ export const analyticsApi = {
     return http.get<Record<string, AbonnementOffer>>(
       `/analytics/performance/offers?memberIds=${encodeURIComponent(memberIds.join(","))}`,
     );
+  },
+};
+
+/** Finance › Clients: groups, list, client file, rules */
+export const clientsApi = {
+  list(params: { segment?: string; abo?: string; todo?: string; q?: string; page: number; perPage?: number }) {
+    const q = new URLSearchParams({ page: String(params.page), perPage: String(params.perPage ?? 20) });
+    for (const k of ["segment", "abo", "todo", "q"] as const) if (params[k]) q.set(k, params[k]!);
+    return http.get<ClientsList>(`/analytics/clients?${q}`);
+  },
+  get(memberId: string) {
+    return http.get<ClientFile>(`/analytics/clients/${memberId}`);
+  },
+  update(memberId: string, data: { doNotContact?: boolean; staffNote?: string | null }) {
+    return http.patch<{ ok: true }>(`/analytics/clients/${memberId}`, data);
+  },
+  draft(memberId: string, data: { reason?: OutreachReason; promotionId?: string | null; previous?: string | null }) {
+    return http.post<{ message: string }>(`/analytics/clients/${memberId}/draft`, data);
+  },
+  rules() {
+    return http.get<{ rules: ClientRules; labels: Record<ClientSegment, string>; describe: Record<ClientSegment, string> }>(
+      "/analytics/clients/rules",
+    );
+  },
+  updateRules(data: Partial<ClientRules>) {
+    return http.patch<{ rules: ClientRules; describe: Record<ClientSegment, string> }>("/analytics/clients/rules", data);
   },
 };
 

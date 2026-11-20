@@ -134,6 +134,24 @@ const REASON_UI: Record<
     tone: "bg-teal-100 text-teal-800",
     why: "Vous aviez promis de le recontacter à cette date.",
   },
+  WELCOME: {
+    label: "Bienvenue",
+    icon: UserPlus,
+    tone: "bg-blue-100 text-blue-800",
+    why: "Un mot juste après la 1ʳᵉ visite (Finance › Clients).",
+  },
+  NEWS: {
+    label: "Nouvelles",
+    icon: Sparkles,
+    tone: "bg-amber-100 text-amber-800",
+    why: "Client occasionnel absent depuis un moment (Finance › Clients).",
+  },
+  WINBACK: {
+    label: "Retour",
+    icon: UserX,
+    tone: "bg-slate-200 text-slate-800",
+    why: "Client inactif depuis 30 à 60 jours (Finance › Clients).",
+  },
 };
 
 /** Member's answer: label, colour, default days before calling back (null = closed), hint. */
