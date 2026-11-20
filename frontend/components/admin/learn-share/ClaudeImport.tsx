@@ -143,7 +143,6 @@ export function ClaudeImport({
                         ))}
                       </div>
                     ) : null}
-                    {q.say ? <p className="pl-6 text-xs italic text-muted-foreground">Compagnon : « {q.say} »</p> : null}
                     {q.fixes.map((f) => (
                       <p key={f} className="pl-6 text-xs text-amber-700 dark:text-amber-400">Corrigé : {f}</p>
                     ))}
@@ -151,6 +150,11 @@ export function ClaudeImport({
                 );
               })}
             </ol>
+            {result.endMessage ? (
+              <p className="rounded-md border border-dashed p-2.5 text-xs">
+                <b>Message de fin :</b> {result.endMessage}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">Après « Créer » : publiez-le et partagez le lien. Vous pouvez tout modifier dans l’onglet Questions.</p>
           </div>
         )}

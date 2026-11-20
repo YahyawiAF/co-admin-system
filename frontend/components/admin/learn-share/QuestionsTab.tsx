@@ -268,7 +268,6 @@ function QuestionDialog({
       id,
       label,
       help: q.help?.trim() || undefined,
-      say: q.say?.trim() || undefined,
       options: needsOptions ? options : undefined,
       allowOther: needsOptions && options?.some((o) => o.value === OTHER) ? q.allowOther : undefined,
       showIf: q.showIf?.questionId && q.showIf.anyOf.length ? q.showIf : undefined,
@@ -290,10 +289,6 @@ function QuestionDialog({
           <div className="space-y-1.5">
             <Label htmlFor="q-help">Aide (optionnelle)</Label>
             <Input id="q-help" value={q.help ?? ""} maxLength={300} onChange={(e) => setQ({ ...q, help: e.target.value })} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="q-say">Phrase du compagnon (optionnelle)</Label>
-            <Input id="q-say" value={q.say ?? ""} maxLength={140} placeholder="Ex. Lève-tôt ou couche-tard ? 🦉" onChange={(e) => setQ({ ...q, say: e.target.value })} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

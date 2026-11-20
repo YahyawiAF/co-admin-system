@@ -6,21 +6,21 @@ export function claudeSurveyRequest(orgName: string, topic: string) {
 Sujet : ${topic.trim() || "(à préciser)"}
 
 Règles :
-- Tutoie. Phrases courtes, simples, un peu drôles. Le sondage est un jeu.
-- 6 à 12 questions. Chaque choix de réponse a un emoji.
-- Pour chaque question, une petite phrase drôle du compagnon (champ "say").
-- Ne demande pas le prénom ni le téléphone : l'appli le fait à la fin.
+- Tutoie. Phrases courtes et simples.
+- Peu de questions (1 à 6). Chaque choix de réponse a un emoji.
+- Ne demande pas le nom ni le téléphone : l'appli le fait à la fin.
+- "endMessage" : le message de l'équipe affiché à la fin (ex. « Notre équipe va te contacter très vite »).
 
 Donne le sondage en UN bloc JSON, rien d'autre, dans ce format :
 {
   "title": "Titre du sondage",
-  "intro": "1 ou 2 phrases d'accueil",
+  "intro": "1 phrase d'accueil",
+  "endMessage": "Merci ! Notre équipe va te contacter très vite sur WhatsApp.",
   "questions": [
     {
       "label": "Tu veux plutôt…",
       "type": "single",
       "required": true,
-      "say": "On commence facile 😄",
       "options": [ { "emoji": "📚", "label": "Apprendre" }, { "emoji": "🤝", "label": "Partager" } ]
     },
     {
@@ -37,7 +37,7 @@ Types possibles : single (1 choix), multi (plusieurs), text (réponse courte), l
 
 export type ImportedQuestion = SurveyQuestion & { fixes: string[] };
 export type ImportResult =
-  | { ok: true; title: string; intro: string; questions: ImportedQuestion[]; cut: boolean }
+  | { ok: true; title: string; intro: string; endMessage: string; questions: ImportedQuestion[]; cut: boolean }
   | { ok: false; error: string; help: string };
 
 const TYPES: Record<string, QuestionType> = {
@@ -74,7 +74,7 @@ export function parseClaudeSurvey(raw: string): ImportResult {
   const end = raw.lastIndexOf("}");
   if (start < 0 || end < start)
     return { ok: false, error: "Je ne trouve pas de sondage dans ce texte.", help: "Demandez à Claude : « Donne-moi le sondage final en bloc JSON ». Puis collez-le ici." };
-  let data: { title?: unknown; intro?: unknown; questions?: unknown };
+  let data: { title?: unknown; intro?: unknown; endMessage?: unknown; questions?: unknown };
   try {
     // Claude sometimes leaves a comma before } or ]
     data = JSON.parse(raw.slice(start, end + 1).replace(/,\s*([}\]])/g, "$1"));
@@ -144,6 +144,7 @@ export function parseClaudeSurvey(raw: string): ImportResult {
     ok: true,
     title: text(data.title, 120) || "Sondage sans titre",
     intro: text(data.intro, 1000),
+    endMessage: text(data.endMessage, 300),
     questions: out,
     cut: list.length > MAX,
   };

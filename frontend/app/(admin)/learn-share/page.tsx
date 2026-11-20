@@ -317,6 +317,7 @@ function NewSurveyDialog({
       if (from === "claude" && imported?.ok) {
         await surveysApi.update(created.id, {
           ...(imported.intro ? { intro: imported.intro } : {}),
+          ...(imported.endMessage ? { settings: { successMessage: imported.endMessage } } : {}),
           questions: imported.questions.map(({ fixes: _fixes, ...q }) => q),
         });
       }
