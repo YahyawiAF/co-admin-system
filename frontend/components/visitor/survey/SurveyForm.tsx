@@ -326,35 +326,35 @@ export function SurveyForm({
     <div
       ref={rootRef}
       className={cn(
-        "relative flex flex-col overflow-hidden bg-[#070a13] text-[#e8ecf8] [color-scheme:dark]",
-        "bg-[radial-gradient(circle_at_85%_-10%,rgba(139,92,246,.35),transparent_45%),radial-gradient(circle_at_-10%_110%,rgba(34,211,238,.18),transparent_45%)]",
+        "relative flex flex-col overflow-hidden bg-white text-slate-900 [color-scheme:light]",
+        "bg-[radial-gradient(circle_at_85%_-10%,rgba(139,92,246,.14),transparent_45%),radial-gradient(circle_at_-10%_110%,rgba(34,211,238,.12),transparent_45%)]",
         framed ? "min-h-full" : "min-h-dvh"
       )}
     >
-      <header className="sticky top-0 z-10 space-y-2.5 bg-[#070a13]/85 px-[18px] pb-3 pt-[calc(1rem+env(safe-area-inset-top,0px))] backdrop-blur">
+      <header className="sticky top-0 z-10 space-y-2.5 bg-white/90 px-[18px] pb-3 pt-[calc(1rem+env(safe-area-inset-top,0px))] backdrop-blur">
         <div className={cn(hud.className, "flex items-center gap-2.5")}>
-          <span className="flex-1 truncate text-xs font-bold uppercase tracking-[0.14em] text-[#8a96b3]">{orgName}</span>
-          {preview ? <span className="text-xs font-semibold text-[#8a96b3]">Aperçu</span> : null}
+          <span className="flex-1 truncate text-xs font-bold uppercase tracking-[0.14em] text-slate-500">{orgName}</span>
+          {preview ? <span className="text-xs font-semibold text-slate-500">Aperçu</span> : null}
           <span
             key={xp}
             aria-label={`${xp} XP`}
-            className="sg-bump rounded-md border border-amber-400/40 bg-[#0f1524] px-2.5 py-1 text-xs font-bold tabular-nums tracking-[0.1em] text-amber-400 [clip-path:polygon(8px_0,100%_0,calc(100%-8px)_100%,0_100%)]"
+            className="sg-bump rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-bold tabular-nums tracking-[0.1em] text-amber-700 [clip-path:polygon(8px_0,100%_0,calc(100%-8px)_100%,0_100%)]"
           >
             {xp} XP
           </span>
           <span className="text-sm font-bold tabular-nums tracking-[0.08em]">
             {phase === "done" ? (
-              <b className="text-cyan-400">GG</b>
+              <b className="text-indigo-600">GG</b>
             ) : (
               <>
-                <b className="text-cyan-400">{two(idx + 1)}</b> / {two(steps.length)}
+                <b className="text-indigo-600">{two(idx + 1)}</b> / {two(steps.length)}
               </>
             )}
           </span>
         </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-[#141c30]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Progression">
+        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} aria-label="Progression">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 shadow-[0_0_12px_#22d3ee] transition-[width] duration-500 ease-out motion-reduce:transition-none"
+            className="h-full rounded-full bg-gradient-to-r from-violet-600 to-indigo-500 shadow-[0_0_10px_rgba(99,102,241,.6)] transition-[width] duration-500 ease-out motion-reduce:transition-none"
             style={{ width: `${progress}%` }}
           />
         </div>
@@ -363,8 +363,8 @@ export function SurveyForm({
       <div ref={bodyRef} className="flex-1 px-[18px] pb-6 pt-4">
         {phase === "done" ? (
           <div className="ls-enter flex flex-col items-center gap-4 pt-4 text-center">
-            <span className="sg-slam grid h-[110px] w-[110px] place-items-center bg-gradient-to-br from-violet-500 to-cyan-400 [clip-path:polygon(25%_4%,75%_4%,100%_50%,75%_96%,25%_96%,0_50%)]">
-              <Check className="h-12 w-12 text-[#050816]" strokeWidth={3} />
+            <span className="sg-slam grid h-[110px] w-[110px] place-items-center bg-gradient-to-br from-violet-600 to-indigo-500 [clip-path:polygon(25%_4%,75%_4%,100%_50%,75%_96%,25%_96%,0_50%)]">
+              <Check className="h-12 w-12 text-white" strokeWidth={3} />
             </span>
             <h2 className={cn(hud.className, "text-[30px] font-bold uppercase tracking-[0.08em]")}>Mission accomplie</h2>
             <div className={cn(hud.className, "flex gap-2.5")}>
@@ -372,24 +372,24 @@ export function SurveyForm({
                 [xp, "XP"],
                 ["100%", "Complété"],
               ].map(([v, l]) => (
-                <div key={String(l)} className="rounded-xl border border-[#24314d] bg-[#0f1524] px-4 py-2.5 text-[11px] uppercase tracking-[0.14em] text-[#8a96b3]">
-                  <b className="block text-[22px] tabular-nums tracking-normal text-[#e8ecf8]">{v}</b>
+                <div key={String(l)} className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-[11px] uppercase tracking-[0.14em] text-slate-500">
+                  <b className="block text-[22px] tabular-nums tracking-normal text-slate-900">{v}</b>
                   {l}
                 </div>
               ))}
             </div>
             {successMessage ? (
-              <div className="w-full space-y-1.5 rounded-2xl border border-cyan-400/35 bg-gradient-to-b from-cyan-400/10 to-violet-500/5 p-4 text-left">
-                <p className={cn(hud.className, "text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-400")}>Message de l’équipe</p>
+              <div className="w-full space-y-1.5 rounded-2xl border border-indigo-200 bg-gradient-to-b from-indigo-50 to-violet-50/60 p-4 text-left">
+                <p className={cn(hud.className, "text-[11px] font-bold uppercase tracking-[0.18em] text-indigo-600")}>Message de l’équipe</p>
                 <p className="text-[17px] font-bold leading-snug">{successMessage}</p>
               </div>
             ) : null}
-            {preview ? <p className="text-xs text-[#8a96b3]">Aperçu : rien n’a été envoyé.</p> : null}
+            {preview ? <p className="text-xs text-slate-500">Aperçu : rien n’a été envoyé.</p> : null}
           </div>
         ) : step ? (
           <div key={idx} className={cn("space-y-4", dir > 0 ? "ls-in-right" : "ls-in-left")}>
             {idx === 0 && alreadyAnsweredAt ? (
-              <p className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-2.5 text-sm font-semibold text-amber-300">Tu as déjà répondu. Tu peux répondre à nouveau.</p>
+              <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm font-semibold text-amber-900">Tu as déjà répondu. Tu peux répondre à nouveau.</p>
             ) : null}
             {step.kind === "contact" ? (
               <ContactStep
@@ -414,7 +414,7 @@ export function SurveyForm({
             ) : (
               <>
                 {step.firstOfSection && step.section.description && settings.sections[0]?.id !== step.section.id ? (
-                  <p className="ls-enter rounded-xl border border-violet-400/30 bg-violet-500/10 px-4 py-2.5 text-sm font-semibold text-violet-200">{step.section.description}</p>
+                  <p className="ls-enter rounded-xl border border-violet-200 bg-violet-50 px-4 py-2.5 text-sm font-semibold text-violet-900">{step.section.description}</p>
                 ) : null}
                 <QuestionField
                   q={step.q}
@@ -430,7 +430,7 @@ export function SurveyForm({
               </>
             )}
             {formError ? (
-              <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-300">
+              <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
                 {formError}
               </p>
             ) : null}
@@ -450,7 +450,7 @@ export function SurveyForm({
         />
       </div>
 
-      <footer className="sticky bottom-0 flex gap-2.5 bg-[#070a13]/85 px-[18px] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur">
+      <footer className="sticky bottom-0 flex gap-2.5 bg-white/90 px-[18px] pb-[calc(1rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur">
         {phase === "done" ? (
           doneActions ?? (
             <button type="button" onClick={reset} className={PRIMARY}>
@@ -465,7 +465,7 @@ export function SurveyForm({
               </button>
             ) : null}
             {(step.kind === "contact" ? !contactRequired : !step.q.required) && !lastStep ? (
-              <button type="button" onClick={skip} className={cn(SECONDARY, "shrink-0 px-4 text-sm text-[#8a96b3]")}>
+              <button type="button" onClick={skip} className={cn(SECONDARY, "shrink-0 px-4 text-sm text-slate-500")}>
                 Passer
               </button>
             ) : null}
@@ -494,7 +494,7 @@ export function SurveyForm({
         <span
           key={f.id}
           aria-hidden
-          className={cn(hud.className, "sg-rise pointer-events-none absolute z-20 text-lg font-bold tracking-[0.1em] text-amber-400 [text-shadow:0_0_12px_rgba(251,191,36,.7)]")}
+          className={cn(hud.className, "sg-rise pointer-events-none absolute z-20 whitespace-nowrap text-lg font-bold tracking-[0.1em] text-amber-500 [text-shadow:0_0_10px_rgba(251,191,36,.5)]")}
           style={{ left: f.x, top: f.y }}
         >
           {f.text}
@@ -506,14 +506,14 @@ export function SurveyForm({
 
 const BTN = cn(
   hud.className,
-  "flex h-[54px] items-center justify-center gap-2 rounded-[14px] text-base font-bold uppercase tracking-[0.14em] transition-[filter,transform,opacity] duration-150 active:scale-[0.98] disabled:cursor-default motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-[#070a13]"
+  "flex h-[54px] items-center justify-center gap-2 rounded-[14px] text-base font-bold uppercase tracking-[0.14em] transition-[filter,transform,opacity] duration-150 active:scale-[0.98] disabled:cursor-default motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
 );
-const PRIMARY = cn(BTN, "flex-1 bg-gradient-to-r from-cyan-400 to-indigo-300 text-[#050816] shadow-[0_10px_30px_-10px_rgba(34,211,238,.7)] hover:brightness-110 disabled:opacity-35 disabled:shadow-none");
-const SECONDARY = cn(BTN, "border border-[#24314d] bg-[#0f1524] tracking-normal text-[#e8ecf8] hover:bg-[#141c30]");
+const PRIMARY = cn(BTN, "flex-1 bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-[0_10px_30px_-12px_rgba(79,70,229,.7)] hover:brightness-110 disabled:opacity-35 disabled:shadow-none");
+const SECONDARY = cn(BTN, "border border-slate-200 bg-slate-50 tracking-normal text-slate-900 hover:bg-slate-100");
 
 const OPTION =
-  "flex w-full items-center gap-3.5 rounded-[14px] border border-[#24314d] bg-gradient-to-b from-[#141c30] to-[#0f1524] p-3.5 text-left text-base font-bold text-[#e8ecf8] transition-[border-color,box-shadow,transform] duration-150 hover:border-cyan-400/50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 motion-reduce:transform-none";
-const OPTION_ON = "border-cyan-400 shadow-[0_0_0_1px_#22d3ee,0_0_24px_-4px_rgba(34,211,238,.6)]";
+  "flex w-full items-center gap-3.5 rounded-[14px] border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-3.5 text-left text-base font-bold text-slate-900 transition-[border-color,box-shadow,transform] duration-150 hover:border-indigo-400 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 motion-reduce:transform-none";
+const OPTION_ON = "border-indigo-600 bg-indigo-50/60 shadow-[0_0_0_1px_#4f46e5,0_0_24px_-6px_rgba(79,70,229,.55)]";
 
 function QuestionField({
   q,
@@ -544,15 +544,15 @@ function QuestionField({
   return (
     <fieldset className="space-y-4" aria-describedby={error ? errId : undefined}>
       <div className="space-y-1.5">
-        <p className={cn(hud.className, "text-[13px] font-bold uppercase tracking-[0.2em] text-cyan-400")}>
+        <p className={cn(hud.className, "text-[13px] font-bold uppercase tracking-[0.2em] text-indigo-600")}>
           Question {two(n)}
-          {q.type === "multi" ? <span className="ml-2 tracking-[0.12em] text-[#8a96b3]">· plusieurs choix</span> : null}
-          {!q.required ? <span className="ml-2 tracking-[0.12em] text-[#8a96b3]">· optionnelle</span> : null}
+          {q.type === "multi" ? <span className="ml-2 tracking-[0.12em] text-slate-500">· plusieurs choix</span> : null}
+          {!q.required ? <span className="ml-2 tracking-[0.12em] text-slate-500">· optionnelle</span> : null}
         </p>
         <legend id={labelId} className="text-[26px] font-extrabold leading-tight tracking-tight [text-wrap:balance]">
           {q.label}
         </legend>
-        {q.help ? <p className="text-sm font-medium text-[#8a96b3]">{q.help}</p> : null}
+        {q.help ? <p className="text-sm font-medium text-slate-500">{q.help}</p> : null}
       </div>
 
       {q.type === "single" || q.type === "multi" ? (
@@ -573,7 +573,7 @@ function QuestionField({
                   className={cn(
                     hud.className,
                     "grid h-[30px] w-[30px] shrink-0 place-items-center rounded-lg border text-sm font-bold transition-colors duration-150",
-                    on ? "border-cyan-400 bg-cyan-400 text-[#04121a]" : "border-[#24314d] bg-[#070a13] text-[#8a96b3]"
+                    on ? "border-indigo-600 bg-indigo-600 text-white" : "border-slate-200 bg-white text-slate-500"
                   )}
                 >
                   {q.type === "multi" && on ? <Check className="h-4 w-4" strokeWidth={3} /> : KEYS[k] ?? "•"}
@@ -592,7 +592,7 @@ function QuestionField({
           {AVAILABILITY_TIMES.map((t) => (
             <span key={t.value} className="text-center text-lg">
               {TIME_EMOJI[t.value]}
-              <small className={cn(hud.className, "block text-[10px] font-bold uppercase tracking-[0.08em] text-[#8a96b3]")}>{t.label}</small>
+              <small className={cn(hud.className, "block text-[10px] font-bold uppercase tracking-[0.08em] text-slate-500")}>{t.label}</small>
             </span>
           ))}
           {AVAILABILITY_DAYS.map((d) => (
@@ -609,7 +609,7 @@ function QuestionField({
         <input id={`in-${q.id}-other`} aria-label="Précise" maxLength={120} placeholder="Précise : ex. guitare, photo…" value={other} onChange={(e) => onOther(e.target.value)} className={cn(INPUT, "ls-enter")} />
       ) : null}
       {error ? (
-        <p id={errId} role="alert" className="text-sm font-semibold text-rose-400">
+        <p id={errId} role="alert" className="text-sm font-semibold text-rose-600">
           {error}
         </p>
       ) : null}
@@ -620,7 +620,7 @@ function QuestionField({
 function AvailabilityRow({ day, picked, onPick }: { day: { value: string; label: string }; picked: string[]; onPick: (v: string) => void }) {
   return (
     <>
-      <span className={cn(hud.className, "text-xs font-bold uppercase text-[#8a96b3]")}>{day.label}</span>
+      <span className={cn(hud.className, "text-xs font-bold uppercase text-slate-500")}>{day.label}</span>
       {AVAILABILITY_TIMES.map((t) => {
         const k = `${day.value}:${t.value}`;
         const on = picked.includes(k);
@@ -633,8 +633,8 @@ function AvailabilityRow({ day, picked, onPick }: { day: { value: string; label:
             aria-label={`${day.label} ${t.label}`}
             onClick={() => onPick(k)}
             className={cn(
-              "h-10 rounded-lg border transition-[background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400",
-              on ? "border-cyan-400 bg-cyan-400/80 shadow-[0_0_14px_-2px_rgba(34,211,238,.7)]" : "border-[#24314d] bg-[#0f1524]"
+              "h-10 rounded-lg border transition-[background-color,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500",
+              on ? "border-indigo-600 bg-indigo-600/80 shadow-[0_0_14px_-2px_rgba(34,211,238,.7)]" : "border-slate-200 bg-slate-50"
             )}
           />
         );
@@ -644,8 +644,8 @@ function AvailabilityRow({ day, picked, onPick }: { day: { value: string; label:
 }
 
 const INPUT =
-  "w-full rounded-xl border border-[#24314d] bg-[#0f1524] px-3.5 py-3 text-base font-semibold text-[#e8ecf8] outline-none transition-[border-color,box-shadow] placeholder:text-[#5b6680] focus:border-cyan-400 focus:shadow-[0_0_0_3px_rgba(34,211,238,.18)]";
-const FIELD_LABEL = cn(hud.className, "text-xs font-bold uppercase tracking-[0.14em] text-[#8a96b3]");
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-base font-semibold text-slate-900 outline-none transition-[border-color,box-shadow] placeholder:text-slate-400 focus:border-indigo-600 focus:shadow-[0_0_0_3px_rgba(79,70,229,.15)]";
+const FIELD_LABEL = cn(hud.className, "text-xs font-bold uppercase tracking-[0.14em] text-slate-500");
 
 function ContactStep({
   orgName,
@@ -669,7 +669,7 @@ function ContactStep({
   return (
     <>
       <div className="space-y-1.5">
-        <p className={cn(hud.className, "text-[13px] font-bold uppercase tracking-[0.2em] text-cyan-400")}>Étape finale</p>
+        <p className={cn(hud.className, "text-[13px] font-bold uppercase tracking-[0.2em] text-indigo-600")}>Étape finale</p>
         <h2 className="text-[26px] font-extrabold leading-tight">Tes coordonnées</h2>
       </div>
       <label className="block space-y-1.5" htmlFor="contact-name">
@@ -685,13 +685,13 @@ function ContactStep({
           className={INPUT}
         />
       </label>
-      {errors["contact.name"] ? <p role="alert" className="-mt-2 text-sm font-semibold text-rose-400">{errors["contact.name"]}</p> : null}
+      {errors["contact.name"] ? <p role="alert" className="-mt-2 text-sm font-semibold text-rose-600">{errors["contact.name"]}</p> : null}
       <div className="space-y-1.5">
         <label htmlFor="contact-phone" className={FIELD_LABEL}>
           WhatsApp
         </label>
         <div className="flex gap-2">
-          <span className="grid min-h-12 place-items-center rounded-xl border border-[#24314d] bg-[#0f1524] px-3 font-bold text-[#8a96b3]">+216</span>
+          <span className="grid min-h-12 place-items-center rounded-xl border border-slate-200 bg-slate-50 px-3 font-bold text-slate-500">+216</span>
           <input
             id="contact-phone"
             type="tel"
@@ -705,13 +705,13 @@ function ContactStep({
             className={INPUT}
           />
         </div>
-        {errors["contact.phone"] ? <p role="alert" className="text-sm font-semibold text-rose-400">{errors["contact.phone"]}</p> : null}
+        {errors["contact.phone"] ? <p role="alert" className="text-sm font-semibold text-rose-600">{errors["contact.phone"]}</p> : null}
       </div>
-      <label htmlFor="contact-consent" className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-[#8a96b3]">
-        <input id="contact-consent" type="checkbox" checked={consent} onChange={(e) => onConsent(e.target.checked)} className="h-5 w-5 shrink-0 accent-cyan-400" />
+      <label htmlFor="contact-consent" className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-slate-500">
+        <input id="contact-consent" type="checkbox" checked={consent} onChange={(e) => onConsent(e.target.checked)} className="h-5 w-5 shrink-0 accent-indigo-600" />
         <span>OK pour que {orgName} m’écrive sur WhatsApp</span>
       </label>
-      {errors["contact.consent"] ? <p role="alert" className="text-sm font-semibold text-rose-400">{errors["contact.consent"]}</p> : null}
+      {errors["contact.consent"] ? <p role="alert" className="text-sm font-semibold text-rose-600">{errors["contact.consent"]}</p> : null}
     </>
   );
 }
