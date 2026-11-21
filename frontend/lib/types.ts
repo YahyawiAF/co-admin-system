@@ -1106,7 +1106,11 @@ export type OutreachReason =
   | "TOP_UP"
   | "CONVERT"
   | "REVIEW"
-  | "FOLLOW_UP";
+  | "FOLLOW_UP"
+  /** Finance › Clients only */
+  | "WELCOME"
+  | "NEWS"
+  | "WINBACK";
 export type OutreachChannel = "WHATSAPP" | "PUSH" | "CALL" | "PERSON" | "INSTAGRAM" | "GROUP" | "SKIP";
 /** Member's answer when a relance is marked as contacted */
 export type OutreachOutcome =
@@ -2167,7 +2171,13 @@ export type CampaignSegment =
   | "ALL"
   | "GROUP"
   /** People picked one by one */
-  | "MANUAL";
+  | "MANUAL"
+  /** Finance › Clients groups */
+  | "CLIENT_NEW"
+  | "CLIENT_OCCASIONAL"
+  | "CLIENT_REGULAR"
+  | "CLIENT_AT_RISK"
+  | "CLIENT_INACTIVE";
 export type CampaignGoal = "VISIT" | "SUBSCRIPTION" | "ANY";
 
 export interface OutreachCampaign {
@@ -2642,4 +2652,92 @@ export interface HouseRulesReaders {
     acceptedAt: string | null;
     upToDate: boolean;
   }[];
+}
+
+// ---- Finance › Clients ----
+export type ClientSegment = "NEW" | "OCCASIONAL" | "REGULAR" | "AT_RISK" | "INACTIVE";
+export type ClientTodo = "ABO" | "AT_RISK" | "NEW" | "INACTIVE" | "OTHER";
+export interface ClientRules {
+  newDays: number;
+  regularVisits: number;
+  riskDays: number;
+  inactiveDays: number;
+  messageGapDays: number;
+}
+export interface ClientAbo {
+  status: "ACTIVE" | "EXPIRED";
+  name: string;
+  /** yyyy-MM-dd */
+  end: string | null;
+}
+export interface ClientListRow {
+  memberId: string;
+  name: string;
+  phone: string | null;
+  segment: ClientSegment;
+  why: string;
+  /** yyyy-MM-dd */
+  lastVisit: string;
+  daysSinceLast: number;
+  visits30: number;
+  abonnement: ClientAbo | null;
+  lastContact: { at: string; channel: OutreachChannel } | null;
+  action: { reason: OutreachReason; label: string } | null;
+  blocked: string | null;
+  todo: ClientTodo | null;
+}
+export interface ClientsList {
+  generatedAt: string;
+  rules: ClientRules;
+  describe: Record<ClientSegment, string>;
+  counts: Record<"ALL" | ClientSegment, number>;
+  abos: { ACTIVE: number; EXPIRED: number };
+  recent30: number;
+  todo: Array<{ key: ClientTodo; label: string; count: number }>;
+  todoTotal: number;
+  total: number;
+  page: number;
+  lastPage: number;
+  rows: ClientListRow[];
+}
+export interface ClientFile {
+  memberId: string;
+  name: string;
+  firstName: string;
+  phone: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  hasPush: boolean;
+  hasApp: boolean;
+  since: string;
+  heardFrom: string | null;
+  profileType: string | null;
+  awayReason: string | null;
+  doNotContact: boolean;
+  staffNote: string | null;
+  segment: ClientSegment | null;
+  why: string;
+  rule: string | null;
+  stats: { total: number; visits30: number; perWeek: number; first: string; last: string } | null;
+  /** yyyy-MM-dd, newest first */
+  visits: string[];
+  abonnements: Array<{ id: string; name: string; from: string; until: string | null; active: boolean; amount: number; paid: number }>;
+  payments: Array<{ at: string; amount: number; label: string }>;
+  contacts: Array<{
+    id: string;
+    at: string;
+    reason: string;
+    channel: OutreachChannel;
+    outcome: OutreachOutcome | null;
+    note: string | null;
+    followUpAt: string | null;
+    closedResult: string | null;
+    closedAuto: boolean;
+    campaign: string | null;
+  }>;
+  action: { reason: OutreachReason; label: string } | null;
+  message: string;
+  vars: Record<string, string>;
+  blocked: string | null;
+  messageGapDays: number;
 }

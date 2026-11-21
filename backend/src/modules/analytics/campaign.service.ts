@@ -13,6 +13,10 @@ import {
 } from './outreach.service';
 import { PerformanceService } from './performance.service';
 import { round1 } from './traffic';
+import { CLIENT_SEGMENTS, type ClientSegment } from './client-segments';
+import { ClientsService } from './clients.service';
+import { contactBlock, facilityClientRules } from './contact-limit';
+import { fillMessage, memberMessageVars, type MessageVars } from './message-vars';
 
 export const CAMPAIGN_SEGMENTS = [
   'ABO_EXPIRING',
@@ -26,6 +30,12 @@ export const CAMPAIGN_SEGMENTS = [
   'GROUP',
   /** People picked one by one */
   'MANUAL',
+  /** Finance › Clients groups */
+  'CLIENT_NEW',
+  'CLIENT_OCCASIONAL',
+  'CLIENT_REGULAR',
+  'CLIENT_AT_RISK',
+  'CLIENT_INACTIVE',
 ] as const;
 export type CampaignSegment = (typeof CAMPAIGN_SEGMENTS)[number];
 export const CAMPAIGN_GOALS = ['VISIT', 'SUBSCRIPTION', 'ANY'] as const;
@@ -51,14 +61,9 @@ type CampaignBody = {
   category?: string;
 };
 
-/** "Bonjour {prenom}," → "Bonjour Sarra," (or "Bonjour," without a first name). */
-export function personalize(template: string, firstName?: string | null) {
-  const name = firstName?.trim() || '';
-  return template
-    .replace(/\{\s*pr[ée]nom\s*\}/gi, name)
-    .replace(/ +([,.])/g, '$1')
-    .replace(/ {2,}/g, ' ')
-    .trim();
+/** "Bonjour {prenom}," → "Bonjour Sarra," (or "Bonjour," without a first name); other variables from `vars`. */
+export function personalize(template: string, firstName?: string | null, vars: MessageVars = {}) {
+  return fillMessage(template, { ...vars, prenom: firstName?.trim() || '' });
 }
 
 @Injectable()
@@ -68,6 +73,7 @@ export class CampaignService {
     private readonly outreach: OutreachService,
     private readonly performance: PerformanceService,
     private readonly push: PushService,
+    private readonly clients: ClientsService,
   ) {}
 
   private async facilityId(facilityId?: string) {
@@ -76,7 +82,26 @@ export class CampaignService {
 
   /** Member ids of a segment right now. */
   async segmentMembers(segment: CampaignSegment, facilityId: string, groupId?: string | null) {
+    return this.withoutDoNotContact(await this.segmentMembersRaw(segment, facilityId, groupId));
+  }
+
+  /** « Ne pas contacter » never enters a campaign. */
+  private async withoutDoNotContact(ids: string[]) {
+    if (!ids.length) return ids;
+    const off = await this.prisma.member.findMany({
+      where: { id: { in: ids }, doNotContact: true },
+      select: { id: true },
+    });
+    const skip = new Set(off.map((m) => m.id));
+    return ids.filter((i) => !skip.has(i));
+  }
+
+  private async segmentMembersRaw(segment: CampaignSegment, facilityId: string, groupId?: string | null) {
     if (segment === 'MANUAL') return [];
+    if (segment.startsWith('CLIENT_')) {
+      const group = segment.slice('CLIENT_'.length) as ClientSegment;
+      return CLIENT_SEGMENTS.includes(group) ? this.clients.segmentIds(group, facilityId) : [];
+    }
     if ((AUTO_LISTS as string[]).includes(segment)) {
       const list = await this.outreach.list(facilityId);
       return [...list.todo, ...list.contacted]
@@ -124,7 +149,7 @@ export class CampaignService {
     if (!wanted.length) return [];
     const org = await this.organizationId(facilityId);
     const rows = await this.prisma.member.findMany({
-      where: { id: { in: wanted }, deletedAt: null, ...(org ? { organizationId: org } : {}) },
+      where: { id: { in: wanted }, deletedAt: null, doNotContact: false, ...(org ? { organizationId: org } : {}) },
       select: { id: true },
     });
     const ok = new Set(rows.map((r) => r.id));
@@ -164,16 +189,18 @@ export class CampaignService {
     const list = await this.outreach.list(id);
     const counts: Record<string, number> = {};
     for (const i of [...list.todo, ...list.contacted]) counts[i.reason] = (counts[i.reason] ?? 0) + 1;
-    const [recent, all, group] = await Promise.all([
+    const [recent, all, group, clientGroups] = await Promise.all([
       this.segmentMembers('RECENT_30', id),
       this.segmentMembers('ALL', id),
       groupId ? this.segmentMembers('GROUP', id, groupId) : Promise.resolve([]),
+      this.clients.segmentCounts(id),
     ]);
     return {
       ...Object.fromEntries(AUTO_LISTS.map((r) => [r, counts[r] ?? 0])),
       RECENT_30: recent.length,
       ALL: all.length,
       GROUP: group.length,
+      ...Object.fromEntries(CLIENT_SEGMENTS.map((g) => [`CLIENT_${g}`, clientGroups[g]])),
     } as Record<CampaignSegment, number>;
   }
 
@@ -448,10 +475,11 @@ export class CampaignService {
   async detail(id: string) {
     const c = await this.prisma.outreachCampaign.findUnique({ where: { id } });
     if (!c) throw new NotFoundException('Campagne introuvable');
-    const [people, pushRows, results] = await Promise.all([
+    const facility = await this.prisma.facility.findUnique({ where: { id: c.facilityId }, select: { name: true } });
+    const [people, pushRows, results, vars] = await Promise.all([
       this.prisma.member.findMany({
         where: { id: { in: c.memberIds } },
-        select: { id: true, firstName: true, lastName: true, phone: true },
+        select: { id: true, firstName: true, lastName: true, phone: true, doNotContact: true },
       }),
       this.prisma.pushSubscription.groupBy({
         by: ['memberId'],
@@ -459,6 +487,7 @@ export class CampaignService {
         _count: true,
       }),
       this.memberResults(c),
+      memberMessageVars(this.prisma, c.memberIds, facility?.name || 'notre espace'),
     ]);
     const withPush = new Set(pushRows.map((p) => p.memberId));
     const pushEnabled = this.push.isEnabled();
@@ -475,7 +504,9 @@ export class CampaignService {
             phone: p.phone,
             whatsapp: whatsappNumber(p.phone),
             hasPush: pushEnabled && withPush.has(p.id),
-            message: personalize(c.message, p.firstName),
+            message: personalize(c.message, p.firstName, vars.get(p.id)),
+            /** « Ne pas contacter » switched on after the campaign was made */
+            doNotContact: p.doNotContact,
             contactedAt: r?.contactedAt ?? null,
             lastContactAt: r?.lastContactAt ?? null,
             channel: r?.channel ?? null,
@@ -493,7 +524,10 @@ export class CampaignService {
   }
 
   async log(id: string, body: { memberId?: string; channel?: string; message?: string }) {
-    const c = await this.prisma.outreachCampaign.findUnique({ where: { id }, select: { memberIds: true, message: true } });
+    const c = await this.prisma.outreachCampaign.findUnique({
+      where: { id },
+      select: { memberIds: true, message: true, facilityId: true },
+    });
     if (!c) throw new NotFoundException('Campagne introuvable');
     if (!body.memberId || !c.memberIds.includes(body.memberId)) {
       throw new BadRequestException('Client hors de cette campagne');
@@ -501,12 +535,17 @@ export class CampaignService {
     if (!CAMPAIGN_CHANNELS.includes(body.channel as (typeof CAMPAIGN_CHANNELS)[number])) {
       throw new BadRequestException('Canal invalide');
     }
+    const rules = await facilityClientRules(this.prisma, c.facilityId);
+    const blocked = await contactBlock(this.prisma, body.memberId, body.channel!, { gapDays: rules.messageGapDays });
+    if (blocked) throw new BadRequestException(blocked);
     if (body.channel === 'PUSH') {
       if (!this.push.isEnabled()) throw new BadRequestException('Notifications push non configurées');
-      const member = await this.prisma.member.findUnique({ where: { id: body.memberId }, select: { firstName: true } });
+      const facility = await this.prisma.facility.findUnique({ where: { id: c.facilityId }, select: { name: true } });
+      const vars = await memberMessageVars(this.prisma, [body.memberId], facility?.name || 'notre espace');
+      const v = vars.get(body.memberId);
       await this.push.sendToMember(body.memberId, {
         title: 'Une offre pour vous',
-        body: (body.message || personalize(c.message, member?.firstName)).trim(),
+        body: (body.message || personalize(c.message, v?.prenom, v)).trim(),
         tag: `campaign-${id}`,
         url: '/m',
       });

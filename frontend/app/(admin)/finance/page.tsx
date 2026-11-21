@@ -24,7 +24,7 @@ import { dt } from "@/lib/finance-queries";
 import { FinanceMonthCharts } from "@/components/admin/finance/FinanceMonthCharts";
 import { FinanceServicesInsight } from "@/components/admin/finance/FinanceServicesInsight";
 import { FinanceProductsInsight } from "@/components/admin/finance/FinanceProductsInsight";
-import { FinanceNewcomers } from "@/components/admin/finance/FinanceNewcomers";
+import { FinanceClients } from "@/components/admin/finance/FinanceClients";
 import { FinanceWeeklyTraffic } from "@/components/admin/finance/FinanceWeeklyTraffic";
 import { FinanceRegulars } from "@/components/admin/finance/FinanceRegulars";
 import { FinanceTopPoints } from "@/components/admin/finance/FinanceTopPoints";
@@ -113,7 +113,7 @@ function FinanceInner() {
           <TabsTrigger value="jour">Jour</TabsTrigger>
           <TabsTrigger value="mois">Mois</TabsTrigger>
           <TabsTrigger value="frequentation">Fréquentation</TabsTrigger>
-          <TabsTrigger value="nouveaux">Nouveaux</TabsTrigger>
+          <TabsTrigger value="nouveaux">Clients</TabsTrigger>
         </TabsList>
 
         <TabsContent value="apercu" className="mt-4">
@@ -357,12 +357,10 @@ function FinanceInner() {
 
         <TabsContent value="nouveaux" className="mt-4 space-y-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight">Nouveaux</h2>
-            <p className="text-sm text-muted-foreground">
-              Qui arrive, qui revient dans les 14 jours, et ce qui fait revenir.
-            </p>
+            <h2 className="text-lg font-semibold tracking-tight">Clients</h2>
+            <p className="text-sm text-muted-foreground">Qui vient, qui s&apos;éloigne, et qui contacter aujourd&apos;hui.</p>
           </div>
-          <FinanceNewcomers />
+          <FinanceClients />
         </TabsContent>
       </Tabs>
     </div>
